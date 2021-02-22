@@ -1,0 +1,18 @@
+// tasks.json
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Serve",
+            "type": "shell",
+            "command": "python manage.py runserver 0.0.0.0:8080"
+        },
+        {
+            "label": "Schema",
+            "type": "shell",
+            "command": "python manage.py makemigrations && python manage.py migrate"
+        },
+    ]
+}
