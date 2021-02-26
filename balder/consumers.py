@@ -22,4 +22,4 @@ class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
         """New client connection handler."""
         # You can `raise` from here to reject the connection.
         user = self.scope.get('user')
-        logger.info(f"New client connected with user {self.scope.get('user')}")
+        logger.debug(f"New client connected with user {self.scope.get('user')}")

@@ -11,6 +11,10 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 """
 import os
 from pathlib import Path
+from delt.initialize import initialize
+
+
+initialize()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,7 +34,7 @@ ALLOWED_HOSTS = ["*"]
 
 ELEMENTS_HOST = "p-tnagerl-lab1"
 ELEMENTS_INWARD = "elements" # Set this to the host you are on
-ELEMENTS_PORT = 8000 # Set this to the host you are on
+ELEMENTS_PORT = 8080 # Set this to the host you are on
 
 # Uncomment and re run
 OAUTH2_PROVIDER_APPLICATION_MODEL='oauth2_provider.Application'
@@ -40,7 +44,7 @@ OAUTH2_PROVIDER_APPLICATION_MODEL='oauth2_provider.Application'
 S3_PUBLIC_DOMAIN = f"{ELEMENTS_HOST}:9000" #TODO: FIx
 AWS_ACCESS_KEY_ID = "weak_access_key"
 AWS_SECRET_ACCESS_KEY = "weak_secret_key"
-AWS_S3_ENDPOINT_URL  = f"{ELEMENTS_HOST}:9000"
+AWS_S3_ENDPOINT_URL  = f"http://minio:9000"
 AWS_STORAGE_BUCKET_NAME = "test"
 AWS_S3_URL_PROTOCOL = "http:"
 AWS_S3_FILE_OVERWRITE = False
@@ -50,6 +54,15 @@ AWS_S3_SECURE_URLS = False # Should resort to True if using in Production behind
 
 
 # Application definition
+
+DELT = {
+    "INWARD": "elements",
+    "OUTWARD": ELEMENTS_HOST,
+    "PORT": ELEMENTS_PORT,
+    "TYPE": "graphql"
+}
+
+
 
 
 HERRE = {
@@ -65,6 +78,11 @@ oQIDAQAB
 -----END PUBLIC KEY-----""",
     "KEY_TYPE": "RS256",
     "ISSUER": "arnheim"
+}
+
+GRUNNLAG = {
+    "GROUPS": None
+
 }
 
 
@@ -89,6 +107,7 @@ INSTALLED_APPS = [
     'taggit',
     'channels',
     'herre',
+    'guardian',
     'graphene_django',
     "rest_framework",
     'oauth2_provider'
@@ -176,6 +195,7 @@ CHANNEL_LAYERS = {
     },
 }
 
+AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'guardian.backends.ObjectPermissionBackend')
 
 # Password validation
 # https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
@@ -220,3 +240,51 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'console': {
+            '()': 'colorlog.ColoredFormatter',  # colored output
+            # exact format is not important, this is the minimum information
+            'format': '%(log_color)s[%(levelname)s]  %(name)s %(asctime)s :: %(message)s',
+            'log_colors': {
+                'DEBUG':    'bold_black',
+                'INFO':     'green',
+                'WARNING':  'yellow',
+                'ERROR':    'red',
+                'CRITICAL': 'bold_red',
+            },
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'colorlog.StreamHandler',
+            'formatter': 'console',
+        },
+    },
+    'loggers': {
+    # root logger
+        '': {
+            'level': "INFO",
+            'handlers': ['console'],
+        },
+        'oauthlib': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'delt': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'oauth2_provider': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

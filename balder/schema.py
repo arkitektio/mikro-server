@@ -1,8 +1,9 @@
 from balder.types.query import BalderQuery
 from herre.bouncer.utils import bounced
+from balder.registry import get_balder_registry
 import graphene
 
-class Query(BalderQuery):
+class Query(graphene.ObjectType):
     hello = graphene.String(default_value="Hi!")
 
     @bounced()
@@ -11,11 +12,4 @@ class Query(BalderQuery):
 
 
 
-
-
-
-
-
-graphql_schema = graphene.Schema(
-    query=Query,
-)
+graphql_schema = get_balder_registry().buildSchema(query = Query)

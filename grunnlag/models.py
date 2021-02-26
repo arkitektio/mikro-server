@@ -26,7 +26,7 @@ class Antibody(models.Model):
         return "{0}".format(self.name)
 
     class Meta:
-        identifiers = ["model"]
+        arnheim = True
 
 
 class Experiment(models.Model):
@@ -41,7 +41,7 @@ class Experiment(models.Model):
         return "Experiment {0} by {1}".format(self.name,self.creator.username)
 
     class Meta:
-        identifiers = ["model"]
+        arnheim = True
 
 class ExperimentalGroup(models.Model):
     name = models.CharField(max_length=200, help_text="The experimental groups name")
@@ -54,7 +54,7 @@ class ExperimentalGroup(models.Model):
         return "ExperimentalGroup {0} on Experiment {1}".format(self.name,self.experiment.name)
 
     class Meta:
-        identifiers = ["model"]
+        arnheim = True
 
 
 class Animal(models.Model):
@@ -69,11 +69,14 @@ class Animal(models.Model):
         return "{0}".format(self.name)
 
     class Meta:
-        identifiers = ["model"]
+        arnheim = True
 
 
 class Sample(models.Model):
-    """ A sgfsefsef is a multi-dimensional Array that can do what ever it wants """
+    """ Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure),
+    was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of
+    the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample
+    """
     creator = models.ForeignKey(get_user_model(), on_delete=models.SET(get_sentinel_user))
     name = models.CharField(max_length=1000)
     experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, blank=True, null=True)
@@ -83,7 +86,7 @@ class Sample(models.Model):
 
 
     class Meta:
-        identifiers = ["model"]
+        arnheim = True
 
 
     def __str__(self):
@@ -100,9 +103,9 @@ class Sample(models.Model):
 
 
 class Representation(Matrise):
+    ''' A Representation is 5-dimensional representation of a microscopic image '''
     group = "representation"
 
-    ''' A Representation is 5-dimensional representation of a microscopic image '''
     origin = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null= True, related_name="derived", related_query_name="derived")
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='representations', help_text="The Sample this representation belongs to")
     type = models.CharField(max_length=400, blank=True, null=True, help_text="The Representation can have varying types, consult your API")
@@ -118,7 +121,8 @@ class Representation(Matrise):
         permissions = [
             ('download_representation', 'Can download Presentation')
         ]
-        identifiers = ["array","model"]
+        arnheim = True
+        extenders = ["array"]
 
     def __str__(self):
         return f'Representation of {self.name}'
@@ -136,10 +140,14 @@ class ROI(models.Model):
     experimentalgroup = models.ForeignKey(ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True)
 
     class Meta:
-        identifiers = ["model","roi"]
+        extenders = ["roi"]
+        arnheim = True
 
 
     def __str__(self):
         return f"ROI created by {self.creator.username} on {self.representation.name}"
 
 
+
+
+import grunnlag.signals as sig

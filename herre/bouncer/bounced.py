@@ -34,17 +34,20 @@ class Bounced:
         return self._roles
 
 
-    def bounce(self, required_roles=[], required_scopes=[], allowed_types = ["m2m","u2m"]):
+    def bounce(self, required_roles=[], required_scopes=[], allowed_types = ["m2m","u2m"], anonymous=False):
 
         required_scopes = set(required_scopes)
         required_roles = set(required_roles)
 
+        if not anonymous and self.user.is_anonymous:
+            raise BounceException("Only signed in users are allowed here")
         if self._type not in allowed_types:
             raise BounceException("Wrong App type")
         if not required_scopes.issubset(self.scopeset):
             raise BounceException("App has not the required Scopes")
         if not required_roles.issubset(self.roleset):
             raise BounceException("User has not the required Roles")
+        
 
 
     @classmethod

@@ -1,12 +1,9 @@
 from django.db.models import TextChoices
 
 class RepresentationVariety(TextChoices):
-    MASK = "MASK", "Mask"
-    VOXEL = "VOXEL", "Voxel"
+    """ Variety expresses the Type of Representation we are dealing with
+    """
+    MASK = "MASK", "Mask (Value represent Labels)"
+    VOXEL = "VOXEL", "Voxel (Value represent Intensity)"
     UNKNOWN = "UNKNOWN", "Unknown"
 
-
-class RepresentationVarietyInput(TextChoices): # We need to have an input type otherwise graphql whines 
-    MASK = "MASK", "Mask"
-    VOXEL = "VOXEL", "Voxel"
-    UNKNOWN = "UNKNOWN", "Unknown"

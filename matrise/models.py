@@ -49,8 +49,8 @@ class MatriseBase(models.Model):
         except Exception as e:
             # We are dealing with an initial Creation, lets create a new Store
             if not self.store.name: 
-                generated = active_settings.getPathGeneratorClass().generatePath(self)
-                self.store.name = generated.path
+                path = active_settings.getPathGeneratorClass().generatePath(self)
+                self.store.name = path
 
             self.has_array = False
 
