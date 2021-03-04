@@ -1,6 +1,7 @@
-from delt.settings import get_active_settings
 from pydantic import BaseModel
 from typing import List, Optional
+from enum import Enum
+
 
 class DataModel(BaseModel):
     identifier: str
@@ -23,6 +24,19 @@ class Extension(BaseModel):
 
 
 class DataQuery(BaseModel):
-    version: str = get_active_settings().api_version
+    version: str
     point: DataPoint
     models: List[DataModel]
+
+
+class ServiceType(Enum):
+    DATA = "DATA"
+    PROVIDER = "PROVIDER"
+
+class Service(BaseModel):
+    type: ServiceType
+    inward: str
+    outward: str
+    port: int
+    
+ 

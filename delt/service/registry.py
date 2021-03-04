@@ -1,7 +1,7 @@
-from delt.datamodel.views import DataPointViewBuilder, DataModelViewBuilder, DataQueryViewBuilder, ExtensionsViewBuilder
+from .views import DataPointViewBuilder, DataModelViewBuilder, DataQueryViewBuilder, ExtensionsViewBuilder
 from typing import Any, Callable, Dict, List
-from delt.datamodel.types import DataModel, Extension, ExtensionParams
-from delt.datamodel.parser import  parse_data_models
+from .types import DataModel, Extension, ExtensionParams
+from .parser import  parse_data_models
 from delt.settings import get_active_settings
 from django.conf.urls import url
 from django.urls import include, path, re_path
@@ -14,6 +14,8 @@ class DataModelRegistry:
         self.settings = get_active_settings()
         self.models: List[DataModel] = []
         self.extensionBuilder: Dict[str, Callable[[Any], ExtensionParams]] = {}
+
+
     def registerInstalledModels(self, exclude=[]):
         self.models = parse_data_models()
 
@@ -22,7 +24,6 @@ class DataModelRegistry:
 
     def registerExtensionBuilder(self, extension: str, builder: Callable[[Any],ExtensionParams]):
         self.extensionBuilder[extension] = builder
-
 
     def buildExtensionsForRequest(self, request) -> List[Extension]:
         return [Extension(name=key, params=builder(request)) for key, builder in self.extensionBuilder.items()]
@@ -33,6 +34,7 @@ class DataModelRegistry:
             url('.well-known/arnheim_point', DataPointViewBuilder(self).as_view()),
             url('.well-known/arnheim_query', DataQueryViewBuilder(self).as_view()),
             url('.well-known/extensions', ExtensionsViewBuilder(self).as_view()),
+            url('.well-known/arkitekt', ExtensionsViewBuilder(self).as_view()),
         )
 
 

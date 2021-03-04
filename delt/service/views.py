@@ -1,6 +1,6 @@
 from typing import List
 from delt.settings import get_active_settings
-from delt.datamodel.types import DataPoint, DataQuery, Extension
+from .types import DataPoint, DataQuery, Extension
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -92,6 +92,22 @@ def ExtensionsViewBuilder(registry):
 
 
             return Response([ex.dict() for ex in extensions])
+                    
+    return ExtensionsView
+
+
+def ArkitektViewBuilder(registry):
+
+    @method_decorator(csrf_exempt, name='dispatch')
+    class ExtensionsView(APIView):
+        """Data Model View is returning all of the acessible models for the Arnheim platform
+        """
+
+        def get(self, request):
+            settings = get_active_settings()
+
+
+            return Response(settings.service.dict())
                     
     return ExtensionsView
 
