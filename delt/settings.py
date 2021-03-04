@@ -1,3 +1,4 @@
+from delt.service.types import Service, ServiceType
 from django.conf import settings
 
 
@@ -20,6 +21,13 @@ class DeltSettings:
                 "S3" : "S3"
             }
         }]
+
+        @property
+        def service(self):
+            return Service(type=ServiceType.DATA, outward=self.outward, inward=self.inward, port=self.port)
+
+
+
 
 
 ACTIVE_DELT_SETTINGS = None
