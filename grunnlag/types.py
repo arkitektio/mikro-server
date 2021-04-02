@@ -1,5 +1,6 @@
 
 
+from django.contrib.auth import get_user_model
 from grunnlag.filters import RepresentationFilter
 from balder.fields.filtered import BalderFiltered
 from balder.types.object import BalderObject
@@ -38,3 +39,10 @@ class SampleType(BalderObject):
     class Meta:
         model = Sample
         description = Sample.__doc__
+
+
+class User(BalderObject):
+
+    class Meta:
+        model = get_user_model()
+        description = get_user_model().__doc__

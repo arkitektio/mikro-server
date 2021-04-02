@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '9=9u7c35!*p_h674kv*t^8ntefnf*#)z_h%6$#b(oe=_mwysw+'
+SECRET_KEY = '9=9u7c35!*p_h674kv*t^8ntefnf*#)z_h%6$sdfoisnepuifonspoinef#b(oe=_mwysw+'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -35,9 +35,6 @@ ALLOWED_HOSTS = ["*"]
 ELEMENTS_HOST = "p-tnagerl-lab1"
 ELEMENTS_INWARD = "elements" # Set this to the host you are on
 ELEMENTS_PORT = 8080 # Set this to the host you are on
-
-# Uncomment and re run
-OAUTH2_PROVIDER_APPLICATION_MODEL='oauth2_provider.Application'
 
 
 # S3 Settings
@@ -54,14 +51,17 @@ AWS_S3_SECURE_URLS = False # Should resort to True if using in Production behind
 
 
 # Application definition
-
-DELT = {
-    "INWARD": "elements",
+ARKITEKT_SERVICE = {
+    "INWARD": ELEMENTS_INWARD,
     "OUTWARD": ELEMENTS_HOST,
     "PORT": ELEMENTS_PORT,
-    "TYPE": "graphql"
+    "TYPES": ["NEGOTIATE","POINT", "PROVIDER"],
+    "NAME": "elements",
+    "VERSION": "0.1",
+    "DEPENDENCIES": [],
+    "REGISTER_INSTALLED": True,
+    "NEGOTIATE_HOOK": "grunnlag.negotiate.on_negotiate"
 }
-
 
 
 
@@ -84,7 +84,6 @@ GRUNNLAG = {
     "GROUPS": None
 
 }
-
 
 
 EXTENSIONS = [
@@ -195,6 +194,7 @@ CHANNEL_LAYERS = {
     },
 }
 
+AUTH_USER_MODEL = 'herre.HerreUser'
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'guardian.backends.ObjectPermissionBackend')
 
 # Password validation

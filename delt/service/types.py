@@ -28,15 +28,18 @@ class DataQuery(BaseModel):
     point: DataPoint
     models: List[DataModel]
 
-
-class ServiceType(Enum):
-    DATA = "DATA"
+class ServiceType(str, Enum):
+    POINT = "POINT"
     PROVIDER = "PROVIDER"
+    NEGOTIATE = "NEGOTIATE"
 
 class Service(BaseModel):
-    type: ServiceType
+    types: List[ServiceType]
     inward: str
     outward: str
     port: int
+    name: str
+    version: str
+    dependencies: Optional[List[str]]
     
  

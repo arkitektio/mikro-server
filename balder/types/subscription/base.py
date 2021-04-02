@@ -3,7 +3,26 @@ from django.db.models import Model
 from pydantic.main import BaseModel
 from balder.types.subscription.meta import BalderSubscriptionMeta
 from balder.types.utils import classToString
-import channels_graphql_ws
+
+try:
+    import channels_graphql_ws
+
+    
+    class BaseSubscription(channels_graphql_ws.Subscription):
+
+        @classmethod
+        def subscribe(cls, root, info, *args, **kwargs):
+            raise NotImplementedError("Should never be called directly")
+
+        @classmethod
+        def publish(cls, payload, info, *args, **kwargs):
+            raise NotImplementedError("Should never be called directly")
+
+
+except ImportError as e:
+
+    BaseSubscription = None
+    
 import graphene
 
 class IllConfigured(Exception):
@@ -11,17 +30,6 @@ class IllConfigured(Exception):
 
 class NoMutateException(Exception):
     pass
-
-
-class BaseSubscription(channels_graphql_ws.Subscription):
-
-    @classmethod
-    def subscribe(cls, root, info, *args, **kwargs):
-        raise NotImplementedError("Should never be called directly")
-
-    @classmethod
-    def publish(cls, payload, info, *args, **kwargs):
-        raise NotImplementedError("Should never be called directly")
 
 
 class BalderSubscription(metaclass=BalderSubscriptionMeta):
@@ -84,7 +92,9 @@ class BalderSubscription(metaclass=BalderSubscriptionMeta):
             assert meta.serializer is not None, "If you omit publish please provide a Meta field serializer in {cls.__name__}"
             publish_function =  lambda payload, info, *args, **kwargs: meta.serializer.unpack(payload, basemodel=meta.model)
 
+        assert BaseSubscription is not None, "You have not installed django-grahql-ws so subscriptions are not enabled!"
         cls.subscription = type("Subscription", (BaseSubscription,), {"Arguments": cls.Arguments, "Output": meta.type, "subscribe": subscribe_function, "publish": publish_function, "__doc__": cls._get_description()})
+
         return cls.subscription.Field(description=cls._get_description())
 
 

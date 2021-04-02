@@ -20,7 +20,7 @@ from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import url
 from balder.autodiscover import autodiscover
-from delt.service.registry import get_datamodel_registry
+from delt.service.registry import get_service_registry
 
 
 # Autodiscover for all of the Balder Modules in the installed Apps
@@ -28,25 +28,7 @@ from delt.service.registry import get_datamodel_registry
 
 autodiscover()
 
-# Bootstrap Backend
-datamodel_registry = get_datamodel_registry()
-datamodel_registry.registerInstalledModels()
 
-
-def array_builder(request):
-    print(request.user)
-    return {
-        "protocol": "s3",
-        "path": "p-tnagerl-lab1:9000",
-        "params": {
-            "access_key": "weak_access_key",
-            "secret_key": "weak_secret_key"
-        }
-    }
-
-
-
-datamodel_registry.registerExtensionBuilder("array", array_builder)
 
 
 def index(request):
@@ -58,5 +40,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', index, name='index'),
     url(r'^graphql$', csrf_exempt(GraphQLView.as_view(graphiql=True))),
-    *datamodel_registry.buildPaths()
+    *get_service_registry().buildPaths()
 ]

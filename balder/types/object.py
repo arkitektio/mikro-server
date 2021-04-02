@@ -1,5 +1,14 @@
 from graphene_django import DjangoObjectType
 
+
+
+
+
+
+
+
+
+
 class BalderObject(DjangoObjectType):
 
     class Meta:

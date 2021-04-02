@@ -7,8 +7,10 @@ class InputEnum:
 
     @staticmethod
     def from_choices(enum_class: Type[TextChoices], description=None):
-        enum_class.__name__ = f"{enum_class.__name__}Input"
         description = description or enum_class.__doc__
 
-        return graphene.Enum.from_enum(enum_class, description= lambda v: enum_class[v].label if v is not None else description)
+        def des(v):
+            return enum_class[v.value].label if v is not None else description
+
+        return graphene.Enum(f"{enum_class.__name__}Input", [(tag.name, tag.name) for tag in enum_class], description= des)
 

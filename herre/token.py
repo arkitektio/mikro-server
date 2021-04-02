@@ -13,13 +13,16 @@ class JwtToken(dict):
     Mimics the structure of `AbstractAccessToken` so you can use standard
     Django Oauth Toolkit permissions like `TokenHasScope`.
     """
-    def __init__(self, decoded, user):
+    def __init__(self, decoded, user, token):
+        decoded["scope"] = decoded["scope"] or ""
         self.scopes = decoded["scope"].split(" ")
         self.issuer = decoded["iss"]
         self.roles = decoded["roles"]
+        self.app = decoded["client_app"]
         self.user = user
         self.type = decoded["type"]
-        super(JwtToken, self).__init__(**decoded)
+        self.token = token
+        super(JwtToken, self).__init__(**decoded, token=token, user=user)
 
     def __getattr__(self, item):
         return self[item]
@@ -50,4 +53,5 @@ class JwtToken(dict):
         resource_scopes = set(scopes)
 
         return resource_scopes.issubset(provided_scopes)
+
 
