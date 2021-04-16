@@ -5,7 +5,7 @@ from grunnlag.filters import RepresentationFilter
 from balder.fields.filtered import BalderFiltered
 from balder.types.object import BalderObject
 import graphene
-from .models import Representation, Experiment, Sample
+from grunnlag import models
 from taggit.managers import TaggableManager
 from graphene_django.converter import convert_django_field
 
@@ -20,25 +20,25 @@ def convert_field_to_string(field, registry=None):
 
 
 
-class RepresentationType(BalderObject):
+class Representation(BalderObject):
     """ A Representation is a multi-dimensional Array that can do what ever it wants """
 
     class Meta:
-        model = Representation
-        description = Representation.__doc__
+        model = models.Representation
+        description = models.Representation.__doc__
 
-class ExperimentType(BalderObject):
-
-    class Meta:
-        model = Experiment
-        description = Experiment.__doc__
-
-class SampleType(BalderObject):
-    representations = BalderFiltered(RepresentationType, filterset_class=RepresentationFilter, related_field="representations")
+class Experiment(BalderObject):
 
     class Meta:
-        model = Sample
-        description = Sample.__doc__
+        model = models.Experiment
+        description = models.Experiment.__doc__
+
+class Sample(BalderObject):
+    representations = BalderFiltered(Representation, filterset_class=RepresentationFilter, related_field="representations")
+
+    class Meta:
+        model = models.Sample
+        description = models.Sample.__doc__
 
 
 class User(BalderObject):

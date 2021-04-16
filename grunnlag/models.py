@@ -26,7 +26,7 @@ class Antibody(models.Model):
         return "{0}".format(self.name)
 
     class Meta:
-        arnheim = True
+        arkitekt = True
 
 
 class Experiment(models.Model):
@@ -41,7 +41,7 @@ class Experiment(models.Model):
         return "Experiment {0} by {1}".format(self.name,self.creator.username)
 
     class Meta:
-        arnheim = True
+        arkitekt = True
 
 class ExperimentalGroup(models.Model):
     name = models.CharField(max_length=200, help_text="The experimental groups name")
@@ -54,7 +54,7 @@ class ExperimentalGroup(models.Model):
         return "ExperimentalGroup {0} on Experiment {1}".format(self.name,self.experiment.name)
 
     class Meta:
-        arnheim = True
+        arkitekt = True
 
 
 class Animal(models.Model):
@@ -69,7 +69,7 @@ class Animal(models.Model):
         return "{0}".format(self.name)
 
     class Meta:
-        arnheim = True
+        arkitekt = True
 
 
 class Sample(models.Model):
@@ -86,7 +86,7 @@ class Sample(models.Model):
 
 
     class Meta:
-        arnheim = True
+        arkitekt = True
 
 
     def __str__(self):
@@ -121,7 +121,7 @@ class Representation(Matrise):
         permissions = [
             ('download_representation', 'Can download Presentation')
         ]
-        arnheim = True
+        arkitekt = True
         extenders = ["array"]
 
     def __str__(self):
@@ -141,7 +141,7 @@ class ROI(models.Model):
 
     class Meta:
         extenders = ["roi"]
-        arnheim = True
+        arkitekt = True
 
 
     def __str__(self):

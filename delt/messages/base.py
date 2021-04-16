@@ -1,11 +1,11 @@
 import json
 import aiormq
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Any, Callable, Optional, Type, TypeVar
+
+from pydantic.types import Json
+from pydantic import Field
 import uuid
-
-from pydantic.types import UUID4
-
 
 class MessageMetaExtensionsModel(BaseModel):
     """ Extensions to the AMQP Message protocol
@@ -15,13 +15,12 @@ class MessageMetaExtensionsModel(BaseModel):
 
 class MessageMetaModel(BaseModel):
     type: str
-    reference: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    extensions: Optional[MessageMetaExtensionsModel] = {}
+    reference: str = Field(default_factory=uuid.uuid4)
+    extensions: Optional[MessageMetaExtensionsModel] = { }
 
 
 class MessageDataModel(BaseModel):
     pass
-
 
 T = TypeVar("T")
 
@@ -53,3 +52,5 @@ class MessageModel(BaseModel):
             return await function(self, input, message, *args, **kwargs)
 
         return unwrapped
+
+    

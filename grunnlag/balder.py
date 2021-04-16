@@ -1,12 +1,11 @@
 from django.db import reset_queries
 from balder.types.mutation.base import BalderMutation
-from grunnlag.types import ExperimentType, RepresentationType, SampleType
+from grunnlag import types, models
 from balder.types.query.base import BalderQuery
 from grunnlag.filters import ExperimentFilter, RepresentationFilter, SampleFilter
 import graphene
-from grunnlag.models import Representation, Sample
 import grunnlag.mutations
-import grunnlag.subscriptions
+#import grunnlag.subscriptions TODO: This is currently breaking because of django-graphql-ws bad references
 
 
 class MyRepresentations(BalderQuery):
@@ -16,7 +15,7 @@ class MyRepresentations(BalderQuery):
     class Meta:
         list = True
         personal = "sample__creator"
-        type = RepresentationType
+        type = types.Representation
         filter = RepresentationFilter
         operation = "myrepresentations"
 
@@ -28,7 +27,7 @@ class MySamples(BalderQuery):
     class Meta:
         list = True
         personal = "creator"
-        type = SampleType
+        type = types.Sample
         filter = SampleFilter
         operation = "mysamples"
 
@@ -39,7 +38,7 @@ class MyExperiments(BalderQuery):
     class Meta:
         list = True
         personal = "creator"
-        type = ExperimentType
+        type = types.Experiment
         filter = ExperimentFilter
         operation = "myexperiments"
 
@@ -49,7 +48,7 @@ class Samples(BalderQuery):
     """
     class Meta:
         list = True
-        type = SampleType
+        type = types.Sample
         filter = SampleFilter
         operation = "samples"
 
@@ -59,39 +58,53 @@ class Representations(BalderQuery):
     """
     class Meta:
         list = True
-        type = RepresentationType
+        type = types.Representation
         filter = RepresentationFilter
         operation = "representations"
 
 
-
-
-class RepresentationByID(BalderQuery):
+class ExperimentDetail(BalderQuery):
     """ Get a single representation by ID """
 
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
 
 
-    resolve = lambda root, info, id: Representation.objects.get(id=id)
+    resolve = lambda root, info, id: models.Experiment.objects.get(id=id)
     
     class Meta:
-        type= RepresentationType 
+        type= types.Experiment 
+        operation = "experiment"   
+
+
+
+
+class Representation(BalderQuery):
+    """ Get a single representation by ID """
+
+    class Arguments:
+        id = graphene.ID(description="The ID to search by", required=True)
+
+
+    resolve = lambda root, info, id: models.Representation.objects.get(id=id)
+    
+    class Meta:
+        type= types.Representation 
         operation = "representation"   
 
 
 
-class SampleByID(BalderQuery):
+class Sample(BalderQuery):
     """ Get a single representation by ID """
 
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
 
 
-    resolve = lambda root, info, id: Sample.objects.get(id=id)
+    resolve = lambda root, info, id: models.Sample.objects.get(id=id)
     
     class Meta:
-        type= SampleType 
+        type= types.Sample 
         operation = "sample"   
 
 

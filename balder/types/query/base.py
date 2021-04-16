@@ -79,7 +79,7 @@ class BalderQuery(metaclass=BalderQueryMeta):
             list_resolver = bounced()(lambda root, info, *args, **kwargs: qs.filter(**{meta.personal: info.context.user}))
             item_resolver = bounced()(lambda root, info, *args, **kwargs: qs.filter(**{meta.personal: info.context.user}).first())
         else:
-            list_resolver = bounced()(lambda root, info, *args, **kwargs: qs)
+            list_resolver = bounced()(lambda root, info, *args, **kwargs: qs.all())
             item_resolver = bounced()(lambda root, info, *args, **kwargs: qs.first())
 
         if meta.filter:

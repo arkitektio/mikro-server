@@ -3,8 +3,7 @@ from grunnlag.enums import RepresentationVariety
 from balder.enum import InputEnum
 from balder.types import BalderMutation
 import graphene
-from grunnlag.models import Representation
-from grunnlag.types import RepresentationType
+from grunnlag import models, types
 
 class UpdateRepresentation(BalderMutation):
     """Updates an Representation (also retriggers meta-data retrieval from data stored in)
@@ -16,10 +15,10 @@ class UpdateRepresentation(BalderMutation):
 
     @bounced()
     def mutate(root, info, *args, **kwargs):
-        rep = Representation.objects.get(id=kwargs.pop("rep"))
+        rep = models.Representation.objects.get(id=kwargs.pop("rep"))
         rep.save()
         return rep
 
 
     class Meta:
-        type = RepresentationType
+        type = types.Representation

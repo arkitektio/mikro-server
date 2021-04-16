@@ -1,7 +1,6 @@
 from balder.types import BalderMutation
 import graphene
-from grunnlag.models import Experiment
-from grunnlag.types import ExperimentType
+from grunnlag import models, types
 from herre.bouncer.utils import bounced
 
 
@@ -17,8 +16,8 @@ class CreateExperiment(BalderMutation):
 
     @bounced()
     def mutate(root, info, *args, **kwargs):
-        return Experiment.objects.create(creator = info.context.user, **kwargs)
+        return models.Experiment.objects.create(creator = info.context.user, **kwargs)
 
 
     class Meta:
-        type = ExperimentType
+        type = types.Experiment

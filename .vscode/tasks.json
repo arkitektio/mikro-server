@@ -10,9 +10,14 @@
             "command": "python manage.py runserver 0.0.0.0:8080"
         },
         {
-            "label": "Schema",
+            "label": "Update Schema",
             "type": "shell",
             "command": "python manage.py makemigrations && python manage.py migrate"
+        },
+        {
+            "label": "Dump Schema",
+            "type": "shell",
+            "command": "python manage.py graphql_schema --out schema.graphql"
         },
     ]
 }

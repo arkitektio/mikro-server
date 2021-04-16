@@ -17,7 +17,7 @@ def parse_data_models():
         for model in allmodels:
             meta = model._meta
             try: 
-                is_arnheim = meta.arnheim
+                is_arnheim = meta.arkitekt
             except:
                 continue
             if is_arnheim:

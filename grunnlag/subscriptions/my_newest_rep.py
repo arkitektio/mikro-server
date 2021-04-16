@@ -1,7 +1,7 @@
-from grunnlag.models import Representation
 from balder.types import BalderSubscription
 from herre.bouncer.utils import bounced
-from grunnlag.types import RepresentationType
+
+from grunnlag import models, types
 
 
 class MyNewestRep(BalderSubscription):
@@ -11,8 +11,8 @@ class MyNewestRep(BalderSubscription):
         pass
 
     class Meta:
-        type = RepresentationType
-        model = Representation
+        type = types.Representation
+        model = models.Representation
 
     
     @bounced()

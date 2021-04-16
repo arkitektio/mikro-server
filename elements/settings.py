@@ -109,7 +109,6 @@ INSTALLED_APPS = [
     'guardian',
     'graphene_django',
     "rest_framework",
-    'oauth2_provider'
 ] + EXTENSIONS
 
 

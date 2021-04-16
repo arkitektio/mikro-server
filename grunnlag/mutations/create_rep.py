@@ -3,8 +3,7 @@ from grunnlag.enums import RepresentationVariety
 from balder.enum import InputEnum
 from balder.types import BalderMutation
 import graphene
-from grunnlag.models import Representation
-from grunnlag.types import RepresentationType
+from grunnlag import models, types
 
 class CreateRepresentation(BalderMutation):
     """Creates a Representation
@@ -25,11 +24,11 @@ class CreateRepresentation(BalderMutation):
         tags = kwargs.pop("tags", [])
 
 
-        rep = Representation.objects.create(name=name, sample_id = sampleid, variety=variety)
+        rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety)
         rep.tags.add(*tags)
         rep.save()
         return rep
 
 
     class Meta:
-        type = RepresentationType
+        type = types.Representation

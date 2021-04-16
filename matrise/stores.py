@@ -1,7 +1,6 @@
 
 import asyncio
 from .settings import get_active_settings
-from fsspec.asyn import async_wrapper
 import s3fs
 import xarray as xr
 from xarray.core import dataset

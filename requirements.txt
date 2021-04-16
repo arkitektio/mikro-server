@@ -4,7 +4,6 @@ channels_redis
 django-registration-redux
 django-extensions
 drf-access-policy
-django-oauth-toolkit
 django-cors-headers
 django-filter
 django-taggit
@@ -13,7 +12,6 @@ drf-access-policy
 psycopg2
 pytest-django
 pytest-asyncio
-django-channels-graphql-ws
 django-guardian
 django-avatar
 python-slugify
@@ -21,7 +19,8 @@ s3fs==0.4.2 #TODO: Need to figure out parallel access in the eventloop first, sh
 boto3
 django-storages
 scipy
-graphene-django
+bergen==0.3.75
+graphene-django==3.0.0b7
 unflatten
 graphql-core<3,>=2.1.0
 
