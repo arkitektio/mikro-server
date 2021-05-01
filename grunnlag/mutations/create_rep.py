@@ -4,6 +4,11 @@ from balder.enum import InputEnum
 from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types
+import logging
+from bergen.console import console
+
+
+logger = logging.getLogger(__name__)
 
 class CreateRepresentation(BalderMutation):
     """Creates a Representation
@@ -19,14 +24,20 @@ class CreateRepresentation(BalderMutation):
     @bounced()
     def mutate(root, info, *args, **kwargs):
         sampleid = kwargs.pop("sample")
-        variety = kwargs.pop("variety", None)
+        variety = kwargs.pop("variety", RepresentationVariety.UNKNOWN)
         name = kwargs.pop("name")
         tags = kwargs.pop("tags", [])
 
+        print(variety.value)
+        try:
+            rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety.value)
+            rep.tags.add(*tags)
+            rep.save()
+        except Exception as e:
+            console.print_exception()
+            logger.error(e)
 
-        rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety)
-        rep.tags.add(*tags)
-        rep.save()
+        print(rep)
         return rep
 
 

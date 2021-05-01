@@ -19,5 +19,15 @@
             "type": "shell",
             "command": "python manage.py graphql_schema --out schema.graphql"
         },
+        {
+            "label": "Register Data",
+            "type": "shell",
+            "command": "python manage.py register_point"
+        },
+        {
+            "label": "Register Nodes",
+            "type": "shell",
+            "command": "python manage.py register_nodes"
+        },
     ]
 }

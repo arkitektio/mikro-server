@@ -18,7 +18,7 @@ def update_or_create_herre(decoded):
         try:
             user = UserModel.objects.get(email=decoded["email"])
         except HerreUser.DoesNotExist:
-            user = UserModel(email=decoded["email"])
+            user = UserModel(email=decoded["email"], username=f"Herre User -  {decoded['email']}")
             user.set_unusable_password()
             user.save()
             logger.warning("Created new user")

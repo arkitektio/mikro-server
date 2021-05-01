@@ -20,8 +20,8 @@ from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import url
 from balder.autodiscover import autodiscover
-from delt.service.registry import get_service_registry
 from balder.views import BalderView
+import elements.arkitekt
 
 # Autodiscover for all of the Balder Modules in the installed Apps
 
@@ -36,5 +36,4 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', index, name='index'),
     url(r'^graphql$', BalderView),
-    *get_service_registry().buildPaths()
 ]

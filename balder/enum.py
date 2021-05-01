@@ -10,7 +10,7 @@ class InputEnum:
         description = description or enum_class.__doc__
 
         def des(v):
-            return enum_class[v.value].label if v is not None else description
+            return enum_class[v.name].label if v is not None else description
 
-        return graphene.Enum(f"{enum_class.__name__}Input", [(tag.name, tag.name) for tag in enum_class], description= des)
+        return graphene.Enum(f"{enum_class.__name__}Input", [(tag.name, tag.value) for tag in enum_class], description= des)
 

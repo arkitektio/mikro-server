@@ -1,0 +1,566 @@
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa09365aac0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa09365aac0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa09365aaf0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa09365aaf0>
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f5736bce9a0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f5736bce9a0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f5736bce9d0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f5736bce9d0>
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f83b9e69610>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f83b9e69610>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f83b9e69640>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f83b9e69640>
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f0fa92e0d30>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f0fa92e0d30>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f0fa92e0d60>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f0fa92e0d60>
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Watching for file changes with StatReloader
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+/usr/local/lib/python3.8/site-packages/bergen/auths/base.py changed, reloading.
+Couldn't fetch Token with config Insecure Connection to herre:8000 on Grant client-credentials
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Watching for file changes with StatReloader
+/workspace/elements/arkitekt.py changed, reloading.
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+/workspace/grunnlag/signals.py changed, reloading.
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+/usr/local/lib/python3.8/site-packages/bergen/monitor/monitor.py changed, reloading.
+/usr/local/lib/python3.8/site-packages/bergen/monitor/monitor.py changed, reloading.
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb32701e430>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb32701e430>
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
+Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f45e52d5bb0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f45e52d5bb0>
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f2a1dbd86a0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f2a1dbd86a0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f2a1c486ac0>, 22785.754626663)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f2a1dbd8700>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f2a1c486ac0>, 22785.754626663)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f2a1dbd8700>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f471eb37eb0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f471eb37eb0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f471e8dfac0>, 24222.127634513)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f471eb4a130>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f471e8dfac0>, 24222.127634513)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f471eb4a130>
+/usr/local/lib/python3.8/site-packages/bergen/messages/types.py changed, reloading.
+/usr/local/lib/python3.8/site-packages/bergen/messages/types.py changed, reloading.
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+/workspace/grunnlag/balder.py changed, reloading.
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f32111a3040>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f32111a3040>
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb455cb0d30>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb455cb0d30>
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None id=1 type='GRAPHQL' name=None needsNegotiation=False inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f68286ca070>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f68286ca070>
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None id=1 app={   'TYPENAME': None,
+    'client_id': None,
+    'grant_type': None,
+    'id': None,
+    'name': 'Elements'} user=None type='GRAPHQL' name=None needsNegotiation=True inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa9225d3eb0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa9225d3eb0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fa921ae6460>, 26838.368600676)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fa921b34400>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fa921ae6460>, 26838.368600676)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fa921b34400>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa9200b4bb0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa9200b4bb0>
+Creating new Ward for Datapoint TYPENAME=None id=1 app={   'TYPENAME': None,
+    'client_id': None,
+    'grant_type': None,
+    'id': None,
+    'name': 'Elements'} user=None type='GRAPHQL' name=None needsNegotiation=True inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
+/usr/local/lib/python3.8/site-packages/bergen/messages/postman/unreserve/bounced_unreserve.py changed, reloading.
+/usr/local/lib/python3.8/site-packages/bergen/messages/postman/unreserve/bounced_unreserve.py changed, reloading.
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f15380cdfd0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f15380cdfd0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f1537639400>, 26905.511789511)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f153762faf0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f1537639400>, 26905.511789511)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f153762faf0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f15357b3c40>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f15357b3c40>
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Registering CreateRepresentation as Mutation
+Registering CreateExperiment as Mutation
+Registering CreateSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query

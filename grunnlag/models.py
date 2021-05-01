@@ -26,7 +26,7 @@ class Antibody(models.Model):
         return "{0}".format(self.name)
 
     class Meta:
-        arkitekt = True
+        identifier = "antibody"
 
 
 class Experiment(models.Model):
@@ -41,7 +41,7 @@ class Experiment(models.Model):
         return "Experiment {0} by {1}".format(self.name,self.creator.username)
 
     class Meta:
-        arkitekt = True
+        identifier = "experiment"
 
 class ExperimentalGroup(models.Model):
     name = models.CharField(max_length=200, help_text="The experimental groups name")
@@ -54,7 +54,7 @@ class ExperimentalGroup(models.Model):
         return "ExperimentalGroup {0} on Experiment {1}".format(self.name,self.experiment.name)
 
     class Meta:
-        arkitekt = True
+        identifier = "experimentalgroup"
 
 
 class Animal(models.Model):
@@ -69,7 +69,7 @@ class Animal(models.Model):
         return "{0}".format(self.name)
 
     class Meta:
-        arkitekt = True
+        identifier = "animal"
 
 
 class Sample(models.Model):
@@ -86,7 +86,7 @@ class Sample(models.Model):
 
 
     class Meta:
-        arkitekt = True
+        identifier = "sample"
 
 
     def __str__(self):
@@ -109,7 +109,7 @@ class Representation(Matrise):
     origin = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null= True, related_name="derived", related_query_name="derived")
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='representations', help_text="The Sample this representation belongs to")
     type = models.CharField(max_length=400, blank=True, null=True, help_text="The Representation can have varying types, consult your API")
-    variety = models.CharField(max_length=400, help_text="The Representation can have varying types, consult your API", choices=RepresentationVariety.choices, default=RepresentationVariety.UNKNOWN)
+    variety = models.CharField(max_length=400, help_text="The Representation can have varying types, consult your API", choices=RepresentationVariety.choices, default=RepresentationVariety.UNKNOWN.value)
     chain = models.CharField(max_length=9000, blank=True, null=True)
     nodeid = models.CharField(max_length=400, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -121,7 +121,7 @@ class Representation(Matrise):
         permissions = [
             ('download_representation', 'Can download Presentation')
         ]
-        arkitekt = True
+        identifier = "representation"
         extenders = ["array"]
 
     def __str__(self):
@@ -141,7 +141,7 @@ class ROI(models.Model):
 
     class Meta:
         extenders = ["roi"]
-        arkitekt = True
+        identifier = "roi"
 
 
     def __str__(self):

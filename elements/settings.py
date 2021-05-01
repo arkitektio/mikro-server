@@ -36,7 +36,7 @@ ELEMENTS_HOST = "p-tnagerl-lab1"
 ELEMENTS_INWARD = "elements" # Set this to the host you are on
 ELEMENTS_PORT = 8080 # Set this to the host you are on
 
-
+CORS_ALLOW_ALL_ORIGINS = True
 # S3 Settings
 S3_PUBLIC_DOMAIN = f"{ELEMENTS_HOST}:9000" #TODO: FIx
 AWS_ACCESS_KEY_ID = "weak_access_key"
@@ -60,7 +60,7 @@ ARKITEKT_SERVICE = {
     "VERSION": "0.1",
     "DEPENDENCIES": [],
     "REGISTER_INSTALLED": True,
-    "NEGOTIATE_HOOK": "grunnlag.negotiate.on_negotiate"
+    "NEEDS_NEGOTIATION": True,
 }
 
 
@@ -102,10 +102,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'django_filters',
     'taggit',
     'channels',
     'herre',
+    'delt',
     'guardian',
     'graphene_django',
     "rest_framework",
@@ -114,6 +116,7 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

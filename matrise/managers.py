@@ -26,7 +26,7 @@ class MatriseManager(Manager):
         item = self.model(**kwargs)
         item.save() # Important. we now assign a store to this
 
-        item.store.save(array, compute=True,fileversion=fileversion, apiversion= apiversion)
+        item.store.save(array, compute=True, fileversion=fileversion, apiversion= apiversion)
         
         item.save()
         return item

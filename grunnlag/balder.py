@@ -5,7 +5,39 @@ from balder.types.query.base import BalderQuery
 from grunnlag.filters import ExperimentFilter, RepresentationFilter, SampleFilter
 import graphene
 import grunnlag.mutations
-#import grunnlag.subscriptions TODO: This is currently breaking because of django-graphql-ws bad references
+from graphene.types.generic import GenericScalar
+#import
+from herre import bounced
+
+
+
+
+class Negotiate(BalderMutation):
+
+    class Arguments:
+        additionals = GenericScalar(description="Addditoinal Parameters")
+
+    @bounced(only_jwt=True)
+    def mutate(root, info, *args, **kwargs):
+        return {
+        "protocol": "s3",
+        "path": "p-tnagerl-lab1:9000",
+        "params": {
+            "access_key": "weak_access_key",
+            "secret_key": "weak_secret_key"
+        }
+        }
+
+    class Meta:
+        type = GenericScalar
+        operation = "negotiate"
+
+
+
+
+
+
+
 
 
 class MyRepresentations(BalderQuery):
