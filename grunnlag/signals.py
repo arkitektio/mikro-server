@@ -18,7 +18,7 @@ def rep_post_save(sender, instance=None, created=None, **kwargs):
     if created:
         logger.info(f"Assigning Permissions {permissions} to Representation")
         for permission in permissions:
-            assign_perm(permission, instance.sample.creator, instance)
+            if instance.sample: assign_perm(permission, instance.sample.creator, instance)
 
     
     #from grunnlag.subscriptions import MyNewestRep

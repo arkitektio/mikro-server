@@ -19,9 +19,11 @@ class Negotiate(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, *args, **kwargs):
+        host = info.context.get_host().split(":")[0]
+
         return {
         "protocol": "s3",
-        "path": "p-tnagerl-lab1:9000",
+        "path": f"{host}:9000",
         "params": {
             "access_key": "weak_access_key",
             "secret_key": "weak_secret_key"

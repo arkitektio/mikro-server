@@ -22,10 +22,10 @@ class RepresentationFilter(django_filters.FilterSet):
 
 
 class SampleFilter(django_filters.FilterSet):
-
     experiment = django_filters.CharFilter(field_name= "experiment__name")
+    name = django_filters.CharFilter(field_name= "name", lookup_expr="icontains")
     bioseries = django_filters.CharFilter(field_name="bioseries__name",  label="The name of the desired BioSeries")
 
     class Meta:
         model = Sample
-        fields = ["creator","experiment","bioseries"]
+        fields = ["creator","experiment","bioseries","name"]

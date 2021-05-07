@@ -8,7 +8,7 @@ herre:
   port: 8000
   client_id: AoNMdwnUGwULwi0UVOD04wpoDjsmX8i8BniBRarF
   client_secret: ke9LXivKkZSyi57eLWFGozHtXH66JUjhJZOisTuxNf0vBo5QcAQAUwHyzYQZgRKlaPNuQNZlxsQbTus1ruThhocOGs4TFg4L2KtXcqwGVRsWWb4k9CEzHt7R3UADjNgW
-  authorization_grant_type: client-credentials
+  authorization_grant_type: CLIENT_CREDENTIALS
   scopes: 
       - read
       - write

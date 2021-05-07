@@ -32,6 +32,7 @@ type Query {
 
     """The name of the desired BioSeries"""
     bioseries: String = null
+    name: String = null
   ): [Sample]
 
   """
@@ -50,6 +51,7 @@ type Query {
 
     """The name of the desired BioSeries"""
     bioseries: String = null
+    name: String = null
   ): [Sample]
 
   """
@@ -118,7 +120,7 @@ type Representation {
   origin: Representation
 
   """The Sample this representation belongs to"""
-  sample: Sample!
+  sample: Sample
 
   """The Representation can have varying types, consult your API"""
   type: String
@@ -150,7 +152,7 @@ type Sample {
   id: ID!
   creator: User!
   name: String!
-  experiment: Experiment
+  experiments: [Experiment!]!
   nodeid: String
   representations(
     name: String = null
@@ -223,7 +225,7 @@ type Experiment {
   linkedPaper: String
   creator: User!
   image: String
-  sampleSet: [Sample!]!
+  samples: [Sample!]!
 }
 
 """An enumeration."""
@@ -242,6 +244,57 @@ scalar Tag
 
 """The root Mutation"""
 type Mutation {
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  createExperiment(
+    """A short description of the experiment"""
+    description: String = null
+
+    """A cleartext description what this representation represents as data"""
+    name: String!
+  ): Experiment
+
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  deleteExperiment(
+    """A cleartext description what this representation represents as data"""
+    id: ID!
+  ): DeleteExperimentResult
+
+  """
+  Creates a Sample
+      
+  """
+  createSample(
+    """The Experiments this sample Belongs to"""
+    experiments: [ID] = null
+
+    """A cleartext name for this Sample"""
+    name: String!
+  ): Sample
+
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  deleteSample(
+    """A cleartext description what this representation represents as data"""
+    id: ID!
+  ): DeleteSampleResult
+
+  """
+  Updates an Representation (also retriggers meta-data retrieval from data stored in)
+      
+  """
+  updateRepresentation(
+    """Which sample does this representation belong to"""
+    rep: ID!
+  ): Representation
+
   """
   Creates a Representation
       
@@ -264,34 +317,22 @@ type Mutation {
    Create an experiment (only signed in users)
       
   """
-  createExperiment(
-    """A short description of the experiment"""
-    description: String = null
+  deleteRepresentation(
+    """The ID of the two deletet Representation"""
+    id: ID!
+  ): DeleteRepresentationResult
+  negotiate(
+    """Addditoinal Parameters"""
+    additionals: GenericScalar = null
+  ): GenericScalar
+}
 
-    """A cleartext description what this representation represents as data"""
-    name: String!
-  ): Experiment
+type DeleteExperimentResult {
+  id: String
+}
 
-  """
-  Creates a Sample
-      
-  """
-  createSample(
-    """The Experiment this Sample Belongs to"""
-    experiment: ID = null
-
-    """A cleartext name for this Sample"""
-    name: String!
-  ): Sample
-
-  """
-  Updates an Representation (also retriggers meta-data retrieval from data stored in)
-      
-  """
-  updateRepresentation(
-    """Which sample does this representation belong to"""
-    rep: ID!
-  ): Representation
+type DeleteSampleResult {
+  id: String
 }
 
 """
@@ -307,4 +348,8 @@ enum RepresentationVarietyInput {
 
   """Unknown"""
   UNKNOWN
+}
+
+type DeleteRepresentationResult {
+  id: String
 }

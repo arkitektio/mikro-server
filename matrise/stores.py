@@ -37,7 +37,7 @@ class XArrayStore(FieldFile):
             location = self.storage.location
             s3_path = f"{bucket}/{self.name}"
             # Initilize the S3 file system
-            logger.info(f"Bucket [{bucket}]: Connecting to {self.name}")
+            logger.info(f"Bucket [{bucket}]: Connecting to {s3_path}")
             store = s3fs.S3FileSystem(client_kwargs={"endpoint_url": get_active_settings().S3_ENDPOINT_URL})
             return store.get_mapper(s3_path)
         if isinstance(self.storage, FileSystemStorage):
@@ -79,7 +79,8 @@ class XArrayStore(FieldFile):
             raise e
 
     def loadDataArray(self, apiversion = get_active_settings().API_VERSION):
-        dataset = xr.open_zarr(store=self.connected, consolidated=False)
+        print(self.connected)
+        dataset = xr.open_zarr(store=self.connected, consolidated=True)
         fileversion = dataset.attrs["fileversion"]
         fileapiversion = dataset.attrs["apiversion"]
         logger.info(dataset)

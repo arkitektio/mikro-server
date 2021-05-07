@@ -21,3 +21,26 @@ class CreateExperiment(BalderMutation):
 
     class Meta:
         type = types.Experiment
+
+
+class DeleteExperimentResult(graphene.ObjectType):
+    id = graphene.String()
+
+
+class DeleteExperiment(BalderMutation):
+    """ Create an experiment (only signed in users)
+    """
+
+    class Arguments:
+        id = graphene.ID(description="A cleartext description what this representation represents as data", required=True)
+
+
+    @bounced()
+    def mutate(root, info, id, **kwargs):
+        experiment =  models.Experiment.objects.get(id=id)
+        experiment.delete()
+        return {"id": id}
+
+
+    class Meta:
+        type = DeleteExperimentResult

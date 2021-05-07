@@ -18,7 +18,7 @@ from django.urls import path
 from django.shortcuts import render
 from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
-from django.conf.urls import url
+from django.conf.urls import include, url
 from balder.autodiscover import autodiscover
 from balder.views import BalderView
 import elements.arkitekt
@@ -36,4 +36,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', index, name='index'),
     url(r'^graphql$', BalderView),
+     url(r'^ht/', include('health_check.urls')),
+
 ]

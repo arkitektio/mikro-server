@@ -79,7 +79,7 @@ class Sample(models.Model):
     """
     creator = models.ForeignKey(get_user_model(), on_delete=models.SET(get_sentinel_user))
     name = models.CharField(max_length=1000)
-    experiment = models.ForeignKey(Experiment, on_delete=models.SET_NULL, blank=True, null=True)
+    experiments = models.ManyToManyField(Experiment, blank=True, null=True, related_name="samples")
     nodeid = models.CharField(max_length=400, null=True, blank=True)
     experimentalgroup = models.ForeignKey(ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True)
     animal = models.ForeignKey(Animal, on_delete=models.SET_NULL, blank=True, null=True)
@@ -107,7 +107,7 @@ class Representation(Matrise):
     group = "representation"
 
     origin = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null= True, related_name="derived", related_query_name="derived")
-    sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='representations', help_text="The Sample this representation belongs to")
+    sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='representations', help_text="The Sample this representation belongs to", null=True, blank=True)
     type = models.CharField(max_length=400, blank=True, null=True, help_text="The Representation can have varying types, consult your API")
     variety = models.CharField(max_length=400, help_text="The Representation can have varying types, consult your API", choices=RepresentationVariety.choices, default=RepresentationVariety.UNKNOWN.value)
     chain = models.CharField(max_length=9000, blank=True, null=True)

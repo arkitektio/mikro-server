@@ -38,6 +38,8 @@ ELEMENTS_PORT = 8080 # Set this to the host you are on
 
 CORS_ALLOW_ALL_ORIGINS = True
 # S3 Settings
+
+
 S3_PUBLIC_DOMAIN = f"{ELEMENTS_HOST}:9000" #TODO: FIx
 AWS_ACCESS_KEY_ID = "weak_access_key"
 AWS_SECRET_ACCESS_KEY = "weak_secret_key"
@@ -52,14 +54,8 @@ AWS_S3_SECURE_URLS = False # Should resort to True if using in Production behind
 
 # Application definition
 ARKITEKT_SERVICE = {
-    "INWARD": ELEMENTS_INWARD,
-    "OUTWARD": ELEMENTS_HOST,
-    "PORT": ELEMENTS_PORT,
-    "TYPES": ["NEGOTIATE","POINT", "PROVIDER"],
     "NAME": "elements",
     "VERSION": "0.1",
-    "DEPENDENCIES": [],
-    "REGISTER_INSTALLED": True,
     "NEEDS_NEGOTIATION": True,
 }
 
@@ -106,6 +102,8 @@ INSTALLED_APPS = [
     'django_filters',
     'taggit',
     'channels',
+    'health_check',
+    'health_check.db', 
     'herre',
     'delt',
     'guardian',
@@ -113,6 +111,10 @@ INSTALLED_APPS = [
     "rest_framework",
 ] + EXTENSIONS
 
+HEALTH_CHECK = {
+    'DISK_USAGE_MAX': 90,  # percent
+    'MEMORY_MIN': 100,    # in MB
+}
 
 
 MIDDLEWARE = [
