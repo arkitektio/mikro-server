@@ -1,3 +1,4 @@
+from grunnlag.utils import array_to_image
 from django.conf import settings
 from django.db.models.signals import post_save
 from django.dispatch.dispatcher import receiver
@@ -19,7 +20,6 @@ def rep_post_save(sender, instance=None, created=None, **kwargs):
         logger.info(f"Assigning Permissions {permissions} to Representation")
         for permission in permissions:
             if instance.sample: assign_perm(permission, instance.sample.creator, instance)
-
     
-    #from grunnlag.subscriptions import MyNewestRep
-    #MyNewestRep.broadcast(instance, groups=[MyNewestRep.USERGROUP(instance.sample.creator)])
+    from grunnlag.subscriptions import MyRepresentations
+    MyRepresentations.broadcast({"action": "created", "data": instance.id} if created else {"action": "updated", "data": instance.id}, [MyRepresentations.USERGROUP(instance.sample.creator)])

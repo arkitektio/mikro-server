@@ -46,10 +46,10 @@ class MatriseBase(models.Model):
             self.shape = list(self.array.shape)
             self.dims = list(self.array.dims)   
             self.has_array = True
+            print("Eached here")
 
 
         except Exception as e:
-            logger.error(e)
             # We are dealing with an initial Creation, lets create a new Store
             if not self.store.name: 
                 path = active_settings.getPathGeneratorClass().generatePath(self)

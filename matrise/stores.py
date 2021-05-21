@@ -38,7 +38,7 @@ class XArrayStore(FieldFile):
             s3_path = f"{bucket}/{self.name}"
             # Initilize the S3 file system
             logger.info(f"Bucket [{bucket}]: Connecting to {s3_path}")
-            store = s3fs.S3FileSystem(client_kwargs={"endpoint_url": get_active_settings().S3_ENDPOINT_URL})
+            store = s3fs.S3FileSystem(client_kwargs={"endpoint_url": get_active_settings().S3_ENDPOINT_URL}, key=get_active_settings().ACCESS_KEY, secret=get_active_settings().SECRET_KEY)
             return store.get_mapper(s3_path)
         if isinstance(self.storage, FileSystemStorage):
             location = self.storage.location

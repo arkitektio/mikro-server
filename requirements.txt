@@ -15,32 +15,22 @@ pytest-asyncio
 django-guardian
 django-avatar
 python-slugify
-s3fs==0.4.2 #TODO: Need to figure out parallel access in the eventloop first, should yield a massive boost in performance
+
+
+s3fs==0.6.0
 boto3
 django-storages
-scipy
-bergen==0.3.75
-graphene-django==3.0.0b7
-unflatten
-graphql-core<3,>=2.1.0
+graphene-django
 
-pandas-profiling
-zarr>=2.4.0
-dask[complete]>=2.28.0
-lz4
+
+zarr
+dask[complete]>
 numcodecs
 xarray
-seaborn
-blosc
-dask-image
-Markdown
 
-# For port provision
-docker
-
-# For Local/Medium
-celery[redis]
-flower
+# Bergen
+django-health-check
+django-channels-graphql-ws
 
 # Testing and Linting
 ptvsd
@@ -52,6 +42,9 @@ pylint-django
 pydantic
 colorlog
 namegenerator
-pika
-aiormq
 pyjwt
+
+# DeployMent
+omegaconf
+gunicorn
+django-probes

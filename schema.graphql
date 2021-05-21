@@ -304,7 +304,7 @@ type Mutation {
     name: String!
 
     """Which sample does this representation belong to"""
-    sample: ID!
+    sample: ID = null
 
     """Do you want to tag the representation?"""
     tags: [String] = null

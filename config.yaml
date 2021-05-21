@@ -1,0 +1,44 @@
+postgres:
+  host: nagi
+  port: 5432
+  user: hello_elements
+  password: hello_elements
+  db_name: hello_elements
+
+server:
+  debug: True
+  hosts:
+    - "*"
+
+s3:
+  host: minio
+  protocol: http
+  access_key: weak_access_key
+  secret_key: weak_secret_key
+  port: 9000
+  public:
+    host: localhost
+    port: 9000
+    protocol: http
+  buckets:
+    - zarr
+    - media
+  
+
+security:
+  secret_key: "!kdjy8tmf&=wyf0netn7^v#k%1ys7maafy7x*39ir43b3)8_es"
+
+herre:
+  public_key: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvIrkAA1Tr8pLRR08xXEs
+    zuyi/+QGRQ3J7o5j7B+HJLv2MWppd+fgoPQYc9nOkZcA9Jizsvm0bqcXe/8zdxaU
+    z7bA+nq3hxLolO4q4SXRxNuBIcNrfLizFrWku5csO9ZfS4EXQGOGAWsVE1WbSRBC
+    gAcOR8eq8gB0ai4UByB/xGlwobz1bkuXd3jGVN2oeCo7gbij/JaMrOSkh9wX/WqZ
+    lbrEWEFfgURENACn45Hm4ojjLepw/b2j7ZrHMQxvY1THi6lZ6bp9NdfkzyE6JhZb
+    SVOzd/dHy+gLBx2UuvmovVEhhxzwRJYtPdqlOWuUOjO24AlpPv7j+BSY7eGSzYU5
+    oQIDAQAB
+    -----END PUBLIC KEY-----
+  key_type: RS256
+  issuer: herre
+

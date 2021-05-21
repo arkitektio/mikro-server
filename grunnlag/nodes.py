@@ -1,4 +1,4 @@
-from grunnlag.models import Experiment, Representation, Sample
+from grunnlag.models import Experiment, Representation, Sample, Thumbnail
 from delt.registry.nodes import registry
 
 
@@ -76,5 +76,20 @@ async def gaussian_blur(rep: Representation, sigma: int = 5) -> Representation:
 
     Returns:
         Representation: The Output Representatoin
+    """
+    return None
+
+
+@registry.func()
+async def generate_thumbnail(rep: Representation) -> Representation:
+    """Generate Thumbnail
+
+    Takes a {rep} and generates a thumbnail
+
+    Args:
+        rep (Representation): The to be showed representation
+
+    Returns:
+        Thumbnail: The Output Representatoin
     """
     return None

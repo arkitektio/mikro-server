@@ -1,6 +1,7 @@
 from django.contrib import admin
-from .models import Representation, Sample, Experiment
+from .models import Representation, Sample, Experiment, Thumbnail
 # Register your models here.
 admin.site.register(Representation)
 admin.site.register(Sample)
 admin.site.register(Experiment)
+admin.site.register(Thumbnail)

@@ -1,3 +1,4 @@
+from grunnlag.storage import PrivateMediaStorage
 from grunnlag.managers import RepresentationManager
 from django.db import models
 
@@ -112,6 +113,7 @@ class Representation(Matrise):
     variety = models.CharField(max_length=400, help_text="The Representation can have varying types, consult your API", choices=RepresentationVariety.choices, default=RepresentationVariety.UNKNOWN.value)
     chain = models.CharField(max_length=9000, blank=True, null=True)
     nodeid = models.CharField(max_length=400, null=True, blank=True)
+    thumbnail = models.ImageField(upload_to="thumbnails",null=True, storage=PrivateMediaStorage())
     created_at = models.DateTimeField(auto_now_add=True)
     tags = TaggableManager()
 
@@ -127,6 +129,13 @@ class Representation(Matrise):
     def __str__(self):
         return f'Representation of {self.name}'
 
+
+class Thumbnail(models.Model):
+    representation = models.ForeignKey(Representation, on_delete=models.CASCADE, related_name='thumbnails', help_text="The Sample this representation belongs to")
+    image = models.ImageField(upload_to="thumbnails",null=True)
+
+    class Meta:
+        identifier = "thumbnail"
 
 
 class ROI(models.Model):

@@ -5,6 +5,7 @@ from balder.types.query.base import BalderQuery
 from grunnlag.filters import ExperimentFilter, RepresentationFilter, SampleFilter
 import graphene
 import grunnlag.mutations
+import grunnlag.subscriptions
 from graphene.types.generic import GenericScalar
 #import
 from herre import bounced

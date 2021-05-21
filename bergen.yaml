@@ -2,6 +2,7 @@ arkitekt:
   host: arkitekt
   port: 8090
   secure: False
+  internal: True
 
 herre:
   host: herre
@@ -11,8 +12,6 @@ herre:
   authorization_grant_type: CLIENT_CREDENTIALS
   scopes: 
       - read
-      - write
       - provider
       - can_forward_bounce
-      - hooker
   secure: False

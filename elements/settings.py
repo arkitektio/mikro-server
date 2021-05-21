@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 import os
 from pathlib import Path
 from delt.initialize import initialize
+from omegaconf import OmegaConf
 
+conf = OmegaConf.load('config.yaml')
 
 initialize()
 
@@ -24,12 +26,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '9=9u7c35!*p_h674kv*t^8ntefnf*#)z_h%6$sdfoisnepuifonspoinef#b(oe=_mwysw+'
+SECRET_KEY = conf.security.secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = conf.server.debug or False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = conf.server.hosts
 
 
 ELEMENTS_HOST = "p-tnagerl-lab1"
@@ -40,17 +42,19 @@ CORS_ALLOW_ALL_ORIGINS = True
 # S3 Settings
 
 
-S3_PUBLIC_DOMAIN = f"{ELEMENTS_HOST}:9000" #TODO: FIx
-AWS_ACCESS_KEY_ID = "weak_access_key"
-AWS_SECRET_ACCESS_KEY = "weak_secret_key"
-AWS_S3_ENDPOINT_URL  = f"http://minio:9000"
-AWS_STORAGE_BUCKET_NAME = "test"
-AWS_S3_URL_PROTOCOL = "http:"
+S3_PUBLIC_DOMAIN = f"{conf.s3.public.host}:{conf.s3.public.port}" #TODO: FIx
+AWS_ACCESS_KEY_ID = conf.s3.access_key
+AWS_SECRET_ACCESS_KEY = conf.s3.secret_key
+AWS_S3_ENDPOINT_URL  = f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}"
+AWS_S3_PUBLIC_ENDPOINT_URL  = f"{conf.s3.public.protocol}://{conf.s3.public.host}:{conf.s3.public.port}"
+AWS_S3_URL_PROTOCOL = f"{conf.s3.public.protocol}:"
 AWS_S3_FILE_OVERWRITE = False
-AWS_DEFAULT_ACL = None
+AWS_STORAGE_BUCKET_NAME="media"
+AWS_DEFAULT_ACL = 'private'
 AWS_S3_USE_SSL = True
 AWS_S3_SECURE_URLS = False # Should resort to True if using in Production behind TLS
 
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 # Application definition
 ARKITEKT_SERVICE = {
@@ -60,36 +64,16 @@ ARKITEKT_SERVICE = {
 }
 
 
-
 HERRE = {
-    "PUBLIC_KEY": """
------BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvIrkAA1Tr8pLRR08xXEs
-zuyi/+QGRQ3J7o5j7B+HJLv2MWppd+fgoPQYc9nOkZcA9Jizsvm0bqcXe/8zdxaU
-z7bA+nq3hxLolO4q4SXRxNuBIcNrfLizFrWku5csO9ZfS4EXQGOGAWsVE1WbSRBC
-gAcOR8eq8gB0ai4UByB/xGlwobz1bkuXd3jGVN2oeCo7gbij/JaMrOSkh9wX/WqZ
-lbrEWEFfgURENACn45Hm4ojjLepw/b2j7ZrHMQxvY1THi6lZ6bp9NdfkzyE6JhZb
-SVOzd/dHy+gLBx2UuvmovVEhhxzwRJYtPdqlOWuUOjO24AlpPv7j+BSY7eGSzYU5
-oQIDAQAB
------END PUBLIC KEY-----""",
-    "KEY_TYPE": "RS256",
-    "ISSUER": "arnheim"
+    "PUBLIC_KEY": conf.herre.public_key,
+    "KEY_TYPE": conf.herre.key_type,
+    "ISSUER": conf.herre.issuer
 }
 
 GRUNNLAG = {
     "GROUPS": None
 
 }
-
-
-EXTENSIONS = [
-    'balder',
-    "matrise",
-    'grunnlag'
-]
-
-
-
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -109,7 +93,10 @@ INSTALLED_APPS = [
     'guardian',
     'graphene_django',
     "rest_framework",
-] + EXTENSIONS
+    'balder',
+    "matrise",
+    'grunnlag'
+]
 
 HEALTH_CHECK = {
     'DISK_USAGE_MAX': 90,  # percent
@@ -136,7 +123,10 @@ ROOT_URLCONF = 'elements.urls'
 MATRISE = {
     'FILE_VERSION': "0.1",
     'API_VERSION': "0.1",
-    'PUBLIC_URL': f"{ELEMENTS_HOST}:9000", #TODO: FIx
+    'ACCESS_KEY': conf.s3.access_key,
+    'SECRET_KEY': conf.s3.secret_key,
+    'PUBLIC_URL': f"{conf.s3.public.host}:{conf.s3.public.port}", #TODO: FIx
+    'PRIVATE_URL': f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}", #TODO: FIx
     "STORAGE_CLASS": "matrise.storages.s3.S3Storage",
     "GENERATOR_CLASS": "matrise.generators.default.DefaultPathGenerator",
     "BUCKET": "zarr"
@@ -145,7 +135,7 @@ MATRISE = {
 BORD = {
     'FILE_VERSION': "0.1",
     'API_VERSION': "0.1",
-    'PUBLIC_URL': f"{ELEMENTS_HOST}:9000", #TODO: FIx
+    'PUBLIC_URL': f"{conf.s3.public.host}:{conf.s3.public.port}", #TODO: FIx
     "STORAGE_CLASS": "bord.storages.s3.S3Storage",
     "GENERATOR_CLASS": "bord.generators.default.DefaultPathGenerator",
     "BUCKET": "zarr"
@@ -180,11 +170,11 @@ ASGI_APPLICATION = 'elements.routing.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB"),
-        "USER": os.environ.get("POSTGRES_USER"),
-        "PASSWORD":os.environ.get("POSTGRES_PASSWORD"),
-        "HOST": os.environ.get("POSTGRES_SERVICE_HOST"),
-        "PORT": os.environ.get("POSTGRES_SERVICE_PORT"),
+        "NAME": conf.postgres.db_name,
+        "USER": conf.postgres.user,
+        "PASSWORD":conf.postgres.password,
+        "HOST": conf.postgres.host,
+        "PORT": conf.postgres.port,
     }
 }
 

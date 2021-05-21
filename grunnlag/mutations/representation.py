@@ -42,12 +42,14 @@ class CreateRepresentation(BalderMutation):
 
     @bounced()
     def mutate(root, info, *args, **kwargs):
-        sampleid = kwargs.pop("sample")
-        variety = kwargs.pop("variety", RepresentationVariety.UNKNOWN)
+        sampleid = kwargs.pop("sample", None)
+        variety = kwargs.pop("variety", RepresentationVariety.UNKNOWN.value)
         name = kwargs.pop("name")
         tags = kwargs.pop("tags", [])
+
+        print(variety)
         try:
-            rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety.value)
+            rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety)
             rep.tags.add(*tags)
             rep.save()
         except:

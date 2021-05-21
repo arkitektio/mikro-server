@@ -29,5 +29,10 @@
             "type": "shell",
             "command": "python manage.py register_nodes"
         },
+        {
+            "label": "Start Provider",
+            "type": "shell",
+            "command": "python manage.py provide"
+        },
     ]
 }
