@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from herre.bouncer.utils import bounced
 from grunnlag.enums import RepresentationVariety
 from balder.enum import InputEnum
@@ -6,6 +7,8 @@ import graphene
 from grunnlag import models, types
 from bergen.console import console
 import logging
+import namegenerator
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +38,24 @@ class CreateRepresentation(BalderMutation):
 
     class Arguments:
         sample = graphene.ID(required=False, description="Which sample does this representation belong to")
-        name = graphene.String(required=True, description="A cleartext description what this representation represents as data")
-        variety = graphene.Argument(InputEnum.from_choices(RepresentationVariety), required=True, description="A description of the variety")
+        name = graphene.String(required=False, description="A cleartext description what this representation represents as data")
+        creator = graphene.String(required=False, description="The Email of the user creating the Representation (only for backend apps)")
+        variety = graphene.Argument(InputEnum.from_choices(RepresentationVariety), required=False, description="A description of the variety")
         tags = graphene.List(graphene.String, required=False, description="Do you want to tag the representation?")
 
 
     @bounced()
-    def mutate(root, info, *args, **kwargs):
+    def mutate(root, info, *args, creator=None, **kwargs):
         sampleid = kwargs.pop("sample", None)
         variety = kwargs.pop("variety", RepresentationVariety.UNKNOWN.value)
-        name = kwargs.pop("name")
+        name = kwargs.pop("name", namegenerator.gen())
         tags = kwargs.pop("tags", [])
+        creator = info.context.user or (get_user_model().objects.get(email=creator) if creator else None)
 
-        print(variety)
-        try:
-            rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety)
-            rep.tags.add(*tags)
-            rep.save()
-        except:
-            console.print_exception()
+        rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety, creator=creator)
+        rep.tags.add(*tags)
+        rep.save()
 
-        print(rep)
         return rep
 
 

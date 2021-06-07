@@ -12179,3 +12179,2383 @@ Registering Representations as Query
 Registering ExperimentDetail as Query
 Registering Representation as Query
 Registering Sample as Query
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Successfully connected [bold]Postman
+Successfully connected [bold]Postman
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+/usr/local/lib/python3.8/site-packages/bergen/query.py changed, reloading.
+/usr/local/lib/python3.8/site-packages/bergen/query.py changed, reloading.
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f1470de23d0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f1470de23d0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f1470bc0ee0>, 144.80815612)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f1470de2460>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f1470bc0ee0>, 144.80815612)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f1470de2460>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f1470bb1970>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f1470bb1970>
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": [], "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "6386cb0f-20e3-4001-9a8b-e986ebc93bd3", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": [], "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "6386cb0f-20e3-4001-9a8b-e986ebc93bd3", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=[], auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=[], auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Received Message data=DataModel(reservation='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', args=['591'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e08c3dfa-031a-446e-8e97-98b033326bc2', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', args=['591'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e08c3dfa-031a-446e-8e97-98b033326bc2', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 1000, y: 1000, z: 10)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) float64 dask.array<chunksize=(1000, 1000, 10, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       4726e5f8-e427-4438-9cbe-1bbee153e8bc
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 1000, y: 1000, z: 10)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) float64 dask.array<chunksize=(1000, 1000, 10, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       4726e5f8-e427-4438-9cbe-1bbee153e8bc
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Registering MyRepresentations as Subscription
+Registering MyRepresentations as Subscription
+Received Message data=DataModel(reservation='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', args=['591'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='7ec5e5bf-d596-4dc5-a694-638b4786f9c9', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', args=['591'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='7ec5e5bf-d596-4dc5-a694-638b4786f9c9', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+Bucket [zarr]: Connecting to zarr/60f127c6-903a-4ba1-9f59-cd6003fd5001-sample.representation.Acquired Stack
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 1000, y: 1000, z: 10)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) float64 dask.array<chunksize=(1000, 1000, 10, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       4726e5f8-e427-4438-9cbe-1bbee153e8bc
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 1000, y: 1000, z: 10)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) float64 dask.array<chunksize=(1000, 1000, 10, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       4726e5f8-e427-4438-9cbe-1bbee153e8bc
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', args=['592'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='7c6b4646-3c96-4ecd-89c2-0f3b32744647', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3', args=['592'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='7c6b4646-3c96-4ecd-89c2-0f3b32744647', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/a1f8615d-e8ba-44d3-81ee-dde24571073b-sample.representation.Trontheim
+Bucket [zarr]: Connecting to zarr/a1f8615d-e8ba-44d3-81ee-dde24571073b-sample.representation.Trontheim
+Bucket [zarr]: Connecting to zarr/a1f8615d-e8ba-44d3-81ee-dde24571073b-sample.representation.Trontheim
+Bucket [zarr]: Connecting to zarr/a1f8615d-e8ba-44d3-81ee-dde24571073b-sample.representation.Trontheim
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 15, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       4ada80fd-4c8c-40d6-be4c-8f0bac855f52
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 15, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       4ada80fd-4c8c-40d6-be4c-8f0bac855f52
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Incoming Message {"data": {"provision": "6386cb0f-20e3-4001-9a8b-e986ebc93bd3"}, "meta": {"type": "bounced_unprovide", "reference": "6a7c5569-218b-47b1-825f-d2667d1e9871", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"provision": "6386cb0f-20e3-4001-9a8b-e986ebc93bd3"}, "meta": {"type": "bounced_unprovide", "reference": "6a7c5569-218b-47b1-825f-d2667d1e9871", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3') meta=MetaModel(type='bounced_unprovide', reference='6a7c5569-218b-47b1-825f-d2667d1e9871', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3') meta=MetaModel(type='bounced_unprovide', reference='6a7c5569-218b-47b1-825f-d2667d1e9871', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Unprovide Request
+Received Unprovide Request
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3') meta=MetaModel(type='unprovide_log', reference='6a7c5569-218b-47b1-825f-d2667d1e9871', extensions=None)
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='6386cb0f-20e3-4001-9a8b-e986ebc93bd3') meta=MetaModel(type='unprovide_log', reference='6a7c5569-218b-47b1-825f-d2667d1e9871', extensions=None)
+Actor is done! Cancellation or Finished??
+Actor is done! Cancellation or Finished??
+Future was cancelled everything is cools
+Future was cancelled everything is cools
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "485575ca-01a1-4c2c-ae28-79e947e0df67", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "485575ca-01a1-4c2c-ae28-79e947e0df67", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='485575ca-01a1-4c2c-ae28-79e947e0df67', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='485575ca-01a1-4c2c-ae28-79e947e0df67', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='485575ca-01a1-4c2c-ae28-79e947e0df67', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='485575ca-01a1-4c2c-ae28-79e947e0df67', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Incoming Message {"data": {"provision": "485575ca-01a1-4c2c-ae28-79e947e0df67"}, "meta": {"type": "bounced_unprovide", "reference": "223b25f4-91cd-422a-9b41-7196f8ec37b0", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"provision": "485575ca-01a1-4c2c-ae28-79e947e0df67"}, "meta": {"type": "bounced_unprovide", "reference": "223b25f4-91cd-422a-9b41-7196f8ec37b0", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(provision='485575ca-01a1-4c2c-ae28-79e947e0df67') meta=MetaModel(type='bounced_unprovide', reference='223b25f4-91cd-422a-9b41-7196f8ec37b0', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(provision='485575ca-01a1-4c2c-ae28-79e947e0df67') meta=MetaModel(type='bounced_unprovide', reference='223b25f4-91cd-422a-9b41-7196f8ec37b0', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Unprovide Request
+Received Unprovide Request
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='485575ca-01a1-4c2c-ae28-79e947e0df67') meta=MetaModel(type='unprovide_log', reference='223b25f4-91cd-422a-9b41-7196f8ec37b0', extensions=None)
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='485575ca-01a1-4c2c-ae28-79e947e0df67') meta=MetaModel(type='unprovide_log', reference='223b25f4-91cd-422a-9b41-7196f8ec37b0', extensions=None)
+Actor is done! Cancellation or Finished??
+Actor is done! Cancellation or Finished??
+Future was cancelled everything is cools
+Future was cancelled everything is cools
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+/workspace/grunnlag/models.py changed, reloading.
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "d83ba9ee-4deb-4401-8afb-b786d9a5f6ff", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "d83ba9ee-4deb-4401-8afb-b786d9a5f6ff", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Received Message data=DataModel(reservation='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', args=[597], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='8823423d-f47b-49de-be01-4d8c418236b7', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', args=[597], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='8823423d-f47b-49de-be01-4d8c418236b7', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/76e71dd9-cc98-4479-a785-53df3c6e1070-sample.representation.baggy-silver-spaniel
+Bucket [zarr]: Connecting to zarr/76e71dd9-cc98-4479-a785-53df3c6e1070-sample.representation.baggy-silver-spaniel
+Bucket [zarr]: Connecting to zarr/76e71dd9-cc98-4479-a785-53df3c6e1070-sample.representation.baggy-silver-spaniel
+Bucket [zarr]: Connecting to zarr/76e71dd9-cc98-4479-a785-53df3c6e1070-sample.representation.baggy-silver-spaniel
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       037aeac0-c28d-40fc-b663-99363f16d3b9
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       037aeac0-c28d-40fc-b663-99363f16d3b9
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Postman disconnected
+Postman disconnected
+Peasent disconnected
+Peasent disconnected
+Entertainer disconnected
+Entertainer disconnected
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "d83ba9ee-4deb-4401-8afb-b786d9a5f6ff", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "d83ba9ee-4deb-4401-8afb-b786d9a5f6ff", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Received Message data=DataModel(reservation='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', args=[598], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e49ddc9b-0087-41e8-a702-e5aa0be455fd', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff', args=[598], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e49ddc9b-0087-41e8-a702-e5aa0be455fd', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/c61dd4f5-96f8-4ea6-b281-c4a79a3abfc9-sample.representation.pasty-champagne-starfish
+Bucket [zarr]: Connecting to zarr/c61dd4f5-96f8-4ea6-b281-c4a79a3abfc9-sample.representation.pasty-champagne-starfish
+Bucket [zarr]: Connecting to zarr/c61dd4f5-96f8-4ea6-b281-c4a79a3abfc9-sample.representation.pasty-champagne-starfish
+Bucket [zarr]: Connecting to zarr/c61dd4f5-96f8-4ea6-b281-c4a79a3abfc9-sample.representation.pasty-champagne-starfish
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       3af608f4-b30d-4c8b-85ed-053a829fcfab
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       3af608f4-b30d-4c8b-85ed-053a829fcfab
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Registering MyRepresentations as Subscription
+Registering MyRepresentations as Subscription
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='22464f03-d591-4dec-90e9-58351e029fe3', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='22464f03-d591-4dec-90e9-58351e029fe3', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Cancellation for task that was not in our tasks..
+Received Cancellation for task that was not in our tasks..
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='1338d10f-0016-4929-bfe3-9e58ed8e114f', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='1338d10f-0016-4929-bfe3-9e58ed8e114f', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Cancellation for task that was not in our tasks..
+Received Cancellation for task that was not in our tasks..
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='93e26abf-3b1c-4ad0-95f2-656b755f401a', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='93e26abf-3b1c-4ad0-95f2-656b755f401a', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Cancellation for task that was not in our tasks..
+Received Cancellation for task that was not in our tasks..
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='f3535b6f-5db4-40a8-8a56-4e721872bc7c', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='f3535b6f-5db4-40a8-8a56-4e721872bc7c', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Cancellation for task that was not in our tasks..
+Received Cancellation for task that was not in our tasks..
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='5e0abb3f-5c09-4396-ae3a-a360986f4e0d', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(assignation='8823423d-f47b-49de-be01-4d8c418236b7') meta=MetaModel(type='bounced_unassign', reference='5e0abb3f-5c09-4396-ae3a-a360986f4e0d', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Cancellation for task that was not in our tasks..
+Received Cancellation for task that was not in our tasks..
+Incoming Message {"data": {"provision": "d83ba9ee-4deb-4401-8afb-b786d9a5f6ff"}, "meta": {"type": "bounced_unprovide", "reference": "7ff119dd-635b-4ebf-86a3-04c74de43732", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"provision": "d83ba9ee-4deb-4401-8afb-b786d9a5f6ff"}, "meta": {"type": "bounced_unprovide", "reference": "7ff119dd-635b-4ebf-86a3-04c74de43732", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff') meta=MetaModel(type='bounced_unprovide', reference='7ff119dd-635b-4ebf-86a3-04c74de43732', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff') meta=MetaModel(type='bounced_unprovide', reference='7ff119dd-635b-4ebf-86a3-04c74de43732', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Unprovide Request
+Received Unprovide Request
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff') meta=MetaModel(type='unprovide_log', reference='7ff119dd-635b-4ebf-86a3-04c74de43732', extensions=None)
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='d83ba9ee-4deb-4401-8afb-b786d9a5f6ff') meta=MetaModel(type='unprovide_log', reference='7ff119dd-635b-4ebf-86a3-04c74de43732', extensions=None)
+Actor is done! Cancellation or Finished??
+Actor is done! Cancellation or Finished??
+Future was cancelled everything is cools
+Future was cancelled everything is cools
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "38a2087c-c88d-44d2-b22e-16849f080bfc", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "38a2087c-c88d-44d2-b22e-16849f080bfc", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='38a2087c-c88d-44d2-b22e-16849f080bfc', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='38a2087c-c88d-44d2-b22e-16849f080bfc', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='38a2087c-c88d-44d2-b22e-16849f080bfc', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='38a2087c-c88d-44d2-b22e-16849f080bfc', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Received Message data=DataModel(reservation='38a2087c-c88d-44d2-b22e-16849f080bfc', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[599], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='87ca6ac9-642b-43a9-8b01-81080814ba3c', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='38a2087c-c88d-44d2-b22e-16849f080bfc', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[599], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='87ca6ac9-642b-43a9-8b01-81080814ba3c', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/9bf37db3-920e-48e8-b67c-2e5f68edea4b-sample.representation.baggy-emerald-fowl
+Bucket [zarr]: Connecting to zarr/9bf37db3-920e-48e8-b67c-2e5f68edea4b-sample.representation.baggy-emerald-fowl
+Bucket [zarr]: Connecting to zarr/9bf37db3-920e-48e8-b67c-2e5f68edea4b-sample.representation.baggy-emerald-fowl
+Bucket [zarr]: Connecting to zarr/9bf37db3-920e-48e8-b67c-2e5f68edea4b-sample.representation.baggy-emerald-fowl
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       f3ba7f36-f452-4613-b735-635b8a739b26
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       f3ba7f36-f452-4613-b735-635b8a739b26
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='38a2087c-c88d-44d2-b22e-16849f080bfc', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=['600'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='8d6d654b-cdf0-4f80-9ca3-db2ecc007ff4', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='38a2087c-c88d-44d2-b22e-16849f080bfc', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=['600'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='8d6d654b-cdf0-4f80-9ca3-db2ecc007ff4', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/4b3a8ca0-57c9-4d3b-a4cf-9f3afeb189d2-sample.representation.stealthy-russet-lynx
+Bucket [zarr]: Connecting to zarr/4b3a8ca0-57c9-4d3b-a4cf-9f3afeb189d2-sample.representation.stealthy-russet-lynx
+Bucket [zarr]: Connecting to zarr/4b3a8ca0-57c9-4d3b-a4cf-9f3afeb189d2-sample.representation.stealthy-russet-lynx
+Bucket [zarr]: Connecting to zarr/4b3a8ca0-57c9-4d3b-a4cf-9f3afeb189d2-sample.representation.stealthy-russet-lynx
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       b29c2b28-a360-4e24-884f-81a0e4165d81
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       b29c2b28-a360-4e24-884f-81a0e4165d81
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='2ce04478-cdd4-490d-9dff-10539f91125c', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[601], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='716abf7e-aa71-427a-9401-81298b1014ba', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='2ce04478-cdd4-490d-9dff-10539f91125c', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[601], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='716abf7e-aa71-427a-9401-81298b1014ba', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/54d0cce2-5981-41d9-b7b1-a499ab4bd3ba-sample.representation.cranky-ivory-zonkey
+Bucket [zarr]: Connecting to zarr/54d0cce2-5981-41d9-b7b1-a499ab4bd3ba-sample.representation.cranky-ivory-zonkey
+Bucket [zarr]: Connecting to zarr/54d0cce2-5981-41d9-b7b1-a499ab4bd3ba-sample.representation.cranky-ivory-zonkey
+Bucket [zarr]: Connecting to zarr/54d0cce2-5981-41d9-b7b1-a499ab4bd3ba-sample.representation.cranky-ivory-zonkey
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       9ace386a-31ff-4503-9ca4-0ae50543e5f0
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       9ace386a-31ff-4503-9ca4-0ae50543e5f0
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='2ce04478-cdd4-490d-9dff-10539f91125c', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[602], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e10c3d49-2ace-4b9f-a912-a41311980ea2', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='2ce04478-cdd4-490d-9dff-10539f91125c', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[602], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e10c3d49-2ace-4b9f-a912-a41311980ea2', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/61d1c254-e02d-483d-bf65-a3605449c0b6-sample.representation.woolly-ecru-macaque
+Bucket [zarr]: Connecting to zarr/61d1c254-e02d-483d-bf65-a3605449c0b6-sample.representation.woolly-ecru-macaque
+Bucket [zarr]: Connecting to zarr/61d1c254-e02d-483d-bf65-a3605449c0b6-sample.representation.woolly-ecru-macaque
+Bucket [zarr]: Connecting to zarr/61d1c254-e02d-483d-bf65-a3605449c0b6-sample.representation.woolly-ecru-macaque
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       20a0138d-93a5-4390-bbc0-e5b1071942f5
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       20a0138d-93a5-4390-bbc0-e5b1071942f5
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='38a2087c-c88d-44d2-b22e-16849f080bfc', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[603], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='cf1c6f43-3ac6-446e-a3bc-d963d5c3ef00', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='38a2087c-c88d-44d2-b22e-16849f080bfc', provision='38a2087c-c88d-44d2-b22e-16849f080bfc', args=[603], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='cf1c6f43-3ac6-446e-a3bc-d963d5c3ef00', extensions=MetaExtensionsModel(progress='amq.gen-iLVKNaq__QXB3l_FvEGGcQ', persist=True, callback='amq.gen-5ZgJmO8FK4aM0LPX4RGxuQ'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/198de920-6cd1-4838-917c-e5ed0895c616-sample.representation.chewy-malachite-binturong
+Bucket [zarr]: Connecting to zarr/198de920-6cd1-4838-917c-e5ed0895c616-sample.representation.chewy-malachite-binturong
+Bucket [zarr]: Connecting to zarr/198de920-6cd1-4838-917c-e5ed0895c616-sample.representation.chewy-malachite-binturong
+Bucket [zarr]: Connecting to zarr/198de920-6cd1-4838-917c-e5ed0895c616-sample.representation.chewy-malachite-binturong
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       e54d2aa7-6bd6-4b7c-9ae1-bfe92683076b
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       e54d2aa7-6bd6-4b7c-9ae1-bfe92683076b
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Incoming Message {"data": {"provision": "38a2087c-c88d-44d2-b22e-16849f080bfc"}, "meta": {"type": "bounced_unprovide", "reference": "013d2e19-d933-43b6-bf7d-c2e8825ab11b", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"provision": "38a2087c-c88d-44d2-b22e-16849f080bfc"}, "meta": {"type": "bounced_unprovide", "reference": "013d2e19-d933-43b6-bf7d-c2e8825ab11b", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(provision='38a2087c-c88d-44d2-b22e-16849f080bfc') meta=MetaModel(type='bounced_unprovide', reference='013d2e19-d933-43b6-bf7d-c2e8825ab11b', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(provision='38a2087c-c88d-44d2-b22e-16849f080bfc') meta=MetaModel(type='bounced_unprovide', reference='013d2e19-d933-43b6-bf7d-c2e8825ab11b', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Unprovide Request
+Received Unprovide Request
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='38a2087c-c88d-44d2-b22e-16849f080bfc') meta=MetaModel(type='unprovide_log', reference='013d2e19-d933-43b6-bf7d-c2e8825ab11b', extensions=None)
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='38a2087c-c88d-44d2-b22e-16849f080bfc') meta=MetaModel(type='unprovide_log', reference='013d2e19-d933-43b6-bf7d-c2e8825ab11b', extensions=None)
+Actor is done! Cancellation or Finished??
+Actor is done! Cancellation or Finished??
+Future was cancelled everything is cools
+Future was cancelled everything is cools
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": [], "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "77614ee3-6570-43ae-8ea2-8f7a687b664f", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": [], "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "77614ee3-6570-43ae-8ea2-8f7a687b664f", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=[], auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='77614ee3-6570-43ae-8ea2-8f7a687b664f', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=[], auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='77614ee3-6570-43ae-8ea2-8f7a687b664f', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='77614ee3-6570-43ae-8ea2-8f7a687b664f', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='77614ee3-6570-43ae-8ea2-8f7a687b664f', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='2633b73c-f1e9-44b7-88a4-075da32b8982', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='2633b73c-f1e9-44b7-88a4-075da32b8982', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e9ddb1ce-d5e5-4cc6-af28-bbe926df9699', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='e9ddb1ce-d5e5-4cc6-af28-bbe926df9699', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='2672efd5-ab0a-4bd5-b3c1-69d4faab2736', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='2672efd5-ab0a-4bd5-b3c1-69d4faab2736', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='f1ed4d4c-4972-4f4e-aece-0bff5139ef90', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='77614ee3-6570-43ae-8ea2-8f7a687b664f', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f', args=['604'], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='f1ed4d4c-4972-4f4e-aece-0bff5139ef90', extensions=MetaExtensionsModel(progress='gateway_progress', persist=True, callback='gateway_callback'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+Bucket [zarr]: Connecting to zarr/01c1f80b-db67-40e3-a29d-6f1faf085423-sample.representation.Segmented Trontheim
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 29)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, z, c, t) int32 dask.array<chunksize=(150, 150, 8, 1, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       6091845c-5859-40d6-aa52-95604410cf73
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Incoming Message {"data": {"provision": "77614ee3-6570-43ae-8ea2-8f7a687b664f"}, "meta": {"type": "bounced_unprovide", "reference": "1ff42234-9151-4ae8-878b-fab58dd9cd13", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"provision": "77614ee3-6570-43ae-8ea2-8f7a687b664f"}, "meta": {"type": "bounced_unprovide", "reference": "1ff42234-9151-4ae8-878b-fab58dd9cd13", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(provision='77614ee3-6570-43ae-8ea2-8f7a687b664f') meta=MetaModel(type='bounced_unprovide', reference='1ff42234-9151-4ae8-878b-fab58dd9cd13', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(provision='77614ee3-6570-43ae-8ea2-8f7a687b664f') meta=MetaModel(type='bounced_unprovide', reference='1ff42234-9151-4ae8-878b-fab58dd9cd13', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Unprovide Request
+Received Unprovide Request
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f') meta=MetaModel(type='unprovide_log', reference='1ff42234-9151-4ae8-878b-fab58dd9cd13', extensions=None)
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='77614ee3-6570-43ae-8ea2-8f7a687b664f') meta=MetaModel(type='unprovide_log', reference='1ff42234-9151-4ae8-878b-fab58dd9cd13', extensions=None)
+Actor is done! Cancellation or Finished??
+Actor is done! Cancellation or Finished??
+Future was cancelled everything is cools
+Future was cancelled everything is cools
+Postman disconnected
+Postman disconnected
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f35be41ca00>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f35be41ca00>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f35be1cfd00>, 176201.851803767)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f35be41c940>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f35be1cfd00>, 176201.851803767)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f35be41c940>
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "07022aba-1b68-4be1-9b4c-7d726b92d20c", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "07022aba-1b68-4be1-9b4c-7d726b92d20c", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Received Message data=DataModel(reservation='07022aba-1b68-4be1-9b4c-7d726b92d20c', provision='07022aba-1b68-4be1-9b4c-7d726b92d20c', args=[613], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='9b8b5d95-431f-4ec4-b4c2-0951a4f1d202', extensions=MetaExtensionsModel(progress='amq.gen-Xtybv6ZXmtf41nB7BrCDBQ', persist=True, callback='amq.gen-ebEd8IhAnf56ppnJMu_Mtg'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='07022aba-1b68-4be1-9b4c-7d726b92d20c', provision='07022aba-1b68-4be1-9b4c-7d726b92d20c', args=[613], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='9b8b5d95-431f-4ec4-b4c2-0951a4f1d202', extensions=MetaExtensionsModel(progress='amq.gen-Xtybv6ZXmtf41nB7BrCDBQ', persist=True, callback='amq.gen-ebEd8IhAnf56ppnJMu_Mtg'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/e820560b-b998-4680-b2db-e81c68016fe7-sample.representation.crabby-turquoise-drever
+Bucket [zarr]: Connecting to zarr/e820560b-b998-4680-b2db-e81c68016fe7-sample.representation.crabby-turquoise-drever
+Bucket [zarr]: Connecting to zarr/e820560b-b998-4680-b2db-e81c68016fe7-sample.representation.crabby-turquoise-drever
+Bucket [zarr]: Connecting to zarr/e820560b-b998-4680-b2db-e81c68016fe7-sample.representation.crabby-turquoise-drever
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       f03ad500-f2f4-4a75-8612-059fad4530b6
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       f03ad500-f2f4-4a75-8612-059fad4530b6
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Registering MyRepresentations as Subscription
+Registering MyRepresentations as Subscription
+Received Message data=DataModel(reservation='07022aba-1b68-4be1-9b4c-7d726b92d20c', provision='07022aba-1b68-4be1-9b4c-7d726b92d20c', args=[614], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='298bd309-b3ce-4d4f-a428-e863f3dff93a', extensions=MetaExtensionsModel(progress='amq.gen-Xtybv6ZXmtf41nB7BrCDBQ', persist=True, callback='amq.gen-ebEd8IhAnf56ppnJMu_Mtg'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Message data=DataModel(reservation='07022aba-1b68-4be1-9b4c-7d726b92d20c', provision='07022aba-1b68-4be1-9b4c-7d726b92d20c', args=[614], kwargs={}) meta=MetaModel(type='bounced_forwarded_assign', reference='298bd309-b3ce-4d4f-a428-e863f3dff93a', extensions=MetaExtensionsModel(progress='amq.gen-Xtybv6ZXmtf41nB7BrCDBQ', persist=True, callback='amq.gen-ebEd8IhAnf56ppnJMu_Mtg'), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Bucket [zarr]: Connecting to zarr/88f3174f-615d-48ff-aa65-2963cd222163-sample.representation.breezy-peach-chin
+Bucket [zarr]: Connecting to zarr/88f3174f-615d-48ff-aa65-2963cd222163-sample.representation.breezy-peach-chin
+Bucket [zarr]: Connecting to zarr/88f3174f-615d-48ff-aa65-2963cd222163-sample.representation.breezy-peach-chin
+Bucket [zarr]: Connecting to zarr/88f3174f-615d-48ff-aa65-2963cd222163-sample.representation.breezy-peach-chin
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       b9ff43c3-ddb7-4dcb-805b-01a6cbc724f0
+<xarray.Dataset>
+Dimensions:  (c: 1, t: 1, x: 600, y: 600, z: 34)
+Dimensions without coordinates: c, t, x, y, z
+Data variables:
+    data     (x, y, c, z, t) uint16 dask.array<chunksize=(150, 150, 1, 17, 1), meta=np.ndarray>
+Attributes:
+    apiversion:   0.1
+    fileversion:  0.1
+    model:        representation
+    unique:       b9ff43c3-ddb7-4dcb-805b-01a6cbc724f0
+Opening File with API v.0.1  and File v.0.1 
+Opening File with API v.0.1  and File v.0.1 
+Rescaling
+Rescaling
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f4d16942be0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f4d16942be0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f4d1691b4c0>, 358.775729276)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f4d169326a0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f4d1691b4c0>, 358.775729276)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f4d169326a0>
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "07022aba-1b68-4be1-9b4c-7d726b92d20c", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"node": null, "template": "83", "params": {"providers": null, "auto_unprovide": true, "auto_provide": true}}, "meta": {"type": "bounced_provide", "reference": "07022aba-1b68-4be1-9b4c-7d726b92d20c", "extensions": {"progress": null, "persist": null, "callback": null}, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(node=None, template='83', params=ProvideParams(providers=None, auto_unprovide=True, auto_provide=True)) meta=MetaModel(type='bounced_provide', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None), token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Provide Request
+Received Provide Request
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Sending data=LogDataModel(level=<LogLevel.INFO: 'INFO'>, message='Pod Pending') meta=MetaModel(type='provide_log', reference='07022aba-1b68-4be1-9b4c-7d726b92d20c', extensions=MetaExtensionsModel(progress=None, persist=None, callback=None))
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fd5336707f0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fd5336707f0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fd533637a60>, 591.601810742)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fd5333fa280>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fd533637a60>, 591.601810742)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fd5333fa280>
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Incoming Message {"data": {"provision": "07022aba-1b68-4be1-9b4c-7d726b92d20c"}, "meta": {"type": "bounced_unprovide", "reference": "606189bd-77f4-4580-81a7-6395027f2f0f", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message {"data": {"provision": "07022aba-1b68-4be1-9b4c-7d726b92d20c"}, "meta": {"type": "bounced_unprovide", "reference": "606189bd-77f4-4580-81a7-6395027f2f0f", "extensions": null, "token": {"roles": ["admin"], "scopes": ["read", "read_starred", "provider", "introspection", "can_provide", "can_assign", "can_forward_bounce"], "user": 2, "app": 1}}}
+Incoming Message data=DataModel(provision='07022aba-1b68-4be1-9b4c-7d726b92d20c') meta=MetaModel(type='bounced_unprovide', reference='606189bd-77f4-4580-81a7-6395027f2f0f', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Incoming Message data=DataModel(provision='07022aba-1b68-4be1-9b4c-7d726b92d20c') meta=MetaModel(type='bounced_unprovide', reference='606189bd-77f4-4580-81a7-6395027f2f0f', extensions=None, token=Token(roles=['admin'], scopes=['read', 'read_starred', 'provider', 'introspection', 'can_provide', 'can_assign', 'can_forward_bounce'], user=2, app=1))
+Received Unprovide Request
+Received Unprovide Request
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='07022aba-1b68-4be1-9b4c-7d726b92d20c') meta=MetaModel(type='unprovide_log', reference='606189bd-77f4-4580-81a7-6395027f2f0f', extensions=None)
+Sending data=UnprovideLogData(level=<LogLevel.INFO: 'INFO'>, message='Pod Unproviding', provision='07022aba-1b68-4be1-9b4c-7d726b92d20c') meta=MetaModel(type='unprovide_log', reference='606189bd-77f4-4580-81a7-6395027f2f0f', extensions=None)
+Actor is done! Cancellation or Finished??
+Actor is done! Cancellation or Finished??
+Future was cancelled everything is cools
+Future was cancelled everything is cools
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host=None port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f0314247100>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f0314247100>
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query

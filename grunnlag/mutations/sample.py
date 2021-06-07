@@ -1,3 +1,5 @@
+from django.contrib.auth import get_user_model
+import namegenerator
 from herre.bouncer.utils import bounced
 from balder.types import BalderMutation
 import graphene
@@ -8,15 +10,16 @@ class CreateSample(BalderMutation):
     """
 
     class Arguments:
-        name = graphene.String(required=True, description="A cleartext name for this Sample")
+        name = graphene.String(required=False, description="A cleartext name for this Sample")
         experiments = graphene.List(graphene.ID, required=False, description="The Experiments this sample Belongs to")
+        creator = graphene.String(required=False, description="The email of the creator, only for backend app")
 
 
     @bounced(anonymous=False)
-    def mutate(root, info, *args, **kwargs):
-        experiments = kwargs.get("experiments", None)
-        name = kwargs.get("name", None)
-        sample = models.Sample.objects.create(creator = info.context.user, name=name)
+    def mutate(root, info, experiments = [], name= namegenerator.gen(), creator=None):
+        creator = info.context.user or (get_user_model().objects.get(email=creator) if creator else None)
+        
+        sample = models.Sample.objects.create(creator = creator, name=name)
         if experiments: sample.experiments.add(*experiments)
 
         return sample

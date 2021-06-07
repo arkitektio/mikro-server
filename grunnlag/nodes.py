@@ -39,12 +39,30 @@ async def acquire() -> Representation:
     """Acquire
 
     Acquires an Image without any Parameters specified (the implementing
-    Application may use its own Settings at the given Moment)
+    Microscope may use its own Settings at the given Moment)
 
     Returns:
         Representation: The Output Representatoin
     """
     return None
+
+
+@registry.func()
+async def stream(sample: Sample = None, name: str = "Name", iterations: int = 6) -> Representation:
+    """Stream
+
+    Streams Images without any Parameters specified (the implementing
+    Microscope may use its own Settings at the given Moment)
+
+    Args:
+        sample (Sample, optional): Where to put the Sample In. Defaults to None.
+        name (str, optional): The Prepended Name for the Representation. Defaults to "Name".
+        iterations (int, optional): How Many Iterations should we undergo?. Defaults to 6.
+
+    Returns:
+        Representation: The Representation that is created
+    """
+    yield None
 
 
 @registry.func()
@@ -76,6 +94,22 @@ async def gaussian_blur(rep: Representation, sigma: int = 5) -> Representation:
 
     Returns:
         Representation: The Output Representatoin
+    """
+    return None
+
+
+@registry.func()
+async def maxisp(rep: Representation, dim: str = "z") -> Representation:
+    """Maximum Intensity Projection
+
+    Takes a {rep} and projects it on its {dim}. Dimension choices are x y c z t
+
+    Args:
+        rep (Representation): The to be showed Stack
+        dim (str, optional): The dimension to project. Defaults to "z"
+
+    Returns:
+        Representation: The projected Stack
     """
     return None
 

@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 
-async def main():
+def main():
     # Perform connection
-    async with ProviderBergen(
+    with ProviderBergen(
         force_new_token=True,
         auto_reconnect=True# if we want to specifically only use pods on this innstance we would use that it in the selector
         ) as client:
@@ -47,7 +47,7 @@ async def main():
 
 
 
-        await client.provide_async()
+        client.provide()
 
 
 class Command(BaseCommand):
@@ -61,11 +61,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         # Get the backend to use
-        
-        loop = asyncio.get_event_loop()
-        loop.create_task(main())
+        main()
 
         # we enter a never-ending loop that waits for data
         # and runs callbacks whenever necessary.
-        print(" [x] Awaiting Providing requests")
-        loop.run_forever()

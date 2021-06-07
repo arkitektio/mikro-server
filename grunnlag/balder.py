@@ -16,11 +16,12 @@ from herre import bounced
 class Negotiate(BalderMutation):
 
     class Arguments:
-        additionals = GenericScalar(description="Addditoinal Parameters")
+        additionals = GenericScalar(description="Additional Parameters")
+        internal = graphene.Boolean(description="is this now a boolean")
 
     @bounced(only_jwt=True)
-    def mutate(root, info, *args, **kwargs):
-        host = info.context.get_host().split(":")[0]
+    def mutate(root, info, *args,internal=False, additionals={}):
+        host = info.context.get_host().split(":")[0] if not internal else "minio"
 
         return {
         "protocol": "s3",

@@ -115,6 +115,7 @@ class Representation(Matrise):
     nodeid = models.CharField(max_length=400, null=True, blank=True)
     thumbnail = models.ImageField(upload_to="thumbnails",null=True, storage=PrivateMediaStorage())
     created_at = models.DateTimeField(auto_now_add=True)
+    creator = models.ForeignKey(get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True)
     tags = TaggableManager()
 
     objects = RepresentationManager()
