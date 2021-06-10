@@ -49,11 +49,15 @@ AWS_S3_ENDPOINT_URL  = f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}"
 AWS_S3_PUBLIC_ENDPOINT_URL  = f"{conf.s3.public.protocol}://{conf.s3.public.host}:{conf.s3.public.port}"
 AWS_S3_URL_PROTOCOL = f"{conf.s3.public.protocol}:"
 AWS_S3_FILE_OVERWRITE = False
+
+
+
+
+
 AWS_STORAGE_BUCKET_NAME="media"
 AWS_DEFAULT_ACL = 'private'
 AWS_S3_USE_SSL = True
 AWS_S3_SECURE_URLS = False # Should resort to True if using in Production behind TLS
-
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 # Application definition
@@ -70,10 +74,18 @@ HERRE = {
     "ISSUER": conf.herre.issuer
 }
 
+SUPERUSERS = [{
+    "USERNAME": su.username,
+    "EMAIL": su.email,
+    "PASSWORD": su.password
+} for su in conf.security.admins]
+
 GRUNNLAG = {
     "GROUPS": None
 
 }
+
+STATIC_ROOT = "/var/www/static"
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -87,7 +99,10 @@ INSTALLED_APPS = [
     'taggit',
     'channels',
     'health_check',
-    'health_check.db', 
+    'health_check.db',
+    'health_check.contrib.psutil',  
+    'health_check.contrib.s3boto3_storage',
+    'health_check.contrib.redis', 
     'herre',
     'delt',
     'guardian',
@@ -103,6 +118,7 @@ HEALTH_CHECK = {
     'MEMORY_MIN': 100,    # in MB
 }
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -183,7 +199,7 @@ CHANNEL_LAYERS = {
         # This example app uses the Redis channel layer implementation channels_redis
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("redis",6379)],
+            "hosts": [(conf.redis.host, conf.redis.port)],
         },
     },
 }
@@ -235,6 +251,8 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
 
+
+REDIS_URL = f'redis://{conf.redis.host}:{conf.redis.port}'
 
 LOGGING = {
     'version': 1,

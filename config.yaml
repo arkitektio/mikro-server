@@ -1,9 +1,14 @@
 postgres:
-  host: nagi
+  host: blagi
   port: 5432
-  user: hello_elements
-  password: hello_elements
-  db_name: hello_elements
+  user: hello_blagi
+  password: hello_blagi
+  db_name: hello_blagi
+
+
+redis:
+  host: redis
+  port: 6379
 
 server:
   debug: True
@@ -26,7 +31,11 @@ s3:
   
 
 security:
-  secret_key: "!kdjy8tmf&=wyf0netn7^v#k%1ys7maafy7x*39ir43b3)8_es"
+  admins:
+    - username: demo
+      password: demodemo 
+      email: demo@demo.com
+  secret_key: 9=9u7c35!*p_h674kv*t^8ntefnf*#)z_h%6$#b(oe=_mwysw+
 
 herre:
   public_key: |

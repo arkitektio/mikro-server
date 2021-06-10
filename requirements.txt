@@ -21,6 +21,7 @@ s3fs==0.6.0
 boto3
 django-storages
 graphene-django
+delt==0.1.12
 
 
 zarr
@@ -43,6 +44,9 @@ pydantic
 colorlog
 namegenerator
 pyjwt
+
+#Health Check
+redis
 
 # DeployMent
 omegaconf

@@ -21,7 +21,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import include, url
 from balder.autodiscover import autodiscover
 from balder.views import BalderView
-import elements.arkitekt
 
 # Autodiscover for all of the Balder Modules in the installed Apps
 

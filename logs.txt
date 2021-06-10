@@ -14559,3 +14559,734 @@ Registering Representations as Query
 Registering ExperimentDetail as Query
 Registering Representation as Query
 Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fc2be810dc0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fc2be810dc0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fc2be821d00>, 15084.156394235)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fc2be810580>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fc2be821d00>, 15084.156394235)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fc2be810580>
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Postman: Trying to reconnect Postman
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Provider: Reconnecting
+Provider: Reconnecting
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Lost connection inbetween everything :( [ConnectionClosedError('code = 1006 (connection closed abnormally [internal]), no reason')]
+Reconnecting
+Reconnecting
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+[red] Connection attempt as Entertainer failed
+Postman disconnected
+Postman disconnected
+Peasent disconnected
+Peasent disconnected
+Entertainer disconnected
+Entertainer disconnected
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Postman disconnected
+Postman disconnected
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Postman disconnected
+Postman disconnected
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb56a2ee730>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb56a2ee730>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fb56a0c8160>, 20196.730926291)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fb56a2eebe0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fb56a0c8160>, 20196.730926291)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fb56a2eebe0>
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Postman disconnected
+Postman disconnected
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb288caf3d0>
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fb288caf3d0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fb288a80160>, 20257.980263516)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fb288caf940>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fb288a80160>, 20257.980263516)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fb288caf940>
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+ [x] Awaiting Entertaining Calls
+ [x] Awaiting Entertaining Calls
+Sueccess fully connected Provider 
+Sueccess fully connected Provider 
+Creating new Ward for Datapoint TYPENAME=None distinct='Elements' needsNegotiation='True' type=<DataPointType.GRAPHQL: 'GRAPHQL'> host='elements' port=8080 secure=None
+Registering CreateExperiment as Mutation
+Registering DeleteExperiment as Mutation
+Registering CreateSample as Mutation
+Registering DeleteSample as Mutation
+Registering UpdateRepresentation as Mutation
+Registering CreateRepresentation as Mutation
+Registering DeleteRepresentation as Mutation
+Registering MyRepresentations as Subscription
+Registering Negotiate as Mutation
+Registering MyRepresentations as Query
+Registering MySamples as Query
+Registering MyExperiments as Query
+Registering Samples as Query
+Registering Representations as Query
+Registering ExperimentDetail as Query
+Registering Representation as Query
+Registering Sample as Query
