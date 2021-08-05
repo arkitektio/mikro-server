@@ -6,19 +6,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class RepresentationEvent(graphene.ObjectType):
+class ExperimentsEvent(graphene.ObjectType):
     deleted =  graphene.ID()
-    update =  graphene.Field(types.Representation)
-    create = graphene.Field(types.Representation)
+    update =  graphene.Field(types.Experiment)
+    create = graphene.Field(types.Experiment)
 
-class MyRepresentations(BalderSubscription):
-    USERGROUP = lambda user: f"representations_user_{user.id}"
+class MyExperiments(BalderSubscription):
+    USERGROUP = lambda user: f"experiments_user_{user.id}"
 
     class Arguments:
         pass
 
     class Meta:
-        type = RepresentationEvent
+        type = ExperimentsEvent
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
@@ -28,9 +28,9 @@ class MyRepresentations(BalderSubscription):
         logger.error(payload)
 
         if action == "updated":
-            return {"update": models.Representation.objects.get(id=data)}
+            return {"update": models.Experiment.objects.get(id=data)}
         if action == "created":
-            return {"create": models.Representation.objects.get(id=data)}
+            return {"create": models.Experiment.objects.get(id=data)}
         if action == "deleted":
             return {"deleted": data}
 
@@ -38,6 +38,6 @@ class MyRepresentations(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        return [MyRepresentations.USERGROUP(info.context.user)]
+        return [MyExperiments.USERGROUP(info.context.user)]
 
 

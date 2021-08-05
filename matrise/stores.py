@@ -12,6 +12,7 @@ from storages.backends.s3boto3 import S3Boto3Storage
 from zarr import blosc
 import logging
 from asgiref.sync import async_to_sync
+import boto3
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,18 @@ class XArrayStore(FieldFile):
     @property
     def connected(self):
         return self._getStore()
+
+
+    def delete(self):
+        if isinstance(self.storage, S3Boto3Storage):
+            bucket = self.storage.bucket_name
+            store = s3fs.S3FileSystem(client_kwargs={"endpoint_url": get_active_settings().S3_ENDPOINT_URL}, key=get_active_settings().ACCESS_KEY, secret=get_active_settings().SECRET_KEY)
+            store.rm(f'{bucket}/{self.name}/', recursive=True)
+            return 
+        else:
+            raise NotImplementedError("Other Storage Formats have not been established yet. Please use S3 like Storage for time being")
+
+
 
 
     def save(self, array: xr.DataArray, compute=True, apiversion = get_active_settings().API_VERSION, fileversion= get_active_settings().FILE_VERSION):

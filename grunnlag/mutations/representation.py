@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from herre.bouncer.utils import bounced
-from grunnlag.enums import RepresentationVariety
+from grunnlag.enums import RepresentationVariety, RepresentationVarietyInput
 from balder.enum import InputEnum
 from balder.types import BalderMutation
 import graphene
@@ -8,6 +8,7 @@ from grunnlag import models, types
 from bergen.console import console
 import logging
 import namegenerator
+from graphene.types.generic import GenericScalar
 
 
 logger = logging.getLogger(__name__)
@@ -40,8 +41,9 @@ class CreateRepresentation(BalderMutation):
         sample = graphene.ID(required=False, description="Which sample does this representation belong to")
         name = graphene.String(required=False, description="A cleartext description what this representation represents as data")
         creator = graphene.String(required=False, description="The Email of the user creating the Representation (only for backend apps)")
-        variety = graphene.Argument(InputEnum.from_choices(RepresentationVariety), required=False, description="A description of the variety")
+        variety = graphene.Argument(RepresentationVarietyInput, required=False, description="A description of the variety")
         tags = graphene.List(graphene.String, required=False, description="Do you want to tag the representation?")
+        meta = GenericScalar(required=False,description="Meta Parameters")
 
 
     @bounced()
@@ -50,10 +52,12 @@ class CreateRepresentation(BalderMutation):
         variety = kwargs.pop("variety", RepresentationVariety.UNKNOWN.value)
         name = kwargs.pop("name", namegenerator.gen())
         tags = kwargs.pop("tags", [])
+        meta = kwargs.pop("meta", None)
         creator = info.context.user or (get_user_model().objects.get(email=creator) if creator else None)
 
-        rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety, creator=creator)
-        rep.tags.add(*tags)
+        rep = models.Representation.objects.create(name=name, sample_id = sampleid, variety=variety, creator=creator, meta=meta)
+        if tags: rep.tags.add(*tags)
+
         rep.save()
 
         return rep

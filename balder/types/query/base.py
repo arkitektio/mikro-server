@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from balder.fields.offsetfiltered import BalderFilteredWithOffset
 from balder.fields.filtered import BalderFiltered
 from herre.bouncer.utils import bounced
 from balder.types.query.meta import BalderQueryMeta
@@ -22,6 +23,7 @@ class BalderQuery(metaclass=BalderQueryMeta):
     class Meta:
         abstract = True
         personal = None
+        paginate = False
         list = None
         filter = None
         operation = None
@@ -84,6 +86,9 @@ class BalderQuery(metaclass=BalderQueryMeta):
 
         if meta.filter:
             if issubclass(meta.filter, django_filters.FilterSet):
+                if meta.paginate:
+                    return BalderFilteredWithOffset(meta.type,  description=cls._get_description(), filterset_class=meta.filter, queryset_resolver=list_resolver)
+                
                 return BalderFiltered(meta.type,  description=cls._get_description(), filterset_class=meta.filter, queryset_resolver=list_resolver)
             else:
                 raise IllConfigured("Meta attribute filter must be of type django_filters.FilterSet")

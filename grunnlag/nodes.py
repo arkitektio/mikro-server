@@ -35,11 +35,16 @@ async def create_sample(name: str, exp: Experiment = None) -> Sample:
 
 
 @registry.func()
-async def acquire() -> Representation:
+async def acquire(sample: Sample = None, name: str = "Name", iterations: int = 6) -> Representation:
     """Acquire
 
     Acquires an Image without any Parameters specified (the implementing
     Microscope may use its own Settings at the given Moment)
+
+    Args:
+        sample (Sample, optional): Where to put the Sample In. Defaults to None.
+        name (str, optional): The Prepended Name for the Representation. Defaults to "Name".
+        iterations (int, optional): How Many Iterations should we undergo?. Defaults to 6.
 
     Returns:
         Representation: The Output Representatoin

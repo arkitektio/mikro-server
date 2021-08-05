@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 class BalderQueryDefaultMeta:
     abstract = False
     personal = None
+    paginate = False
     list = None
     filter = None
     operation = None

@@ -1,3 +1,4 @@
+from abc import abstractclassmethod
 from grunnlag.storage import PrivateMediaStorage
 from grunnlag.managers import RepresentationManager
 from django.db import models
@@ -30,13 +31,21 @@ class Antibody(models.Model):
         identifier = "antibody"
 
 
+
+
+
+
 class Experiment(models.Model):
+    meta = models.JSONField(null=True, blank=True)
     name = models.CharField(max_length=200)
-    description = models.CharField(max_length=1000)
+    description = models.CharField(max_length=1000, null=True, blank=True)
     description_long = models.TextField(null=True,blank=True)
     linked_paper = models.URLField(null=True,blank=True)
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     image = models.ImageField(upload_to='experiment_banner',null=True,blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
+    tags = TaggableManager()
 
     def __str__(self):
         return "Experiment {0} by {1}".format(self.name,self.creator.username)
@@ -78,12 +87,16 @@ class Sample(models.Model):
     was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of
     the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample
     """
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET(get_sentinel_user))
+    meta = models.JSONField(null=True, blank=True)
     name = models.CharField(max_length=1000)
     experiments = models.ManyToManyField(Experiment, blank=True, null=True, related_name="samples")
     nodeid = models.CharField(max_length=400, null=True, blank=True)
     experimentalgroup = models.ForeignKey(ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True)
     animal = models.ForeignKey(Animal, on_delete=models.SET_NULL, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
+    tags = TaggableManager()
 
 
     class Meta:
@@ -104,9 +117,9 @@ class Sample(models.Model):
 
 
 class Representation(Matrise):
-    ''' A Representation is 5-dimensional representation of a microscopic image '''
+    ''' A Representation is 5-dimensional representation of a microscopic image @arkitekt/rep'''
     group = "representation"
-
+    meta = models.JSONField(null=True, blank=True)
     origin = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null= True, related_name="derived", related_query_name="derived")
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='representations', help_text="The Sample this representation belongs to", null=True, blank=True)
     type = models.CharField(max_length=400, blank=True, null=True, help_text="The Representation can have varying types, consult your API")
@@ -129,6 +142,19 @@ class Representation(Matrise):
 
     def __str__(self):
         return f'Representation of {self.name}'
+
+
+
+class RepresentationMetric(models.Model):
+    rep = models.ForeignKey(Representation,on_delete=models.CASCADE, related_name='metrics', help_text="The Representatoin this Metric belongs to")
+    key = models.CharField(max_length=1000, help_text="The Key")
+    value = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
+
+    class Meta:
+        identifier = "representationmetric"
 
 
 class Thumbnail(models.Model):

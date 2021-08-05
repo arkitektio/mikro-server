@@ -18,6 +18,7 @@ conf = OmegaConf.load('config.yaml')
 
 initialize()
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -49,6 +50,7 @@ AWS_S3_ENDPOINT_URL  = f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}"
 AWS_S3_PUBLIC_ENDPOINT_URL  = f"{conf.s3.public.protocol}://{conf.s3.public.host}:{conf.s3.public.port}"
 AWS_S3_URL_PROTOCOL = f"{conf.s3.public.protocol}:"
 AWS_S3_FILE_OVERWRITE = False
+AWS_QUERYSTRING_EXPIRE = 3600
 
 
 

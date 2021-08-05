@@ -2,12 +2,16 @@ from django.db import reset_queries
 from balder.types.mutation.base import BalderMutation
 from grunnlag import types, models
 from balder.types.query.base import BalderQuery
-from grunnlag.filters import ExperimentFilter, RepresentationFilter, SampleFilter
+from grunnlag.filters import ExperimentFilter, RepresentationFilter, RepresentationMetricFilter, SampleFilter
 import graphene
 import grunnlag.mutations
 import grunnlag.subscriptions
 from graphene.types.generic import GenericScalar
+from delt.registry.nodes import registry
+from delt.management.commands.register_point import parse_data_models
 #import
+
+
 from herre import bounced
 
 
@@ -53,6 +57,7 @@ class MyRepresentations(BalderQuery):
         personal = "sample__creator"
         type = types.Representation
         filter = RepresentationFilter
+        paginate = True
         operation = "myrepresentations"
 
         
@@ -65,6 +70,7 @@ class MySamples(BalderQuery):
         personal = "creator"
         type = types.Sample
         filter = SampleFilter
+        paginate = True
         operation = "mysamples"
 
 class MyExperiments(BalderQuery):
@@ -76,6 +82,7 @@ class MyExperiments(BalderQuery):
         personal = "creator"
         type = types.Experiment
         filter = ExperimentFilter
+        paginate = True
         operation = "myexperiments"
 
 
@@ -87,6 +94,29 @@ class Samples(BalderQuery):
         type = types.Sample
         filter = SampleFilter
         operation = "samples"
+        paginate = True
+
+
+class RepresentationMetric(BalderQuery):
+    """ All Samples
+    """
+    class Meta:
+        list = True
+        type = types.RepresentationMetric
+        filter = RepresentationMetricFilter
+        operation = "metrics"
+        paginate = True
+
+
+class Experiments(BalderQuery):
+    """ All Samples
+    """
+    class Meta:
+        list = True
+        type = types.Experiment
+        filter = ExperimentFilter
+        operation = "experiments"
+        paginate = True
 
 
 class Representations(BalderQuery):
@@ -96,6 +126,7 @@ class Representations(BalderQuery):
         list = True
         type = types.Representation
         filter = RepresentationFilter
+        paginate = True
         operation = "representations"
 
 
@@ -113,10 +144,39 @@ class ExperimentDetail(BalderQuery):
         operation = "experiment"   
 
 
+class Nodes(BalderQuery):
+
+
+    @bounced()
+    def resolve(root, info):
+
+        registry.node_dicts.values()
+        return registry.node_dicts.values()
+
+
+    class Meta:
+        list = True
+        type = types.Node
+        operation = "_nodes"
+
+
+class Models(BalderQuery):
+
+    @bounced()
+    def resolve(root, info):
+        return parse_data_models()
+
+    class Meta:
+        list = True
+        type = types.DataModel
+        operation = "_models"
+
 
 
 class Representation(BalderQuery):
-    """ Get a single representation by ID """
+    """ Get a single representation by ID 
+    
+    """
 
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
@@ -128,6 +188,21 @@ class Representation(BalderQuery):
         type= types.Representation 
         operation = "representation"   
 
+
+class Metric(BalderQuery):
+    """ Get a single representation by ID 
+    
+    """
+
+    class Arguments:
+        id = graphene.ID(description="The ID to search by", required=True)
+
+
+    resolve = lambda root, info, id: models.RepresentationMetric.objects.get(id=id)
+    
+    class Meta:
+        type= types.RepresentationMetric 
+        operation = "metric" 
 
 
 class Sample(BalderQuery):

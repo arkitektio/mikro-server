@@ -1,3 +1,4 @@
+from balder.enum import InputEnum
 from django.db.models import TextChoices
 
 class RepresentationVariety(TextChoices):
@@ -7,3 +8,5 @@ class RepresentationVariety(TextChoices):
     VOXEL = "VOXEL", "Voxel (Value represent Intensity)"
     UNKNOWN = "UNKNOWN", "Unknown"
 
+
+RepresentationVarietyInput = InputEnum.from_choices(RepresentationVariety)
