@@ -21,7 +21,6 @@ s3fs==0.6.0
 boto3
 django-storages
 graphene-django
-delt==0.1.12
 
 
 zarr
@@ -32,6 +31,8 @@ xarray
 # Bergen
 django-health-check
 django-channels-graphql-ws
+arkitekt
+lok>=0.1.5
 
 # Testing and Linting
 ptvsd

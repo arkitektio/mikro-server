@@ -27,8 +27,6 @@ class Antibody(models.Model):
     def __str__(self):
         return "{0}".format(self.name)
 
-    class Meta:
-        identifier = "antibody"
 
 
 
@@ -50,8 +48,6 @@ class Experiment(models.Model):
     def __str__(self):
         return "Experiment {0} by {1}".format(self.name,self.creator.username)
 
-    class Meta:
-        identifier = "experiment"
 
 class ExperimentalGroup(models.Model):
     name = models.CharField(max_length=200, help_text="The experimental groups name")
@@ -63,8 +59,6 @@ class ExperimentalGroup(models.Model):
     def __str__(self):
         return "ExperimentalGroup {0} on Experiment {1}".format(self.name,self.experiment.name)
 
-    class Meta:
-        identifier = "experimentalgroup"
 
 
 class Animal(models.Model):
@@ -78,8 +72,6 @@ class Animal(models.Model):
     def __str__(self):
         return "{0}".format(self.name)
 
-    class Meta:
-        identifier = "animal"
 
 
 class Sample(models.Model):
@@ -98,9 +90,6 @@ class Sample(models.Model):
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
     tags = TaggableManager()
 
-
-    class Meta:
-        identifier = "sample"
 
 
     def __str__(self):
@@ -126,7 +115,7 @@ class Representation(Matrise):
     variety = models.CharField(max_length=400, help_text="The Representation can have varying types, consult your API", choices=RepresentationVariety.choices, default=RepresentationVariety.UNKNOWN.value)
     chain = models.CharField(max_length=9000, blank=True, null=True)
     nodeid = models.CharField(max_length=400, null=True, blank=True)
-    thumbnail = models.ImageField(upload_to="thumbnails",null=True, storage=PrivateMediaStorage())
+    thumbnail = models.ImageField(upload_to="thumbnails",null=True, storage=PrivateMediaStorage(), blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True)
     tags = TaggableManager()
@@ -137,8 +126,6 @@ class Representation(Matrise):
         permissions = [
             ('download_representation', 'Can download Presentation')
         ]
-        identifier = "representation"
-        extenders = ["array"]
 
     def __str__(self):
         return f'Representation of {self.name}'
@@ -153,16 +140,12 @@ class RepresentationMetric(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
 
-    class Meta:
-        identifier = "representationmetric"
 
 
 class Thumbnail(models.Model):
     representation = models.ForeignKey(Representation, on_delete=models.CASCADE, related_name='thumbnails', help_text="The Sample this representation belongs to")
     image = models.ImageField(upload_to="thumbnails",null=True)
 
-    class Meta:
-        identifier = "thumbnail"
 
 
 class ROI(models.Model):
@@ -174,10 +157,6 @@ class ROI(models.Model):
     created_at = models.DateTimeField(auto_now=True)
     representation = models.ForeignKey(Representation, on_delete=models.CASCADE,blank=True, null=True, related_name="rois")
     experimentalgroup = models.ForeignKey(ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True)
-
-    class Meta:
-        extenders = ["roi"]
-        identifier = "roi"
 
 
     def __str__(self):

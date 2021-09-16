@@ -11,17 +11,12 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 """
 import os
 from pathlib import Path
-from delt.initialize import initialize
 from omegaconf import OmegaConf
-
-conf = OmegaConf.load('config.yaml')
-
-initialize()
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+conf = OmegaConf.load(os.path.join(BASE_DIR, "config.yaml"))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
@@ -105,8 +100,7 @@ INSTALLED_APPS = [
     'health_check.contrib.psutil',  
     'health_check.contrib.s3boto3_storage',
     'health_check.contrib.redis', 
-    'herre',
-    'delt',
+    'lok',
     'guardian',
     'graphene_django',
     "rest_framework",
@@ -129,8 +123,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'herre.middlewares.request.jwt.JWTTokenMiddleWare',
-    'herre.middlewares.request.bouncer.BouncedMiddleware', # needs to be after JWT and session 
+    'lok.middlewares.request.jwt.JWTTokenMiddleWare',
+    'lok.middlewares.request.bouncer.BouncedMiddleware', # needs to be after JWT and session 
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -206,7 +200,7 @@ CHANNEL_LAYERS = {
     },
 }
 
-AUTH_USER_MODEL = 'herre.HerreUser'
+AUTH_USER_MODEL = 'lok.LokUser'
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'guardian.backends.ObjectPermissionBackend')
 
 # Password validation

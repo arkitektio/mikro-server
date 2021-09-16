@@ -3,7 +3,7 @@ from graphene.types.generic import GenericScalar
 from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types
-from herre.bouncer.utils import bounced
+from lok import bounced
 
 
 

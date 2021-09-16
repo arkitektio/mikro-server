@@ -1,3 +1,4 @@
+import django
 import graphene
 from graphene.types.scalars import Int, String
 from graphene.types.structures import List
@@ -61,6 +62,7 @@ class RepresentationFilter(django_filters.FilterSet):
     order = django_filters.BaseInFilter(method='order_filter',label="Order by Keys")
     variety = EnumFilter(type=RepresentationVarietyInput, field_name="variety")
     forceThumbnail = django_filters.BooleanFilter(field_name="thumbnail", method="thumbnail_filter")
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains", label="Search for substring of name")
 
     class Meta:
         model = Representation

@@ -1,5 +1,5 @@
 from balder.types import BalderSubscription
-from herre.bouncer.utils import bounced
+from lok import bounced
 import graphene
 from grunnlag import models, types
 import logging

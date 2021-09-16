@@ -4,7 +4,6 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch.dispatcher import receiver
 from guardian.shortcuts import assign_perm
 from .models import Experiment, Representation, Sample
-from bergen.models import Node
 import logging
 
 logger = logging.getLogger(__name__)

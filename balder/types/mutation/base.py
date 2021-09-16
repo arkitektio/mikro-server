@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from balder.fields.filtered import BalderFiltered
-from herre.bouncer.utils import bounced
+from lok import bounced
 from balder.types.mutation.meta import BalderMutationMeta
 from balder.types.utils import classToString
 import graphene

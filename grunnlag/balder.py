@@ -7,12 +7,7 @@ import graphene
 import grunnlag.mutations
 import grunnlag.subscriptions
 from graphene.types.generic import GenericScalar
-from delt.registry.nodes import registry
-from delt.management.commands.register_point import parse_data_models
-#import
-
-
-from herre import bounced
+from lok import bounced
 
 
 
@@ -142,34 +137,6 @@ class ExperimentDetail(BalderQuery):
     class Meta:
         type= types.Experiment 
         operation = "experiment"   
-
-
-class Nodes(BalderQuery):
-
-
-    @bounced()
-    def resolve(root, info):
-
-        registry.node_dicts.values()
-        return registry.node_dicts.values()
-
-
-    class Meta:
-        list = True
-        type = types.Node
-        operation = "_nodes"
-
-
-class Models(BalderQuery):
-
-    @bounced()
-    def resolve(root, info):
-        return parse_data_models()
-
-    class Meta:
-        list = True
-        type = types.DataModel
-        operation = "_models"
 
 
 

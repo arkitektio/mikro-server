@@ -1,12 +1,11 @@
 from django.contrib.auth import get_user_model
 from graphene.types.generic import GenericScalar
-from herre.bouncer.utils import bounced
+from lok import bounced
 from grunnlag.enums import RepresentationVariety
 from balder.enum import InputEnum
 from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types
-from bergen.console import console
 import logging
 import namegenerator
 

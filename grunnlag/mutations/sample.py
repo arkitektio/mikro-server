@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from graphene.types.generic import GenericScalar
 import namegenerator
-from herre.bouncer.utils import bounced
+from lok import bounced
 from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types

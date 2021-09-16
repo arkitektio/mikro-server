@@ -1,5 +1,5 @@
 from balder.types.query import BalderQuery
-from herre.bouncer.utils import bounced
+from lok import bounced
 from balder.registry import get_balder_registry
 from balder.autodiscover import autodiscover
 import graphene
