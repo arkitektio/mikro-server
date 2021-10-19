@@ -16,7 +16,7 @@ django-guardian
 django-avatar
 python-slugify
 
-
+tifffile
 s3fs==0.6.0
 boto3
 django-storages
@@ -31,13 +31,14 @@ xarray
 # Bergen
 django-health-check
 django-channels-graphql-ws
-arkitekt
+arkitekt>=0.1.13
+
 
 # JWT
-lok>=0.1.7
+lok>=0.1.12
 
 # GraphQL abstaction
-balder>=0.1.6
+balder[subscription]>=0.1.8
 
 # Testing and Linting
 ptvsd

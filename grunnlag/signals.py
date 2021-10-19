@@ -17,8 +17,6 @@ def rep_post_save(sender, instance=None, created=None, **kwargs):
     permissions = ["download_representation","view_representation"]
     if created:
         logger.info(f"Assigning Permissions {permissions} to Representation")
-        for permission in permissions:
-            if instance.sample is not None: assign_perm(permission, instance.sample.creator, instance)
     
     from grunnlag.subscriptions import MyRepresentations
     if instance.creator: MyRepresentations.broadcast({"action": "created", "data": instance.id} if created else {"action": "updated", "data": instance.id}, [MyRepresentations.USERGROUP(instance.creator)])

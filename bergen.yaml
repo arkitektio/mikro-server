@@ -2,6 +2,16 @@ arkitekt:
   host: arkitekt
   port: 8090
   secure: false
+  postman:
+    host: arktiekt
+    port: 8090
+    secure: false
+
+logging:
+  stream: true
+  file: true
+  level: INFO
+
 herre:
   host: herre
   port: 8000

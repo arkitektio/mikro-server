@@ -45,8 +45,6 @@ class Experiment(models.Model):
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
     tags = TaggableManager()
 
-    def __str__(self):
-        return "Experiment {0} by {1}".format(self.name,self.creator.username)
 
 
 class ExperimentalGroup(models.Model):
@@ -56,8 +54,6 @@ class ExperimentalGroup(models.Model):
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, help_text="The experiment this Group belongs too")
     iscontrol = models.BooleanField(help_text="Is this Experimental Group a ControlGroup?")
 
-    def __str__(self):
-        return "ExperimentalGroup {0} on Experiment {1}".format(self.name,self.experiment.name)
 
 
 
@@ -69,8 +65,7 @@ class Animal(models.Model):
     experiment = models.ForeignKey(Experiment, blank=True, on_delete=models.CASCADE, null=True)
     experimentalgroup = models.ForeignKey(ExperimentalGroup, blank=True, on_delete=models.CASCADE, null=True)
 
-    def __str__(self):
-        return "{0}".format(self.name)
+
 
 
 
@@ -90,10 +85,6 @@ class Sample(models.Model):
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True)
     tags = TaggableManager()
 
-
-
-    def __str__(self):
-        return "{0} by User: {1}".format(self.name,self.creator.username)
 
 
     def delete(self, *args, **kwargs):

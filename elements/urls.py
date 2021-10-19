@@ -20,6 +20,8 @@ from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import include, url
 from balder.views import BalderView
+from django.conf.urls.static import static
+from django.conf import settings
 # Autodiscover for all of the Balder Modules in the installed Apps
 
 
@@ -32,7 +34,11 @@ def index(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', index, name='index'),
-    url(r'^graphql$', BalderView),
-     url(r'^ht/', include('health_check.urls')),
+    path('graphql', BalderView, name="graphql"),
+    path('accounts/',include('django.contrib.auth.urls')),
+    path('ht/', include('health_check.urls')),
+]+ static("static", document_root=settings.STATIC_ROOT) + static("media", document_root=settings.MEDIA_ROOT)
 
-]
+
+from django.urls import get_resolver
+print(get_resolver().reverse_dict.keys())

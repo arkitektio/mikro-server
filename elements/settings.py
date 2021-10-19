@@ -65,7 +65,7 @@ ARKITEKT_SERVICE = {
 }
 
 
-HERRE = {
+LOK = {
     "PUBLIC_KEY": conf.herre.public_key,
     "KEY_TYPE": conf.herre.key_type,
     "ISSUER": conf.herre.issuer

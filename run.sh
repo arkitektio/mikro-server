@@ -8,8 +8,11 @@ python manage.py migrate
 echo "=> Ensuring Superusers..."
 python manage.py ensureadmin
 
+echo "=> Ensuring DemoData..."
+python manage.py ensuredemo
+
 echo "=> Collecting Static.."
 python manage.py collectstatic --noinput
 # Start the first process
 echo "=> Starting Server"
-python manage.py runserver 0.0.0.0:8080 
+daphne -b 0.0.0.0 -p 8080 elements.asgi:application

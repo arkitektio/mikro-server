@@ -4,8 +4,17 @@ services:
   elements:
     build: .
     command: bash run.sh
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - .:/workspace
     ports:
       - 8080:8080
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.elementsheaders.headers.customrequestheaders.Daphne-Root-Path=/mikro"
+      - "traefik.http.routers.elements.rule=PathPrefix(`/mikro`)"
+      - "traefik.http.routers.elements.middlewares=elementsheaders"
+      - "traefik.http.routers.elements.entrypoints=web"
   blagi:
     image: postgres:12.6-alpine
     environment:
@@ -22,6 +31,19 @@ services:
       MINIO_SECRET_KEY: weak_secret_key
     volumes:
         - mytest:/export
+  traefiks:
+    image: "traefik:v2.5"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8088:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
 
 
@@ -30,7 +52,5 @@ networks:
     external:
       name: dev
 
-    
 volumes:
   mytest:
-
