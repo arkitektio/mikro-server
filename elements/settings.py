@@ -174,7 +174,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'elements.wsgi.application'
-ASGI_APPLICATION = 'elements.routing.application'
+ASGI_APPLICATION = 'elements.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
