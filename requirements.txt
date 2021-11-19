@@ -1,5 +1,5 @@
 Django>=3.1
-channels>=2.4.0
+channels
 channels_redis
 django-registration-redux
 django-extensions
@@ -16,29 +16,26 @@ django-guardian
 django-avatar
 python-slugify
 
-tifffile
-s3fs==0.6.0
 boto3
 django-storages
 graphene-django
 
 
 zarr
-dask[complete]>
 numcodecs
 xarray
 
 # Bergen
 django-health-check
 django-channels-graphql-ws
-arkitekt>=0.1.13
+arkitekt>=0.1.84
 
 
 # JWT
 lok>=0.1.12
 
 # GraphQL abstaction
-balder[subscription]>=0.1.8
+balder[subscription]>=0.1.14
 
 # Testing and Linting
 ptvsd
@@ -46,6 +43,7 @@ pytest-django
 pytest-asyncio
 pylint
 pylint-django
+psutil
 
 pydantic
 colorlog
