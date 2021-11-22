@@ -46,11 +46,14 @@ class MatriseBase(models.Model):
             self.shape = list(self.array.shape)
             self.dims = list(self.array.dims)   
             self.has_array = True
+            print("Eached here")
+
+
         except Exception as e:
             # We are dealing with an initial Creation, lets create a new Store
             if not self.store.name: 
-                generated = active_settings.getPathGeneratorClass().generatePath(self)
-                self.store.name = generated.path
+                path = active_settings.getPathGeneratorClass().generatePath(self)
+                self.store.name = path
 
             self.has_array = False
 
@@ -73,7 +76,6 @@ class MatriseBase(models.Model):
             [xr.DataArray] -- The xr.DataArray class
         """
         if self._array is not None: return self._array
-
 
         if self.store:
             self._array = self.store.loadDataArray()

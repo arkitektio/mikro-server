@@ -6,7 +6,6 @@ import numpy as np
 import xarray as xr
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models.manager import Manager
-from .extenders import ArnheimError
 from .settings import get_active_settings
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ class MatriseManager(Manager):
         item = self.model(**kwargs)
         item.save() # Important. we now assign a store to this
 
-        item.store.save(array, compute=True,fileversion=fileversion, apiversion= apiversion)
+        item.store.save(array, compute=True, fileversion=fileversion, apiversion= apiversion)
         
         item.save()
         return item

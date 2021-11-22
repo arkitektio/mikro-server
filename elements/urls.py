@@ -16,17 +16,36 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.shortcuts import render
+from grunnlag.views import ThumbnailUploadView
 from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
-from django.conf.urls import url
-# Bootstrap Backend
+from django.conf.urls import include, url
+from balder.views import BalderView
+from django.conf.urls.static import static
+from django.conf import settings
+
+# Autodiscover for all of the Balder Modules in the installed Apps
+
+
 def index(request):
-        # Render that in the index template
+    # Render that in the index template
     return render(request, "index-oslo.html")
 
 
-urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', index, name='index'),
-    url(r'^graphql$', csrf_exempt(GraphQLView.as_view(graphiql=True))),
-]
+urlpatterns = (
+    [
+        path("admin/", admin.site.urls),
+        path("", index, name="index"),
+        path("graphql", BalderView, name="graphql"),
+        path("accounts/", include("django.contrib.auth.urls")),
+        path("ht/", include("health_check.urls")),
+        path("api/thumbnails", ThumbnailUploadView.as_view()),
+    ]
+    + static("static", document_root=settings.STATIC_ROOT)
+    + static("media", document_root=settings.MEDIA_ROOT)
+)
+
+
+from django.urls import get_resolver
+
+print(get_resolver().reverse_dict.keys())

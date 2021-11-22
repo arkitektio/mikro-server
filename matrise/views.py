@@ -50,7 +50,6 @@ class MatriseViewsetMixIn():
         Returns:
             xr.DataArray -- The selected xr.DataArray 
         """
-        from .extenders import EXTENDED
         try:
             array = array.sel(c=query_params["c"]) if "c" in query_params else array
             array = array.sel(t=query_params["t"]) if "t" in query_params else array

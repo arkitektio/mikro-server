@@ -1,0 +1,26 @@
+arkitekt:
+  host: arkitekt
+  port: 8090
+  secure: false
+  postman:
+    host: arktiekt
+    port: 8090
+    secure: false
+
+logging:
+  stream: true
+  file: true
+  level: INFO
+
+herre:
+  host: herre
+  port: 8000
+  secure: false
+  scopes:
+    - introspection
+    - provider
+  clientID: huKQboFgvLaqfVb23QAJ7Kchp9Rzl87vCVRgWHjZ
+  client_id: AoNMdwnUGwULwi0UVOD04wpoDjsmX8i8BniBRarF
+  client_secret: ke9LXivKkZSyi57eLWFGozHtXH66JUjhJZOisTuxNf0vBo5QcAQAUwHyzYQZgRKlaPNuQNZlxsQbTus1ruThhocOGs4TFg4L2KtXcqwGVRsWWb4k9CEzHt7R3UADjNgW
+  authorization_grant_type: CLIENT_CREDENTIALS
+  redirect_uri: null

@@ -1,4 +1,4 @@
-from .extenders import ArnheimError
+
 import django.db.models.options as options
 from django.db import models
 

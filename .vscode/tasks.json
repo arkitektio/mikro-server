@@ -10,9 +10,34 @@
             "command": "python manage.py runserver 0.0.0.0:8080"
         },
         {
-            "label": "Schema",
+            "label": "Update Schema",
             "type": "shell",
             "command": "python manage.py makemigrations && python manage.py migrate"
+        },
+        {
+            "label": "Dump Schema",
+            "type": "shell",
+            "command": "python manage.py graphql_schema --out schema.graphql"
+        },
+        {
+            "label": "Register Data",
+            "type": "shell",
+            "command": "python manage.py register_point"
+        },
+        {
+            "label": "Register Nodes",
+            "type": "shell",
+            "command": "python manage.py register_nodes"
+        },
+        {
+            "label": "Start Provider",
+            "type": "shell",
+            "command": "python manage.py provide"
+        },
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "docker build -t jhnnsrs/elements:prod ."
         },
     ]
 }

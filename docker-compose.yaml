@@ -3,22 +3,17 @@ version: "3.4"
 services:
   elements:
     build: .
-    command: python manage.py runserver 0.0.0.0:8080
+    command: bash run-debug.sh
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - .:/workspace
     ports:
       - 8080:8080
-    volumes:
-      - .:/worskpace:cached
-    env_file:
-      - elements.env
-  nagi:
-    image: postgres:12.6-alpine
-    env_file:
-      - elements.env
-
-
-
+      
 networks:
   default:
     external:
       name: dev
 
+volumes:
+  mytest:

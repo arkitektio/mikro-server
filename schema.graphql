@@ -1,0 +1,355 @@
+"""The root Query"""
+type Query {
+  hello: String
+  void: String
+
+  """
+   My Representations returns all of the Representations, attached to the current user
+      
+  """
+  myrepresentations(
+    name: String = null
+    variety: String = null
+
+    """The tags you want to filter by"""
+    tags: String = null
+
+    """The Experiment the Sample of this Representation belongs to"""
+    experiment: ID = null
+    sample: ID = null
+
+    """Ordering"""
+    ordering: String = null
+  ): [Representation]
+
+  """
+   My samples return all of the users samples attached to the current user
+      
+  """
+  mysamples(
+    creator: ID = null
+    experiment: String = null
+
+    """The name of the desired BioSeries"""
+    bioseries: String = null
+    name: String = null
+  ): [Sample]
+
+  """
+   My samples return all of the users samples attached to the current user
+      
+  """
+  myexperiments(creator: Float = null): [Experiment]
+
+  """
+   All Samples
+      
+  """
+  samples(
+    creator: ID = null
+    experiment: String = null
+
+    """The name of the desired BioSeries"""
+    bioseries: String = null
+    name: String = null
+  ): [Sample]
+
+  """
+   All represetations
+      
+  """
+  representations(
+    name: String = null
+    variety: String = null
+
+    """The tags you want to filter by"""
+    tags: String = null
+
+    """The Experiment the Sample of this Representation belongs to"""
+    experiment: ID = null
+    sample: ID = null
+
+    """Ordering"""
+    ordering: String = null
+  ): [Representation]
+
+  """ Get a single representation by ID """
+  experiment(
+    """The ID to search by"""
+    id: ID!
+  ): Experiment
+
+  """ Get a single representation by ID """
+  representation(
+    """The ID to search by"""
+    id: ID!
+  ): Representation
+
+  """ Get a single representation by ID """
+  sample(
+    """The ID to search by"""
+    id: ID!
+  ): Sample
+}
+
+""" A Representation is 5-dimensional representation of a microscopic image 
+"""
+type Representation {
+  id: ID!
+
+  """The location of the Array on the Storage System (S3 or Media-URL)"""
+  store: String
+
+  """The arrays shape"""
+  shape: [Int!]
+
+  """The arrays dimension"""
+  dims: [String!]
+
+  """Does this Model have attached Data?"""
+  hasArray: Boolean!
+
+  """Cleartext name"""
+  name: String
+
+  """A unique identifier for this array"""
+  unique: UUID!
+
+  """The File Version of this Array"""
+  fileversion: String!
+  origin: Representation
+
+  """The Sample this representation belongs to"""
+  sample: Sample
+
+  """The Representation can have varying types, consult your API"""
+  type: String
+
+  """The Representation can have varying types, consult your API"""
+  variety: GrunnlagRepresentationVarietyChoices!
+  chain: String
+  nodeid: String
+  createdAt: DateTime!
+
+  """A comma-separated list of tags."""
+  tags: [Tag]
+  derived: [Representation!]!
+}
+
+"""
+Leverages the internal Python implementation of UUID (uuid.UUID) to provide native UUID objects
+in fields, resolvers and input.
+"""
+scalar UUID
+
+"""
+ Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure),
+    was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of
+    the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample
+    
+"""
+type Sample {
+  id: ID!
+  creator: User!
+  name: String!
+  experiments: [Experiment!]!
+  nodeid: String
+  representations(
+    name: String = null
+    variety: String = null
+
+    """The tags you want to filter by"""
+    tags: String = null
+
+    """The Experiment the Sample of this Representation belongs to"""
+    experiment: ID = null
+    sample: ID = null
+
+    """Ordering"""
+    ordering: String = null
+  ): [Representation]
+}
+
+""" A reflection on the real User"""
+type User {
+  id: ID!
+  password: String!
+  lastLogin: DateTime
+
+  """
+  Designates that this user has all permissions without explicitly assigning them.
+  """
+  isSuperuser: Boolean!
+
+  """Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only."""
+  username: String!
+  firstName: String!
+  lastName: String!
+
+  """Designates whether the user can log into this admin site."""
+  isStaff: Boolean!
+
+  """
+  Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
+  """
+  isActive: Boolean!
+  dateJoined: DateTime!
+  email: String!
+  roles: GenericScalar
+  experimentSet: [Experiment!]!
+  sampleSet: [Sample!]!
+}
+
+"""
+The `DateTime` scalar type represents a DateTime
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar DateTime
+
+"""
+The `GenericScalar` scalar type represents a generic
+GraphQL scalar value that could be:
+String, Boolean, Int, Float, List or Object.
+"""
+scalar GenericScalar
+
+"""
+Experiment(id, name, description, description_long, linked_paper, creator, image)
+"""
+type Experiment {
+  id: ID!
+  name: String!
+  description: String!
+  descriptionLong: String
+  linkedPaper: String
+  creator: User!
+  image: String
+  samples: [Sample!]!
+}
+
+"""An enumeration."""
+enum GrunnlagRepresentationVarietyChoices {
+  """Mask (Value represent Labels)"""
+  MASK
+
+  """Voxel (Value represent Intensity)"""
+  VOXEL
+
+  """Unknown"""
+  UNKNOWN
+}
+
+scalar Tag
+
+"""The root Mutation"""
+type Mutation {
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  createExperiment(
+    """A short description of the experiment"""
+    description: String = null
+
+    """A cleartext description what this representation represents as data"""
+    name: String!
+  ): Experiment
+
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  deleteExperiment(
+    """A cleartext description what this representation represents as data"""
+    id: ID!
+  ): DeleteExperimentResult
+
+  """
+  Creates a Sample
+      
+  """
+  createSample(
+    """The Experiments this sample Belongs to"""
+    experiments: [ID] = null
+
+    """A cleartext name for this Sample"""
+    name: String!
+  ): Sample
+
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  deleteSample(
+    """A cleartext description what this representation represents as data"""
+    id: ID!
+  ): DeleteSampleResult
+
+  """
+  Updates an Representation (also retriggers meta-data retrieval from data stored in)
+      
+  """
+  updateRepresentation(
+    """Which sample does this representation belong to"""
+    rep: ID!
+  ): Representation
+
+  """
+  Creates a Representation
+      
+  """
+  createRepresentation(
+    """A cleartext description what this representation represents as data"""
+    name: String!
+
+    """Which sample does this representation belong to"""
+    sample: ID = null
+
+    """Do you want to tag the representation?"""
+    tags: [String] = null
+
+    """A description of the variety"""
+    variety: RepresentationVarietyInput!
+  ): Representation
+
+  """
+   Create an experiment (only signed in users)
+      
+  """
+  deleteRepresentation(
+    """The ID of the two deletet Representation"""
+    id: ID!
+  ): DeleteRepresentationResult
+  negotiate(
+    """Addditoinal Parameters"""
+    additionals: GenericScalar = null
+  ): GenericScalar
+}
+
+type DeleteExperimentResult {
+  id: String
+}
+
+type DeleteSampleResult {
+  id: String
+}
+
+"""
+ Variety expresses the Type of Representation we are dealing with
+    
+"""
+enum RepresentationVarietyInput {
+  """Mask (Value represent Labels)"""
+  MASK
+
+  """Voxel (Value represent Intensity)"""
+  VOXEL
+
+  """Unknown"""
+  UNKNOWN
+}
+
+type DeleteRepresentationResult {
+  id: String
+}

@@ -28,8 +28,12 @@ class Generator(LazyObject):
 
 class MatriseSettings():
 
-    S3_ENDPOINT_URL = settings.AWS_S3_ENDPOINT_URL #Non Public
+    S3_ENDPOINT_URL = settings.MATRISE["PRIVATE_URL"] #Non Public
     S3_PUBLIC_URL = settings.MATRISE["PUBLIC_URL"]
+
+    ACCESS_KEY = settings.MATRISE["ACCESS_KEY"]
+    SECRET_KEY = settings.MATRISE["SECRET_KEY"]
+
 
     API_VERSION = settings.MATRISE["API_VERSION"]
     FILE_VERSION = settings.MATRISE["FILE_VERSION"]
