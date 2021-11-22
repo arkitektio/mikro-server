@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.utils.module_loading import import_string
 from bord.fields import ParquetField
 from django.conf import settings
 from taggit.managers import TaggableManager
@@ -29,7 +30,7 @@ class Table(models.Model):
     columns = models.JSONField(default=list)
     store = ParquetField(
         verbose_name="store",
-        storage=settings.BORD["STORAGE_CLASS"],
+        storage=import_string(settings.BORD["STORAGE_CLASS"]),
         upload_to="parquet",
         blank=True,
         null=True,

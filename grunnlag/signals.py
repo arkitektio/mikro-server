@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models.signals import post_save, post_delete
 from django.dispatch.dispatcher import receiver
-from .models import Experiment, OmeroFile, Representation, Sample
+from .models import Experiment, OmeroFile, Representation, Sample, Thumbnail
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,22 @@ def rep_post_save(sender, instance=None, created=None, **kwargs):
             else {"action": "updated", "data": instance.id},
             [MyRepresentations.USERGROUP(instance.creator)],
         )
+
+
+@receiver(post_save, sender=Thumbnail)
+def rep_post_save(sender, instance=None, created=None, **kwargs):
+    """
+    Assign Permission to the Representation
+    """
+
+    from grunnlag.subscriptions import MyRepresentations
+
+    if instance.representation:
+        if instance.representation.creator:
+            MyRepresentations.broadcast(
+                {"action": "updated", "data": instance.representation.id},
+                [MyRepresentations.USERGROUP(instance.representation.creator)],
+            )
 
 
 @receiver(post_save, sender=Experiment)

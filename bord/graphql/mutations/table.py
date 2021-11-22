@@ -20,6 +20,9 @@ class UpdateTable(BalderMutation):
     @bounced()
     def mutate(root, info, *args, **kwargs):
         tab = models.Table.objects.get(id=kwargs.pop("id"))
+
+        schema = tab.store.data.schema.to_arrow_schema().pandas_metadata
+        tab.columns = schema["columns"]
         tab.save()
         return tab
 
@@ -52,6 +55,11 @@ class CreateTable(BalderMutation):
             description="The Email of the user creating the Representation (only for backend apps)",
         )
         tags = graphene.List(
+            graphene.String,
+            required=False,
+            description="Do you want to tag the representation?",
+        )
+        columns = graphene.List(
             graphene.String,
             required=False,
             description="Do you want to tag the representation?",

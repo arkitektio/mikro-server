@@ -3,8 +3,8 @@ from bord.filters import TableFilter
 from grunnlag.omero import Channel, OmeroRepresentation, PhysicalSize, Plane
 from graphene.types.generic import GenericScalar
 from grunnlag.filters import (
+    MetricFilter,
     RepresentationFilter,
-    RepresentationMetricFilter,
     SampleFilter,
 )
 from balder.fields.filtered import BalderFiltered
@@ -65,9 +65,9 @@ class Node(graphene.ObjectType):
     returns = graphene.List(GenericScalar)
 
 
-class RepresentationMetric(BalderObject):
+class Metric(BalderObject):
     class Meta:
-        model = models.RepresentationMetric
+        model = models.Metric
 
 
 class OmeroFile(BalderObject):
@@ -112,6 +112,14 @@ class OmeroFile(BalderObject):
         model = models.OmeroFile
 
 
+class Column(graphene.ObjectType):
+    name = graphene.String()
+    field_name = graphene.String()
+    pandas_type = graphene.String()
+    numpy_type = graphene.String()
+    metadata = GenericScalar()
+
+
 class Table(BalderObject):
     query = graphene.List(
         lambda: graphene.List(GenericScalar),
@@ -122,9 +130,13 @@ class Table(BalderObject):
         offset=graphene.Int(required=False, description="The Offset for the query"),
         limit=graphene.Int(required=False, description="The Offset for the query"),
     )
+    columns = graphene.List(Column, description="Columns Data")
 
     def resolve_query(root, info, *args, columns=[], offset=0, limit=200):
-        return [["Empty Value" for column in columns] for i in range(limit)]
+
+        pd_thing = root.store.data.read_pandas().to_pandas()
+        pd_thing = pd_thing[columns] if columns else pd_thing
+        return pd_thing.head(limit).values.tolist()
 
     class Meta:
         model = bordmodels.Table
@@ -140,8 +152,8 @@ class Representation(BalderObject):
     """
 
     metrics = BalderFilteredWithOffset(
-        RepresentationMetric,
-        filterset_class=RepresentationMetricFilter,
+        Metric,
+        filterset_class=MetricFilter,
         related_field="metrics",
     )
     latest_thumbnail = graphene.Field(Thumbnail)

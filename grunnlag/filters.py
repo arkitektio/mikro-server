@@ -6,7 +6,7 @@ from balder.enum import InputEnum
 import django_filters
 from django_filters.filters import ChoiceFilter
 from graphene.types.dynamic import Dynamic
-from .models import Experiment, OmeroFile, Representation, Sample
+from .models import Experiment, Metric, OmeroFile, Representation, Sample
 from .enums import RepresentationVariety, RepresentationVarietyInput
 from django import forms
 from graphene_django.forms.converter import convert_form_field
@@ -97,21 +97,20 @@ class RepresentationFilter(django_filters.FilterSet):
         return queryset.filter(metrics__key__in=tag_list)
 
 
-class RepresentationMetricFilter(django_filters.FilterSet):
+class MetricFilter(django_filters.FilterSet):
     keys = django_filters.BaseInFilter(
         method="my_key_filter", label="The key you want to filter by"
     )
     sample = django_filters.ModelChoiceFilter(
-        queryset=Sample.objects.all(), field_name="rep__sample"
+        queryset=Sample.objects.all(), field_name="sample"
+    )
+    experiment = django_filters.ModelChoiceFilter(
+        queryset=Sample.objects.all(), field_name="experiment"
     )
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="rep"
     )
     order = django_filters.BaseInFilter(method="order_filter", label="Order by Keys")
-
-    class Meta:
-        model = Representation
-        fields = ["name", "variety"]
 
     def my_key_filter(self, queryset, name, value):
         return queryset.filter(key__in=value)

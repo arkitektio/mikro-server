@@ -3,9 +3,10 @@ import hashlib
 from django.core.cache import cache
 from storages.backends.s3boto3 import S3Boto3Storage
 
+
 class PrivateMediaStorage(S3Boto3Storage):
-    location = 'thumbnails'
-    default_acl = 'private'
+    location = "thumbnails"
+    default_acl = "private"
     file_overwrite = False
 
     def url(self, name):
@@ -13,6 +14,7 @@ class PrivateMediaStorage(S3Boto3Storage):
         key = f"PrivateMediaStorage_{name}"
         result = cache.get(key)
         if result:
+            print("Cached")
             return result
 
         # No cached value exists, follow the usual logic
@@ -23,7 +25,7 @@ class PrivateMediaStorage(S3Boto3Storage):
             timeout = settings.AWS_QUERYSTRING_EXPIRE
         except:
             timeout = 3600
-        timeout = int(timeout*.75)
+        timeout = int(timeout * 0.75)
         cache.set(key, result, timeout)
 
         return result

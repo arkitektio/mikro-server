@@ -16,6 +16,7 @@ django-guardian
 django-avatar
 python-slugify
 
+s3fs
 boto3
 django-storages
 graphene-django
@@ -44,6 +45,10 @@ pytest-asyncio
 pylint
 pylint-django
 psutil
+
+
+pyarrow
+pandas
 
 pydantic
 colorlog

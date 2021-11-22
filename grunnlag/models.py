@@ -152,9 +152,6 @@ class Representation(Matrise):
     )
     chain = models.CharField(max_length=9000, blank=True, null=True)
     nodeid = models.CharField(max_length=400, null=True, blank=True)
-    thumbnail = models.ImageField(
-        upload_to="thumbnails", null=True, storage=PrivateMediaStorage(), blank=True
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True
@@ -170,10 +167,28 @@ class Representation(Matrise):
         return f"Representation of {self.name}"
 
 
-class RepresentationMetric(models.Model):
+class Metric(models.Model):
     rep = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metrics",
+        help_text="The Representatoin this Metric belongs to",
+    )
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metrics",
+        help_text="The Representatoin this Metric belongs to",
+    )
+    sample = models.ForeignKey(
+        Sample,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="metrics",
         help_text="The Representatoin this Metric belongs to",
     )
@@ -193,7 +208,9 @@ class Thumbnail(models.Model):
         related_name="thumbnails",
         help_text="The Sample this representation belongs to",
     )
-    image = models.ImageField(upload_to="thumbnails", null=True)
+    image = models.ImageField(
+        upload_to="thumbnails", null=True, storage=PrivateMediaStorage()
+    )
 
 
 class ROI(models.Model):

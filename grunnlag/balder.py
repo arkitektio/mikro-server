@@ -4,9 +4,9 @@ from grunnlag import types, models
 from balder.types.query.base import BalderQuery
 from grunnlag.filters import (
     ExperimentFilter,
+    MetricFilter,
     OmeroFileFilter,
     RepresentationFilter,
-    RepresentationMetricFilter,
     SampleFilter,
 )
 import graphene
@@ -109,13 +109,13 @@ class Samples(BalderQuery):
         paginate = True
 
 
-class RepresentationMetric(BalderQuery):
+class Metrics(BalderQuery):
     """All Samples"""
 
     class Meta:
         list = True
-        type = types.RepresentationMetric
-        filter = RepresentationMetricFilter
+        type = types.Metric
+        filter = MetricFilter
         operation = "metrics"
         paginate = True
 
@@ -187,10 +187,10 @@ class Metric(BalderQuery):
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
 
-    resolve = lambda root, info, id: models.RepresentationMetric.objects.get(id=id)
+    resolve = lambda root, info, id: models.Metric.objects.get(id=id)
 
     class Meta:
-        type = types.RepresentationMetric
+        type = types.Metric
         operation = "metric"
 
 
