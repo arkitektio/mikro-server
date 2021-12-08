@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db.models.signals import post_save, post_delete
 from django.dispatch.dispatcher import receiver
+
+from bord.models import Table
 from .models import Experiment, OmeroFile, Representation, Sample, Thumbnail
 import logging
 
@@ -92,6 +94,30 @@ def exp_post_del(sender, instance=None, **kwargs):
         )
 
 
+@receiver(post_save, sender=Table)
+def table_post_save(sender, instance=None, created=None, **kwargs):
+    from grunnlag.subscriptions import MyTables
+
+    if instance.creator:
+        MyTables.broadcast(
+            {"action": "created", "data": instance.id}
+            if created
+            else {"action": "updated", "data": instance.id},
+            [MyTables.USERGROUP(instance.creator)],
+        )
+
+
+@receiver(post_delete, sender=Table)
+def table_post_del(sender, instance=None, **kwargs):
+    from grunnlag.subscriptions import MyTables
+
+    if instance.creator:
+        MyTables.broadcast(
+            {"action": "deleted", "data": instance.id},
+            [MyTables.USERGROUP(instance.creator)],
+        )
+
+
 @receiver(post_delete, sender=Representation)
 def auto_delete_file_on_delete(sender, instance, **kwargs):
     """
@@ -101,8 +127,8 @@ def auto_delete_file_on_delete(sender, instance, **kwargs):
     if instance.store:
         try:
             instance.store.delete()
-        except:
-            logger.error(f"Deleting failed for {instance}")
+        except Exception as e:
+            logger.exception(e)
 
     from grunnlag.subscriptions import MyRepresentations
 
@@ -120,7 +146,4 @@ def auto_delete_file_on_delete(sender, instance, **kwargs):
     when corresponding `Representation` object is deleted.
     """
     if instance.file:
-        try:
-            instance.file.delete()
-        except:
-            logger.error(f"Deleting failed for {instance}")
+        instance.file.delete()

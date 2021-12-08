@@ -52,3 +52,6 @@ class Table(models.Model):
             self.store.name = path
 
         return super().save(*args, **kwargs)
+
+
+from . import signals

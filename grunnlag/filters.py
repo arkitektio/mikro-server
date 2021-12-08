@@ -6,6 +6,7 @@ from balder.enum import InputEnum
 import django_filters
 from django_filters.filters import ChoiceFilter
 from graphene.types.dynamic import Dynamic
+from taggit.models import Tag
 from .models import Experiment, Metric, OmeroFile, Representation, Sample
 from .enums import RepresentationVariety, RepresentationVarietyInput
 from django import forms
@@ -45,6 +46,9 @@ class EnumFilter(django_filters.CharFilter):
 
 
 class ExperimentFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
     creator = django_filters.NumberFilter(field_name="creator")
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
@@ -60,7 +64,7 @@ class RepresentationFilter(django_filters.FilterSet):
         field_name="sample__experiments",
         label="The Experiment the Sample of this Representation belongs to",
     )
-    sample = django_filters.ModelChoiceFilter(
+    samples = django_filters.ModelMultipleChoiceFilter(
         queryset=Sample.objects.all(), field_name="sample"
     )
     ordering = django_filters.OrderingFilter(fields={"created_at": "time"})
@@ -72,8 +76,18 @@ class RepresentationFilter(django_filters.FilterSet):
     forceThumbnail = django_filters.BooleanFilter(
         field_name="thumbnail", method="thumbnail_filter"
     )
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    derived_tags = django_filters.BaseInFilter(
+        method="derived_tag_filter", label="The tags you want to filter by"
     )
 
     class Meta:
@@ -82,6 +96,9 @@ class RepresentationFilter(django_filters.FilterSet):
 
     def my_tag_filter(self, queryset, name, value):
         return queryset.filter(tags__name__in=value)
+
+    def derived_tag_filter(self, queryset, name, value):
+        return queryset.filter(derived__tags__name__in=value).distinct()
 
     def order_filter(self, queryset, name, value):
         return queryset.order_by(*value)
@@ -133,6 +150,17 @@ class SampleFilter(django_filters.FilterSet):
     class Meta:
         model = Sample
         fields = ["creator", "experiment", "bioseries", "name"]
+
+
+class TagFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    def order_filter(self, queryset, name, value):
+        return queryset.order_by(*value)
+
+    class Meta:
+        model = Tag
+        fields = ["name"]
 
 
 class OmeroFileFilter(django_filters.FilterSet):

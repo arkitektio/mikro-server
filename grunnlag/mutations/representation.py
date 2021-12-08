@@ -59,6 +59,10 @@ class CreateRepresentation(BalderMutation):
             required=False,
             description="Do you want to tag the representation?",
         )
+        origin = graphene.ID(
+            required=False,
+            description="Which representation was used to create this representation",
+        )
         meta = GenericScalar(required=False, description="Meta Parameters")
         omero = graphene.Argument(OmeroRepresentationInput)
 
@@ -70,6 +74,7 @@ class CreateRepresentation(BalderMutation):
         tags = kwargs.pop("tags", [])
         meta = kwargs.pop("meta", None)
         omero = kwargs.pop("omero", None)
+        origin = kwargs.pop("origin", None)
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
@@ -85,6 +90,7 @@ class CreateRepresentation(BalderMutation):
             creator=creator,
             meta=meta,
             omero=omero,
+            origin_id=origin,
         )
         if tags:
             rep.tags.add(*tags)

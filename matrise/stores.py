@@ -11,6 +11,7 @@ from zarr import blosc
 import logging
 from asgiref.sync import async_to_sync
 import boto3
+import s3fs
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,6 @@ class NotCompatibleException(Exception):
 
 class XArrayStore(FieldFile):
     def _getStore(self):
-
-        import s3fs
 
         if isinstance(self.storage, S3Boto3Storage):
             bucket = self.storage.bucket_name

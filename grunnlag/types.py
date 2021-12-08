@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from graphene.types.scalars import String
 from bord.filters import TableFilter
 from grunnlag.omero import Channel, OmeroRepresentation, PhysicalSize, Plane
 from graphene.types.generic import GenericScalar
@@ -13,37 +14,26 @@ from balder.types.object import BalderObject
 import graphene
 from grunnlag import models
 from taggit.managers import TaggableManager
+from taggit.models import Tag
 from graphene_django.converter import convert_django_field
 from django.conf import settings
 from grunnlag.enums import OmeroFileType
 from bord import models as bordmodels
 
 
-class Tag(graphene.String):
-    pass
+class Tag(BalderObject):
+    class Meta:
+        model = Tag
 
 
 @convert_django_field.register(TaggableManager)
 def convert_field_to_string(field, registry=None):
-    return graphene.List(Tag, description=field.help_text, required=not field.null)
+    return graphene.List(String, description=field.help_text, required=not field.null)
 
 
 class Thumbnail(BalderObject):
     def resolve_image(root, info, *args, **kwargs):
-        try:
-            host = info.context.get_host().split(":")[0]
-        except:
-            host = {
-                key.decode("utf-8"): item.decode("utf-8")
-                for key, item in info.context["headers"]
-            }["host"].split(":")[0]
-        port = 9000
-        url = f"http://{host}:{port}"
-        return (
-            root.image.url.replace(settings.AWS_S3_ENDPOINT_URL, url)
-            if root.image
-            else None
-        )
+        return root.image.url if root.image else None
 
     class Meta:
         model = models.Thumbnail
@@ -73,40 +63,8 @@ class Metric(BalderObject):
 class OmeroFile(BalderObject):
     thumbnail = graphene.String(description="Url of a thumbnail")
 
-    def resolve_thumbnail(root, info, *args, **kwargs):
-        if root.type == OmeroFileType.MSR:
-            pass
-
-        try:
-            host = info.context.get_host().split(":")[0]
-        except:
-            host = {
-                key.decode("utf-8"): item.decode("utf-8")
-                for key, item in info.context["headers"]
-            }["host"].split(":")[0]
-        port = 9000
-        url = f"http://{host}:{port}/"
-        return (
-            root.file.url.replace(settings.AWS_S3_ENDPOINT_URL, url)
-            if root.file
-            else None
-        )
-
     def resolve_file(root, info, *args, **kwargs):
-        try:
-            host = info.context.get_host().split(":")[0]
-        except:
-            host = {
-                key.decode("utf-8"): item.decode("utf-8")
-                for key, item in info.context["headers"]
-            }["host"].split(":")[0]
-        port = 9000
-        url = f"http://{host}:{port}"
-        return (
-            root.file.url.replace(settings.AWS_S3_ENDPOINT_URL, url)
-            if root.file
-            else None
-        )
+        return root.file.url if root.file else None
 
     class Meta:
         model = models.OmeroFile
@@ -133,7 +91,6 @@ class Table(BalderObject):
     columns = graphene.List(Column, description="Columns Data")
 
     def resolve_query(root, info, *args, columns=[], offset=0, limit=200):
-
         pd_thing = root.store.data.read_pandas().to_pandas()
         pd_thing = pd_thing[columns] if columns else pd_thing
         return pd_thing.head(limit).values.tolist()
@@ -162,6 +119,12 @@ class Representation(BalderObject):
         Table,
         filterset_class=TableFilter,
         related_field="tables",
+    )
+    derived = BalderFilteredWithOffset(
+        lambda: Representation,
+        model=models.Representation,
+        filterset_class=RepresentationFilter,
+        related_field="derived",
     )
 
     def resolve_latest_thumbnail(root, info, *args, **kwargs):

@@ -19,6 +19,7 @@ class PrivateMediaStorage(S3Boto3Storage):
 
         # No cached value exists, follow the usual logic
         result = super(PrivateMediaStorage, self).url(name)
+        result = result.replace(settings.AWS_S3_ENDPOINT_URL, "")
 
         # Cache the result for 3/4 of the temp_url's lifetime.
         try:

@@ -8,6 +8,7 @@ from grunnlag.filters import (
     OmeroFileFilter,
     RepresentationFilter,
     SampleFilter,
+    TagFilter,
 )
 import graphene
 import grunnlag.mutations
@@ -117,6 +118,17 @@ class Metrics(BalderQuery):
         type = types.Metric
         filter = MetricFilter
         operation = "metrics"
+        paginate = True
+
+
+class Tags(BalderQuery):
+    """All Samples"""
+
+    class Meta:
+        list = True
+        type = types.Tag
+        filter = TagFilter
+        operation = "tags"
         paginate = True
 
 
