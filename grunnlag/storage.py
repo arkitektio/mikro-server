@@ -14,7 +14,6 @@ class PrivateMediaStorage(S3Boto3Storage):
         key = f"PrivateMediaStorage_{name}"
         result = cache.get(key)
         if result:
-            print("Cached")
             return result
 
         # No cached value exists, follow the usual logic

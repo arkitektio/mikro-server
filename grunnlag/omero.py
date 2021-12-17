@@ -90,9 +90,11 @@ class OmeroRepresentationInput(graphene.InputObjectType):
     planes = graphene.List(PlaneInput)
     channels = graphene.List(ChannelInput)
     physicalSize = graphene.Argument(PhysicalSizeInput)
+    scale = graphene.List(graphene.Float)
 
 
 class OmeroRepresentation(graphene.ObjectType):
     planes = graphene.List(Plane)
     channels = graphene.List(Channel)
     physicalSize = graphene.Field(PhysicalSize)
+    scale = graphene.List(graphene.Float)

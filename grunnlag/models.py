@@ -1,5 +1,4 @@
 from abc import abstractclassmethod
-from grunnlag.omero import ChannelModel, PhysicalSizeModel, PlaneModel
 from grunnlag.storage import PrivateMediaStorage
 from grunnlag.managers import RepresentationManager
 from django.db import models
@@ -122,13 +121,13 @@ class Representation(Matrise):
     group = "representation"  #
     meta = models.JSONField(null=True, blank=True)
     omero = models.JSONField(null=True, blank=True, default=dict)
-    origin = models.ForeignKey(
+    origins = models.ManyToManyField(
         "self",
-        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="derived",
         related_query_name="derived",
+        symmetrical=False,
     )
     sample = models.ForeignKey(
         Sample,

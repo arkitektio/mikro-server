@@ -16,7 +16,6 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.shortcuts import render
-from grunnlag.views import ThumbnailUploadView
 from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import include, url
@@ -39,7 +38,6 @@ urlpatterns = (
         path("graphql", BalderView, name="graphql"),
         path("accounts/", include("django.contrib.auth.urls")),
         path("ht/", include("health_check.urls")),
-        path("api/thumbnails", ThumbnailUploadView.as_view()),
     ]
     + static("static", document_root=settings.STATIC_ROOT)
     + static("media", document_root=settings.MEDIA_ROOT)
