@@ -1,11 +1,11 @@
 from abc import abstractclassmethod
-from grunnlag.omero import ChannelModel, PhysicalSizeModel, PlaneModel
+from email.policy import default
 from grunnlag.storage import PrivateMediaStorage
 from grunnlag.managers import RepresentationManager
 from django.db import models
 
 # Create your models here.
-from .enums import OmeroFileType, RepresentationVariety
+from .enums import OmeroFileType, RepresentationVariety, RoiType
 import logging
 
 from django.contrib.auth import get_user_model
@@ -28,6 +28,10 @@ class Antibody(models.Model):
 
     def __str__(self):
         return "{0}".format(self.name)
+
+
+class OmeroFileField(models.FileField):
+    pass
 
 
 class Experiment(models.Model):
@@ -78,7 +82,7 @@ class OmeroFile(models.Model):
     type = models.CharField(
         max_length=400, choices=OmeroFileType.choices, default=OmeroFileType.UNKNWON
     )
-    file = models.FileField(
+    file = OmeroFileField(
         upload_to="files", null=True, storage=PrivateMediaStorage(), blank=True
     )
     name = models.CharField(max_length=400)
@@ -122,13 +126,13 @@ class Representation(Matrise):
     group = "representation"  #
     meta = models.JSONField(null=True, blank=True)
     omero = models.JSONField(null=True, blank=True, default=dict)
-    origin = models.ForeignKey(
+    origins = models.ManyToManyField(
         "self",
-        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="derived",
         related_query_name="derived",
+        symmetrical=False,
     )
     sample = models.ForeignKey(
         Sample,
@@ -216,9 +220,16 @@ class Thumbnail(models.Model):
 class ROI(models.Model):
     nodeid = models.CharField(max_length=400, null=True, blank=True)
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
-    vectors = models.CharField(
+    vectors = models.JSONField(
         max_length=3000,
         help_text="A json dump of the ROI Vectors (specific for each type)",
+        default=list,
+    )
+    type = models.CharField(
+        max_length=400,
+        help_text="The Representation can have varying types, consult your API",
+        choices=RoiType.choices,
+        default=RoiType.UNKNOWN.value,
     )
     color = models.CharField(max_length=100, blank=True, null=True)
     signature = models.CharField(max_length=300, null=True, blank=True)
@@ -233,6 +244,7 @@ class ROI(models.Model):
     experimentalgroup = models.ForeignKey(
         ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
     )
+    tags = TaggableManager()
 
     def __str__(self):
         return f"ROI created by {self.creator.username} on {self.representation.name}"

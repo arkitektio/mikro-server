@@ -3,6 +3,7 @@ from lok import bounced
 from balder.types import BalderMutation
 import graphene
 from bord import models
+from bord.scalar import DataFrame
 from grunnlag import types
 import logging
 import namegenerator
@@ -93,6 +94,68 @@ class CreateTable(BalderMutation):
 
     class Meta:
         type = types.Table
+
+
+class FromDF(BalderMutation):
+    """Creates a Representation"""
+
+    class Arguments:
+        sample = graphene.ID(
+            required=False,
+            description="Which sample does this table belong to",
+        )
+        representation = graphene.ID(
+            required=False,
+            description="Which sample does this table belong to",
+        )
+        experiment = graphene.ID(
+            required=False,
+            description="Which sample does this table belong to",
+        )
+        name = graphene.String(
+            required=False,
+            description="A cleartext description what this representation represents as data",
+        )
+        creator = graphene.String(
+            required=False,
+            description="The Email of the user creating the Representation (only for backend apps)",
+        )
+        tags = graphene.List(
+            graphene.String,
+            required=False,
+            description="Do you want to tag the representation?",
+        )
+        df = graphene.Argument(DataFrame, required=True)
+
+    @bounced()
+    def mutate(root, info, *args, creator=None, **kwargs):
+        sampleid = kwargs.pop("sample", None)
+        repid = kwargs.pop("representation", None)
+        expid = kwargs.pop("experiment", None)
+        name = kwargs.pop("name", namegenerator.gen())
+        tags = kwargs.pop("tags", [])
+        creator = info.context.user or (
+            get_user_model().objects.get(email=creator) if creator else None
+        )
+
+        tab = models.Table.objects.create(
+            name=name,
+            sample_id=sampleid,
+            representation_id=repid,
+            experiment_id=expid,
+            creator=creator,
+        )
+
+        if tags:
+            tab.tags.add(*tags)
+
+        tab.save()
+
+        return tab
+
+    class Meta:
+        type = types.Table
+        operation = "from_df"
 
 
 class DeleteTableResult(graphene.ObjectType):

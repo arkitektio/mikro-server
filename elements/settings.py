@@ -92,8 +92,7 @@ INSTALLED_APPS = [
     "channels",
     "health_check",
     "health_check.db",
-    # "health_check.contrib.psutil",
-    # "health_check.contrib.s3boto3_storage",
+    "health_check.contrib.psutil",
     "health_check.contrib.redis",
     "lok",
     "guardian",
@@ -106,7 +105,7 @@ INSTALLED_APPS = [
 ]
 
 HEALTH_CHECK = {
-    "DISK_USAGE_MAX": 90,  # percent
+    "DISK_USAGE_MAX": 99,  # percent
     "MEMORY_MIN": 100,  # in MB
 }
 

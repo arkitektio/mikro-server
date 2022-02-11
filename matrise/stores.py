@@ -11,6 +11,7 @@ from zarr import blosc
 import logging
 from asgiref.sync import async_to_sync
 import boto3
+import s3fs
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,10 @@ class NotCompatibleException(Exception):
 class XArrayStore(FieldFile):
     def _getStore(self):
 
-        import s3fs
-
         if isinstance(self.storage, S3Boto3Storage):
             bucket = self.storage.bucket_name
             location = self.storage.location
-            s3_path = f"{bucket}/{self.name}"
+            s3_path = f"{self.name}"
             # Initilize the S3 file system
             logger.info(f"Bucket [{bucket}]: Connecting to {s3_path}")
             store = s3fs.S3FileSystem(
@@ -67,7 +66,7 @@ class XArrayStore(FieldFile):
                 key=get_active_settings().ACCESS_KEY,
                 secret=get_active_settings().SECRET_KEY,
             )
-            store.rm(f"{bucket}/{self.name}/", recursive=True)
+            store.rm(f"{self.name}/", recursive=True)
             return
         else:
             raise NotImplementedError(
@@ -114,22 +113,8 @@ class XArrayStore(FieldFile):
         print(self.connected)
         dataset = xr.open_zarr(store=self.connected, consolidated=True)
         fileversion = dataset.attrs["fileversion"]
-        fileapiversion = dataset.attrs["apiversion"]
         logger.info(dataset)
-        if apiversion == "0.1":
-            if fileapiversion == "0.1" and fileversion == "0.1":
-                logger.info(
-                    f"Opening File with API v.{apiversion}  and File v.{fileversion} "
-                )
-                array = dataset["data"]
-                array.name = self.instance.name
-                return array
-            else:
-                raise NotCompatibleException(
-                    f"The ApiVersion v.{apiversion} is not able to parse file with API v.{fileapiversion} and File v.{fileversion}"
-                )
-        else:
-            NotImplementedError("This API Version has not been Implemented Yet")
+        return dataset["data"]
 
     def loadDataset(self):
         return xr.open_zarr(store=self.connected, consolidated=False)

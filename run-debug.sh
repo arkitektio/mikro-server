@@ -8,9 +8,6 @@ python manage.py migrate
 echo "=> Ensuring Superusers..."
 python manage.py ensureadmin
 
-echo "=> Ensuring DemoData..."
-python manage.py ensuredemo
-
 echo "=> Collecting Static.."
 python manage.py collectstatic --noinput
 # Start the first process

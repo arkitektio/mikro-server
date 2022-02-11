@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import Representation, Sample, Experiment, Thumbnail, Metric
+from .models import (
+    ROI,
+    OmeroFile,
+    Representation,
+    Sample,
+    Experiment,
+    Thumbnail,
+    Metric,
+)
 
 # Register your models here.
 class SingleTextInputFilter(admin.ListFilter):
@@ -86,5 +94,7 @@ class RepresentationAdmin(admin.ModelAdmin):
 admin.site.register(Representation, RepresentationAdmin)
 admin.site.register(Sample, SampleAdmin)
 admin.site.register(Experiment)
+admin.site.register(OmeroFile)
 admin.site.register(Thumbnail)
 admin.site.register(Metric)
+admin.site.register(ROI)

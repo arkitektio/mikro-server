@@ -1,3 +1,0 @@
-Creating new Ward for Datapoint TYPENAME=None id=5 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8080 url=None models=None
-Creating new Ward for Datapoint TYPENAME=None id=6 type='GRAPHQL' name=None inward=None outward='p-tnagerl-lab1' port=8070 url=None models=None
-Successfully connected [bold]Postman

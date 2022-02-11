@@ -13,9 +13,6 @@ class FieldParquet(FieldFile):
 
         if isinstance(self.storage, S3Boto3Storage):
             import s3fs
-
-            bucket = self.storage.bucket_name
-            location = self.storage.location
             # Initilize the S3 file system
             return s3fs.S3FileSystem(
                 client_kwargs={"endpoint_url": settings.BORD["PRIVATE_URL"]},
