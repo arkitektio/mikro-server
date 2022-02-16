@@ -34,7 +34,7 @@ class Rois(BalderSubscription):
         if action == "created":
             return {"create": data}
         if action == "deleted":
-            return {"deleted": data}
+            return {"delete": data}
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, representation=None, **kwargs):
