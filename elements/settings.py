@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "health_check.contrib.psutil",
     "health_check.contrib.redis",
     "lok",
+    "colorfield",
     "guardian",
     "graphene_django",
     "rest_framework",

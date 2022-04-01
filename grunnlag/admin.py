@@ -7,6 +7,7 @@ from .models import (
     Experiment,
     Thumbnail,
     Metric,
+    UserMeta,
 )
 
 # Register your models here.
@@ -91,6 +92,7 @@ class RepresentationAdmin(admin.ModelAdmin):
         return True
 
 
+admin.site.register(UserMeta)
 admin.site.register(Representation, RepresentationAdmin)
 admin.site.register(Sample, SampleAdmin)
 admin.site.register(Experiment)

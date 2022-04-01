@@ -1,3 +1,4 @@
+from attr import has
 from django.contrib.auth import get_user_model
 from django.db.models import FileField
 from graphene.types.scalars import String
@@ -179,6 +180,13 @@ class Experiment(BalderObject):
 
 
 class User(BalderObject):
+    color = graphene.String(description="The associated color for this user")
+
+    def resolve_color(root, info):
+        if hasattr(root, "meta"):
+            return root.meta.color
+        return "#FF0000"
+
     class Meta:
         model = get_user_model()
         description = get_user_model().__doc__
@@ -195,3 +203,13 @@ class ROI(BalderObject):
 
     class Meta:
         model = models.ROI
+
+
+class Label(BalderObject):
+    class Meta:
+        model = models.Label
+
+
+class SizeFeature(BalderObject):
+    class Meta:
+        model = models.SizeFeature

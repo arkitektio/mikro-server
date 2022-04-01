@@ -33,7 +33,9 @@ class CreateROI(BalderMutation):
             required=False,
             description="Do you want to tag the roi?",
         )
-        type = graphene.Argument(RoiTypeInput, description="The type of ROI")
+        type = graphene.Argument(
+            RoiTypeInput, description="The type of ROI", required=True
+        )
         meta = GenericScalar(required=False, description="Meta Parameters")
 
     @bounced(anonymous=False)

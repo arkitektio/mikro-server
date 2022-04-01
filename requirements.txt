@@ -15,6 +15,7 @@ pytest-asyncio
 django-guardian
 django-avatar
 python-slugify
+django-colorfield
 
 s3fs
 boto3
@@ -29,11 +30,10 @@ xarray
 # Bergen
 django-health-check
 django-channels-graphql-ws
-arkitekt>=0.1.111
 
 
 # JWT
-lok>=0.1.12
+lok>=0.1.14
 
 # GraphQL abstaction
 balder[subscription]>=0.1.18

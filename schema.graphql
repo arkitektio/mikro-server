@@ -40,6 +40,10 @@ type DeleteOmeroFileResult {
   id: String
 }
 
+type DeleteROIResult {
+  id: String
+}
+
 type DeleteRepresentationResult {
   id: String
 }
@@ -80,6 +84,12 @@ scalar GenericScalar
 
 scalar ImageFile
 
+input InputVector {
+  x: Float
+  y: Float
+  z: Float
+}
+
 type Metric {
   id: ID!
   rep: Representation
@@ -105,6 +115,8 @@ type Mutation {
   uploadOmeroFile(file: Upload!): OmeroFile
   deleteOmeroFile(id: ID!): DeleteOmeroFileResult
   negotiate(additionals: GenericScalar, internal: Boolean): GenericScalar
+  createROI(creator: ID, meta: GenericScalar, representation: ID!, tags: [String], type: RoiTypeInput!, vectors: [InputVector]!): ROI
+  deleteROI(id: ID!): DeleteROIResult
   updateTable(id: ID!): Table
   createTable(columns: [String], creator: String, experiment: ID, name: String, representation: ID, sample: ID, tags: [String]): Table
   fromDf(creator: String, df: DataFrame!, experiment: ID, name: String, representation: ID, sample: ID, tags: [String]): Table
@@ -199,9 +211,32 @@ type Query {
   mysamples(creator: ID, experiments: [ID], bioseries: String, name: String, ids: [ID], representations: [ID], order: [String], limit: Int, offset: Int): [Sample]
   tags(name: String, limit: Int, offset: Int): [Tag]
   thumbnail(id: ID!): Thumbnail
+  rois(representation: ID, creator: Float, tags: [String], type: [RoiTypeInput], limit: Int, offset: Int): [ROI]
   tables: [Table]
   mytables: [Table]
   table(id: ID!): Table
+}
+
+type ROI {
+  id: ID!
+  nodeid: String
+  creator: User!
+  vectors: [Vector]
+  type: ROIType!
+  color: String
+  signature: String
+  createdAt: DateTime!
+  representation: Representation
+  tags: [String]
+}
+
+enum ROIType {
+  ELLIPSE
+  POLYGON
+  LINE
+  RECTANGLE
+  PATH
+  UNKNOWN
 }
 
 type Representation {
@@ -227,6 +262,7 @@ type Representation {
   derived(name: String, tags: [String], ids: [String], experiments: [ID], samples: [ID], ordering: String, hasMetric: String, order: [String], variety: RepresentationVarietyInput, forceThumbnail: Boolean, createdAfter: DateTime, createdBefore: DateTime, derivedTags: [String], limit: Int, offset: Int): [Representation]
   metrics(keys: [String], sample: ID, experiment: ID, representation: ID, order: [String], limit: Int, offset: Int): [Metric]
   thumbnails: [Thumbnail!]!
+  rois: [ROI!]!
   tables(name: String, tags: [String], limit: Int, offset: Int): [Table]
   latestThumbnail: Thumbnail
 }
@@ -240,12 +276,29 @@ type RepresentationEvent {
 enum RepresentationVariety {
   MASK
   VOXEL
+  RGB
   UNKNOWN
 }
 
 enum RepresentationVarietyInput {
   MASK
   VOXEL
+  RGB
+  UNKNOWN
+}
+
+type RoiEvent {
+  delete: ID
+  update: ROI
+  create: ROI
+}
+
+enum RoiTypeInput {
+  ELLIPSIS
+  POLYGON
+  LINE
+  RECTANGLE
+  PATH
   UNKNOWN
 }
 
@@ -276,6 +329,7 @@ type Subscription {
   myExperiments: ExperimentsEvent
   mySamples: SamplesEvent
   myTables: TablesEvent
+  rois(representation: ID!): RoiEvent
 }
 
 type Table {
@@ -332,7 +386,15 @@ type User {
   sampleSet: [Sample!]!
   representationSet: [Representation!]!
   metricSet: [Metric!]!
+  roiSet: [ROI!]!
   tableSet: [Table!]!
+  color: String
+}
+
+type Vector {
+  x: Float
+  y: Float
+  z: Float
 }
 
 scalar XArray

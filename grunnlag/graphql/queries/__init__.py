@@ -6,3 +6,4 @@ from .sample import *
 from .tags import *
 from .thumbnail import *
 from .roi import *
+from .label import *

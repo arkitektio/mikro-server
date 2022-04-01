@@ -91,6 +91,13 @@ class ROIFilter(django_filters.FilterSet):
     type = MultiEnumFilter(type=RoiTypeInput, field_name="type")
 
 
+class LabelFilter(django_filters.FilterSet):
+    representation = django_filters.ModelChoiceFilter(
+        queryset=Representation.objects.all(), field_name="representation"
+    )
+    creator = django_filters.NumberFilter(field_name="creator")
+
+
 class RepresentationFilter(django_filters.FilterSet):
     tags = django_filters.BaseInFilter(
         method="my_tag_filter", label="The tags you want to filter by"

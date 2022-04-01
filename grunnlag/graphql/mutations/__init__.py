@@ -6,3 +6,5 @@ from .thumbnail import UploadThumbnail
 from .omero import UploadOmeroFile, DeleteOmeroFile
 from .ward import Negotiate
 from .roi import CreateROI, DeleteROI
+from .feature import CreateSizeFeature
+from .label import CreateLabel

@@ -10,15 +10,26 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.db import models
-
+from lok.models import LokUser
 from taggit.managers import TaggableManager
 from matrise.models import Matrise
+from colorfield.fields import ColorField
 
 logger = logging.getLogger(__name__)
 
 
 def get_sentinel_user():
     return get_user_model().objects.get_or_create(username="deleted")[0]
+
+
+class UserMeta(models.Model):
+    user = models.OneToOneField(
+        get_user_model(), blank=True, on_delete=models.CASCADE, related_name="meta"
+    )
+    color = ColorField(default="#FF0000")
+
+    def __str__(self) -> str:
+        return f"User Meta for {self.user}"
 
 
 class Antibody(models.Model):
@@ -248,6 +259,45 @@ class ROI(models.Model):
 
     def __str__(self):
         return f"ROI created by {self.creator.username} on {self.representation.name}"
+
+
+class Label(models.Model):
+    instance = models.BigIntegerField()
+    name = models.CharField(max_length=600, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now=True)
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    representation = models.ForeignKey(
+        Representation,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="labels",
+    )
+    experimentalgroup = models.ForeignKey(
+        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    tags = TaggableManager()
+
+    def __str__(self):
+        return f"ROI created by {self.creator.username} on {self.representation.name}"
+
+
+class Feature(models.Model):
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True)
+    label = models.ForeignKey(
+        Label,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="features",
+    )
+
+    class Meta:
+        abstract = True
+
+
+class SizeFeature(Feature):
+    size = models.FloatField()
 
 
 import grunnlag.signals as sig
