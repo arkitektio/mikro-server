@@ -1,6 +1,6 @@
 FROM python:3.8
 LABEL maintainer="jhnnsrs@gmail.com"
-
+LABEL service="mikro"
 # Install Minimal Dependencies for Django
 ADD requirements.txt /tmp
 WORKDIR /tmp

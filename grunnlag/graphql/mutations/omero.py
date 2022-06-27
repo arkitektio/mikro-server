@@ -69,3 +69,24 @@ class DeleteOmeroFile(BalderMutation):
 
     class Meta:
         type = DeleteOmeroFileResult
+
+
+class UpdateOmeroFile(BalderMutation):
+    """Updates an Representation (also retriggers meta-data retrieval from data stored in)"""
+
+    class Arguments:
+        id = graphene.ID(
+            required=True, description="Which sample does this representation belong to"
+        )
+        tags = graphene.List(graphene.String, required=False, description="Tags")
+
+    @bounced()
+    def mutate(root, info, id, tags=[]):
+        rep = models.OmeroFile.objects.get(id=id)
+        if tags:
+            rep.tags.set(tags)
+        rep.save()
+        return rep
+
+    class Meta:
+        type = types.OmeroFile

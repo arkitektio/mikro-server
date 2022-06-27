@@ -23,10 +23,19 @@ class UpdateRepresentation(BalderMutation):
         rep = graphene.ID(
             required=True, description="Which sample does this representation belong to"
         )
+        variety = RepresentationVarietyInput(
+            required=False, description="The variety of the representation"
+        )
+        tags = graphene.List(graphene.String, required=False, description="Tags")
+        sample = graphene.ID(required=False, description="The sample")
 
     @bounced()
-    def mutate(root, info, *args, **kwargs):
-        rep = models.Representation.objects.get(id=kwargs.pop("rep"))
+    def mutate(root, info, *args, sample=None, tags=None, variety=None, rep=None):
+        rep = models.Representation.objects.get(id=rep)
+        rep.sample_id = sample or rep.sample_id
+        if tags:
+            rep.tags.set(tags)
+        rep.variety = variety or rep.variety
         rep.save()
         return rep
 

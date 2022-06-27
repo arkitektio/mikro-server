@@ -101,6 +101,7 @@ class OmeroFile(models.Model):
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.CASCADE, null=True, blank=True
     )
+    tags = TaggableManager()
 
 
 class Sample(models.Model):

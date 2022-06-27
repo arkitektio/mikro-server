@@ -22,30 +22,24 @@ conf = OmegaConf.load(os.path.join(BASE_DIR, "config.yaml"))
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = conf.security.secret_key
+SECRET_KEY = conf.server.secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = conf.server.debug or False
 
 ALLOWED_HOSTS = conf.server.hosts
-
-
-ELEMENTS_HOST = "p-tnagerl-lab1"
-ELEMENTS_INWARD = "elements"  # Set this to the host you are on
-ELEMENTS_PORT = 8080  # Set this to the host you are on
-
 CORS_ALLOW_ALL_ORIGINS = True
 # S3 Settings
 
 
-S3_PUBLIC_DOMAIN = f"{conf.s3.public.host}:{conf.s3.public.port}"  # TODO: FIx
-AWS_ACCESS_KEY_ID = conf.s3.access_key
-AWS_SECRET_ACCESS_KEY = conf.s3.secret_key
-AWS_S3_ENDPOINT_URL = f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}"
-AWS_S3_PUBLIC_ENDPOINT_URL = (
-    f"{conf.s3.public.protocol}://{conf.s3.public.host}:{conf.s3.public.port}"
-)
-AWS_S3_URL_PROTOCOL = f"{conf.s3.public.protocol}:"
+# S3_PUBLIC_DOMAIN = f"{conf.s3.public.host}:{conf.s3.public.port}"  # TODO: FIx
+AWS_ACCESS_KEY_ID = conf.minio.access_key
+AWS_SECRET_ACCESS_KEY = conf.minio.secret_key
+AWS_S3_ENDPOINT_URL = f"{conf.minio.protocol}://{conf.minio.host}:{conf.minio.port}"
+# AWS_S3_PUBLIC_ENDPOINT_URL = (
+#    f"{conf.minio.public.protocol}://{conf.minio.public.host}:{conf.minio.public.port}"
+# )
+AWS_S3_URL_PROTOCOL = f"{conf.minio.protocol}:"
 AWS_S3_FILE_OVERWRITE = False
 AWS_QUERYSTRING_EXPIRE = 3600
 
@@ -56,26 +50,21 @@ AWS_S3_USE_SSL = True
 AWS_S3_SECURE_URLS = False  # Should resort to True if using in Production behind TLS
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 
-# Application definition
-ARKITEKT_SERVICE = {
-    "NAME": "elements",
-    "VERSION": "0.1",
-    "NEEDS_NEGOTIATION": True,
-}
-
 
 LOK = {
-    "PUBLIC_KEY": conf.herre.public_key,
-    "KEY_TYPE": conf.herre.key_type,
-    "ISSUER": conf.herre.issuer,
+    "PUBLIC_KEY": conf.lok.public_key,
+    "KEY_TYPE": conf.lok.key_type,
+    "ISSUER": conf.lok.issuer,
 }
 
 SUPERUSERS = [
-    {"USERNAME": su.username, "EMAIL": su.email, "PASSWORD": su.password}
-    for su in conf.security.admins
+    {
+        "USERNAME": conf.server.admin.username,
+        "EMAIL": conf.server.admin.email,
+        "PASSWORD": conf.server.admin.password,
+    }
 ]
 
-GRUNNLAG = {"GROUPS": None}
 
 STATIC_ROOT = "/var/www/static"
 
@@ -131,10 +120,10 @@ ROOT_URLCONF = "elements.urls"
 MATRISE = {
     "FILE_VERSION": "0.1",
     "API_VERSION": "0.1",
-    "ACCESS_KEY": conf.s3.access_key,
-    "SECRET_KEY": conf.s3.secret_key,
-    "PUBLIC_URL": f"{conf.s3.public.host}:{conf.s3.public.port}",  # TODO: FIx
-    "PRIVATE_URL": f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}",  # TODO: FIx
+    "ACCESS_KEY": conf.minio.access_key,
+    "SECRET_KEY": conf.minio.secret_key,
+    "PUBLIC_URL": f"WORRIED",  # TODO: FIx
+    "PRIVATE_URL": f"{conf.minio.protocol}://{conf.minio.host}:{conf.minio.port}",  # TODO: FIx
     "STORAGE_CLASS": "matrise.storages.s3.S3Storage",
     "GENERATOR_CLASS": "matrise.generators.default.DefaultPathGenerator",
     "BUCKET": "zarr",
@@ -143,10 +132,10 @@ MATRISE = {
 BORD = {
     "FILE_VERSION": "0.1",
     "API_VERSION": "0.1",
-    "ACCESS_KEY": conf.s3.access_key,
-    "SECRET_KEY": conf.s3.secret_key,
-    "PUBLIC_URL": f"{conf.s3.public.host}:{conf.s3.public.port}",  # TODO: FIx
-    "PRIVATE_URL": f"{conf.s3.protocol}://{conf.s3.host}:{conf.s3.port}",  # TODO
+    "ACCESS_KEY": conf.minio.access_key,
+    "SECRET_KEY": conf.minio.secret_key,
+    "PUBLIC_URL": f"WORRIED",
+    "PRIVATE_URL": f"{conf.minio.protocol}://{conf.minio.host}:{conf.minio.port}",  # TODO
     "STORAGE_CLASS": "bord.storages.s3.S3Storage",
     "GENERATOR_CLASS": "bord.generators.default.DefaultPathGenerator",
     "BUCKET": "parquet",

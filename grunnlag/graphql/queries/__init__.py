@@ -7,3 +7,4 @@ from .tags import *
 from .thumbnail import *
 from .roi import *
 from .label import *
+from .request import *

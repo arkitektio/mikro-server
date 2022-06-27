@@ -37,6 +37,8 @@ class Representation(BalderQuery):
 
 def get_random_obj_from_queryset(queryset):
     max_pk = queryset.aggregate(max_pk=Max("pk"))["max_pk"]
+    if max_pk is None:
+        return None
     while True:
         obj = queryset.filter(pk=random.randint(1, max_pk)).first()
         if obj:

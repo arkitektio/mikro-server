@@ -16,6 +16,7 @@ django-guardian
 django-avatar
 python-slugify
 django-colorfield
+requests
 
 s3fs
 boto3
