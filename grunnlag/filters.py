@@ -80,6 +80,18 @@ class ExperimentFilter(django_filters.FilterSet):
     )
 
 
+class ThumbnailFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="representation__name",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+    creator = django_filters.NumberFilter(field_name="creator")
+    tags = django_filters.BaseInFilter(
+        label="The tags you want to filter by", field_name="tags__name"
+    )
+
+
 class ROIFilter(django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"

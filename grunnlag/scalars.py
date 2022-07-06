@@ -52,3 +52,20 @@ class Store(Scalar):
     @staticmethod
     def parse_value(value):
         return value
+
+
+class Parquet(Scalar):
+    """A Representation of a Parquet file on the s3"""
+
+    @staticmethod
+    def serialize(dt):
+        return dt
+
+    @staticmethod
+    def parse_literal(node):
+        if isinstance(node, ast.StringValue):
+            return node.value
+
+    @staticmethod
+    def parse_value(value):
+        return value

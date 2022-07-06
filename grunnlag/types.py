@@ -1,10 +1,11 @@
 from attr import has
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.db.models import FileField
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
-from grunnlag.scalars import File, Store
+from grunnlag.scalars import File, Parquet, Store
 from grunnlag.omero import Channel, OmeroRepresentation, PhysicalSize, Plane
 from graphene.types.generic import GenericScalar
 from grunnlag.filters import (
@@ -23,6 +24,7 @@ from graphene_django.converter import convert_django_field
 from django.conf import settings
 from grunnlag.enums import OmeroFileType
 from bord import models as bordmodels
+import logging
 
 
 class Tag(BalderObject):
@@ -81,28 +83,57 @@ class OmeroFile(BalderObject):
 
 class Column(graphene.ObjectType):
     name = graphene.String(description="The Column Name")
-    field_name = graphene.String(description="The FIeld Name")
+    field_name = graphene.String(description="The FIeld Name", required=True)
     pandas_type = graphene.String(description="The Panda Types for the Column")
     numpy_type = graphene.String(description="The Numpy Types for the Column")
     metadata = GenericScalar(description="Generic MetaData from Stuff")
 
 
+class PandasMetaData(graphene.ObjectType):
+    columns = graphene.List(Column)
+
+
 class Table(BalderObject):
     query = graphene.List(
-        lambda: graphene.List(GenericScalar),
-        description="List of List",
-        columns=graphene.List(
+        GenericScalar,
+        description="List of Records",
+        only=graphene.List(
             graphene.String, description="Columns you want to select", required=False
         ),
         offset=graphene.Int(required=False, description="The Offset for the query"),
         limit=graphene.Int(required=False, description="The Offset for the query"),
+        query=graphene.String(required=False, description="The Query for the query"),
     )
-    columns = graphene.List(Column, description="Columns Data")
+    store = graphene.Field(Parquet)
+    columns = graphene.List(
+        Column,
+        description="Columns Data",
+        only=graphene.List(
+            graphene.String, description="Columns you want to select", required=False
+        ),
+    )
 
-    def resolve_query(root, info, *args, columns=[], offset=0, limit=200):
+    def resolve_store(root, info, *args, **kwargs):
+        return root.store.name
+
+    def resolve_query(root, info, *args, columns=[], offset=0, limit=200, query=None):
         pd_thing = root.store.data.read_pandas().to_pandas()
+        logging.error(pd_thing)
         pd_thing = pd_thing[columns] if columns else pd_thing
-        return pd_thing.head(limit).values.tolist()
+
+        if query:
+            pd_thing = pd_thing.query(query)
+
+        return pd_thing.iloc[offset : offset + limit].to_dict("records")
+
+    def resolve_columns(root, info, only=[]):
+        columns_data = root.store.data.read().schema.pandas_metadata["columns"]
+
+        return (
+            columns_data
+            if not only
+            else [el for el in columns_data if el["field_name"] in only]
+        )
 
     class Meta:
         model = bordmodels.Table
@@ -213,3 +244,13 @@ class Label(BalderObject):
 class SizeFeature(BalderObject):
     class Meta:
         model = models.SizeFeature
+
+
+class Permission(BalderObject):
+    unique = graphene.String(description="Unique ID for this permission", required=True)
+
+    def resolve_unique(root, info):
+        return f"{root.content_type.app_label}.{root.codename}"
+
+    class Meta:
+        model = Permission

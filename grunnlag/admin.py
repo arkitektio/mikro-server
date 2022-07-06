@@ -9,6 +9,8 @@ from .models import (
     Metric,
     UserMeta,
 )
+from guardian.admin import GuardedModelAdmin
+
 
 # Register your models here.
 class SingleTextInputFilter(admin.ListFilter):
@@ -85,7 +87,7 @@ class SampleAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-class RepresentationAdmin(admin.ModelAdmin):
+class RepresentationAdmin(GuardedModelAdmin):
     list_filter = (SampleNameListFilter, ExperimentNameFilter)
 
     def lookup_allowed(self, key, value):

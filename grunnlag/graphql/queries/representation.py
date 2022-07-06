@@ -8,6 +8,8 @@ from grunnlag.filters import (
 )
 from django.db.models import Max
 import random
+import logging
+from guardian.shortcuts import get_objects_for_user
 
 
 class MyRepresentations(BalderQuery):
@@ -20,6 +22,20 @@ class MyRepresentations(BalderQuery):
         filter = RepresentationFilter
         paginate = True
         operation = "myrepresentations"
+
+
+class AccessibleRepresentations(BalderQuery):
+    def resolve(self, info):
+        reps = get_objects_for_user(
+            info.context.user,
+            "grunnlag.download_representation",
+        )
+        return reps.all()
+
+    class Meta:
+        type = types.Representation
+        list = True
+        operation = "accessiblerepresentations"
 
 
 class Representation(BalderQuery):

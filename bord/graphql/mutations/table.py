@@ -128,7 +128,8 @@ class FromDF(BalderMutation):
         df = graphene.Argument(DataFrame, required=True)
 
     @bounced()
-    def mutate(root, info, *args, creator=None, **kwargs):
+    def mutate(root, info, df, *args, creator=None, **kwargs):
+
         sampleid = kwargs.pop("sample", None)
         repid = kwargs.pop("representation", None)
         expid = kwargs.pop("experiment", None)
@@ -144,6 +145,7 @@ class FromDF(BalderMutation):
             representation_id=repid,
             experiment_id=expid,
             creator=creator,
+            store=df,
         )
 
         if tags:

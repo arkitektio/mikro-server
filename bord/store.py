@@ -13,6 +13,7 @@ class FieldParquet(FieldFile):
 
         if isinstance(self.storage, S3Boto3Storage):
             import s3fs
+
             # Initilize the S3 file system
             return s3fs.S3FileSystem(
                 client_kwargs={"endpoint_url": settings.BORD["PRIVATE_URL"]},
@@ -28,14 +29,18 @@ class FieldParquet(FieldFile):
     @property
     def data(self) -> pq.ParquetDataset:
         bucket = self.storage.bucket_name
-        s3_path = f"{bucket}/{self.name}"
+        s3_path = f"{self.name}"
+        logging.error(f"{s3_path}")
         return pq.ParquetDataset(s3_path, filesystem=self._getFileSystem())
 
     def delete(self):
         if isinstance(self.storage, S3Boto3Storage):
             bucket = self.storage.bucket_name
             fs = self._getFileSystem()
-            fs.rm(f"{bucket}/{self.name}/", recursive=True)
+            try:
+                fs.rm(f"{self.name}/", recursive=True)
+            except Exception as e:
+                logger.error(e)
             return
         else:
             raise NotImplementedError(

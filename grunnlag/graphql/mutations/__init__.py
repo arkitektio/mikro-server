@@ -8,3 +8,4 @@ from .ward import Negotiate
 from .roi import CreateROI, DeleteROI
 from .feature import CreateSizeFeature
 from .label import CreateLabel
+from .perms import ChangePermissions
