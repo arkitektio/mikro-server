@@ -8,7 +8,12 @@ from grunnlag.enums import RoiTypeInput
 from grunnlag import models, types
 from enum import Enum
 from grunnlag.graphql.utils import AvailableModelsEnum, ct_types
-from guardian.shortcuts import assign_perm
+from guardian.shortcuts import (
+    assign_perm,
+    get_users_with_perms,
+    get_groups_with_perms,
+    remove_perm,
+)
 import logging
 
 
@@ -23,6 +28,16 @@ class ChangePermissionsResult(graphene.ObjectType):
     message = graphene.String()
 
 
+class UserAssignmentInput(graphene.InputObjectType):
+    permissions = graphene.List(graphene.String, required=True)
+    user = graphene.String(required=True, description="The user email")
+
+
+class GroupAssignmentInput(graphene.InputObjectType):
+    permissions = graphene.List(graphene.String, required=True)
+    group = graphene.ID(required=True)
+
+
 class ChangePermissions(BalderMutation):
     """Creates a Sample"""
 
@@ -31,24 +46,46 @@ class ChangePermissions(BalderMutation):
         object = graphene.ID(
             required=True, description="The Representationss this sROI belongs to"
         )
-        users = graphene.List(graphene.String, required=False)
-        groups = graphene.List(graphene.String, required=False)
-        permissions = graphene.List(graphene.String, required=True)
+        userAssignments = graphene.List(UserAssignmentInput)
+        groupAssignments = graphene.List(GroupAssignmentInput)
 
     @bounced(anonymous=False)
-    def mutate(root, info, type, object, permissions, users=[], groups=[]):
+    def mutate(root, info, type, object, userAssignments=[], groupAssignments=[]):
 
         model_class = ct_types[type].model_class()
         instance = model_class.objects.get(id=object)
 
-        for permission in permissions:
-            for user in users:
-                logging.warning(f"Assigning {permission} to {user}")
-                assign_perm(permission, get_user_model().objects.get(id=user), instance)
+        users = get_users_with_perms(
+            instance, attach_perms=True, with_group_users=False, with_superusers=False
+        )
+        groups = get_groups_with_perms(instance, attach_perms=True)
 
-            for group in groups:
-                logging.warning(f"Assigning {permission} to {group}")
-                assign_perm(permission, Group.objects.get(name=group), instance)
+        # remove all permissions
+        for user, permissions in users.items():
+            for permission in permissions:
+                remove_perm(permission, user, instance)
+
+        for group, permissions in groups.items():
+            for permission in permissions:
+                remove_perm(permission, group, instance)
+
+        for ass in userAssignments:
+            logging.warning(f"Assigning {ass['permissions']} to {ass['user']}")
+            for perm in ass["permissions"]:
+                assign_perm(
+                    perm,
+                    get_user_model().objects.get(email=ass["user"]),
+                    instance,
+                )
+
+        for ass in groupAssignments:
+            logging.warning(f"Assigning {ass['permissions']} to {ass['group']}")
+            for perm in ass["permissions"]:
+                assign_perm(
+                    perm,
+                    Group.objects.get(name=ass["group"]),
+                    instance,
+                )
 
         return {"success": True}
 

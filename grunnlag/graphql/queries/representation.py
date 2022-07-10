@@ -9,7 +9,8 @@ from grunnlag.filters import (
 from django.db.models import Max
 import random
 import logging
-from guardian.shortcuts import get_objects_for_user
+from guardian.shortcuts import get_objects_for_user, get_objects_for_group
+from django.contrib.auth.models import User, Group
 
 
 class MyRepresentations(BalderQuery):
@@ -36,6 +37,39 @@ class AccessibleRepresentations(BalderQuery):
         type = types.Representation
         list = True
         operation = "accessiblerepresentations"
+
+
+class SharedRepresentations(BalderQuery):
+    def resolve(self, info):
+        reps = get_objects_for_user(
+            info.context.user,
+            "grunnlag.download_representation",
+        ).exclude(creator=info.context.user)
+        return reps.all()
+
+    class Meta:
+        type = types.Representation
+        list = True
+        operation = "sharedrepresentations"
+
+
+class RepresentationsForGroup(BalderQuery):
+    class Arguments:
+        name = graphene.String(description="The Group to search by", required=True)
+
+    def resolve(self, info, name):
+        group = info.context.user.groups.get(name=name)
+
+        reps = get_objects_for_group(
+            group,
+            "grunnlag.download_representation",
+        )
+        return reps.all()
+
+    class Meta:
+        type = types.Representation
+        list = True
+        operation = "representationsForGroup"
 
 
 class Representation(BalderQuery):

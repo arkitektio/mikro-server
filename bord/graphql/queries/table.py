@@ -2,6 +2,7 @@ from bord import models
 from grunnlag import types
 from balder.types.query.base import BalderQuery
 import graphene
+from bord.filters import TableFilter
 
 
 class Tables(BalderQuery):
@@ -10,6 +11,7 @@ class Tables(BalderQuery):
     class Meta:
         list = True
         type = types.Table
+        filter = TableFilter
         paginate = True
         operation = "tables"
 
@@ -20,6 +22,7 @@ class MyTables(BalderQuery):
     class Meta:
         list = True
         type = types.Table
+        filter = TableFilter
         personal = "creator"
         paginate = True
         operation = "mytables"

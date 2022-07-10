@@ -25,6 +25,7 @@ from django.conf import settings
 from grunnlag.enums import OmeroFileType
 from bord import models as bordmodels
 import logging
+from django.contrib.auth.models import Group as GroupModel
 
 
 class Tag(BalderObject):
@@ -254,3 +255,8 @@ class Permission(BalderObject):
 
     class Meta:
         model = Permission
+
+
+class Group(BalderObject):
+    class Meta:
+        model = GroupModel
