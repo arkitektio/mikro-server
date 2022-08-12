@@ -124,11 +124,15 @@ def rep_post_save(sender, instance=None, created=None, **kwargs):
 def roi_post_del(sender, instance=None, **kwargs):
     from grunnlag.graphql.subscriptions import Rois
 
-    if instance.representation:
-        Rois.broadcast(
-            {"action": "deleted", "data": instance.id},
-            [Rois.ROI_FOR_REP(instance.representation)],
-        )
+    try:
+        if instance.representation:
+            Rois.broadcast(
+                {"action": "deleted", "data": instance.id},
+                [Rois.ROI_FOR_REP(instance.representation)],
+            )
+    except Exception as e:
+        # should raise if representaiton was deleted as well
+        logger.error(e)
 
 
 @receiver(post_delete, sender=Table)

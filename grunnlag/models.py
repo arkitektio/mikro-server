@@ -3,6 +3,10 @@ from email.policy import default
 from grunnlag.storage import PrivateMediaStorage
 from grunnlag.managers import RepresentationManager
 from django.db import models
+from django.contrib.contenttypes.fields import GenericRelation
+
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 # Create your models here.
 from .enums import OmeroFileType, RepresentationVariety, RoiType
@@ -20,6 +24,26 @@ logger = logging.getLogger(__name__)
 
 def get_sentinel_user():
     return get_user_model().objects.get_or_create(username="deleted")[0]
+
+
+class Comment(models.Model):
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey()
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET(get_sentinel_user),
+        related_name="comments",
+    )
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="children"
+    )
+    descendents = models.JSONField(default=list)
+    mentions = models.ManyToManyField(
+        get_user_model(), blank=True, related_name="mentioned_in"
+    )
 
 
 class UserMeta(models.Model):
@@ -53,6 +77,7 @@ class Experiment(models.Model):
     linked_paper = models.URLField(null=True, blank=True)
     image = models.ImageField(upload_to="experiment_banner", null=True, blank=True)
 
+    comments = GenericRelation(Comment)
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.CASCADE, null=True, blank=True
@@ -172,6 +197,8 @@ class Representation(Matrise):
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True
     )
+    comments = GenericRelation(Comment)
+
     tags = TaggableManager()
 
     objects = RepresentationManager()
@@ -253,6 +280,7 @@ class ROI(models.Model):
         null=True,
         related_name="rois",
     )
+
     experimentalgroup = models.ForeignKey(
         ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
     )

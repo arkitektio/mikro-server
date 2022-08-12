@@ -22,7 +22,14 @@ class ExperimentDetail(BalderQuery):
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
 
-    resolve = lambda root, info, id: models.Experiment.objects.get(id=id)
+    def resolve(self, info, id):
+        x = models.Experiment.objects.get(id=id)
+        assert (
+            info.context.user.has_perm("grunnlag.view_experiment", x)
+            or x.creator == info.context.user
+        ), "You do not have permission to view this representation"
+
+        return x
 
     class Meta:
         type = types.Experiment

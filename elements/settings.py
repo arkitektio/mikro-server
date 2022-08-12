@@ -81,7 +81,7 @@ INSTALLED_APPS = [
     "channels",
     "health_check",
     "health_check.db",
-    "health_check.contrib.psutil",
+    # "health_check.contrib.psutil",
     "health_check.contrib.redis",
     "lok",
     "colorfield",

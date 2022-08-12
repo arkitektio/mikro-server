@@ -7,6 +7,7 @@ from .models import (
     Experiment,
     Thumbnail,
     Metric,
+    Comment,
     UserMeta,
 )
 from guardian.admin import GuardedModelAdmin
@@ -98,6 +99,7 @@ admin.site.register(UserMeta)
 admin.site.register(Representation, RepresentationAdmin)
 admin.site.register(Sample, SampleAdmin)
 admin.site.register(Experiment)
+admin.site.register(Comment)
 admin.site.register(OmeroFile)
 admin.site.register(Thumbnail)
 admin.site.register(Metric)

@@ -1,5 +1,6 @@
 import django_filters
 from bord.models import Table
+from django.contrib.auth import get_user_model
 
 
 class TableFilter(django_filters.FilterSet):
@@ -8,6 +9,16 @@ class TableFilter(django_filters.FilterSet):
     )
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
     )
 
     class Meta:

@@ -11,7 +11,13 @@ class Sample(BalderQuery):
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
 
-    resolve = lambda root, info, id: models.Sample.objects.get(id=id)
+    def resolve(self, info, id):
+        rep = models.Sample.objects.get(id=id)
+        assert rep.creator == info.context.user or info.context.user.has_perm(
+            "grunnlag.view_sample", rep
+        ), "You do not have permission to view this sammple"
+
+        return rep
 
     class Meta:
         type = types.Sample

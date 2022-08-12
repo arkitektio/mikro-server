@@ -118,3 +118,6 @@ class XArrayStore(FieldFile):
 
     def loadDataset(self):
         return xr.open_zarr(store=self.connected, consolidated=False)
+
+    def get_path(self):
+        return self.name

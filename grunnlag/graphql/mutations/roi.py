@@ -11,6 +11,8 @@ class InputVector(graphene.InputObjectType):
     x = graphene.Float(description="X-coordinate")
     y = graphene.Float(description="Y-coordinate")
     z = graphene.Float(description="Z-coordinate")
+    c = graphene.Float(description="C-coordinate")
+    t = graphene.Float(description="T-coordinate")
 
 
 class CreateROI(BalderMutation):

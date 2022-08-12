@@ -9,6 +9,7 @@ from django import forms
 from graphene_django.forms.converter import convert_form_field
 from balder.filters import EnumFilter, MultiEnumFilter
 import json
+from django.contrib.auth import get_user_model
 
 
 class EnumChoiceField(forms.CharField):
@@ -63,11 +64,33 @@ class IDChoiceFilter(django_filters.MultipleChoiceFilter):
         super().__init__(*args, **kwargs, field_name="pk")
 
 
+class UserFilter(django_filters.FilterSet):
+    username = django_filters.CharFilter(
+        field_name="username",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+    email = django_filters.CharFilter(
+        field_name="email",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+
+
 class ExperimentFilter(django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
-    creator = django_filters.NumberFilter(field_name="creator")
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
     )
@@ -79,7 +102,9 @@ class ThumbnailFilter(django_filters.FilterSet):
         lookup_expr="icontains",
         label="Search for substring of name",
     )
-    creator = django_filters.NumberFilter(field_name="creator")
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
     )
@@ -89,7 +114,16 @@ class ROIFilter(django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
-    creator = django_filters.NumberFilter(field_name="creator")
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
     )
@@ -130,6 +164,9 @@ class RepresentationFilter(django_filters.FilterSet):
     created_after = django_filters.DateTimeFilter(
         field_name="created_at",
         lookup_expr=("gt"),
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
     )
     created_before = django_filters.DateTimeFilter(
         field_name="created_at", lookup_expr=("lt")
@@ -186,6 +223,9 @@ class MetricFilter(django_filters.FilterSet):
         queryset=Representation.objects.all(), field_name="rep"
     )
     order = django_filters.BaseInFilter(method="order_filter", label="Order by Keys")
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
 
     def my_key_filter(self, queryset, name, value):
         return queryset.filter(key__in=value)
@@ -205,12 +245,25 @@ class SampleFilter(django_filters.FilterSet):
     ids = IDChoiceFilter(
         label="The ids you want to filter by",
     )
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
     representations = django_filters.ModelMultipleChoiceFilter(
         queryset=Representation.objects.all(),
         field_name="representations",
         label="The ids you want to filter by",
     )
     order = django_filters.BaseInFilter(method="order_filter", label="Order by Keys")
+    tags = django_filters.BaseInFilter(
+        label="The tags you want to filter by", field_name="tags__name"
+    )
 
     def order_filter(self, queryset, name, value):
         return queryset.order_by(*value)
