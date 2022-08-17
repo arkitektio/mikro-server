@@ -18,32 +18,13 @@ from lok.models import LokUser
 from taggit.managers import TaggableManager
 from matrise.models import Matrise
 from colorfield.fields import ColorField
+from komment.models import Comment
 
 logger = logging.getLogger(__name__)
 
 
 def get_sentinel_user():
     return get_user_model().objects.get_or_create(username="deleted")[0]
-
-
-class Comment(models.Model):
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey()
-    user = models.ForeignKey(
-        get_user_model(),
-        on_delete=models.SET(get_sentinel_user),
-        related_name="comments",
-    )
-    text = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    parent = models.ForeignKey(
-        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="children"
-    )
-    descendents = models.JSONField(default=list)
-    mentions = models.ManyToManyField(
-        get_user_model(), blank=True, related_name="mentioned_in"
-    )
 
 
 class UserMeta(models.Model):

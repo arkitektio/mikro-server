@@ -3,9 +3,9 @@ from django.contrib.auth import get_user_model
 from graphene.types.generic import GenericScalar
 from balder.types import BalderMutation
 import graphene
-from grunnlag import models, types
+from komment import models, types
 from lok import bounced
-from grunnlag.graphql.utils import AvailableModelsEnum, ct_types
+from komment.enums import CommentableModelsEnum, commentable_models
 import logging
 
 
@@ -74,7 +74,7 @@ class CreateComment(BalderMutation):
     """Create an experiment (only signed in users)"""
 
     class Arguments:
-        type = graphene.Argument(AvailableModelsEnum, required=True)
+        type = graphene.Argument(CommentableModelsEnum, required=True)
         object = graphene.ID(
             required=True, description="The Representationss this sROI belongs to"
         )
@@ -84,7 +84,7 @@ class CreateComment(BalderMutation):
     @bounced()
     def mutate(root, info, type, object, descendents, parent=None):
         creator = info.context.user
-        model_class = ct_types[type].model_class()
+        model_class = commentable_models[type]
         UserModel = get_user_model()
         instance = model_class.objects.get(id=object)
 

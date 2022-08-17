@@ -68,6 +68,9 @@ SUPERUSERS = [
 
 STATIC_ROOT = "/var/www/static"
 
+COMMENTABLE_APPS = ["grunnlag", "bord", "matrise"]
+SHARABLE_APPS = ["grunnlag", "bord", "matrise", "loks"]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -80,6 +83,8 @@ INSTALLED_APPS = [
     "taggit",
     "channels",
     "health_check",
+    "komment",
+    "perms",
     "health_check.db",
     # "health_check.contrib.psutil",
     "health_check.contrib.redis",

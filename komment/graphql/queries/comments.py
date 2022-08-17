@@ -1,30 +1,32 @@
 from balder.types.query import BalderQuery
-from grunnlag.graphql.utils import AvailableModelsEnum, ct_types
+from komment.enums import CommentableModelsEnum, commentable_models
 import graphene
 from django.contrib.auth.models import Group, Permission
-from grunnlag import types, models
+from django.contrib.contenttypes.models import ContentType
+from komment import types, models
 from balder.registry import register_type
 import graphene
 
 
 class CommentsFor(BalderQuery):
     class Arguments:
-        model = graphene.Argument(AvailableModelsEnum, required=True)
+        model = graphene.Argument(CommentableModelsEnum, required=True)
         id = graphene.ID(required=False)
 
     def resolve(self, info, model, id):
 
-        ct = ct_types[model]
-        model = ct.model_class()
+        model = commentable_models[model]
 
-        f = models.Comment.objects.filter(content_type=ct, object_id=id)
+        f = models.Comment.objects.filter(
+            content_type=ContentType.objects.get_for_model(model), object_id=id
+        )
 
         return f.order_by("-created_at").all()
 
     class Meta:
         type = types.Comment
         list = True
-        operation = "commentsFor"
+        operation = "commentsfor"
 
 
 class MyMentions(BalderQuery):

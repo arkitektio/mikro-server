@@ -64,19 +64,6 @@ class IDChoiceFilter(django_filters.MultipleChoiceFilter):
         super().__init__(*args, **kwargs, field_name="pk")
 
 
-class UserFilter(django_filters.FilterSet):
-    username = django_filters.CharFilter(
-        field_name="username",
-        lookup_expr="icontains",
-        label="Search for substring of name",
-    )
-    email = django_filters.CharFilter(
-        field_name="email",
-        lookup_expr="icontains",
-        label="Search for substring of name",
-    )
-
-
 class ExperimentFilter(django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"

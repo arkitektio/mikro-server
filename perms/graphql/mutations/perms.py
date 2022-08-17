@@ -1,13 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from graphene.types.generic import GenericScalar
 from lok import bounced
 from balder.types import BalderMutation
 import graphene
-from grunnlag.enums import RoiTypeInput
-from grunnlag import models, types
-from enum import Enum
-from grunnlag.graphql.utils import AvailableModelsEnum, ct_types
+from perms.enums import SharableModelsEnum, sharable_models
 from guardian.shortcuts import (
     assign_perm,
     get_users_with_perms,
@@ -42,7 +38,7 @@ class ChangePermissions(BalderMutation):
     """Creates a Sample"""
 
     class Arguments:
-        type = graphene.Argument(AvailableModelsEnum, required=True)
+        type = graphene.Argument(SharableModelsEnum, required=True)
         object = graphene.ID(
             required=True, description="The Representationss this sROI belongs to"
         )
@@ -52,7 +48,7 @@ class ChangePermissions(BalderMutation):
     @bounced(anonymous=False)
     def mutate(root, info, type, object, userAssignments=[], groupAssignments=[]):
 
-        model_class = ct_types[type].model_class()
+        model_class = sharable_models[type]
         instance = model_class.objects.get(id=object)
 
         users = get_users_with_perms(

@@ -8,6 +8,3 @@ from .thumbnail import *
 from .roi import *
 from .label import *
 from .request import *
-from .perms import *
-from .comments import *
-from .user import *
