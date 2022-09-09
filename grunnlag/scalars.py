@@ -1,5 +1,6 @@
 import datetime
 from graphene.types import Scalar
+from graphene.types.generic import GenericScalar
 from graphql.language import ast
 
 
@@ -69,3 +70,11 @@ class Parquet(Scalar):
     @staticmethod
     def parse_value(value):
         return value
+
+
+class MetricValue(GenericScalar):
+    """A Representation of a Metric Value"""
+
+
+class FeatureValue(GenericScalar):
+    """A Representation of a Metric Value"""

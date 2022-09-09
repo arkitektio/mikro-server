@@ -6,6 +6,7 @@ from balder.enum import InputEnum
 from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types
+from grunnlag.scalars import MetricValue
 import logging
 import namegenerator
 
@@ -33,7 +34,7 @@ class CreateMetric(BalderMutation):
             required=True,
             description="A cleartext description what this representation represents as data",
         )
-        value = GenericScalar(required=True)
+        value = MetricValue(required=True)
 
         creator = graphene.String(
             required=False,

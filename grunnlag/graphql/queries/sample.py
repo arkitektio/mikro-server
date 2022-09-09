@@ -13,9 +13,6 @@ class Sample(BalderQuery):
 
     def resolve(self, info, id):
         rep = models.Sample.objects.get(id=id)
-        assert rep.creator == info.context.user or info.context.user.has_perm(
-            "grunnlag.view_sample", rep
-        ), "You do not have permission to view this sammple"
 
         return rep
 

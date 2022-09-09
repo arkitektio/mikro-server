@@ -3,7 +3,7 @@ import graphene
 from balder.enum import InputEnum
 import django_filters
 from taggit.models import Tag
-from .models import ROI, Experiment, Metric, OmeroFile, Representation, Sample
+from .models import ROI, Experiment, Label, Metric, OmeroFile, Representation, Sample
 from .enums import RepresentationVariety, RepresentationVarietyInput, RoiTypeInput
 from django import forms
 from graphene_django.forms.converter import convert_form_field
@@ -101,6 +101,7 @@ class ROIFilter(django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
+    repname = django_filters.CharFilter(field_name="representation__name")
     created_after = django_filters.DateTimeFilter(
         field_name="created_at",
         lookup_expr=("gt"),
@@ -124,6 +125,19 @@ class LabelFilter(django_filters.FilterSet):
     creator = django_filters.NumberFilter(field_name="creator")
 
 
+class FeatureFilter(django_filters.FilterSet):
+    label = django_filters.ModelChoiceFilter(
+        queryset=Label.objects.all(), field_name="label"
+    )
+    creator = django_filters.NumberFilter(field_name="creator")
+    keys = django_filters.BaseInFilter(
+        method="my_key_filter", label="The key you want to filter by"
+    )
+
+    def my_key_filter(self, queryset, name, value):
+        return queryset.filter(key__in=value)
+
+
 class RepresentationFilter(django_filters.FilterSet):
     tags = django_filters.BaseInFilter(
         method="my_tag_filter", label="The tags you want to filter by"
@@ -138,6 +152,9 @@ class RepresentationFilter(django_filters.FilterSet):
     )
     samples = django_filters.ModelMultipleChoiceFilter(
         queryset=Sample.objects.all(), field_name="sample"
+    )
+    no_children = django_filters.BooleanFilter(
+        method="no_children_filter", label="Only show Representations without children"
     )
     ordering = django_filters.OrderingFilter(fields={"created_at": "time"})
     has_metric = django_filters.CharFilter(
@@ -194,6 +211,9 @@ class RepresentationFilter(django_filters.FilterSet):
         tag_list = [item.strip() for item in value.split(",")]
 
         return queryset.filter(metrics__key__in=tag_list)
+
+    def no_children_filter(self, queryset, name, value):
+        return queryset.filter(origins=None) if value else queryset
 
 
 class MetricFilter(django_filters.FilterSet):

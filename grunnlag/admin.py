@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     ROI,
+    Omero,
     OmeroFile,
     Representation,
     Sample,
@@ -99,6 +100,7 @@ admin.site.register(Representation, RepresentationAdmin)
 admin.site.register(Sample, SampleAdmin)
 admin.site.register(Experiment)
 admin.site.register(OmeroFile)
+admin.site.register(Omero)
 admin.site.register(Thumbnail)
 admin.site.register(Metric)
 admin.site.register(ROI)

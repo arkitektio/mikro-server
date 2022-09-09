@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 import graphene
@@ -32,6 +33,7 @@ class OmeroRepresentationModel(BaseModel):
     planes: Optional[PlaneModel]
     channels: Optional[ChannelModel]
     physicalSize: Optional[PhysicalSizeModel]
+    acquistion_date: Optional[datetime]
 
 
 class PhysicalSize(graphene.ObjectType):
@@ -91,10 +93,4 @@ class OmeroRepresentationInput(graphene.InputObjectType):
     channels = graphene.List(ChannelInput)
     physicalSize = graphene.Argument(PhysicalSizeInput)
     scale = graphene.List(graphene.Float)
-
-
-class OmeroRepresentation(graphene.ObjectType):
-    planes = graphene.List(Plane)
-    channels = graphene.List(Channel)
-    physicalSize = graphene.Field(PhysicalSize)
-    scale = graphene.List(graphene.Float)
+    acquisition_date = graphene.DateTime()

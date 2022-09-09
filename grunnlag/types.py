@@ -5,10 +5,11 @@ from django.db.models import FileField
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
-from grunnlag.scalars import File, Parquet, Store
-from grunnlag.omero import Channel, OmeroRepresentation, PhysicalSize, Plane
+from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store
+from grunnlag.omero import Channel, PhysicalSize, Plane
 from graphene.types.generic import GenericScalar
 from grunnlag.filters import (
+    FeatureFilter,
     MetricFilter,
     RepresentationFilter,
     SampleFilter,
@@ -71,6 +72,8 @@ class Node(graphene.ObjectType):
 
 
 class Metric(BalderObject):
+    value = MetricValue(description="Value")
+
     class Meta:
         model = models.Metric
 
@@ -143,6 +146,17 @@ class Table(BalderObject):
         model = bordmodels.Table
 
 
+class Omero(BalderObject):
+    planes = graphene.List(Plane)
+    channels = graphene.List(Channel)
+    physicalSize = graphene.Field(PhysicalSize)
+    scale = graphene.List(graphene.Float)
+    acquistion_date = graphene.DateTime()
+
+    class Meta:
+        model = models.Omero
+
+
 class Representation(BalderObject):
     """A Representation is a multi-dimensional Array that can do what ever it wants
 
@@ -152,6 +166,7 @@ class Representation(BalderObject):
 
     """
 
+    identifier: str = graphene.String(description="The Arkitekt identifier")
     metrics = BalderFilteredWithOffset(
         Metric,
         filterset_class=MetricFilter,
@@ -159,9 +174,6 @@ class Representation(BalderObject):
         description="Associated metrics of this Image",
     )
     latest_thumbnail = graphene.Field(Thumbnail)
-    omero = graphene.Field(
-        OmeroRepresentation, description="Metadata in Omero-compliant format"
-    )
     store = graphene.Field(Store)
     tables = BalderFilteredWithOffset(
         Table,
@@ -234,10 +246,20 @@ class ROI(BalderObject):
 
 
 class Label(BalderObject):
+    features = BalderFilteredWithOffset(
+        lambda: Feature,
+        model=models.Feature,
+        filterset_class=FeatureFilter,
+        related_field="features",
+        description="Features attached to this Label",
+    )
+
     class Meta:
         model = models.Label
 
 
-class SizeFeature(BalderObject):
+class Feature(BalderObject):
+    value = FeatureValue(description="Value")
+
     class Meta:
-        model = models.SizeFeature
+        model = models.Feature

@@ -24,10 +24,10 @@ class ExperimentDetail(BalderQuery):
 
     def resolve(self, info, id):
         x = models.Experiment.objects.get(id=id)
-        assert (
-            info.context.user.has_perm("grunnlag.view_experiment", x)
-            or x.creator == info.context.user
-        ), "You do not have permission to view this representation"
+        # assert (
+        #     info.context.user.has_perm("grunnlag.view_experiment", x)
+        #     or x.creator == info.context.user
+        # ), "You do not have permission to view this representation"
 
         return x
 

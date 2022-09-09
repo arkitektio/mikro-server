@@ -1,30 +1,25 @@
-from balder.types.scalars import Upload
+from balder.types.scalars import ImageFile
 from balder.types.mutation import BalderMutation
 import graphene
 from lok import bounced
 from grunnlag import models, types
 from grunnlag.enums import OmeroFileType
+from pathlib import Path
+import ntpath
 
 
 class UploadOmeroFile(BalderMutation):
     class Arguments:
-        file = Upload(required=True)
+        file = ImageFile(required=True)
+        name = graphene.String(required=False)
 
     @bounced()
-    def mutate(
-        root,
-        info,
-        *args,
-        file=None,
-    ):
+    def mutate(root, info, *args, file=None, name=None):
         # do something with your file
 
-        filename: str = file.name
-
+        filename: str = ntpath.basename(file.name)
         ending = filename.split(".")[-1]
-        name = filename.split(".")[0]
-
-        print(ending)
+        name = name or filename.split(".")[0]
 
         if ending in ["tiff", "tif", "TIF"]:
             filetype = OmeroFileType.TIFF
@@ -35,14 +30,10 @@ class UploadOmeroFile(BalderMutation):
         else:
             filetype = OmeroFileType.UNKNWON
 
-        print(file)
         t = models.OmeroFile.objects.create(
             file=file, name=name, creator=info.context.user, type=filetype
         )
 
-        file.name
-
-        print(file)
         return t
 
     class Meta:

@@ -97,6 +97,7 @@ INSTALLED_APPS = [
     "matrise",
     "grunnlag",
     "bord",
+    "plotql",
 ]
 
 HEALTH_CHECK = {

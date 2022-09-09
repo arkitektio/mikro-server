@@ -1,7 +1,7 @@
+import json
 from django.contrib.auth import get_user_model
 from grunnlag.scalars import XArray
 from grunnlag.omero import OmeroRepresentationInput
-from grunnlag.types import OmeroRepresentation
 from lok import bounced
 from grunnlag.enums import RepresentationVariety, RepresentationVarietyInput
 from balder.enum import InputEnum
@@ -26,16 +26,31 @@ class UpdateRepresentation(BalderMutation):
         variety = RepresentationVarietyInput(
             required=False, description="The variety of the representation"
         )
+        origins = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which representations were used to create this representation",
+        )
         tags = graphene.List(graphene.String, required=False, description="Tags")
         sample = graphene.ID(required=False, description="The sample")
 
     @bounced()
-    def mutate(root, info, *args, sample=None, tags=None, variety=None, rep=None):
+    def mutate(
+        root, info, *args, sample=None, tags=None, variety=None, rep=None, origins=None
+    ):
         rep = models.Representation.objects.get(id=rep)
         rep.sample_id = sample or rep.sample_id
         if tags:
             rep.tags.set(tags)
         rep.variety = variety or rep.variety
+
+        if origins:
+            for o in origins:
+                assert o != rep.id, "Cannot have self as origin"
+                rep.derived.remove(o)
+
+            rep.origins.set(origins)
+
         rep.save()
         return rep
 
@@ -75,6 +90,11 @@ class CreateRepresentation(BalderMutation):
             required=False,
             description="Which representations were used to create this representation",
         )
+        files = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which files were used to create this representation",
+        )
         meta = GenericScalar(required=False, description="Meta Parameters")
         omero = graphene.Argument(OmeroRepresentationInput)
 
@@ -101,8 +121,11 @@ class CreateRepresentation(BalderMutation):
             variety=variety,
             creator=creator,
             meta=meta,
-            omero=omero,
         )
+
+        if omero:
+            omero = models.Omero.objects.create(representation=rep, **omero)
+
         if tags:
             rep.tags.add(*tags)
         if origins:
@@ -165,6 +188,12 @@ class FromXArray(BalderMutation):
             required=False,
             description="Do you want to tag the representation?",
         )
+
+        files = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which files were used to create this representation",
+        )
         origins = graphene.List(
             graphene.ID,
             required=False,
@@ -183,11 +212,11 @@ class FromXArray(BalderMutation):
         omero = kwargs.pop("omero", None)
         xarray = kwargs.pop("xarray", None)
         origins = kwargs.pop("origins", None)
+        files = kwargs.pop("files", None)
+
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
-
-        print(omero)
 
         rep = models.Representation.objects.create(
             name=name,
@@ -195,14 +224,18 @@ class FromXArray(BalderMutation):
             variety=variety,
             creator=creator,
             meta=meta,
-            omero=omero,
             store=xarray,
         )
+
+        if omero:
+            omero = models.Omero.objects.create(representation=rep, **omero)
 
         if tags:
             rep.tags.add(*tags)
         if origins:
             rep.origins.add(*origins)
+        if files:
+            rep.files.add(*files)
 
         rep.save()
 

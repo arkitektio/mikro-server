@@ -1,5 +1,7 @@
 from abc import abstractclassmethod
+from datetime import datetime
 from email.policy import default
+import json
 from grunnlag.storage import PrivateMediaStorage
 from grunnlag.managers import RepresentationManager
 from django.db import models
@@ -21,6 +23,15 @@ from colorfield.fields import ColorField
 from komment.models import Comment
 
 logger = logging.getLogger(__name__)
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, o):
+        print(o)
+        if isinstance(o, datetime):
+            return o.isoformat()
+
+        return json.JSONEncoder.default(self, o)
 
 
 def get_sentinel_user():
@@ -143,13 +154,20 @@ class Representation(Matrise):
 
     group = "representation"  #
     meta = models.JSONField(null=True, blank=True)
-    omero = models.JSONField(null=True, blank=True, default=dict)
     origins = models.ManyToManyField(
         "self",
         blank=True,
         null=True,
         related_name="derived",
         related_query_name="derived",
+        symmetrical=False,
+    )
+    files = models.ManyToManyField(
+        OmeroFile,
+        blank=True,
+        null=True,
+        related_name="representations",
+        related_query_name="representations",
         symmetrical=False,
     )
     sample = models.ForeignKey(
@@ -189,6 +207,17 @@ class Representation(Matrise):
 
     def __str__(self):
         return f"Representation of {self.name}"
+
+
+class Omero(models.Model):
+    representation = models.OneToOneField(
+        Representation, on_delete=models.CASCADE, related_name="omero"
+    )
+    planes = models.JSONField(null=True, blank=True, default=list)
+    channels = models.JSONField(null=True, blank=True, default=list)
+    scale = models.JSONField(null=True, blank=True, default=list)
+    physicalSize = models.JSONField(null=True, blank=True, default=list)
+    acquisition_date = models.DateTimeField(null=True, blank=True)
 
 
 class Metric(models.Model):
@@ -301,13 +330,8 @@ class Feature(models.Model):
         null=True,
         related_name="features",
     )
-
-    class Meta:
-        abstract = True
-
-
-class SizeFeature(Feature):
-    size = models.FloatField()
+    key = models.CharField(max_length=1000, help_text="The sKesyss")
+    value = models.JSONField(null=True, blank=True)
 
 
 import grunnlag.signals as sig

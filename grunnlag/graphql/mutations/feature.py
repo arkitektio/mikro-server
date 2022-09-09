@@ -1,3 +1,4 @@
+from typing import Any
 from django.contrib.auth import get_user_model
 from graphene.types.generic import GenericScalar
 from lok import bounced
@@ -5,26 +6,22 @@ from balder.types import BalderMutation
 import graphene
 from grunnlag.enums import RoiTypeInput
 from grunnlag import models, types
+from grunnlag.scalars import FeatureValue
 
 
-class InputVector(graphene.InputObjectType):
-    x = graphene.Float(description="X-coordinate")
-    y = graphene.Float(description="Y-coordinate")
-    z = graphene.Float(description="Z-coordinate")
-
-
-class CreateSizeFeature(BalderMutation):
+class CreateFeature(BalderMutation):
     """Creates a Sample"""
 
     class Arguments:
         label = graphene.ID(
             required=True, description="The Representation this ROI belongs to"
         )
-        size = graphene.Float(description="The size", required=True)
+        key = graphene.String(description="The key of the feature")
+        value = FeatureValue(description="The size", required=True)
         creator = graphene.ID(description="The creator of this feature")
 
     @bounced(anonymous=False)
-    def mutate(root, info, label, size, creator=None):
+    def mutate(root, info, label, key, value, creator=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
@@ -32,13 +29,12 @@ class CreateSizeFeature(BalderMutation):
 
         label = models.Label.objects.get(id=label)
 
-        print(type)
-        feature = models.SizeFeature.objects.create(
-            creator=creator, label=label, size=size
+        feature = models.Feature.objects.create(
+            creator=creator, label=label, key=key, value=value
         )
 
         return feature
 
     class Meta:
-        type = types.SizeFeature
-        operation = "createSizeFeature"
+        type = types.Feature
+        operation = "createfeature"
