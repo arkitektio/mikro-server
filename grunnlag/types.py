@@ -14,6 +14,7 @@ from grunnlag.filters import (
     RepresentationFilter,
     SampleFilter,
 )
+from bord.enums import PandasDType
 from balder.fields.filtered import BalderFiltered
 from balder.fields.offsetfiltered import BalderFilteredWithOffset
 from balder.types.object import BalderObject
@@ -91,7 +92,9 @@ class OmeroFile(BalderObject):
 class Column(graphene.ObjectType):
     name = graphene.String(description="The Column Name")
     field_name = graphene.String(description="The FIeld Name", required=True)
-    pandas_type = graphene.String(description="The Panda Types for the Column")
+    pandas_type = graphene.Field(
+        PandasDType, description="The Panda Types for the Column"
+    )
     numpy_type = graphene.String(description="The Numpy Types for the Column")
     metadata = GenericScalar(description="Generic MetaData from Stuff")
 
@@ -253,6 +256,13 @@ class Label(BalderObject):
         related_field="features",
         description="Features attached to this Label",
     )
+    feature = graphene.Field(
+        lambda: Feature,
+        key=graphene.String(required=True),
+    )
+
+    def resolve_feature(root, info, key):
+        return root.features.get(key=key)
 
     class Meta:
         model = models.Label

@@ -320,6 +320,14 @@ class Label(models.Model):
     def __str__(self):
         return f"ROI created by {self.creator.username} on {self.representation.name}"
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "representation"],
+                name="Only one unique label per image",
+            )
+        ]
+
 
 class Feature(models.Model):
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True)
@@ -332,6 +340,14 @@ class Feature(models.Model):
     )
     key = models.CharField(max_length=1000, help_text="The sKesyss")
     value = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["key", "label"],
+                name="Only one unique key per label",
+            )
+        ]
 
 
 import grunnlag.signals as sig

@@ -8,3 +8,4 @@ from .thumbnail import *
 from .roi import *
 from .label import *
 from .request import *
+from .feature import *

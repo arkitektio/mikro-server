@@ -50,7 +50,7 @@ class UpdatePlot(BalderMutation):
         creator = info.context.user
 
         exp = models.Plot.objects.get(id=id)
-        exp.name = name
+        exp.name = name or exp.name
         exp.query = query
         exp.save()
 

@@ -100,9 +100,9 @@ class Representation(BalderQuery):
 
     def resolve(self, info, id):
         rep = models.Representation.objects.get(id=id)
-        assert rep.creator == info.context.user or info.context.user.has_perm(
-            "grunnlag.view_representation", rep
-        ), "You do not have permission to view this representation"
+        # assert rep.creator == info.context.user or info.context.user.has_perm(
+        #     "grunnlag.view_representation", rep
+        # ), "You do not have permission to view this representation"
 
         return models.Representation.objects.get(id=id)
 
