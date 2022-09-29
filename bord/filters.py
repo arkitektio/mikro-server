@@ -20,6 +20,23 @@ class TableFilter(django_filters.FilterSet):
     creator = django_filters.ModelChoiceFilter(
         field_name="creator", queryset=get_user_model().objects.all()
     )
+    pinned = django_filters.BooleanFilter(
+        method="my_pinned_filter", label="Filter by pinned"
+    )
+
+    def my_pinned_filter(self, queryset, name, value):
+        if value:
+            if (
+                self.request
+                and self.request.user
+                and self.request.user.is_authenticated
+            ):
+                # needs to be checked becaust request is not ensured to be set
+                return queryset.filter(pinned_by=self.request.user)
+            else:
+                raise Exception("Pin can only be used by authenticated users")
+        else:
+            return queryset
 
     class Meta:
         model = Table

@@ -9,3 +9,4 @@ from .roi import *
 from .label import *
 from .request import *
 from .feature import *
+from .instrument import *

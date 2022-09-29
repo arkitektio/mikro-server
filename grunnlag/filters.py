@@ -3,13 +3,43 @@ import graphene
 from balder.enum import InputEnum
 import django_filters
 from taggit.models import Tag
-from .models import ROI, Experiment, Label, Metric, OmeroFile, Representation, Sample
+from .models import (
+    ROI,
+    Experiment,
+    Instrument,
+    Label,
+    Metric,
+    OmeroFile,
+    Representation,
+    Sample,
+)
 from .enums import RepresentationVariety, RepresentationVarietyInput, RoiTypeInput
 from django import forms
 from graphene_django.forms.converter import convert_form_field
 from balder.filters import EnumFilter, MultiEnumFilter
 import json
 from django.contrib.auth import get_user_model
+
+
+class PinnedFilterMixin(django_filters.FilterSet):
+
+    pinned = django_filters.BooleanFilter(
+        method="my_pinned_filter", label="Filter by pinned"
+    )
+
+    def my_pinned_filter(self, queryset, name, value):
+        if value:
+            if (
+                self.request
+                and self.request.user
+                and self.request.user.is_authenticated
+            ):
+                # needs to be checked becaust request is not ensured to be set
+                return queryset.filter(pinned_by=self.request.user)
+            else:
+                raise Exception("Pin can only be used by authenticated users")
+        else:
+            return queryset
 
 
 class EnumChoiceField(forms.CharField):
@@ -64,7 +94,7 @@ class IDChoiceFilter(django_filters.MultipleChoiceFilter):
         super().__init__(*args, **kwargs, field_name="pk")
 
 
-class ExperimentFilter(django_filters.FilterSet):
+class ExperimentFilter(PinnedFilterMixin, django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
@@ -78,6 +108,7 @@ class ExperimentFilter(django_filters.FilterSet):
     creator = django_filters.ModelChoiceFilter(
         field_name="creator", queryset=get_user_model().objects.all()
     )
+    order = django_filters.OrderingFilter(fields={"created_at": "time"})
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
     )
@@ -97,7 +128,7 @@ class ThumbnailFilter(django_filters.FilterSet):
     )
 
 
-class ROIFilter(django_filters.FilterSet):
+class ROIFilter(PinnedFilterMixin, django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
@@ -112,6 +143,7 @@ class ROIFilter(django_filters.FilterSet):
     creator = django_filters.ModelChoiceFilter(
         field_name="creator", queryset=get_user_model().objects.all()
     )
+    ordering = django_filters.OrderingFilter(fields={"created_at": "time"})
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
     )
@@ -133,12 +165,18 @@ class FeatureFilter(django_filters.FilterSet):
     keys = django_filters.BaseInFilter(
         method="my_key_filter", label="The key you want to filter by"
     )
+    substring = django_filters.CharFilter(
+        method="my_substring_filter", label="The substring you want to filter by"
+    )
 
     def my_key_filter(self, queryset, name, value):
         return queryset.filter(key__in=value)
 
+    def my_substring_filter(self, queryset, name, value):
+        return queryset.filter(key__contains=value)
 
-class RepresentationFilter(django_filters.FilterSet):
+
+class RepresentationFilter(PinnedFilterMixin, django_filters.FilterSet):
     tags = django_filters.BaseInFilter(
         method="my_tag_filter", label="The tags you want to filter by"
     )
@@ -241,7 +279,7 @@ class MetricFilter(django_filters.FilterSet):
         return queryset.order_by(*value)
 
 
-class SampleFilter(django_filters.FilterSet):
+class SampleFilter(PinnedFilterMixin, django_filters.FilterSet):
     experiments = django_filters.ModelMultipleChoiceFilter(
         queryset=Experiment.objects.all(), field_name="experiments"
     )
@@ -310,4 +348,12 @@ class OmeroFileFilter(django_filters.FilterSet):
 
     class Meta:
         model = OmeroFile
+        fields = ["name"]
+
+
+class InstrumentFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    class Meta:
+        model = Instrument
         fields = ["name"]

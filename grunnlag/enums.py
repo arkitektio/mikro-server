@@ -28,6 +28,10 @@ class RoiType(TextChoices):
     PATH = "path", "Path"
     UNKNOWN = "unknown", "Unknown"
 
+    FRAME = "frame", "Frame"
+    SLICE = "slice", "Slice"
+    POINT = "point", "Point"
+
 
 RepresentationVarietyInput = InputEnum.from_choices(RepresentationVariety)
 OmeroFileTypesInput = InputEnum.from_choices(OmeroFileType)

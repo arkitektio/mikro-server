@@ -94,7 +94,7 @@ class UpdateSample(BalderMutation):
         if name:
             sample.name = name
         if experiments:
-            sample.experiments.set(experiments)
+            sample.experiments.set(*experiments)
         if tags:
             sample.tags.add(*tags)
 
@@ -126,3 +126,24 @@ class DeleteSample(BalderMutation):
 
     class Meta:
         type = DeleteSampleResult
+
+
+class PinSample(BalderMutation):
+    """Sets the pin"""
+
+    class Arguments:
+        id = graphene.ID(required=True, description="The ID of the representation")
+        pin = graphene.Boolean(required=True, description="The pin")
+
+    @bounced()
+    def mutate(root, info, id, pin, **kwargs):
+        rep = models.Sample.objects.get(id=id)
+        if pin:
+            rep.pinned_by.add(info.context.user)
+        else:
+            rep.pinned_by.remove(info.context.user)
+        rep.save()
+        return rep
+
+    class Meta:
+        type = types.Sample

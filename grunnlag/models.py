@@ -74,6 +74,9 @@ class Experiment(models.Model):
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.CASCADE, null=True, blank=True
     )
+    pinned_by = models.ManyToManyField(
+        get_user_model(), related_name="pinned_experiments"
+    )
     tags = TaggableManager()
 
 
@@ -122,10 +125,7 @@ class OmeroFile(models.Model):
 
 
 class Sample(models.Model):
-    """Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure),
-    was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of
-    the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample
-    """
+    """Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure), was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample"""
 
     meta = models.JSONField(null=True, blank=True)
     name = models.CharField(max_length=1000)
@@ -142,6 +142,7 @@ class Sample(models.Model):
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.CASCADE, null=True, blank=True
     )
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_samples")
     tags = TaggableManager()
 
     def delete(self, *args, **kwargs):
@@ -162,22 +163,31 @@ class Representation(Matrise):
         related_query_name="derived",
         symmetrical=False,
     )
-    files = models.ManyToManyField(
+    file_origins = models.ManyToManyField(
         OmeroFile,
         blank=True,
         null=True,
-        related_name="representations",
-        related_query_name="representations",
+        related_name="derived_representations",
+        related_query_name="derived_representations",
+        symmetrical=False,
+    )
+    roi_origins = models.ManyToManyField(
+        "ROI",
+        blank=True,
+        null=True,
+        related_name="derived_representations",
+        related_query_name="derived_representations",
         symmetrical=False,
     )
     sample = models.ForeignKey(
         Sample,
         on_delete=models.CASCADE,
         related_name="representations",
-        help_text="The Sample this representation belongs to",
+        help_text="The Sample this representation belosngs to",
         null=True,
         blank=True,
     )
+    description = models.CharField(max_length=1000, null=True, blank=True)
     type = models.CharField(
         max_length=400,
         blank=True,
@@ -186,7 +196,7 @@ class Representation(Matrise):
     )
     variety = models.CharField(
         max_length=400,
-        help_text="The Representation can have varying types, consult your API",
+        help_text="The Representation can have vasrying types, consult your API",
         choices=RepresentationVariety.choices,
         default=RepresentationVariety.UNKNOWN.value,
     )
@@ -197,6 +207,9 @@ class Representation(Matrise):
         get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True
     )
     comments = GenericRelation(Comment)
+    pinned_by = models.ManyToManyField(
+        get_user_model(), related_name="pinned_representations"
+    )
 
     tags = TaggableManager()
 
@@ -206,7 +219,18 @@ class Representation(Matrise):
         permissions = [("download_representation", "Can download Presentation")]
 
     def __str__(self):
-        return f"Representation of {self.name}"
+        return f"Representation osf {self.name}"
+
+
+class Instrument(models.Model):
+    name = models.CharField(max_length=1000, unique=True)
+    detectors = models.JSONField(null=True, blank=True, default=list)
+    dichroics = models.JSONField(null=True, blank=True, default=list)
+    filters = models.JSONField(null=True, blank=True, default=list)
+    lot_number = models.CharField(max_length=1000, null=True, blank=True)
+    manufacturer = models.CharField(max_length=1000, null=True, blank=True)
+    model = models.CharField(max_length=1000, null=True, blank=True)
+    serial_number = models.CharField(max_length=1000, null=True, blank=True)
 
 
 class Omero(models.Model):
@@ -216,12 +240,17 @@ class Omero(models.Model):
     planes = models.JSONField(null=True, blank=True, default=list)
     channels = models.JSONField(null=True, blank=True, default=list)
     scale = models.JSONField(null=True, blank=True, default=list)
-    physicalSize = models.JSONField(null=True, blank=True, default=list)
+    physical_size = models.JSONField(null=True, blank=True, default=list)
     acquisition_date = models.DateTimeField(null=True, blank=True)
+    objective_settings = models.JSONField(null=True, blank=True, default=dict)
+    imaging_environment = models.JSONField(null=True, blank=True, default=dict)
+    instrument = models.ForeignKey(
+        Instrument, null=True, blank=True, on_delete=models.SET_NULL
+    )
 
 
 class Metric(models.Model):
-    rep = models.ForeignKey(
+    representation = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
         null=True,
@@ -264,6 +293,7 @@ class Thumbnail(models.Model):
     image = models.ImageField(
         upload_to="thumbnails", null=True, storage=PrivateMediaStorage()
     )
+    major_color = models.CharField(max_length=100, null=True, blank=True)
 
 
 class ROI(models.Model):
@@ -290,14 +320,15 @@ class ROI(models.Model):
         null=True,
         related_name="rois",
     )
-
+    label = models.CharField(max_length=1000, null=True, blank=True)
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_rois")
     experimentalgroup = models.ForeignKey(
         ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
     )
     tags = TaggableManager()
 
     def __str__(self):
-        return f"ROI created by {self.creator.username} on {self.representation.name}"
+        return f"ROI creatsed by {self.creator.username} on {self.representation.name}"
 
 
 class Label(models.Model):
@@ -315,6 +346,7 @@ class Label(models.Model):
     experimentalgroup = models.ForeignKey(
         ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
     )
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_labels")
     tags = TaggableManager()
 
     def __str__(self):
@@ -324,7 +356,7 @@ class Label(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["instance", "representation"],
-                name="Only one unique label per image",
+                name="Only one unique label per images",
             )
         ]
 

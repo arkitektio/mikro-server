@@ -18,7 +18,7 @@ class CreateMetric(BalderMutation):
     """Creates a Representation"""
 
     class Arguments:
-        rep = graphene.ID(
+        representation = graphene.ID(
             required=False,
             description="Which Representaiton does this metric belong to",
         )
@@ -43,14 +43,21 @@ class CreateMetric(BalderMutation):
 
     @bounced()
     def mutate(
-        root, info, key, value, creator=None, sample=None, experiment=None, rep=None
+        root,
+        info,
+        key,
+        value,
+        creator=None,
+        sample=None,
+        experiment=None,
+        representation=None,
     ):
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
 
         metric = models.Metric.objects.create(
-            rep_id=rep,
+            representation_id=representation,
             key=key,
             value=value,
             creator=creator,

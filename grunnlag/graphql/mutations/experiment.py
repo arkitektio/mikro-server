@@ -115,3 +115,24 @@ class UpdateExperiment(BalderMutation):
 
     class Meta:
         type = types.Experiment
+
+
+class PinExperiment(BalderMutation):
+    """Sets the pin"""
+
+    class Arguments:
+        id = graphene.ID(required=True, description="The ID of the representation")
+        pin = graphene.Boolean(required=True, description="The pin")
+
+    @bounced()
+    def mutate(root, info, id, pin, **kwargs):
+        rep = models.Experiment.objects.get(id=id)
+        if pin:
+            rep.pinned_by.add(info.context.user)
+        else:
+            rep.pinned_by.remove(info.context.user)
+        rep.save()
+        return rep
+
+    class Meta:
+        type = types.Experiment

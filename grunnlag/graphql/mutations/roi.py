@@ -30,6 +30,7 @@ class CreateROI(BalderMutation):
         creator = graphene.ID(
             required=False, description="The email of the creator, only for backend app"
         )
+        label = graphene.String(required=False, description="The label of the ROI")
         tags = graphene.List(
             graphene.String,
             required=False,
@@ -48,6 +49,7 @@ class CreateROI(BalderMutation):
         vectors=[],
         creator=None,
         meta=None,
+        label=None,
         type=None,
         tags=[],
     ):
@@ -60,7 +62,7 @@ class CreateROI(BalderMutation):
 
         print(type)
         roi = models.ROI.objects.create(
-            creator=creator, vectors=vectors, representation=rep, type=type
+            creator=creator, vectors=vectors, representation=rep, type=type, label=label
         )
 
         if tags:
@@ -93,3 +95,24 @@ class DeleteROI(BalderMutation):
 
     class Meta:
         type = DeleteROIResult
+
+
+class PinROI(BalderMutation):
+    """Sets the pin"""
+
+    class Arguments:
+        id = graphene.ID(required=True, description="The ID of the representation")
+        pin = graphene.Boolean(required=True, description="The pin")
+
+    @bounced()
+    def mutate(root, info, id, pin, **kwargs):
+        rep = models.ROI.objects.get(id=id)
+        if pin:
+            rep.pinned_by.add(info.context.user)
+        else:
+            rep.pinned_by.remove(info.context.user)
+        rep.save()
+        return rep
+
+    class Meta:
+        type = types.ROI

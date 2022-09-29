@@ -36,7 +36,7 @@ class Table(models.Model):
         null=True,
         help_text="The location of the Parquet on the Storage System (S3 or Media-URL)",
     )
-
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_tables")
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.CASCADE, null=True, blank=True

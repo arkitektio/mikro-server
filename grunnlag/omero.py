@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 import graphene
+from graphene.types.generic import GenericScalar
 
 
 class PhysicalSizeModel(BaseModel):
@@ -33,64 +34,111 @@ class OmeroRepresentationModel(BaseModel):
     planes: Optional[PlaneModel]
     channels: Optional[ChannelModel]
     physicalSize: Optional[PhysicalSizeModel]
-    acquistion_date: Optional[datetime]
+    acquisition_date: Optional[datetime]
 
 
 class PhysicalSize(graphene.ObjectType):
-    x = graphene.Int()
-    y = graphene.Int()
-    z = graphene.Int()
-    t = graphene.Int()
-    c = graphene.Int()
+    x = graphene.Float()
+    y = graphene.Float()
+    z = graphene.Float()
+    t = graphene.Float()
+    c = graphene.Float()
 
 
 class PhysicalSizeInput(graphene.InputObjectType):
-    x = graphene.Int()
-    y = graphene.Int()
-    z = graphene.Int()
-    t = graphene.Int()
-    c = graphene.Int()
+    x = graphene.Float()
+    y = graphene.Float()
+    z = graphene.Float()
+    t = graphene.Float()
+    c = graphene.Float()
 
 
 class Channel(graphene.ObjectType):
     name = graphene.String()
-    emmissionWavelength = graphene.Float()
-    excitationWavelength = graphene.Float()
-    acquisitionMode = graphene.String()
+    emmission_wavelength = graphene.Float()
+    excitation_wavelength = graphene.Float()
+    acquisition_mode = graphene.String()
     color = graphene.String()
 
 
 class ChannelInput(graphene.InputObjectType):
     name = graphene.String()
-    emmissionWavelength = graphene.Float()
-    excitationWavelength = graphene.Float()
-    acquisitionMode = graphene.String()
+    emmission_wavelength = graphene.Float()
+    excitation_wavelength = graphene.Float()
+    acquisition_mode = graphene.String()
     color = graphene.String()
 
 
+class Medium(graphene.Enum):
+    AIR = "Air"
+    GLYCEROL = "Glycerol"
+    OIL = "Oil"
+    OTHER = "Other"
+    WATER = "Water"
+
+
 class Plane(graphene.ObjectType):
-    zIndex = graphene.Int()
-    yIndex = graphene.Int()
-    xIndex = graphene.Int()
-    cIndex = graphene.Int()
-    tIndex = graphene.Int()
-    exposureTime = graphene.Float()
+    z = graphene.Int()
+    y = graphene.Int()
+    x = graphene.Int()
+    c = graphene.Int()
+    t = graphene.Int()
+    position_x = graphene.Float()
+    position_y = graphene.Float()
+    position_z = graphene.Float()
+    exposure_time = graphene.Float()
     deltaT = graphene.Float()
 
 
 class PlaneInput(graphene.InputObjectType):
-    zIndex = graphene.Int()
-    yIndex = graphene.Int()
-    xIndex = graphene.Int()
-    cIndex = graphene.Int()
-    tIndex = graphene.Int()
-    exposureTime = graphene.Float()
+    z = graphene.Int()
+    y = graphene.Int()
+    x = graphene.Int()
+    c = graphene.Int()
+    t = graphene.Int()
+    position_x = graphene.Float()
+    position_y = graphene.Float()
+    position_z = graphene.Float()
+    exposure_time = graphene.Float()
     deltaT = graphene.Float()
+
+
+class ObjectiveSettingsInput(graphene.InputObjectType):
+    correction_collar = graphene.Float()
+    medium = graphene.Argument(Medium)
+    numerical_aperture = graphene.Float()
+    working_distance = graphene.Float()
+
+
+class ObjectiveSettings(graphene.ObjectType):
+    correction_collar = graphene.Float()
+    medium = graphene.Field(Medium)
+    numerical_aperture = graphene.Float()
+    working_distance = graphene.Float()
+
+
+class ImagingEnvironmentInput(graphene.InputObjectType):
+    air_pessure = graphene.Float()
+    co2_percent = graphene.Float()
+    humidity = graphene.Float()
+    temperature = graphene.Float()
+    map = GenericScalar()
+
+
+class ImagingEnvironment(graphene.ObjectType):
+    air_pressure = graphene.Float()
+    co2_percent = graphene.Float()
+    humidity = graphene.Float()
+    temperature = graphene.Float()
+    map = GenericScalar()
 
 
 class OmeroRepresentationInput(graphene.InputObjectType):
     planes = graphene.List(PlaneInput)
     channels = graphene.List(ChannelInput)
-    physicalSize = graphene.Argument(PhysicalSizeInput)
+    physical_size = graphene.Argument(PhysicalSizeInput)
     scale = graphene.List(graphene.Float)
     acquisition_date = graphene.DateTime()
+    objective_settings = graphene.Argument(ObjectiveSettingsInput)
+    imaging_environment = graphene.Argument(ImagingEnvironmentInput)
+    instrument = graphene.ID()

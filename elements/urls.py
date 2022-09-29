@@ -31,19 +31,13 @@ def index(request):
     return render(request, "index-oslo.html")
 
 
-urlpatterns = (
-    [
-        path("admin/", admin.site.urls),
-        path("", index, name="index"),
-        path("graphql", BalderView, name="graphql"),
-        path("accounts/", include("django.contrib.auth.urls")),
-        path("ht/", include("health_check.urls")),
-    ]
-    + static("static", document_root=settings.STATIC_ROOT)
-    + static("media", document_root=settings.MEDIA_ROOT)
-)
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("", index, name="index"),
+    path("graphql", BalderView, name="graphql"),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("ht/", include("health_check.urls")),
+] + static("static", document_root=settings.STATIC_ROOT)
 
 
 from django.urls import get_resolver
-
-print(get_resolver().reverse_dict.keys())

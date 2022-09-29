@@ -1,4 +1,5 @@
 import json
+from urllib import request
 from django.contrib.auth import get_user_model
 from grunnlag.scalars import XArray
 from grunnlag.omero import OmeroRepresentationInput
@@ -58,87 +59,6 @@ class UpdateRepresentation(BalderMutation):
         type = types.Representation
 
 
-class CreateRepresentation(BalderMutation):
-    """Creates a Representation"""
-
-    class Arguments:
-        sample = graphene.ID(
-            required=False,
-            description="Which sample does this representation belong to",
-        )
-        name = graphene.String(
-            required=False,
-            description="A cleartext description what this representation represents as data",
-        )
-        creator = graphene.String(
-            required=False,
-            description="The Email of the user creating the Representation (only for backend apps)",
-        )
-        variety = graphene.Argument(
-            RepresentationVarietyInput,
-            required=False,
-            description="A description of the variety",
-        )
-        array = graphene.Argument(XArray, required=False, description="The X Arra")
-        tags = graphene.List(
-            graphene.String,
-            required=False,
-            description="Do you want to tag the representation?",
-        )
-        origins = graphene.List(
-            graphene.ID,
-            required=False,
-            description="Which representations were used to create this representation",
-        )
-        files = graphene.List(
-            graphene.ID,
-            required=False,
-            description="Which files were used to create this representation",
-        )
-        meta = GenericScalar(required=False, description="Meta Parameters")
-        omero = graphene.Argument(OmeroRepresentationInput)
-
-    @bounced()
-    def mutate(root, info, *args, creator=None, **kwargs):
-        sampleid = kwargs.pop("sample", None)
-        variety = kwargs.pop("variety", RepresentationVariety.UNKNOWN.value)
-        name = kwargs.pop("name", namegenerator.gen())
-        tags = kwargs.pop("tags", [])
-        meta = kwargs.pop("meta", None)
-        omero = kwargs.pop("omero", None)
-        origins = kwargs.pop("origins", None)
-        creator = info.context.user or (
-            get_user_model().objects.get(email=creator) if creator else None
-        )
-
-        print("oiNAOINSOINSAOISNOASNOASINOASINS")
-
-        print(omero)
-
-        rep = models.Representation.objects.create(
-            name=name,
-            sample_id=sampleid,
-            variety=variety,
-            creator=creator,
-            meta=meta,
-        )
-
-        if omero:
-            omero = models.Omero.objects.create(representation=rep, **omero)
-
-        if tags:
-            rep.tags.add(*tags)
-        if origins:
-            rep.origins.add(*origins)
-
-        rep.save()
-
-        return rep
-
-    class Meta:
-        type = types.Representation
-
-
 class DeleteRepresentationResult(graphene.ObjectType):
     id = graphene.String()
 
@@ -186,13 +106,18 @@ class FromXArray(BalderMutation):
         tags = graphene.List(
             graphene.String,
             required=False,
-            description="Do you want to tag the representation?",
+            description="Do you want to tag the repsresentation?",
         )
 
-        files = graphene.List(
+        file_origins = graphene.List(
             graphene.ID,
             required=False,
             description="Which files were used to create this representation",
+        )
+        roi_origins = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which rois were used to create this representation",
         )
         origins = graphene.List(
             graphene.ID,
@@ -212,11 +137,16 @@ class FromXArray(BalderMutation):
         omero = kwargs.pop("omero", None)
         xarray = kwargs.pop("xarray", None)
         origins = kwargs.pop("origins", None)
-        files = kwargs.pop("files", None)
+        file_origins = kwargs.pop("file_origins", None)
+        roi_origins = kwargs.pop("roi_origins", None)
 
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
+
+        if not sampleid:
+            if origins:
+                sampleid = models.Representation.objects.get(id=origins[0]).sample_id
 
         rep = models.Representation.objects.create(
             name=name,
@@ -227,18 +157,55 @@ class FromXArray(BalderMutation):
             store=xarray,
         )
 
+        print(omero)
+        logger.info(f"ROIS {roi_origins}")
+
         if omero:
-            omero = models.Omero.objects.create(representation=rep, **omero)
+            omero = models.Omero.objects.create(
+                representation=rep,
+                planes=omero.get("planes", None),
+                channels=omero.get("channels", None),
+                scale=omero.get("scale", None),
+                physical_size=omero.get("physical_size", None),
+                acquisition_date=omero.get("acquisition_date", None),
+                objective_settings=omero.get("objective_settings", None),
+                imaging_environment=omero.get("imaging_environment", None),
+                instrument_id=omero.get("instrument", None),
+            )
 
         if tags:
             rep.tags.add(*tags)
         if origins:
             rep.origins.add(*origins)
-        if files:
-            rep.files.add(*files)
+        if file_origins:
+            rep.file_origins.add(*file_origins)
+
+        if roi_origins:
+            rep.roi_origins.add(*roi_origins)
 
         rep.save()
 
+        return rep
+
+    class Meta:
+        type = types.Representation
+
+
+class PinRepresentation(BalderMutation):
+    """Sets the pin"""
+
+    class Arguments:
+        id = graphene.ID(required=True, description="The ID of the representation")
+        pin = graphene.Boolean(required=True, description="The pin")
+
+    @bounced()
+    def mutate(root, info, id, pin, **kwargs):
+        rep = models.Representation.objects.get(id=id)
+        if pin:
+            rep.pinned_by.add(info.context.user)
+        else:
+            rep.pinned_by.remove(info.context.user)
+        rep.save()
         return rep
 
     class Meta:

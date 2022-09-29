@@ -6,11 +6,18 @@ from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
 from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store
-from grunnlag.omero import Channel, PhysicalSize, Plane
+from grunnlag.omero import (
+    Channel,
+    ImagingEnvironment,
+    ObjectiveSettings,
+    PhysicalSize,
+    Plane,
+)
 from graphene.types.generic import GenericScalar
 from grunnlag.filters import (
     FeatureFilter,
     MetricFilter,
+    ROIFilter,
     RepresentationFilter,
     SampleFilter,
 )
@@ -122,6 +129,10 @@ class Table(BalderObject):
             graphene.String, description="Columns you want to select", required=False
         ),
     )
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
 
     def resolve_store(root, info, *args, **kwargs):
         return root.store.name
@@ -149,12 +160,19 @@ class Table(BalderObject):
         model = bordmodels.Table
 
 
+class Instrument(BalderObject):
+    class Meta:
+        model = models.Instrument
+
+
 class Omero(BalderObject):
     planes = graphene.List(Plane)
     channels = graphene.List(Channel)
-    physicalSize = graphene.Field(PhysicalSize)
+    physical_size = graphene.Field(PhysicalSize)
     scale = graphene.List(graphene.Float)
-    acquistion_date = graphene.DateTime()
+    acquisition_date = graphene.DateTime()
+    imaging_environment = graphene.Field(ImagingEnvironment)
+    objective_settings = graphene.Field(ObjectiveSettings)
 
     class Meta:
         model = models.Omero
@@ -184,6 +202,13 @@ class Representation(BalderObject):
         related_field="tables",
         description="Associated tables",
     )
+    rois = BalderFilteredWithOffset(
+        lambda: ROI,
+        model=models.ROI,
+        filterset_class=ROIFilter,
+        related_field="rois",
+        description="Associated rois",
+    )
     derived = BalderFilteredWithOffset(
         lambda: Representation,
         model=models.Representation,
@@ -192,6 +217,7 @@ class Representation(BalderObject):
         description="Derived Images from this Image",
     )
     comments = graphene.List(Comment)
+    pinned = graphene.Boolean()
 
     def resolve_latest_thumbnail(root, info, *args, **kwargs):
         return root.thumbnails.last()
@@ -201,6 +227,9 @@ class Representation(BalderObject):
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
 
     class Meta:
         model = models.Representation
@@ -215,7 +244,12 @@ class Sample(BalderObject):
         Representation,
         filterset_class=RepresentationFilter,
         related_field="representations",
+        description="Associated representations of this Sample",
     )
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
 
     class Meta:
         model = models.Sample
@@ -228,6 +262,10 @@ class Experiment(BalderObject):
     samples = BalderFilteredWithOffset(
         Sample, filterset_class=SampleFilter, related_field="samples"
     )
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
 
     class Meta:
         model = models.Experiment
@@ -243,6 +281,11 @@ class Vector(graphene.ObjectType):
 
 class ROI(BalderObject):
     vectors = graphene.List(Vector)
+
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
 
     class Meta:
         model = models.ROI
@@ -260,6 +303,11 @@ class Label(BalderObject):
         lambda: Feature,
         key=graphene.String(required=True),
     )
+
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
 
     def resolve_feature(root, info, key):
         return root.features.get(key=key)

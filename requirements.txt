@@ -37,7 +37,7 @@ django-channels-graphql-ws
 lok>=0.1.14
 
 # GraphQL abstaction
-balder[subscription]>=0.1.18
+balder[subscription]>=0.1.20
 
 # Testing and Linting
 ptvsd
