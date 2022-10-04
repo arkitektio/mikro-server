@@ -62,25 +62,42 @@ class OmeroFileField(models.FileField):
 
 
 class Experiment(models.Model):
-    meta = models.JSONField(null=True, blank=True)
-    name = models.CharField(max_length=200)
-    description = models.CharField(max_length=1000, null=True, blank=True)
-    description_long = models.TextField(null=True, blank=True)
-    linked_paper = models.URLField(null=True, blank=True)
-    image = models.ImageField(upload_to="experiment_banner", null=True, blank=True)
+    """
+    An experiment is a collection of samples and their representations.
+    It mimics the concept of an experiment in the lab and is the top level
+    object in the data model.
 
-    comments = GenericRelation(Comment)
-    created_at = models.DateTimeField(auto_now_add=True)
+    You can use the experiment to group samples and representations likewise
+    to how you would group files into folders in a file system.
+
+    
+    
+    
+    
+    """
+
+
+
+    name = models.CharField(max_length=200, help_text="The name of the experiment")
+    description = models.CharField(max_length=1000, null=True, blank=True, help_text="A short description of the experiment")
+    description_long = models.TextField(null=True, blank=True, help_text="A long description of the experiment")
+    linked_paper = models.URLField(null=True, blank=True, help_text="A link to a paper describing the experiment")
+    image = models.ImageField(upload_to="experiment_banner", null=True, blank=True, help_text="An image to be used as a banner for the experiment")
+
+    comments = GenericRelation(Comment,help_text="Comments on the experiment")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the experiment was created")
     creator = models.ForeignKey(
-        get_user_model(), on_delete=models.CASCADE, null=True, blank=True
+        get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created the experiment"
     )
     pinned_by = models.ManyToManyField(
-        get_user_model(), related_name="pinned_experiments"
+        get_user_model(), related_name="pinned_experiments", blank=True, help_text="The users that have pinned the experiment"
     )
-    tags = TaggableManager()
+    tags = TaggableManager(help_text="Tags for the experiment")
 
 
 class ExperimentalGroup(models.Model):
+    """ A group of samples that are part of the same experimental group"""
+
     name = models.CharField(max_length=200, help_text="The experimental groups name")
     description = models.CharField(
         max_length=1000, help_text="A brief summary of applied techniques in this group"
@@ -97,6 +114,7 @@ class ExperimentalGroup(models.Model):
 
 
 class Animal(models.Model):
+    """An animal is a living organism that is part of an experiment"""
     name = models.CharField(max_length=100)
     age = models.CharField(max_length=400)
     type = models.CharField(max_length=500)
@@ -110,39 +128,45 @@ class Animal(models.Model):
 
 
 class OmeroFile(models.Model):
+    """An OmeroFile is a file that contains omero-meta data. It is the raw file that was generated
+    by the microscope. 
+    
+    Mikro uses the omero-meta data to create representations of the file. See Representation for more information."""
+
+
+
     type = models.CharField(
-        max_length=400, choices=OmeroFileType.choices, default=OmeroFileType.UNKNWON
+        max_length=400, choices=OmeroFileType.choices, default=OmeroFileType.UNKNWON, help_text="The type of the file"
     )
     file = OmeroFileField(
-        upload_to="files", null=True, storage=PrivateMediaStorage(), blank=True
+        upload_to="files", null=True, storage=PrivateMediaStorage(), blank=True, help_text="The file"
     )
-    name = models.CharField(max_length=400)
-    created_at = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(max_length=400, help_text="The name of the file")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the file was created")
     creator = models.ForeignKey(
-        get_user_model(), on_delete=models.CASCADE, null=True, blank=True
+        get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created/uploaded the file"
     )
-    tags = TaggableManager()
+    tags = TaggableManager(help_text="Tags for the file")
 
 
 class Sample(models.Model):
     """Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure), was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample"""
 
     meta = models.JSONField(null=True, blank=True)
-    name = models.CharField(max_length=1000)
+    name = models.CharField(max_length=1000, help_text="The name of the sample")
     experiments = models.ManyToManyField(
-        Experiment, blank=True, null=True, related_name="samples"
+        Experiment, blank=True, null=True, related_name="samples", help_text="The experiments this sample belongs to"
     )
-    nodeid = models.CharField(max_length=400, null=True, blank=True)
     experimentalgroup = models.ForeignKey(
-        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
+        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True, help_text="The experimental group this sample belongs to"
     )
-    animal = models.ForeignKey(Animal, on_delete=models.SET_NULL, blank=True, null=True)
+    animal = models.ForeignKey(Animal, on_delete=models.SET_NULL, blank=True, null=True, help_text="The animal this sample belongs to")
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the sample was created")
     creator = models.ForeignKey(
-        get_user_model(), on_delete=models.CASCADE, null=True, blank=True
+        get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created the sample"
     )
-    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_samples")
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_samples", blank=True, help_text="The users that have pinned the sample")
     tags = TaggableManager()
 
     def delete(self, *args, **kwargs):
@@ -151,7 +175,37 @@ class Sample(models.Model):
 
 
 class Representation(Matrise):
-    """A Representation is 5-dimensional representation of a microscopic image @arkitekt/rep"""
+    """A Representation is 5-dimensional representation of an image
+
+    Mikro stores each image as a 5-dimensional representation. The dimensions are:
+    - t: time
+    - c: channel
+    - z: z-stack
+    - x: x-dimension
+    - y: y-dimension
+
+    This ensures a unified api for all images, regardless of their original dimensions. Another main
+    determining factor for a representation is its variety:
+    A representation can be a raw image representating voxels (VOXEL)
+    or a segmentation mask representing instances of a class. (MASK)
+    It can also representate a human perception of the image (RGB) or a human perception of the mask (RGBMASK)
+
+    # Meta
+
+    Meta information is stored in the omero field which gives access to the omero-meta data. Refer to the omero documentation for more information.
+
+
+    #Origins and Derivations
+
+    Images can be filtered, which means that a new representation is created from the other (original) representations. This new representation is then linked to the original representations. This way, we can always trace back to the original representation.
+    Both are encapsulaed in the origins and derived fields.
+
+    Representations belong to *one* sample. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample
+    Each iamge has also a name, which is used to identify the image. The name is unique within a sample.
+    File and Rois that are used to create images are saved in the file origins and roi origins repectively.
+
+
+    """
 
     group = "representation"  #
     meta = models.JSONField(null=True, blank=True)
@@ -188,27 +242,19 @@ class Representation(Matrise):
         blank=True,
     )
     description = models.CharField(max_length=1000, null=True, blank=True)
-    type = models.CharField(
-        max_length=400,
-        blank=True,
-        null=True,
-        help_text="The Representation can have varying types, consult your API",
-    )
     variety = models.CharField(
         max_length=400,
         help_text="The Representation can have vasrying types, consult your API",
         choices=RepresentationVariety.choices,
         default=RepresentationVariety.UNKNOWN.value,
     )
-    chain = models.CharField(max_length=9000, blank=True, null=True)
-    nodeid = models.CharField(max_length=400, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True
     )
-    comments = GenericRelation(Comment)
+    comments = GenericRelation(Comment, help_text="Comments on the representation")
     pinned_by = models.ManyToManyField(
-        get_user_model(), related_name="pinned_representations"
+        get_user_model(), related_name="pinned_representations", help_text="The users that have pinned the representation"
     )
 
     tags = TaggableManager()
@@ -217,9 +263,15 @@ class Representation(Matrise):
 
     class Meta:
         permissions = [("download_representation", "Can download Presentation")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "sample"],
+                name="Only one unique iamge per sample",
+            )
+        ]
 
     def __str__(self):
-        return f"Representation osf {self.name}"
+        return f"Representation: {self.name}"
 
 
 class Instrument(models.Model):
@@ -234,6 +286,16 @@ class Instrument(models.Model):
 
 
 class Omero(models.Model):
+    """Omero is a model that stores the omero meta data
+    
+    This model is used to store the omero meta data. It is used to store the meta data of the omero file.
+    Its implementation is based on the omero meta data model. Refer to the omero documentation for more information.
+
+
+    
+    """
+
+
     representation = models.OneToOneField(
         Representation, on_delete=models.CASCADE, related_name="omero"
     )
@@ -250,6 +312,15 @@ class Omero(models.Model):
 
 
 class Metric(models.Model):
+    """ A Metric is a single (scalar) value that is associated with a representation, sample or experiment.
+
+    It can be used to store any kind of value that is associated with a sample or experiment, representation. 
+    For example, the number of cells in a sample or the average intensity of a channel in a representation.
+    
+    
+    """
+
+
     representation = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
@@ -272,18 +343,33 @@ class Metric(models.Model):
         null=True,
         blank=True,
         related_name="metrics",
-        help_text="The Representatoin this Metric belongs to",
+        help_text="The Sample this Metric belongs to",
     )
     key = models.CharField(max_length=1000, help_text="The Key")
-    value = models.JSONField(null=True, blank=True)
+    value = models.JSONField(null=True, blank=True, help_text="The value")
 
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(
         get_user_model(), on_delete=models.CASCADE, null=True, blank=True
     )
 
+    class Meta:
+        permissions = [("download_representation", "Can download Presentation")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["key", "sample"],
+                name="Only one unique key per sample",
+            )
+        ]
+
 
 class Thumbnail(models.Model):
+    """A Thumbnail is a render of a representation that is used to display the representation in the UI.
+
+    Thumbnails can also store the major color of the representation. This is used to color the representation in the UI.
+    """
+
+
     representation = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
@@ -297,33 +383,46 @@ class Thumbnail(models.Model):
 
 
 class ROI(models.Model):
-    nodeid = models.CharField(max_length=400, null=True, blank=True)
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    """A ROI is a region of interest in a representation.
+
+    This region is to be regarded as a view on the representation. Depending
+    on the implementatoin (type) of the ROI, the view can be constructed
+    differently. For example, a rectangular ROI can be constructed by cropping
+    the representation according to its 2 vectors. while a polygonal ROI can be constructed by masking the
+    representation with the polygon.
+
+    The ROI can also store a name and a description. This is used to display the ROI in the UI.
+
+    """
+
+
+
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The user that created the ROI")
     vectors = models.JSONField(
         max_length=3000,
-        help_text="A json dump of the ROI Vectors (specific for each type)",
+        help_text="A list of the ROI Vectors (specific for each type)",
         default=list,
     )
     type = models.CharField(
         max_length=400,
-        help_text="The Representation can have varying types, consult your API",
+        help_text="The Roi can have varying types, consult your API",
         choices=RoiType.choices,
         default=RoiType.UNKNOWN.value,
     )
-    color = models.CharField(max_length=100, blank=True, null=True)
-    signature = models.CharField(max_length=300, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now=True)
+    color = models.CharField(max_length=100, blank=True, null=True, help_text="The color of the ROI (for UI)")
+    created_at = models.DateTimeField(auto_now=True, help_text="The time the ROI was created")
     representation = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
         blank=True,
         null=True,
         related_name="rois",
+        help_text="The Representation this ROI was original used to create (drawn on)",
     )
-    label = models.CharField(max_length=1000, null=True, blank=True)
-    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_rois")
+    label = models.CharField(max_length=1000, null=True, blank=True, help_text="The label of the ROI (for UI)")
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_rois", blank=True, help_text="The users that pinned this ROI")
     experimentalgroup = models.ForeignKey(
-        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
+        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True, help_text="The ExperimentalGroup this ROI belongs to"
     )
     tags = TaggableManager()
 
@@ -332,21 +431,35 @@ class ROI(models.Model):
 
 
 class Label(models.Model):
-    instance = models.BigIntegerField()
-    name = models.CharField(max_length=600, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now=True)
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    """A Label is a trough model for image and features.
+    
+    Its map an instance value of a representation
+    (e.g. a pixel value of a segmentation mask) to a set of corresponding features of the segmented
+    class instance.
+
+    There can only be one label per representation and class instance. You can then attach
+    features to the label.
+    
+    
+    """
+
+
+    instance = models.BigIntegerField(help_text="The instance value of the representation (pixel value). Must be a value of the image array")
+    name = models.CharField(max_length=600, null=True, blank=True, help_text="The name of the instance")
+    created_at = models.DateTimeField(auto_now=True, help_text="The time the Label was created")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The user that created the Label")
     representation = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
         blank=True,
         null=True,
         related_name="labels",
+        help_text="The Representation this Label instance belongs to",
     )
     experimentalgroup = models.ForeignKey(
-        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True
+        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True, help_text="The ExperimentalGroup this Label belongs to"
     )
-    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_labels")
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_labels", help_text="The users that pinned this Label")
     tags = TaggableManager()
 
     def __str__(self):
@@ -362,16 +475,33 @@ class Label(models.Model):
 
 
 class Feature(models.Model):
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True)
+    """ A Feature is a numerical key value pair that is attached to a Label.
+     
+    You can model it for example as a key value pair of a class instance of a segmentation mask.
+    Representation -> Label0 -> Feature0
+                             -> Feature1
+                   -> Label1 -> Feature0 
+
+    Features can be used to store any numerical value that is attached to a class instance.
+    THere can only ever be one key per label. If you want to store multiple values for a key, you can
+    store them as a list in the value field.
+
+    Feature are analogous to metrics on a representation, but for a specific class instance (Label)
+    
+    """
+
+
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created the Feature")
     label = models.ForeignKey(
         Label,
         on_delete=models.CASCADE,
         blank=True,
         null=True,
         related_name="features",
+        help_text="The Label this Feature belongs to",
     )
-    key = models.CharField(max_length=1000, help_text="The sKesyss")
-    value = models.JSONField(null=True, blank=True)
+    key = models.CharField(max_length=1000, help_text="The key of the feature")
+    value = models.JSONField(null=True, blank=True, help_text="The value of the feature")
 
     class Meta:
         constraints = [

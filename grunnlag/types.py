@@ -1,4 +1,3 @@
-from attr import has
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.db.models import FileField
@@ -56,6 +55,8 @@ def convert_field_to_string(field, registry=None):
 
 
 class Thumbnail(BalderObject):
+
+
     def resolve_image(root, info, *args, **kwargs):
         return root.image.url if root.image else None
 
@@ -97,6 +98,13 @@ class OmeroFile(BalderObject):
 
 
 class Column(graphene.ObjectType):
+    """ A column in a table
+
+    A Column describes the associated name and metadata of a column in a table.
+    It gives access to the pandas and numpy dtypes of the column.
+
+    """
+
     name = graphene.String(description="The Column Name")
     field_name = graphene.String(description="The FIeld Name", required=True)
     pandas_type = graphene.Field(
@@ -118,10 +126,10 @@ class Table(BalderObject):
             graphene.String, description="Columns you want to select", required=False
         ),
         offset=graphene.Int(required=False, description="The Offset for the query"),
-        limit=graphene.Int(required=False, description="The Offset for the query"),
+        limit=graphene.Int(required=False, description="The Limit for the query"),
         query=graphene.String(required=False, description="The Query for the query"),
     )
-    store = graphene.Field(Parquet)
+    store = graphene.Field(Parquet, description="The parquet store for the table")
     columns = graphene.List(
         Column,
         description="Columns Data",
@@ -129,7 +137,7 @@ class Table(BalderObject):
             graphene.String, description="Columns you want to select", required=False
         ),
     )
-    pinned = graphene.Boolean()
+    pinned = graphene.Boolean(description="Is the table pinned by the active user")
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -158,11 +166,13 @@ class Table(BalderObject):
 
     class Meta:
         model = bordmodels.Table
+        description = bordmodels.Table.__doc__
 
 
 class Instrument(BalderObject):
     class Meta:
         model = models.Instrument
+        description = models.Instrument.__doc__
 
 
 class Omero(BalderObject):
@@ -176,16 +186,10 @@ class Omero(BalderObject):
 
     class Meta:
         model = models.Omero
+        description = models.Omero.__doc__
 
 
 class Representation(BalderObject):
-    """A Representation is a multi-dimensional Array that can do what ever it wants
-
-
-    @elements/rep:latest
-
-
-    """
 
     identifier: str = graphene.String(description="The Arkitekt identifier")
     metrics = BalderFilteredWithOffset(
@@ -233,13 +237,10 @@ class Representation(BalderObject):
 
     class Meta:
         model = models.Representation
+        description = models.Representation.__doc__
 
 
 class Sample(BalderObject):
-    """Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure),
-    was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of
-    the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample @elements/sample"""
-
     representations = BalderFilteredWithOffset(
         Representation,
         filterset_class=RepresentationFilter,
@@ -257,7 +258,6 @@ class Sample(BalderObject):
 
 
 class Experiment(BalderObject):
-    """A Representation is a multi-dimensional Array that can do what ever it wants @elements/experiment"""
 
     samples = BalderFilteredWithOffset(
         Sample, filterset_class=SampleFilter, related_field="samples"
@@ -269,6 +269,7 @@ class Experiment(BalderObject):
 
     class Meta:
         model = models.Experiment
+        description = models.Experiment.__doc__
 
 
 class Vector(graphene.ObjectType):
@@ -280,15 +281,16 @@ class Vector(graphene.ObjectType):
 
 
 class ROI(BalderObject):
-    vectors = graphene.List(Vector)
+    vectors = graphene.List(Vector, description="The vectors of the ROI")
 
-    pinned = graphene.Boolean()
+    pinned = graphene.Boolean(description="Is the ROI pinned by the active user")
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
 
     class Meta:
         model = models.ROI
+        description = models.ROI.__doc__
 
 
 class Label(BalderObject):
@@ -314,6 +316,7 @@ class Label(BalderObject):
 
     class Meta:
         model = models.Label
+        description = models.Label.__doc__
 
 
 class Feature(BalderObject):
@@ -321,3 +324,4 @@ class Feature(BalderObject):
 
     class Meta:
         model = models.Feature
+        description = models.Feature.__doc__

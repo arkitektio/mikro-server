@@ -19,5 +19,5 @@ for app in apps.get_app_configs():
 SharableModelsEnum = type(
     "SharableModels",
     (graphene.Enum,),
-    {m: m for m in sharable_models.keys()},
+    {**{m: m for m in sharable_models.keys()}, "__doc__": "Sharable Models are models that can be shared amongst users and groups. They representent the models of the DB"},
 )

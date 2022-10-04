@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class CreateMetric(BalderMutation):
-    """Creates a Representation"""
+    """Create a metric
+
+    This mutation creates a metric and returns the created metric.
+    
+    """
+
 
     class Arguments:
         representation = graphene.ID(

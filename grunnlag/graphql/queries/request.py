@@ -17,7 +17,8 @@ class Credentials(graphene.ObjectType):
 
 
 class Request(BalderQuery):
-    """Get a single representation by ID"""
+    """Requets a new set of credentials from the S3 server
+    encompassing the users credentials and the access key and secret key"""
 
     class Arguments:
         id = graphene.String(required=False)

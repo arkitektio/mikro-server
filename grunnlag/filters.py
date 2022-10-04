@@ -159,7 +159,7 @@ class LabelFilter(django_filters.FilterSet):
 
 class FeatureFilter(django_filters.FilterSet):
     label = django_filters.ModelChoiceFilter(
-        queryset=Label.objects.all(), field_name="label"
+        queryset=Label.objects.all(), field_name="label", label="The corresponding label that you want to filter by"
     )
     creator = django_filters.NumberFilter(field_name="creator")
     keys = django_filters.BaseInFilter(

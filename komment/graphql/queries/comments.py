@@ -9,6 +9,17 @@ import graphene
 
 
 class CommentsFor(BalderQuery):
+    """Comments for a specific object
+    
+    This query returns all comments for a specific object. The object is
+    specified by the `model` and `id` arguments. The `model` argument is
+    a string that is the name of the model. The `id` argument is the id of
+    the object.
+
+    You can only query for comments for objects that you have access to.
+    
+    """
+
     class Arguments:
         model = graphene.Argument(CommentableModelsEnum, required=True)
         id = graphene.ID(required=False)

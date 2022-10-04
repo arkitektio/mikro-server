@@ -5,7 +5,13 @@ from grunnlag import types, models
 
 
 class Tags(BalderQuery):
-    """All Samples"""
+    """All Tags
+    
+    Returns all Tags that are stored on the platform
+    depending on the user's permissions. Generally, this query will return
+    all Tags that the user has access to. If the user is an amdin
+    or superuser, all Tags will be returned.
+    """
 
     class Meta:
         list = True

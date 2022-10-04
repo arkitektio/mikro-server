@@ -87,13 +87,14 @@ query {
 
 
 class Plot(models.Model):
-    name = models.CharField(max_length=255)
-    description = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    query = models.CharField(max_length=10000, default=default_plot_query)
+    name = models.CharField(max_length=255, help_text="The name of the plot")
+    description = models.TextField(help_text="A description of the plot")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When was this plot created")
+    updated_at = models.DateTimeField(auto_now=True, help_text="When was this plot last updated")
+    query = models.CharField(max_length=10000, default=default_plot_query, help_text="The PlotQL query (see documentation for PlotQL)")
     creator = models.ForeignKey(
         get_user_model(),
         related_name="plots",
         on_delete=models.CASCADE,
+        help_text="The user who created this plot",
     )

@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class CreateInstrument(BalderMutation):
-    """Creates a Representation"""
+    """Creates an Instrument
+    
+    This mutation creates an Instrument and returns the created Instrument.
+    The serial number is required and the manufacturer is inferred from the serial number.
+    """
 
     class Arguments:
         name = graphene.String(required=True)

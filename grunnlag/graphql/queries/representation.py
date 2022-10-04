@@ -15,7 +15,10 @@ from django.contrib.auth import get_user_model
 
 
 class MyRepresentations(BalderQuery):
-    """My Representations returns all of the Representations, attached to the current user"""
+    """My Representatoin runs a fast query on the database to return all
+    Representation that the user has created. This query is faster than
+    the `representations` query, but it does not return all Representation that
+    the user has access to."""
 
     class Meta:
         list = True
@@ -27,6 +30,7 @@ class MyRepresentations(BalderQuery):
 
 
 class AccessibleRepresentations(BalderQuery):
+
     def resolve(self, info):
         reps = get_objects_for_user(
             info.context.user,
@@ -93,7 +97,11 @@ class RepresentationsForUser(BalderQuery):
 
 
 class Representation(BalderQuery):
-    """Get a single representation by ID"""
+    """Get a single Representation by ID
+    
+    Returns a single Representation by ID. If the user does not have access
+    to the Representation, an error will be raised.
+    """
 
     class Arguments:
         id = graphene.ID(description="The ID to search by", required=True)
@@ -122,7 +130,14 @@ def get_random_obj_from_queryset(queryset):
 
 
 class RandomRep(BalderQuery):
-    """Get a single representation by ID"""
+    """Get a random Representation
+    
+    Gets a random Representation from the database. This is used for
+    testing purposes
+    
+    """
+
+
 
     resolve = lambda root, info: get_random_obj_from_queryset(
         models.Representation.objects.all()
@@ -134,7 +149,12 @@ class RandomRep(BalderQuery):
 
 
 class Representations(BalderQuery):
-    """All represetations"""
+    """All Representations
+    
+    This query returns all Representations that are stored on the platform
+    depending on the user's permissions. Generally, this query will return
+    all Representations that the user has access to. If the user is an amdin
+    or superuser, all Representations will be returned."""
 
     class Meta:
         list = True

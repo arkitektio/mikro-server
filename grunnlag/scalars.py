@@ -5,7 +5,20 @@ from graphql.language import ast
 
 
 class XArray(Scalar):
-    """DateTime Scalar Description"""
+    """XArray scalar
+    
+    This scalar is used to represent xarray objects and allows them to
+    be serialized correct.
+    XArray objects are used to represent multidimensional data, such as
+    time series, images, and other data.
+
+    They are used in this project to represent the data of a Representation.
+    The Python interface can used to extra and manipulate the data.
+
+    This scalar is used to represent the data stored as an object on a S3 bucket
+    this object representats a zarr store of an xarray
+    
+    """
 
     @staticmethod
     def serialize(dt):
@@ -22,7 +35,8 @@ class XArray(Scalar):
 
 
 class File(Scalar):
-    """A Representation of a Django File"""
+    """A Representation of a Django File
+    """
 
     @staticmethod
     def serialize(dt):
@@ -39,7 +53,18 @@ class File(Scalar):
 
 
 class Store(Scalar):
-    """A Representation of a Django File"""
+    """Store
+    
+    This scalar is used to represent zarr store objects and allows them to
+    be serialized correct.
+    Zarr Stores are used to retrieve multidimensional data, such as
+    time series, images, and other data.
+
+    This scalar is used to represent the data stored as an object on a S3 bucket
+    this object representats a zarr store of an xarray
+    
+    """
+
 
     @staticmethod
     def serialize(dt):
@@ -56,7 +81,12 @@ class Store(Scalar):
 
 
 class Parquet(Scalar):
-    """A Representation of a Parquet file on the s3"""
+    """A Parquet file
+    
+    This scalar is used to represent parquet files and allows them to be accesed trough
+    the code generator python libraries with the correct type.
+    
+    On the python side this will be converted from and to a pandas dataframe."""
 
     @staticmethod
     def serialize(dt):
@@ -73,8 +103,28 @@ class Parquet(Scalar):
 
 
 class MetricValue(GenericScalar):
-    """A Representation of a Metric Value"""
+    """A Metric Value
+    
+    This scalar ensures serializaiton of metric values. Metric values
+    can be of different types, such as int, float, string, datetime, etc.
+
+    However we impose a few rules on the metric values:
+    - The value must be a scalar
+    - The value must be a scalar that can be serialized to JSON
+
+    
+    """
 
 
 class FeatureValue(GenericScalar):
-    """A Representation of a Metric Value"""
+    """A Feature Value
+    
+    This scalar ensures serializaiton of feature values. Feature values
+    can be of different types, such as int, float, string, datetime, etc.
+
+    However we impose a few rules on the metric values:
+    - The value must be a scalar
+    - The value must be a scalar that can be serialized to JSON
+    
+    
+    """

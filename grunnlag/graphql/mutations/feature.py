@@ -10,14 +10,21 @@ from grunnlag.scalars import FeatureValue
 
 
 class CreateFeature(BalderMutation):
-    """Creates a Sample"""
+    """Creates a Feature
+    
+    This mutation creates a Feature and returns the created Feature.
+    We require a reference to the label that the feature belongs to.
+    As well as the key and value of the feature.
+    
+    There can be multiple features with the same label, but only one feature per key
+    per label"""
 
     class Arguments:
         label = graphene.ID(
-            required=True, description="The Representation this ROI belongs to"
+            required=True, description="The Label this Feature belongs to"
         )
         key = graphene.String(description="The key of the feature")
-        value = FeatureValue(description="The size", required=True)
+        value = FeatureValue(description="The value of the feature", required=True)
         creator = graphene.ID(description="The creator of this feature")
 
     @bounced(anonymous=False)

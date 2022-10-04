@@ -7,25 +7,27 @@ from lok import bounced
 
 
 class CreateExperiment(BalderMutation):
-    """Create an experiment (only signed in users)"""
+    """Create an Experiment
+    
+    This mutation creates an Experiment and returns the created Experiment.
+    """
 
     class Arguments:
         name = graphene.String(
             required=True,
-            description="A cleartext description what this representation represents as data",
+            description="A name for the experiment",
         )
         description = graphene.String(
             required=False, description="A short description of the experiment"
         )
-        meta = GenericScalar(required=False, description="Meta Parameters")
         creator = graphene.String(
             required=False,
-            description="The Email of the user creating the Representation (only for backend apps)",
+            description="The user that created this experiment (defaults to the logined user)",
         )
         tags = graphene.List(
             graphene.String,
             required=False,
-            description="Do you want to tag the representation?",
+            description="Tags for the experiment",
         )
 
     @bounced()
@@ -52,11 +54,13 @@ class DeleteExperimentResult(graphene.ObjectType):
 
 
 class DeleteExperiment(BalderMutation):
-    """Create an experiment (only signed in users)"""
+    """Delete Experiment
+    
+    This mutation deletes an Experiment and returns the deleted Experiment."""
 
     class Arguments:
         id = graphene.ID(
-            description="A cleartext description what this representation represents as data",
+            description="The ID of the experiment to delete",
             required=True,
         )
 
@@ -71,26 +75,27 @@ class DeleteExperiment(BalderMutation):
 
 
 class UpdateExperiment(BalderMutation):
-    """Create an experiment (only signed in users)"""
+    """ Update an Experiment
+    
+    This mutation updates an Experiment and returns the updated Experiment."""
 
     class Arguments:
         id = graphene.ID(required=True)
         name = graphene.String(
             required=True,
-            description="A cleartext description what this representation represents as data",
+            description="The name of the experiment",
         )
         description = graphene.String(
             required=False, description="A short description of the experiment"
         )
-        meta = GenericScalar(required=False, description="Meta Parameters")
         creator = graphene.String(
             required=False,
-            description="The Email of the user creating the Representation (only for backend apps)",
+            description="The user that created this experiment (defaults to the logined user)",
         )
         tags = graphene.List(
             graphene.String,
             required=False,
-            description="Do you want to tag the representation?",
+            description="Tags for the experiment",
         )
 
     @bounced()
@@ -118,11 +123,13 @@ class UpdateExperiment(BalderMutation):
 
 
 class PinExperiment(BalderMutation):
-    """Sets the pin"""
+    """Pin Experiment
+    
+    This mutation pins an Experiment and returns the pinned Experiment."""
 
     class Arguments:
         id = graphene.ID(required=True, description="The ID of the representation")
-        pin = graphene.Boolean(required=True, description="The pin")
+        pin = graphene.Boolean(required=True, description="The pin state")
 
     @bounced()
     def mutate(root, info, id, pin, **kwargs):

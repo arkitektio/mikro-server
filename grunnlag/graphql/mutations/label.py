@@ -15,17 +15,27 @@ class InputVector(graphene.InputObjectType):
 
 
 class CreateLabel(BalderMutation):
-    """Creates a Sample"""
+    """Creates a Label
+    
+    This mutation creates a Label and returns the created Label.
+    We require a reference to the image pixel value that the label belongs to.
+    (Labels can be created for any pixel in an image, no matter if this image
+    is a mask or not). However labels can only be created for pixels that are
+    integer values.
+
+    
+
+    """
 
     class Arguments:
         instance = graphene.Int(
-            required=True, description="The Representation this ROI belongs to"
+            required=True, description="The instance this Label belongs to"
         )
         representation = graphene.ID(
-            required=True, description="The Representation this ROI belongs to"
+            required=True, description="The Representation this Label belongs to"
         )
         name = graphene.String(description="The label name")
-        creator = graphene.ID(description="The creator of this feature")
+        creator = graphene.ID(description="The creator of this label")
 
     @bounced(anonymous=False)
     def mutate(root, info, instance, representation, creator=None, name=None):

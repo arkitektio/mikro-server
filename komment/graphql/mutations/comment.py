@@ -71,14 +71,30 @@ def recurse_parse_decendents(
 
 
 class CreateComment(BalderMutation):
-    """Create an experiment (only signed in users)"""
+    """Create an Comment 
+    
+    This mutation creates a comment. It takes a commentable_id and a commentable_type.
+    If this is the first comment on the commentable, it will create a new comment thread.
+    If there is already a comment thread, it will add the comment to the thread (by setting
+    it's parent to the last parent comment in the thread).
+
+    CreateComment takes a list of Descendents, which are the comment tree. The Descendents
+    are a recursive structure, where each Descendent can have a list of Descendents as children.
+    The Descendents are either a Leaf, which is a text node, or a MentionDescendent, which is a
+    reference to another user on the platform.
+
+    Please convert your comment tree to a list of Descendents before sending it to the server.
+    TODO: Add a converter from a comment tree to a list of Descendents.
+
+    
+    (only signed in users)"""
 
     class Arguments:
-        type = graphene.Argument(CommentableModelsEnum, required=True)
+        type = graphene.Argument(CommentableModelsEnum, required=True, description="The type model you want to comment on")
         object = graphene.ID(
             required=True, description="The Representationss this sROI belongs to"
         )
-        descendents = graphene.List(DescendendInput, required=True)
+        descendents = graphene.List(DescendendInput, required=True, description="The comment tree")
         parent = graphene.ID(description="The parent comment", required=False)
 
     @bounced()

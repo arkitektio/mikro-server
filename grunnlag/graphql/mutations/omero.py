@@ -9,6 +9,10 @@ import ntpath
 
 
 class UploadOmeroFile(BalderMutation):
+    """Upload a file to Mikro
+
+    This mutation uploads a file to Omero and returns the created OmeroFile.
+    """
     class Arguments:
         file = ImageFile(required=True)
         name = graphene.String(required=False)
@@ -45,11 +49,11 @@ class DeleteOmeroFileResult(graphene.ObjectType):
 
 
 class DeleteOmeroFile(BalderMutation):
-    """Create an experiment (only signed in users)"""
+    """Delete OmeroFile"""
 
     class Arguments:
         id = graphene.ID(
-            description="The ID of the two deletet Representation", required=True
+            description="The ID of the two deleted File", required=True
         )
 
     @bounced()
@@ -63,13 +67,13 @@ class DeleteOmeroFile(BalderMutation):
 
 
 class UpdateOmeroFile(BalderMutation):
-    """Updates an Representation (also retriggers meta-data retrieval from data stored in)"""
+    """Update an omero file"""
 
     class Arguments:
         id = graphene.ID(
-            required=True, description="Which sample does this representation belong to"
+            required=True, description="The omero file you want to update"
         )
-        tags = graphene.List(graphene.String, required=False, description="Tags")
+        tags = graphene.List(graphene.String, required=False, description="The updated tags ( old tags will be deleted)")
 
     @bounced()
     def mutate(root, info, id, tags=[]):

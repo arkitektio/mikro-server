@@ -9,25 +9,41 @@ import uuid
 
 
 class Table(models.Model):
+    """ A Table is a collection of tabular data.
+
+    It provides a way to store data in a tabular format and associate it with a Representation,
+    Sample or Experiment. It is a way to store data that might be to large to store in a
+    Feature or Metric on this Experiments. Or it might be data that is not easily represented
+    as a Feature or Metric.
+
+    Tables can be easily created from a pandas DataFrame and can be converted to a pandas DataFrame.
+    Its columns are defined by the columns of the DataFrame.
+
+    
+    """
+
+
+
     representation = models.ForeignKey(
         Representation,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="tables",
+        help_text="The Representation this Table belongs to",
     )
     sample = models.ForeignKey(
-        Sample, on_delete=models.CASCADE, null=True, blank=True, related_name="tables"
+        Sample, on_delete=models.CASCADE, null=True, blank=True, related_name="tables", help_text="Sample this table belongs to"
     )
     experiment = models.ForeignKey(
         Experiment,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="tables",
+        related_name="tables",help_text="The Experiment this Table belongs to.",
     )
     name = models.CharField(max_length=2000)
-    columns = models.JSONField(default=list)
+    columns = models.JSONField(default=list, help_text="List of column and their properties")
     store = ParquetField(
         verbose_name="store",
         storage=import_string(settings.BORD["STORAGE_CLASS"]),
@@ -37,9 +53,9 @@ class Table(models.Model):
         help_text="The location of the Parquet on the Storage System (S3 or Media-URL)",
     )
     pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_tables")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When the Table was created")
     creator = models.ForeignKey(
-        get_user_model(), on_delete=models.CASCADE, null=True, blank=True
+        get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The creator of the Table"
     )
     tags = TaggableManager()
 

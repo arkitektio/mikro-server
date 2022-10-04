@@ -14,6 +14,12 @@ class MentionEvent(graphene.ObjectType):
 
 
 class MyMentionsSubscription(BalderSubscription):
+    """My Mentions
+
+    Returns an event of a new mention for the user if the user 
+    was mentioned in a comment.
+    """
+
     USERGROUP = lambda user: f"mymentions_{user.id}"
 
     class Arguments:

@@ -17,6 +17,9 @@ descendent_map = lambda: {
 
 @register_type
 class Node(graphene.Interface):
+    """A node in the comment tree"""
+
+
     children = graphene.List(lambda: Descendent)
     untyped_children = GenericScalar()
 
@@ -31,6 +34,7 @@ class Node(graphene.Interface):
 
 @register_type
 class Descendent(graphene.Interface):
+    """A descendent of a node in the comment tree"""
     typename = graphene.String()
 
     @classmethod
@@ -41,6 +45,7 @@ class Descendent(graphene.Interface):
 
 @register_type
 class Leaf(graphene.ObjectType):
+    """A leaf in the comment tree. Representations some sort of text"""
     bold = graphene.Boolean(description="Is this a bold leaf?")
     italic = graphene.Boolean(description="Is this a italic leaf?")
     code = graphene.Boolean(description="Is this a code leaf?")
@@ -52,6 +57,7 @@ class Leaf(graphene.ObjectType):
 
 @register_type
 class MentionDescendent(graphene.ObjectType):
+    """A mention in the comment tree. This  is a reference to another user on the platform"""
     user = graphene.String(description="The user that is mentioned", required=True)
 
     class Meta:
@@ -60,6 +66,7 @@ class MentionDescendent(graphene.ObjectType):
 
 @register_type
 class ParagraphDescendent(graphene.ObjectType):
+    """A paragraph in the comment tree. This paragraph contains other nodes (list nodes)"""
     size = graphene.String(description="The size of the paragraph", required=False)
 
     class Meta:
@@ -67,13 +74,20 @@ class ParagraphDescendent(graphene.ObjectType):
 
 
 class Comment(BalderObject):
-    descendents = graphene.List(Descendent)
+    """A comment
+    
+    A comment is a user generated comment on a commentable object. A comment can be a reply to another comment or a top level comment.
+    Comments can be nested to any depth. A comment can be edited and deleted by the user that created it.
+    """
+
+    descendents = graphene.List(Descendent, description="The descendents of the comment (this referes to the Comment Tree)")
     children = graphene.List(
         lambda: Comment,
         limit=graphene.Int(description="How many children to return"),
         offset=graphene.Int(description="The offset for the children"),
+        description="Comments that are replies to this comment",
     )
-    content_type = graphene.Field(CommentableModelsEnum)
+    content_type = graphene.Field(CommentableModelsEnum, description="The content type of the commentable object")
 
     def resolve_children(root, info, *args, offset=0, limit=20):
         return root.children.order_by("-created_at")[offset : offset + limit]

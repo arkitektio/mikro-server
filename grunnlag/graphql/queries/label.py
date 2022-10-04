@@ -7,7 +7,13 @@ from grunnlag.filters import (
 
 
 class Labels(BalderQuery):
-    """All represetations"""
+    """All Labels
+    
+    This query returns all Labels that are stored on the platform
+    depending on the user's permissions. Generally, this query will return
+    all Labels that the user has access to. If the user is an amdin
+    or superuser, all Labels will be returned.
+    """
 
     class Meta:
         list = True
@@ -18,7 +24,10 @@ class Labels(BalderQuery):
 
 
 class Label(BalderQuery):
-    """Get a single representation by ID"""
+    """Get a single label by ID
+    
+    Returns a single label by ID. If the user does not have access
+    to the label, an error will be raised."""
 
     class Arguments:
         id = graphene.ID(description="The ID to search by")
@@ -33,7 +42,9 @@ class Label(BalderQuery):
 
 
 class LabelFor(BalderQuery):
-    """Get a label for a specific instance on a specific representation"""
+    """Get a label for a specific instance on a specific representation
+    
+    """
 
     class Arguments:
         representation = graphene.ID(description="The ID to search by", required=True)
