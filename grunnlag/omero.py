@@ -209,7 +209,7 @@ class ImagingEnvironmentInput(graphene.InputObjectType):
     Follows the OME model for imaging environment
     
     """
-    air_pessure = graphene.Float(description="The air pressure during the acquisition")
+    air_pressure = graphene.Float(description="The air pressure during the acquisition")
     co2_percent = graphene.Float(description="The CO2 percentage in the environment")
     humidity = graphene.Float(description="The humidity of the imaging environment")
     temperature = graphene.Float(description="The temperature of the imaging environment")
@@ -222,7 +222,7 @@ class ImagingEnvironment(graphene.ObjectType):
     Follows the OME model for imaging environment
     
     """
-    air_pessure = graphene.Float(description="The air pressure during the acquisition")
+    air_pressure = graphene.Float(description="The air pressure during the acquisition")
     co2_percent = graphene.Float(description="The CO2 percentage in the environment")
     humidity = graphene.Float(description="The humidity of the imaging environment")
     temperature = graphene.Float(description="The temperature of the imaging environment")

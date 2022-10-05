@@ -32,14 +32,14 @@ class CreateExperiment(BalderMutation):
 
     @bounced()
     def mutate(
-        root, info, name=None, description=None, meta=None, creator=None, tags=[]
+        root, info, name=None, description=None, creator=None, tags=[]
     ):
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
 
         exp = models.Experiment.objects.create(
-            creator=creator, description=description, meta=meta, name=name
+            creator=creator, description=description, name=name
         )
         if tags:
             exp.tags.add(*tags)

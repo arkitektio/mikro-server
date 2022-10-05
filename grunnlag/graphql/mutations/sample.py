@@ -36,14 +36,13 @@ class CreateSample(BalderMutation):
         experiments=[],
         name=namegenerator.gen(),
         creator=None,
-        meta=None,
         tags=[],
     ):
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
 
-        sample = models.Sample.objects.create(creator=creator, name=name, meta=meta)
+        sample = models.Sample.objects.create(creator=creator, name=name)
         if experiments:
             sample.experiments.add(*experiments)
         if tags:

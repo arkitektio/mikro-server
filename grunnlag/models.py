@@ -457,7 +457,7 @@ class Label(models.Model):
         help_text="The Representation this Label instance belongs to",
     )
     experimentalgroup = models.ForeignKey(
-        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True, help_text="The ExperimentalGroup this Label belongs to"
+        ExperimentalGroup, on_delete=models.SET_NULL, blank=True, null=True, help_text="The Experimental group this Label belongs to"
     )
     pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_labels", help_text="The users that pinned this Label")
     tags = TaggableManager()
