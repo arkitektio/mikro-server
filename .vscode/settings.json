@@ -12,7 +12,7 @@
         "pylint_django",
         "--django-settings-module=elements.settings"
     ],
-    "window.title": "${dirty}Elements${separator} ${activeEditorShort}${separator}${rootName}${separator}$",
+    "window.title": "${dirty} Mikro ${separator} ${activeEditorShort}${separator}${rootName}${separator}$",
     "python.languageServer": "Pylance",
     "workbench.colorCustomizations": {
         "titleBar.activeForeground": "#F6FBFB",

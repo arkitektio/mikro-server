@@ -4,7 +4,7 @@ from graphene.types.generic import GenericScalar
 from graphql.language import ast
 
 
-class XArray(Scalar):
+class XArrayInput(Scalar):
     """XArray scalar
     
     This scalar is used to represent xarray objects and allows them to

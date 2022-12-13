@@ -1,7 +1,7 @@
 import json
 from urllib import request
 from django.contrib.auth import get_user_model
-from grunnlag.scalars import XArray
+from grunnlag.scalars import XArrayInput
 from grunnlag.omero import OmeroRepresentationInput
 from lok import bounced
 from grunnlag.enums import RepresentationVariety, RepresentationVarietyInput
@@ -32,18 +32,22 @@ class UpdateRepresentation(BalderMutation):
             required=False,
             description="Which representations were used to create this representation",
         )
+        position = graphene.ID(required=False, description="The position within an acquisition")
         tags = graphene.List(graphene.String, required=False, description="Tags")
         sample = graphene.ID(required=False, description="The sample")
 
     @bounced()
     def mutate(
-        root, info, *args, sample=None, tags=None, variety=None, rep=None, origins=None
+        root, info, *args, sample=None, tags=None, variety=None, rep=None, origins=None, position=None, **kwargs
     ):
         rep = models.Representation.objects.get(id=rep)
         rep.sample_id = sample or rep.sample_id
         if tags:
             rep.tags.set(tags)
         rep.variety = variety or rep.variety
+
+        if position:
+            rep.position_id = position
 
         if origins:
             for o in origins:
@@ -102,7 +106,7 @@ class FromXArray(BalderMutation):
             required=False,
             description="A description of the variety",
         )
-        xarray = graphene.Argument(XArray, required=True, description="The X Arra")
+        xarray = graphene.Argument(XArrayInput, required=True, description="The X Arra")
         tags = graphene.List(
             graphene.String,
             required=False,
@@ -171,11 +175,15 @@ class FromXArray(BalderMutation):
                 objective_settings=omero.get("objective_settings", None),
                 imaging_environment=omero.get("imaging_environment", None),
                 instrument_id=omero.get("instrument", None),
+                position_id=omero.get("position", None),
+                objective_id =omero.get("objective", None),
             )
 
         if tags:
             rep.tags.add(*tags)
         if origins:
+
+
             rep.origins.add(*origins)
         if file_origins:
             rep.file_origins.add(*file_origins)

@@ -4,7 +4,7 @@ from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch.dispatcher import receiver
 
 from bord.models import Table
-from .models import ROI, Experiment, OmeroFile, Representation, Sample, Thumbnail
+from .models import ROI, Experiment, OmeroFile, Representation, Sample, Thumbnail, Stage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,11 @@ def exp_post_save(sender, instance=None, created=None, **kwargs):
             else {"action": "updated", "data": instance.id},
             [MyExperiments.USERGROUP(instance.creator)],
         )
+
+@receiver(post_save, sender=Stage)
+def stage_post_save(sender, instance=None, created=None, **kwargs):
+    pass
+
 
 
 @receiver(post_save, sender=Sample)

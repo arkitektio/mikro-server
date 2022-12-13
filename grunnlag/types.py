@@ -19,6 +19,7 @@ from grunnlag.filters import (
     ROIFilter,
     RepresentationFilter,
     SampleFilter,
+    OmeroFilter,
 )
 from bord.enums import PandasDType
 from balder.fields.filtered import BalderFiltered
@@ -30,7 +31,7 @@ from taggit.managers import TaggableManager
 from taggit.models import Tag
 from graphene_django.converter import convert_django_field
 from django.conf import settings
-from grunnlag.enums import OmeroFileType
+from grunnlag.enums import OmeroFileType, AcquisitionKind
 from bord import models as bordmodels
 import logging
 from grunnlag.graphql.utils import AvailableModelsEnum
@@ -169,12 +170,6 @@ class Table(BalderObject):
         description = bordmodels.Table.__doc__
 
 
-class Instrument(BalderObject):
-    class Meta:
-        model = models.Instrument
-        description = models.Instrument.__doc__
-
-
 class Omero(BalderObject):
     planes = graphene.List(Plane)
     channels = graphene.List(Channel)
@@ -188,6 +183,31 @@ class Omero(BalderObject):
         model = models.Omero
         description = models.Omero.__doc__
 
+
+
+class Instrument(BalderObject):
+    omeros = BalderFilteredWithOffset(
+        Omero,
+        filterset_class=OmeroFilter,
+        related_field="omeros",
+        description="Associated images through Omero",
+    )
+    
+    class Meta:
+        model = models.Instrument
+        description = models.Instrument.__doc__
+
+class Objective(BalderObject):
+    omeros = BalderFilteredWithOffset(
+        Omero,
+        filterset_class=OmeroFilter,
+        related_field="omeros",
+        description="Associated images through Omero",
+    )
+
+    class Meta:
+        model = models.Objective
+        description = models.Objective.__doc__
 
 class Representation(BalderObject):
 
@@ -278,6 +298,36 @@ class Vector(graphene.ObjectType):
     z = graphene.Float(description="Z-coordinate")
     t = graphene.Float(description="T-coordinate")
     c = graphene.Float(description="C-coordinate")
+
+
+class Stage(BalderObject):
+    kind = graphene.Field(AcquisitionKind, description="The kind of acquisition")
+    pinned = graphene.Boolean(description="Is the table pinned by the active user")
+    physical_size = graphene.List(graphene.Float, description="The physical size of the stage")
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
+
+    class Meta:
+        model = models.Stage
+        description = models.Stage.__doc__
+
+class Position(BalderObject):
+    pinned = graphene.Boolean(description="Is the table pinned by the active user")
+    omeros = BalderFilteredWithOffset(
+        Omero,
+        filterset_class=OmeroFilter,
+        related_field="omeros",
+        description="Associated images through Omero",
+    )
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
+
+    class Meta:
+        model = models.Position
+        description = models.Position.__doc__
+
 
 
 class ROI(BalderObject):

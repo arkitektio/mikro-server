@@ -12,6 +12,7 @@ from .models import (
     OmeroFile,
     Representation,
     Sample,
+    Stage,
 )
 from .enums import RepresentationVariety, RepresentationVarietyInput, RoiTypeInput
 from django import forms
@@ -19,7 +20,7 @@ from graphene_django.forms.converter import convert_form_field
 from balder.filters import EnumFilter, MultiEnumFilter
 import json
 from django.contrib.auth import get_user_model
-
+from django.db.models import Q
 
 class PinnedFilterMixin(django_filters.FilterSet):
 
@@ -40,6 +41,16 @@ class PinnedFilterMixin(django_filters.FilterSet):
                 raise Exception("Pin can only be used by authenticated users")
         else:
             return queryset
+
+
+class AppFilterMixin(django_filters.FilterSet):
+
+    app = django_filters.CharFilter(
+        method="my_app_filter", label="Created through which app"
+    )
+
+    def my_app_filter(self, queryset, name, value):
+        return queryset.filter(created_through__app__identifier=value)
 
 
 class EnumChoiceField(forms.CharField):
@@ -94,7 +105,40 @@ class IDChoiceFilter(django_filters.MultipleChoiceFilter):
         super().__init__(*args, **kwargs, field_name="pk")
 
 
-class ExperimentFilter(PinnedFilterMixin, django_filters.FilterSet):
+class StageFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+
+
+class ObjectiveFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    search = django_filters.CharFilter(
+        method="search_filter", label="The substring you want to filter by"
+    )
+
+    def search_filter(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value) | Q(instruments__name__icontains=value)
+        )
+
+
+class PositionFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterSet):
+    stage = django_filters.ModelChoiceFilter(
+        field_name="stage", queryset=Stage.objects.all()
+    )
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+
+
+class OmeroFilter(django_filters.FilterSet):
+    order = django_filters.OrderingFilter(fields={"acquisition_date": "acquired"})
+
+
+class ExperimentFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
@@ -114,7 +158,7 @@ class ExperimentFilter(PinnedFilterMixin, django_filters.FilterSet):
     )
 
 
-class ThumbnailFilter(django_filters.FilterSet):
+class ThumbnailFilter(AppFilterMixin, django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="representation__name",
         lookup_expr="icontains",
@@ -128,7 +172,7 @@ class ThumbnailFilter(django_filters.FilterSet):
     )
 
 
-class ROIFilter(PinnedFilterMixin, django_filters.FilterSet):
+class ROIFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
@@ -150,14 +194,18 @@ class ROIFilter(PinnedFilterMixin, django_filters.FilterSet):
     type = MultiEnumFilter(type=RoiTypeInput, field_name="type")
 
 
-class LabelFilter(django_filters.FilterSet):
+class LabelFilter(AppFilterMixin, django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
     creator = django_filters.NumberFilter(field_name="creator")
+    name = django_filters.CharFilter(
+        field_name="name",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
 
-
-class FeatureFilter(django_filters.FilterSet):
+class FeatureFilter(AppFilterMixin, django_filters.FilterSet):
     label = django_filters.ModelChoiceFilter(
         queryset=Label.objects.all(), field_name="label", label="The corresponding label that you want to filter by"
     )
@@ -176,7 +224,7 @@ class FeatureFilter(django_filters.FilterSet):
         return queryset.filter(key__contains=value)
 
 
-class RepresentationFilter(PinnedFilterMixin, django_filters.FilterSet):
+class RepresentationFilter(AppFilterMixin, PinnedFilterMixin, django_filters.FilterSet):
     tags = django_filters.BaseInFilter(
         method="my_tag_filter", label="The tags you want to filter by"
     )
@@ -187,6 +235,11 @@ class RepresentationFilter(PinnedFilterMixin, django_filters.FilterSet):
         queryset=Experiment.objects.all(),
         field_name="sample__experiments",
         label="The Experiment the Sample of this Representation belongs to",
+    )
+    stages = django_filters.ModelMultipleChoiceFilter(
+        queryset=Stage.objects.all(),
+        field_name="omero__position__stage",
+        label="The Stage this Representation belongs to",
     )
     samples = django_filters.ModelMultipleChoiceFilter(
         queryset=Sample.objects.all(), field_name="sample"
@@ -254,7 +307,7 @@ class RepresentationFilter(PinnedFilterMixin, django_filters.FilterSet):
         return queryset.filter(origins=None) if value else queryset
 
 
-class MetricFilter(django_filters.FilterSet):
+class MetricFilter(AppFilterMixin, django_filters.FilterSet):
     keys = django_filters.BaseInFilter(
         method="my_key_filter", label="The key you want to filter by"
     )
@@ -279,7 +332,7 @@ class MetricFilter(django_filters.FilterSet):
         return queryset.order_by(*value)
 
 
-class SampleFilter(PinnedFilterMixin, django_filters.FilterSet):
+class SampleFilter(AppFilterMixin, PinnedFilterMixin, django_filters.FilterSet):
     experiments = django_filters.ModelMultipleChoiceFilter(
         queryset=Experiment.objects.all(), field_name="experiments"
     )
@@ -351,7 +404,7 @@ class OmeroFileFilter(django_filters.FilterSet):
         fields = ["name"]
 
 
-class InstrumentFilter(django_filters.FilterSet):
+class InstrumentFilter(AppFilterMixin, django_filters.FilterSet):
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
 
     class Meta:

@@ -89,10 +89,9 @@ INSTALLED_APPS = [
     # "health_check.contrib.psutil",
     "health_check.contrib.redis",
     "lok",
-    "colorfield",
     "guardian",
     "graphene_django",
-    "rest_framework",
+    # "rest_framework",
     "balder",
     "matrise",
     "grunnlag",
@@ -249,22 +248,15 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "console": {
-            "()": "colorlog.ColoredFormatter",  # colored output
             # exact format is not important, this is the minimum information
-            "format": "%(log_color)s[%(levelname)s]  %(name)s %(asctime)s :: %(message)s",
-            "log_colors": {
-                "DEBUG": "bold_black",
-                "INFO": "green",
-                "WARNING": "yellow",
-                "ERROR": "red",
-                "CRITICAL": "bold_red",
-            },
+            "format": "%(message)s",
         },
     },
     "handlers": {
         "console": {
-            "class": "colorlog.StreamHandler",
+            "class": "rich.logging.RichHandler",
             "formatter": "console",
+            "rich_tracebacks": True,
         },
     },
     "loggers": {

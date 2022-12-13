@@ -37,7 +37,7 @@
         {
             "label": "Build",
             "type": "shell",
-            "command": "docker build -t jhnnsrs/elements:prod ."
+            "command": "docker build -t jhnnsrs/mikro:prod ."
         },
     ]
 }

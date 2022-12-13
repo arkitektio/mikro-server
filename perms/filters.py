@@ -12,3 +12,8 @@ class UserFilter(django_filters.FilterSet):
         lookup_expr="icontains",
         label="Search for substring of name",
     )
+    search = django_filters.CharFilter(
+        field_name="first_name",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )

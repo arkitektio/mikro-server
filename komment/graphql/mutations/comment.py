@@ -7,6 +7,7 @@ from komment import models, types
 from lok import bounced
 from komment.enums import CommentableModelsEnum, commentable_models
 import logging
+import datetime
 
 
 class DescendendInput(graphene.InputObjectType):
@@ -106,7 +107,7 @@ class CreateComment(BalderMutation):
 
         dicted_variables, mentions = recurse_parse_decendents(descendents)
 
-        users = [UserModel.objects.get(email=m["user"]) for m in mentions]
+        users = [UserModel.objects.get(id=m["user"]) for m in mentions]
 
         exp = models.Comment.objects.create(
             content_object=instance,
@@ -117,6 +118,45 @@ class CreateComment(BalderMutation):
         )
         exp.mentions.set(users)
         exp.save()
+
+        return exp
+
+    class Meta:
+        type = types.Comment
+
+
+class ResolveComment(BalderMutation):
+    """Create an Comment 
+    
+    This mutation resolves a comment. By resolving a comment, it will be marked as resolved,
+    and the user that resolved it will be set as the resolver.
+
+    (only signed in users)"""
+
+    class Arguments:
+        id = graphene.ID(
+            required=True, description="The comments id"
+        )
+        imitate = graphene.ID(description="Should we imitate the resolving by another user (requires imitate permission)", required=False)
+
+    @bounced()
+    def mutate(root, info, id, imitate=None):
+        resolver = info.context.user
+        UserModel = get_user_model()
+
+        if imitate:
+            resolver = UserModel.objects.get(id=imitate)
+            # TODO: check imitation permission
+
+
+        exp = models.Comment.objects.get(id=id)
+        #TODO: Check persmission of user to resolve comment
+        assert exp.resolved is None, "Comment is already resolved"
+
+        exp.resolved = datetime.datetime.now()
+        exp.resolved_by = resolver
+        exp.save()
+
 
         return exp
 

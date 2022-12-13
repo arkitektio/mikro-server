@@ -9,7 +9,7 @@ from grunnlag import models, types
 from grunnlag.scalars import MetricValue
 import logging
 import namegenerator
-
+from grunnlag.utils import fill_created
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,11 @@ class CreateInstrument(BalderMutation):
             required=False,
             description="Which Representaiton does this metric belong to",
         )
+        objectives = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which objectives are installed on this instrument",
+        )
         lot_number = graphene.String(required=False)
         serial_number = graphene.String(required=False)
         model = graphene.String(required=False)
@@ -52,11 +57,15 @@ class CreateInstrument(BalderMutation):
         detectors=None,
         filters=None,
         lot_number=None,
+        objectives=None,
         serial_number=None,
         model=None,
         manufacturer=None,
     ):
         creator = info.context.user
+
+
+    
 
         instrument, _ = models.Instrument.objects.update_or_create(
             dict(
@@ -67,9 +76,14 @@ class CreateInstrument(BalderMutation):
                 serial_number=serial_number,
                 model=model,
                 manufacturer=manufacturer,
+                **fill_created(info)
             ),
             name=name,
         )
+        if objectives:
+            instrument.objectives.set(objectives)
+
+
         return instrument
 
     class Meta:

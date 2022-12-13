@@ -1,6 +1,19 @@
 from doctest import ELLIPSIS
 from balder.enum import InputEnum
 from django.db.models import TextChoices
+import graphene
+
+
+
+class AcquisitionKind(graphene.Enum):
+    """ What do the multiple positions in this acquistion represent?"""
+
+    POSTION_IS_SAMPLE = "POSITION_IS_SAMPLE"
+    POSITION_IS_ROI = "POSITION_IS_IMAGE"
+    UNKNOWN = "UNKNOWN"
+
+
+
 
 
 class RepresentationVariety(TextChoices):

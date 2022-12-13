@@ -4,7 +4,7 @@ from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types
 from lok import bounced
-
+from grunnlag.utils import fill_created
 
 class CreateExperiment(BalderMutation):
     """Create an Experiment
@@ -39,7 +39,7 @@ class CreateExperiment(BalderMutation):
         )
 
         exp = models.Experiment.objects.create(
-            creator=creator, description=description, name=name
+            creator=creator, description=description, name=name, **fill_created(info)
         )
         if tags:
             exp.tags.add(*tags)
@@ -140,6 +140,81 @@ class PinExperiment(BalderMutation):
             rep.pinned_by.remove(info.context.user)
         rep.save()
         return rep
+
+    class Meta:
+        type = types.Experiment
+
+
+
+class AssociateSamples(BalderMutation):
+
+
+    class Arguments:
+        samples = graphene.List(graphene.ID, required=True)
+        experiment = graphene.ID(required=True)
+
+    @bounced()
+    def mutate(root, info, samples, experiment, **kwargs):
+        experiment = models.Experiment.objects.get(id=experiment)
+        samples = models.Sample.objects.filter(id__in=samples)
+        experiment.samples.add(*samples)
+        return experiment
+
+    class Meta:
+        type = types.Experiment
+
+class UnassociateSamples(BalderMutation):
+
+
+    class Arguments:
+        samples = graphene.List(graphene.ID, required=True)
+        experiment = graphene.ID(required=True)
+
+    @bounced()
+    def mutate(root, info, samples, experiment, **kwargs):
+        experiment = models.Experiment.objects.get(id=experiment)
+        samples = models.Sample.objects.filter(id__in=samples)
+        experiment.samples.remove(*samples)
+        experiment.save()
+        return experiment
+
+    class Meta:
+        type = types.Experiment
+        
+
+class AssociateFiles(BalderMutation):
+
+
+    class Arguments:
+        files = graphene.List(graphene.ID, required=True)
+        experiment = graphene.ID(required=True)
+
+    @bounced()
+    def mutate(root, info, files, experiment, **kwargs):
+        experiment = models.Experiment.objects.get(id=experiment)
+        files = models.OmeroFile.objects.filter(id__in=files)
+        experiment.omero_files.add(*files)
+        experiment.save()
+        return experiment
+
+    class Meta:
+        type = types.Experiment
+        
+
+class UnassociateFiles(BalderMutation):
+
+
+    class Arguments:
+        files = graphene.List(graphene.ID, required=True)
+        experiment = graphene.ID(required=True)
+
+    @bounced()
+    def mutate(root, info, files, experiment, **kwargs):
+        experiment = models.Experiment.objects.get(id=experiment)
+        files = models.OmeroFile.objects.filter(id__in=files)
+        experiment.omero_files.remove(*files)
+        experiment.save()
+        return experiment
 
     class Meta:
         type = types.Experiment

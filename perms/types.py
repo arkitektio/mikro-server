@@ -3,7 +3,7 @@ from django.contrib.auth.models import Group as GroupModel
 from balder.types.object import BalderObject
 import graphene
 from django.contrib.auth.models import Permission
-
+from lok.models import LokClient as LokClientModel, LokApp as LokAppModel
 
 class Permission(BalderObject):
     """ A Permission object
@@ -23,6 +23,20 @@ class Permission(BalderObject):
         model = Permission
 
 
+class LokApp(BalderObject):
+
+    class Meta:
+        model = LokAppModel
+
+class LokClient(BalderObject):
+
+    class Meta:
+        model = LokClientModel
+
+
+
+
+
 class User(BalderObject):
     """User
     
@@ -40,9 +54,14 @@ class User(BalderObject):
     
     """
     color = graphene.String(description="The prefered color of the user", required=True)
+    name = graphene.String(description="The name of the user", required=True)
 
     def resolve_color(root, info):
         return "#ff00ff"
+
+    def resolve_name(self, info):
+        return self.first_name + " " + self.last_name
+
 
     class Meta:
         model = get_user_model()
@@ -53,6 +72,7 @@ class User(BalderObject):
             "last_name",
             "first_name",
             "groups",
+            "sub",
         ]
 
 

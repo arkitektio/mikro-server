@@ -34,7 +34,7 @@ class CreateSample(BalderMutation):
         root,
         info,
         experiments=[],
-        name=namegenerator.gen(),
+        name=None,
         creator=None,
         tags=[],
     ):
@@ -42,7 +42,9 @@ class CreateSample(BalderMutation):
             get_user_model().objects.get(email=creator) if creator else None
         )
 
-        sample = models.Sample.objects.create(creator=creator, name=name)
+        sample = models.Sample.objects.create(
+            creator=creator, name=name or namegenerator.gen()
+        )
         if experiments:
             sample.experiments.add(*experiments)
         if tags:
@@ -146,3 +148,5 @@ class PinSample(BalderMutation):
 
     class Meta:
         type = types.Sample
+
+

@@ -37,7 +37,7 @@ class CreateFeature(BalderMutation):
         label = models.Label.objects.get(id=label)
 
         feature = models.Feature.objects.create(
-            creator=creator, label=label, key=key, value=value
+            creator=creator, label=label, key=key, value=value, **fill_created(info)
         )
 
         return feature

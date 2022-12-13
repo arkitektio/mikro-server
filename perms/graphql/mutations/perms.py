@@ -26,7 +26,7 @@ class ChangePermissionsResult(graphene.ObjectType):
 
 class UserAssignmentInput(graphene.InputObjectType):
     permissions = graphene.List(graphene.String, required=True)
-    user = graphene.String(required=True, description="The user email")
+    user = graphene.String(required=True, description="The user id")
 
 
 class GroupAssignmentInput(graphene.InputObjectType):
@@ -70,7 +70,7 @@ class ChangePermissions(BalderMutation):
             for perm in ass["permissions"]:
                 assign_perm(
                     perm,
-                    get_user_model().objects.get(email=ass["user"]),
+                    get_user_model().objects.get(id=ass["user"]),
                     instance,
                 )
 

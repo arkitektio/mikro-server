@@ -9,6 +9,8 @@ from .models import (
     Thumbnail,
     Metric,
     UserMeta,
+    Stage,
+    Position,
 )
 from guardian.admin import GuardedModelAdmin
 
@@ -103,4 +105,5 @@ admin.site.register(OmeroFile)
 admin.site.register(Omero)
 admin.site.register(Thumbnail)
 admin.site.register(Metric)
-admin.site.register(ROI)
+admin.site.register(Stage)
+admin.site.register(Position)

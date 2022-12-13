@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "mikro-server"
+version = "0.1.0"
+description = ""
+authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+balder = { version = "0.1.22", extras = ["subscription"] }
+django-storages = "^1.13.1"
+lok = "^0.2.0"
+psycopg2 = "^2.9.4"
+django-guardian = "^2.4.0"
+django-taggit = "^3.0.0"
+omegaconf = "^2.2.3"
+rich = "^12.6.0"
+django-cors-headers = "^3.13.0"
+django-health-check = "^3.17.0"
+xarray = "^2022.9.0"
+zarr = "^2.13.3"
+s3fs = { extras = ["boto3"], version = "^2022.8.2" }
+pyarrow = "^9.0.0"
+django-colorfield = "^0.7.2"
+redis = "^4.3.4"
+pydantic = "^1.10.2"
+namegenerator = "^1.0.6"
+gunicorn = "^20.1.0"
+channels-redis = "^4.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

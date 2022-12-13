@@ -49,3 +49,18 @@ class MyMentions(BalderQuery):
         type = types.Comment
         list = True
         operation = "mymentions"
+
+
+class Comment(BalderQuery):
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    def resolve(self, info, id):
+        return models.Comment.objects.get(id=id)
+
+    class Meta:
+        type = types.Comment
+        list = False
+        operation = "comment"
+
+

@@ -28,6 +28,14 @@ class Comment(models.Model):
     mentions = models.ManyToManyField(
         get_user_model(), blank=True, related_name="mentioned_in"
     )
+    resolved = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="resolved_comments",
+    )
 
 
 import komment.signals

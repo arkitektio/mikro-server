@@ -10,3 +10,6 @@ from .label import *
 from .request import *
 from .feature import *
 from .instrument import *
+from .position import *
+from .stage import *
+from .objective import *

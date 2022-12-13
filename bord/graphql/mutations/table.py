@@ -3,7 +3,7 @@ from lok import bounced
 from balder.types import BalderMutation
 import graphene
 from bord import models
-from bord.scalar import DataFrame
+from bord.scalar import ParquetInput
 from grunnlag import types
 import logging
 import namegenerator
@@ -125,7 +125,7 @@ class FromDF(BalderMutation):
             required=False,
             description="Do you want to tag the representation?",
         )
-        df = graphene.Argument(DataFrame, required=True)
+        df = graphene.Argument(ParquetInput, required=True)
 
     @bounced()
     def mutate(root, info, df, *args, creator=None, **kwargs):

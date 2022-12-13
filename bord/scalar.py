@@ -2,8 +2,9 @@ from graphql.language import ast
 from graphene import Scalar
 
 
-class DataFrame(Scalar):
-    """DateTime Scalar Description"""
+class ParquetInput(Scalar):
+    """A scalar to represent a parquet file
+    """
 
     @staticmethod
     def serialize(dt):

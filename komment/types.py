@@ -6,7 +6,7 @@ from komment.enums import CommentableModelsEnum
 from django.contrib.auth.models import Group as GroupModel
 from balder.registry import register_type
 from graphene.types.generic import GenericScalar
-
+from perms import types
 
 descendent_map = lambda: {
     "MentionDescendent": MentionDescendent,
@@ -58,10 +58,13 @@ class Leaf(graphene.ObjectType):
 @register_type
 class MentionDescendent(graphene.ObjectType):
     """A mention in the comment tree. This  is a reference to another user on the platform"""
-    user = graphene.String(description="The user that is mentioned", required=True)
+    user = graphene.Field(types.User, description="The user that is mentioned", required=True)
 
     class Meta:
         interfaces = (Node, Descendent)
+
+    def resolve_user(root, info):
+        return get_user_model().objects.get(id=root.get("user"))
 
 
 @register_type
