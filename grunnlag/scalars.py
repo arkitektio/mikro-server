@@ -2,6 +2,29 @@ import datetime
 from graphene.types import Scalar
 from graphene.types.generic import GenericScalar
 from graphql.language import ast
+from balder.types.scalars import Upload
+
+
+class ModelFile(Upload):
+    """A Model File"""
+
+
+class Model(Scalar):
+    """ A model"""
+
+    @staticmethod
+    def serialize(dt):
+        return dt
+
+    @staticmethod
+    def parse_literal(node):
+        if isinstance(node, ast.StringValue):
+            return node.value
+
+    @staticmethod
+    def parse_value(value):
+        return value
+
 
 
 class XArrayInput(Scalar):

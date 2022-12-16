@@ -7,7 +7,7 @@ import graphene
 from grunnlag.enums import RoiTypeInput
 from grunnlag import models, types
 from grunnlag.scalars import FeatureValue
-
+from grunnlag.utils import fill_created
 
 class CreateFeature(BalderMutation):
     """Creates a Feature

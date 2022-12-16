@@ -205,6 +205,14 @@ class LabelFilter(AppFilterMixin, django_filters.FilterSet):
         label="Search for substring of name",
     )
 
+class ImageToImageModelFilter(AppFilterMixin, django_filters.FilterSet):
+    creator = django_filters.NumberFilter(field_name="creator")
+    name = django_filters.CharFilter(
+        field_name="name",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+
 class FeatureFilter(AppFilterMixin, django_filters.FilterSet):
     label = django_filters.ModelChoiceFilter(
         queryset=Label.objects.all(), field_name="label", label="The corresponding label that you want to filter by"

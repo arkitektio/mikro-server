@@ -13,6 +13,13 @@ class AcquisitionKind(graphene.Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class ModelKind(graphene.Enum):
+    """ What format is the model in?"""
+    ONNX = "ONNX"
+    TENSORFLOW = "TENSORFLOW"
+    PYTORCH = "PYTORCH"
+    UNKNOWN = "UNKNOWN"
+
 
 
 
@@ -31,6 +38,9 @@ class OmeroFileType(TextChoices):
     MSR = "MSR", "MSR File"
     CZI = "CZI", "Zeiss Microscopy File"
     UNKNWON = "UNKNOWN", "Unwknon File Format"
+
+
+
 
 
 class RoiType(TextChoices):

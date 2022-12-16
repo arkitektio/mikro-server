@@ -13,3 +13,4 @@ from .instrument import *
 from .position import *
 from .stage import *
 from .objective import *
+from .model import *

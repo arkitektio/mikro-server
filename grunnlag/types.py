@@ -4,7 +4,7 @@ from django.db.models import FileField
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
-from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store
+from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store, Model
 from grunnlag.omero import (
     Channel,
     ImagingEnvironment,
@@ -31,7 +31,7 @@ from taggit.managers import TaggableManager
 from taggit.models import Tag
 from graphene_django.converter import convert_django_field
 from django.conf import settings
-from grunnlag.enums import OmeroFileType, AcquisitionKind
+from grunnlag.enums import OmeroFileType, AcquisitionKind, ModelKind
 from bord import models as bordmodels
 import logging
 from grunnlag.graphql.utils import AvailableModelsEnum
@@ -375,3 +375,16 @@ class Feature(BalderObject):
     class Meta:
         model = models.Feature
         description = models.Feature.__doc__
+
+
+class ImageToImageModel(BalderObject):
+    kind = graphene.Field(ModelKind, description="The kind of model")
+    data = graphene.Field(Model, description="The model data")
+
+    def resolve_data(root, info, *args, **kwargs):
+        return root.data.url if root.data else None
+
+
+    class Meta:
+        model = models.ImageToImageModel
+        description = models.ImageToImageModel.__doc__

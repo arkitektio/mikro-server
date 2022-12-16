@@ -94,6 +94,10 @@ class OmeroFileField(models.FileField):
     pass
 
 
+class ModelDataField(models.FileField):
+    pass
+
+
 class Experiment(CreatedThroughMixin, models.Model):
     """
     An experiment is a collection of samples and their representations.
@@ -220,6 +224,47 @@ class OmeroFile(CreatedThroughMixin, models.Model):
         help_text="The user that created/uploaded the file",
     )
     tags = TaggableManager(help_text="Tags for the file")
+
+
+
+class Model(CreatedThroughMixin, models.Model):
+    """A
+
+    Mikro uses the omero-meta data to create representations of the file. See Representation for more information."""
+
+    kind = models.CharField(
+        max_length=400,
+        help_text="The kind of the model (e.g. Pytorch, Tensorflow, etc.)",
+    )
+    experiments = models.ManyToManyField(
+        Experiment,
+        help_text="The experiment this model belongs to",
+        null=True,
+        blank=True,
+        related_name="models",
+    )
+    data = ModelDataField(
+        upload_to="models",
+        null=True,
+        storage=PrivateMediaStorage(),
+        blank=True,
+        help_text="The model",
+    )
+    name = models.CharField(max_length=400, help_text="The name of the model")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the file was created"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that created/uploaded the file",
+    )
+
+class ImageToImageModel(Model):
+    training_data = models.ManyToManyField("Representation", related_name="training_data")
+    tags = TaggableManager(help_text="Tags for the model")
 
 
 class Sample(CreatedThroughMixin, models.Model):
