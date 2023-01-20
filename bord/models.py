@@ -24,11 +24,8 @@ class Table(models.Model):
 
 
 
-    representation = models.ForeignKey(
+    rep_origins = models.ManyToManyField(
         Representation,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name="tables",
         help_text="The Representation this Table belongs to",
     )

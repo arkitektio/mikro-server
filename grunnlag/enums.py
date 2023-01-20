@@ -5,6 +5,13 @@ import graphene
 
 
 
+
+
+
+
+
+
+
 class AcquisitionKind(graphene.Enum):
     """ What do the multiple positions in this acquistion represent?"""
 

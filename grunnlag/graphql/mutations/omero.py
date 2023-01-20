@@ -16,14 +16,15 @@ class UploadOmeroFile(BalderMutation):
     class Arguments:
         file = ImageFile(required=True)
         name = graphene.String(required=False)
+        experiments = graphene.List(graphene.ID, required=False)
 
     @bounced()
-    def mutate(root, info, *args, file=None, name=None):
+    def mutate(root, info, *args, file=None, name=None, experiments=None, **kwargs):
         # do something with your file
 
         filename: str = ntpath.basename(file.name)
         ending = filename.split(".")[-1]
-        name = name or filename.split(".")[0]
+        name = name or filename.split("/")[-1]
 
         if ending in ["tiff", "tif", "TIF"]:
             filetype = OmeroFileType.TIFF
@@ -37,6 +38,9 @@ class UploadOmeroFile(BalderMutation):
         t = models.OmeroFile.objects.create(
             file=file, name=name, creator=info.context.user, type=filetype
         )
+
+        if experiments:
+            t.experiments.set(experiments)
 
         return t
 

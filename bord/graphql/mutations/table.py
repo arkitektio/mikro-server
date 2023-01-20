@@ -104,7 +104,8 @@ class FromDF(BalderMutation):
             required=False,
             description="Which sample does this table belong to",
         )
-        representation = graphene.ID(
+        rep_origins = graphene.List(
+            graphene.ID,
             required=False,
             description="Which sample does this table belong to",
         )
@@ -131,7 +132,7 @@ class FromDF(BalderMutation):
     def mutate(root, info, df, *args, creator=None, **kwargs):
 
         sampleid = kwargs.pop("sample", None)
-        repid = kwargs.pop("representation", None)
+        repids = kwargs.pop("rep_origins", None)
         expid = kwargs.pop("experiment", None)
         name = kwargs.pop("name", namegenerator.gen())
         tags = kwargs.pop("tags", [])
@@ -142,11 +143,13 @@ class FromDF(BalderMutation):
         tab = models.Table.objects.create(
             name=name,
             sample_id=sampleid,
-            representation_id=repid,
             experiment_id=expid,
             creator=creator,
             store=df,
         )
+
+        if repids:
+            tab.rep_origins.add(*repids)
 
         if tags:
             tab.tags.add(*tags)

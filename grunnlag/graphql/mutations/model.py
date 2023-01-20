@@ -13,7 +13,7 @@ from grunnlag.utils import fill_created
 
 logger = logging.getLogger(__name__)
 
-class CreateImageToImageModel(BalderMutation):
+class CreateModel(BalderMutation):
     """Creates an Instrument
     
     This mutation creates an Instrument and returns the created Instrument.
@@ -24,7 +24,7 @@ class CreateImageToImageModel(BalderMutation):
         data = ModelFile(required=True, description="The model")
         kind = graphene.Argument(ModelKind, required=True, description="Which kind of model is this?")
         name = graphene.String(required=True)
-        training_data = graphene.List(graphene.ID, required=False, description="Which training data does this model use?")
+        contexts = graphene.List(graphene.ID, required=False, description="Which training data does this model use?")
         experiments = graphene.List(graphene.ID, required=False, description="Which training data does this model use?")
 
     @bounced()
@@ -34,19 +34,20 @@ class CreateImageToImageModel(BalderMutation):
         data=None,
         kind=None,
         name=None,
-        training_data=None,
+        contexts=None,
         experiments=None,
     ):
-        instrument= models.ImageToImageModel.objects.create(
+        model= models.Model.objects.create(
             kind=kind, data=data, name=name, **fill_created(info),
         )
-        if training_data:
-            instrument.training_data.set(training_data)
-        if experiments:
-            instrument.experiments.set(experiments)
+        if contexts:
+            model.contexts.set(contexts)
 
-        instrument.save()
-        return instrument
+        if experiments:
+            model.experiments.set(experiments)
+
+        model.save()
+        return model
 
     class Meta:
-        type = types.ImageToImageModel
+        type = types.Model

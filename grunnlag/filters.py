@@ -13,15 +13,17 @@ from .models import (
     Representation,
     Sample,
     Stage,
+    Context,
 )
 from .enums import RepresentationVariety, RepresentationVarietyInput, RoiTypeInput
+from .linke import LinkableModels, linkable_models
 from django import forms
 from graphene_django.forms.converter import convert_form_field
 from balder.filters import EnumFilter, MultiEnumFilter
 import json
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-
+from django.contrib.contenttypes.models import ContentType
 class PinnedFilterMixin(django_filters.FilterSet):
 
     pinned = django_filters.BooleanFilter(
@@ -84,6 +86,16 @@ class EnumFilter(django_filters.CharFilter):
             return qs.filter(**{self.field_name: value})
         return qs
 
+
+class LinkableModelsFilter(EnumFilter):
+    
+    def filter(self, qs, value):
+        """Convert the filter value to a primary key before filtering"""
+        if value:
+            ct = ContentType.objects.get_for_model(linkable_models[value])
+            print(ct, self.field_name)
+            return qs.filter(**{self.field_name: ct})
+        return qs
 
 class IDChoiceField(forms.JSONField):
     def __init__(self, *args, **kwargs) -> None:
@@ -157,6 +169,48 @@ class ExperimentFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterS
         label="The tags you want to filter by", field_name="tags__name"
     )
 
+class ContextFilter(PinnedFilterMixin, AppFilterMixin, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
+    order = django_filters.OrderingFilter(fields={"created_at": "time"})
+    tags = django_filters.BaseInFilter(
+        label="The tags you want to filter by", field_name="tags__name"
+    )
+
+class DataLinkFilter(django_filters.FilterSet):
+    relation = django_filters.CharFilter(
+        field_name="relation", lookup_expr='iexact', label="Search for relationship of name"
+    )
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr=("gt"),
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at", lookup_expr=("lt")
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
+    context = django_filters.ModelChoiceFilter(
+        field_name="context", queryset=Context.objects.all()
+    )
+    order = django_filters.OrderingFilter(fields={"created_at": "time"})
+
+    x_type = LinkableModelsFilter(type=LinkableModels, field_name="x_content_type")
+    y_type = LinkableModelsFilter(type=LinkableModels, field_name="y_content_type")
+
+
 
 class ThumbnailFilter(AppFilterMixin, django_filters.FilterSet):
     name = django_filters.CharFilter(
@@ -205,12 +259,15 @@ class LabelFilter(AppFilterMixin, django_filters.FilterSet):
         label="Search for substring of name",
     )
 
-class ImageToImageModelFilter(AppFilterMixin, django_filters.FilterSet):
+class ModelFilter(AppFilterMixin, django_filters.FilterSet):
     creator = django_filters.NumberFilter(field_name="creator")
     name = django_filters.CharFilter(
         field_name="name",
         lookup_expr="icontains",
         label="Search for substring of name",
+    )
+    contexts = django_filters.ModelChoiceFilter(
+        queryset=Context.objects.all(), field_name="contexts"
     )
 
 class FeatureFilter(AppFilterMixin, django_filters.FilterSet):

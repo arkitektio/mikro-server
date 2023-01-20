@@ -4,7 +4,7 @@ from django.db.models import FileField
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
-from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store, Model
+from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store, ModelData
 from grunnlag.omero import (
     Channel,
     ImagingEnvironment,
@@ -20,6 +20,7 @@ from grunnlag.filters import (
     RepresentationFilter,
     SampleFilter,
     OmeroFilter,
+    DataLinkFilter,
 )
 from bord.enums import PandasDType
 from balder.fields.filtered import BalderFiltered
@@ -38,7 +39,7 @@ from grunnlag.graphql.utils import AvailableModelsEnum
 from django.contrib.auth.models import Group as GroupModel
 from balder.registry import register_type
 from komment.types import Comment
-
+from .linke import LinkableModels, linkable_models, reverse_linkable_models
 
 class Tag(BalderObject):
     class Meta:
@@ -83,6 +84,10 @@ class Node(graphene.ObjectType):
 
 class Metric(BalderObject):
     value = MetricValue(description="Value")
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     class Meta:
         model = models.Metric
@@ -123,7 +128,7 @@ class Table(BalderObject):
     query = graphene.List(
         GenericScalar,
         description="List of Records",
-        only=graphene.List(
+        columns=graphene.List(
             graphene.String, description="Columns you want to select", required=False
         ),
         offset=graphene.Int(required=False, description="The Offset for the query"),
@@ -134,10 +139,11 @@ class Table(BalderObject):
     columns = graphene.List(
         Column,
         description="Columns Data",
-        only=graphene.List(
+        filter=graphene.List(
             graphene.String, description="Columns you want to select", required=False
         ),
     )
+    comments = graphene.List(Comment)
     pinned = graphene.Boolean(description="Is the table pinned by the active user")
 
     def resolve_pinned(root, info, *args, **kwargs):
@@ -148,7 +154,6 @@ class Table(BalderObject):
 
     def resolve_query(root, info, *args, columns=[], offset=0, limit=200, query=None):
         pd_thing = root.store.data.read_pandas().to_pandas()
-        logging.error(pd_thing)
         pd_thing = pd_thing[columns] if columns else pd_thing
 
         if query:
@@ -165,9 +170,42 @@ class Table(BalderObject):
             else [el for el in columns_data if el["field_name"] in only]
         )
 
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
+
     class Meta:
         model = bordmodels.Table
         description = bordmodels.Table.__doc__
+
+
+
+
+class Context(BalderObject):
+
+    class Meta:
+        model = models.Context
+        description = models.Context.__doc__
+
+
+
+class DataLink(BalderObject):
+    relation = graphene.String(description="Relation")
+    x = graphene.Field(lambda: GenericObject, description="X")
+    y = graphene.Field(lambda: GenericObject, description="Y")
+    left_type = graphene.Field(LinkableModels, description="Left Type")
+    right_type = graphene.Field(LinkableModels, description="Left Type")
+
+
+
+    class Meta:
+        model = models.DataLink
+        description = models.DataLink.__doc__
+
+class LinkRelation:
+    pass
+
+
+
 
 
 class Omero(BalderObject):
@@ -178,6 +216,10 @@ class Omero(BalderObject):
     acquisition_date = graphene.DateTime()
     imaging_environment = graphene.Field(ImagingEnvironment)
     objective_settings = graphene.Field(ObjectiveSettings)
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     class Meta:
         model = models.Omero
@@ -192,6 +234,10 @@ class Instrument(BalderObject):
         related_field="omeros",
         description="Associated images through Omero",
     )
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
     
     class Meta:
         model = models.Instrument
@@ -204,12 +250,16 @@ class Objective(BalderObject):
         related_field="omeros",
         description="Associated images through Omero",
     )
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     class Meta:
         model = models.Objective
         description = models.Objective.__doc__
 
-class Representation(BalderObject):
+class Representation(LinkRelation, BalderObject):
 
     identifier: str = graphene.String(description="The Arkitekt identifier")
     metrics = BalderFilteredWithOffset(
@@ -268,6 +318,10 @@ class Sample(BalderObject):
         description="Associated representations of this Sample",
     )
     pinned = graphene.Boolean()
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -283,6 +337,10 @@ class Experiment(BalderObject):
         Sample, filterset_class=SampleFilter, related_field="samples"
     )
     pinned = graphene.Boolean()
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -304,6 +362,10 @@ class Stage(BalderObject):
     kind = graphene.Field(AcquisitionKind, description="The kind of acquisition")
     pinned = graphene.Boolean(description="Is the table pinned by the active user")
     physical_size = graphene.List(graphene.Float, description="The physical size of the stage")
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -320,6 +382,10 @@ class Position(BalderObject):
         related_field="omeros",
         description="Associated images through Omero",
     )
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -334,6 +400,10 @@ class ROI(BalderObject):
     vectors = graphene.List(Vector, description="The vectors of the ROI")
 
     pinned = graphene.Boolean(description="Is the ROI pinned by the active user")
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -355,8 +425,12 @@ class Label(BalderObject):
         lambda: Feature,
         key=graphene.String(required=True),
     )
+    comments = graphene.List(Comment)
 
     pinned = graphene.Boolean()
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
@@ -371,20 +445,34 @@ class Label(BalderObject):
 
 class Feature(BalderObject):
     value = FeatureValue(description="Value")
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     class Meta:
         model = models.Feature
         description = models.Feature.__doc__
 
 
-class ImageToImageModel(BalderObject):
+class Model(BalderObject):
     kind = graphene.Field(ModelKind, description="The kind of model")
-    data = graphene.Field(Model, description="The model data")
+    data = graphene.Field(ModelData, description="The model data")
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
 
     def resolve_data(root, info, *args, **kwargs):
         return root.data.url if root.data else None
 
 
     class Meta:
-        model = models.ImageToImageModel
-        description = models.ImageToImageModel.__doc__
+        model = models.Model
+        description = models.Model.__doc__
+
+
+
+class GenericObject(graphene.Union):
+    class Meta:
+        types = (Representation, ROI, Feature, Label, Model, Sample, Experiment, Stage, Position)

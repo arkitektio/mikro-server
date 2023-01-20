@@ -49,6 +49,13 @@ class CreatedThroughMixin(models.Model):
 
 
 
+class CommentableMixin(models.Model):
+    comments = GenericRelation(Comment, help_text="Comments on the experiment")
+
+    class Meta:
+        abstract = True
+
+
 class UserMeta(models.Model):
     user = models.OneToOneField(
         get_user_model(), blank=True, on_delete=models.CASCADE, related_name="meta"
@@ -59,7 +66,7 @@ class UserMeta(models.Model):
         return f"User Meta for {self.user}"
 
 
-class Antibody(CreatedThroughMixin, models.Model):
+class Antibody(CreatedThroughMixin, CommentableMixin, models.Model):
 
     name = models.CharField(max_length=100)
     creator = models.ForeignKey(get_user_model(), blank=True, on_delete=models.CASCADE)
@@ -69,7 +76,7 @@ class Antibody(CreatedThroughMixin, models.Model):
 
 
 
-class Objective(CreatedThroughMixin, models.Model):
+class Objective(CreatedThroughMixin, CommentableMixin,  models.Model):
     serial_number = models.CharField(max_length=1000, unique=True)
     name = models.CharField(max_length=1000, unique=True)
     magnification = models.FloatField()
@@ -78,7 +85,7 @@ class Objective(CreatedThroughMixin, models.Model):
 
 
 
-class Instrument(CreatedThroughMixin, models.Model):
+class Instrument(CreatedThroughMixin,  CommentableMixin, models.Model):
     name = models.CharField(max_length=1000, unique=True)
     detectors = models.JSONField(null=True, blank=True, default=list)
     dichroics = models.JSONField(null=True, blank=True, default=list)
@@ -98,7 +105,13 @@ class ModelDataField(models.FileField):
     pass
 
 
-class Experiment(CreatedThroughMixin, models.Model):
+
+
+
+
+
+
+class Experiment(CreatedThroughMixin,  CommentableMixin, models.Model):
     """
     An experiment is a collection of samples and their representations.
     It mimics the concept of an experiment in the lab and is the top level
@@ -153,7 +166,63 @@ class Experiment(CreatedThroughMixin, models.Model):
     tags = TaggableManager(help_text="Tags for the experiment")
 
 
-class ExperimentalGroup(CreatedThroughMixin, models.Model):
+
+class Context(CreatedThroughMixin, CommentableMixin, models.Model):
+    name = models.CharField(max_length=1000, help_text="The name of the context")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the context was created"
+    )
+    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="contexts", null=True, blank=True)
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that created the context",
+    )
+    pinned_by = models.ManyToManyField(
+        get_user_model(),
+        related_name="pinned_contexts",
+        blank=True,
+        help_text="The users that have pinned the context",
+    )
+    tags = TaggableManager(help_text="Tags for the context")
+
+    def __str__(self) -> str:
+        return self.name
+
+class DataLink(models.Model):
+    x_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="x_content_type")
+    x_id = models.PositiveIntegerField()
+    y_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="y_content_type")
+    y_id = models.PositiveIntegerField()
+    x = GenericForeignKey(ct_field="x_content_type", fk_field="x_id")
+    y = GenericForeignKey(ct_field="y_content_type", fk_field="y_id")
+    relation = models.CharField(max_length=1000, help_text="The relation between the two objects")
+    left_type = models.CharField(max_length=1000, help_text="The type of the left object")
+    right_type = models.CharField(max_length=1000, help_text="The type of the right object")
+    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name="links", null=True, blank=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the sample was created"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that created the sample",
+    )
+
+    class Meta:
+        permissions = [("can_link", "Can link objects")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("x_content_type", "x_id", "y_content_type", "y_id", "relation", "context"),
+                name="Only one relationship of the same kind between two objects in the same context",
+            )
+        ]
+
+class ExperimentalGroup(CreatedThroughMixin, CommentableMixin,  models.Model):
     """A group of samples that are part of the same experimental group"""
 
     name = models.CharField(max_length=200, help_text="The experimental groups name")
@@ -171,7 +240,7 @@ class ExperimentalGroup(CreatedThroughMixin, models.Model):
     )
 
 
-class Animal(CreatedThroughMixin, models.Model):
+class Animal(CreatedThroughMixin, CommentableMixin, models.Model):
     """An animal is a living organism that is part of an experiment"""
 
     name = models.CharField(max_length=100)
@@ -185,8 +254,10 @@ class Animal(CreatedThroughMixin, models.Model):
         ExperimentalGroup, blank=True, on_delete=models.CASCADE, null=True
     )
 
+    comments = GenericRelation(Comment, help_text="Comments on the experiment")
 
-class OmeroFile(CreatedThroughMixin, models.Model):
+
+class OmeroFile(CreatedThroughMixin, CommentableMixin, models.Model):
     """An OmeroFile is a file that contains omero-meta data. It is the raw file that was generated
     by the microscope.
 
@@ -225,9 +296,10 @@ class OmeroFile(CreatedThroughMixin, models.Model):
     )
     tags = TaggableManager(help_text="Tags for the file")
 
+    comments = GenericRelation(Comment, help_text="Comments on the experiment")
 
 
-class Model(CreatedThroughMixin, models.Model):
+class Model(CreatedThroughMixin, CommentableMixin, models.Model):
     """A
 
     Mikro uses the omero-meta data to create representations of the file. See Representation for more information."""
@@ -261,13 +333,24 @@ class Model(CreatedThroughMixin, models.Model):
         blank=True,
         help_text="The user that created/uploaded the file",
     )
+    contexts = models.ManyToManyField(
+        Context,
+        help_text="The contexts this model is valid for",
+        null=True,
+        blank=True,
+        related_name="models",
+    )
 
-class ImageToImageModel(Model):
-    training_data = models.ManyToManyField("Representation", related_name="training_data")
-    tags = TaggableManager(help_text="Tags for the model")
 
 
-class Sample(CreatedThroughMixin, models.Model):
+
+
+
+
+
+
+
+class Sample(CreatedThroughMixin, CommentableMixin, models.Model):
     """Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure), was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample"""
 
     meta = models.JSONField(null=True, blank=True)
@@ -317,7 +400,7 @@ class Sample(CreatedThroughMixin, models.Model):
         super(Sample, self).delete(*args, **kwargs)
 
 # TODO: Rename Stage
-class Stage(CreatedThroughMixin, models.Model):
+class Stage(CreatedThroughMixin, CommentableMixin, models.Model):
     """An Stage is a set of positions that share a common space on a microscope and can
     be use to translate.
     
@@ -346,7 +429,7 @@ class Stage(CreatedThroughMixin, models.Model):
     tags = TaggableManager()
 
 
-class Position(CreatedThroughMixin, models.Model):
+class Position(CreatedThroughMixin, CommentableMixin, models.Model):
     """The relative position of a sample on a microscope stage"""
 
     #Should be stage
@@ -375,7 +458,7 @@ class Position(CreatedThroughMixin, models.Model):
 
 
 
-class Representation(CreatedThroughMixin, Matrise):
+class Representation(CreatedThroughMixin,  CommentableMixin,Matrise):
     """A Representation is 5-dimensional representation of an image
 
     Mikro stores each image as a 5-dimensional representation. The dimensions are:
@@ -442,6 +525,13 @@ class Representation(CreatedThroughMixin, Matrise):
         null=True,
         blank=True,
     )
+    experiments = models.ManyToManyField(
+        Experiment,
+        blank=True,
+        null=True,
+        related_name="experiments",
+        help_text="The experiments this image belongs to",
+    )
     description = models.CharField(max_length=1000, null=True, blank=True)
     variety = models.CharField(
         max_length=400,
@@ -454,6 +544,8 @@ class Representation(CreatedThroughMixin, Matrise):
         get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True
     )
     comments = GenericRelation(Comment, help_text="Comments on the representation")
+    x = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="x_content_type", object_id_field="x_id")
+    y = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="y_content_type", object_id_field="y_id")
     pinned_by = models.ManyToManyField(
         get_user_model(),
         related_name="pinned_representations",
@@ -466,12 +558,6 @@ class Representation(CreatedThroughMixin, Matrise):
 
     class Meta:
         permissions = [("download_representation", "Can download Presentation")]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["name", "sample"],
-                name="Only one unique iamge per sample",
-            )
-        ]
 
     def __str__(self):
         return f"Representation: {self.name}"
@@ -480,7 +566,7 @@ class Representation(CreatedThroughMixin, Matrise):
 
 
 # TODO: Rename Context
-class Omero(CreatedThroughMixin, models.Model):
+class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
 
 
     """Omero is a through model that stores the real world context of an image
@@ -508,7 +594,7 @@ class Omero(CreatedThroughMixin, models.Model):
     )
 
 
-class Metric(CreatedThroughMixin, models.Model):
+class Metric(CreatedThroughMixin, CommentableMixin, models.Model):
     """A Metric is a single (scalar) value that is associated with a representation, sample or experiment.
 
     It can be used to store any kind of value that is associated with a sample or experiment, representation.
@@ -561,7 +647,7 @@ class Metric(CreatedThroughMixin, models.Model):
 
 
 
-class Thumbnail(CreatedThroughMixin, models.Model):
+class Thumbnail(CreatedThroughMixin,  CommentableMixin,models.Model):
     """A Thumbnail is a render of a representation that is used to display the representation in the UI.
 
     Thumbnails can also store the major color of the representation. This is used to color the representation in the UI.
@@ -580,7 +666,7 @@ class Thumbnail(CreatedThroughMixin, models.Model):
     major_color = models.CharField(max_length=100, null=True, blank=True)
 
 
-class ROI(CreatedThroughMixin, models.Model):
+class ROI(CreatedThroughMixin,  CommentableMixin,models.Model):
     """A ROI is a region of interest in a representation.
 
     This region is to be regarded as a view on the representation. Depending
@@ -623,6 +709,9 @@ class ROI(CreatedThroughMixin, models.Model):
         related_name="rois",
         help_text="The Representation this ROI was original used to create (drawn on)",
     )
+    x = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="x_content_type", object_id_field="x_id")
+    y = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="y_content_type", object_id_field="y_id")
+    
     label = models.CharField(
         max_length=1000,
         null=True,
@@ -648,7 +737,7 @@ class ROI(CreatedThroughMixin, models.Model):
         return f"ROI creatsed by {self.creator.username} on {self.representation.name}"
 
 
-class Label(CreatedThroughMixin, models.Model):
+class Label(CreatedThroughMixin, CommentableMixin, models.Model):
     """A Label is a trough model for image and features.
 
     Its map an instance value of a representation
@@ -709,7 +798,7 @@ class Label(CreatedThroughMixin, models.Model):
         ]
 
 
-class Feature(CreatedThroughMixin, models.Model):
+class Feature(CreatedThroughMixin,  CommentableMixin,models.Model):
     """A Feature is a numerical key value pair that is attached to a Label.
 
     You can model it for example as a key value pair of a class instance of a segmentation mask.

@@ -97,6 +97,11 @@ class FromXArray(BalderMutation):
             required=False,
             description="A cleartext description what this representation represents as data",
         )
+        experiments = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which experiments does this representation belong to",
+        )
         creator = graphene.String(
             required=False,
             description="The Email of the user creating the Representation (only for backend apps)",
@@ -141,6 +146,7 @@ class FromXArray(BalderMutation):
         omero = kwargs.pop("omero", None)
         xarray = kwargs.pop("xarray", None)
         origins = kwargs.pop("origins", None)
+        experiments = kwargs.pop("experiments", None)
         file_origins = kwargs.pop("file_origins", None)
         roi_origins = kwargs.pop("roi_origins", None)
 
@@ -182,9 +188,9 @@ class FromXArray(BalderMutation):
         if tags:
             rep.tags.add(*tags)
         if origins:
-
-
             rep.origins.add(*origins)
+        if experiments:
+            rep.experiments.add(*experiments)
         if file_origins:
             rep.file_origins.add(*file_origins)
 

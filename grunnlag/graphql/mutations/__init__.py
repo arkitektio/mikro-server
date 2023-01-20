@@ -12,5 +12,8 @@ from .instrument import CreateInstrument
 from .stage import CreateStage
 from .position import CreatePosition
 from .objective import CreateObjective
-from .model import CreateImageToImageModel
-__all__ = [ "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition"]
+from .model import CreateModel
+from .link import Link
+from .context import CreateContext, DeleteContext
+
+__all__ = [ "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition", "Link"]

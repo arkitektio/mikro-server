@@ -11,6 +11,7 @@ from .models import (
     UserMeta,
     Stage,
     Position,
+    DataLink,
 )
 from guardian.admin import GuardedModelAdmin
 
@@ -107,3 +108,4 @@ admin.site.register(Thumbnail)
 admin.site.register(Metric)
 admin.site.register(Stage)
 admin.site.register(Position)
+admin.site.register(DataLink)

@@ -2,11 +2,11 @@ import graphene
 from grunnlag import types, models
 from balder.types.query.base import BalderQuery
 from grunnlag.filters import (
-    ImageToImageModelFilter,
+    ModelFilter,
 )
 
 
-class ImageToImageModels(BalderQuery):
+class Models(BalderQuery):
     """All Labels
     
     This query returns all Labels that are stored on the platform
@@ -17,13 +17,27 @@ class ImageToImageModels(BalderQuery):
 
     class Meta:
         list = True
-        type = types.ImageToImageModel
-        filter = ImageToImageModelFilter
+        type = types.Model
+        filter = ModelFilter
         paginate = True
-        operation = "imageToImageModels"
+        operation = "models"
+
+class MyModels(BalderQuery):
+    """My Experiments runs a fast query on the database to return all
+    Experiments that the user has created. This query is faster than
+    the `experiments` query, but it does not return all Experiments that
+    the user has access to."""
+
+    class Meta:
+        list = True
+        personal = "created_by"
+        type = types.Model
+        filter = ModelFilter
+        paginate = True
+        operation = "mymodels"
 
 
-class ImageToImageModel(BalderQuery):
+class Model(BalderQuery):
     """Get a single label by ID
     
     Returns a single label by ID. If the user does not have access
@@ -34,9 +48,9 @@ class ImageToImageModel(BalderQuery):
 
     def resolve(root, info, id):
 
-        return models.ImageToImageModel.objects.get(id=id)
+        return models.Model.objects.get(id=id)
 
     class Meta:
-        type = types.ImageToImageModel
-        operation = "imageToImageModel"
+        type = types.Model
+        operation = "model"
 

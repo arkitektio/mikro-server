@@ -9,7 +9,7 @@ class ModelFile(Upload):
     """A Model File"""
 
 
-class Model(Scalar):
+class ModelData(Scalar):
     """ A model"""
 
     @staticmethod
