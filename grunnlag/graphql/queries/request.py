@@ -7,12 +7,26 @@ from django.conf import settings
 import logging
 
 logger = logging.getLogger(__name__)
+import boto3
+import json
+
+sts = boto3.client('sts', 
+    endpoint_url='http://minio:9000',
+    region_name='us-east-1',
+    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+    aws_session_token=None,
+    config=boto3.session.Config(signature_version='s3v4'),
+    verify=False
+)
+
 
 
 class Credentials(graphene.ObjectType):
     status: str = graphene.String()
     access_key: str = graphene.String()
     secret_key: str = graphene.String()
+    session_token: str = graphene.String()
 
 
 class Request(BalderQuery):
@@ -24,20 +38,36 @@ class Request(BalderQuery):
 
     @classmethod
     def resolve(cls, root, info, id=None):
-        import boto3
 
-        client = boto3.client(
-            "sts",
-            region_name="us-west-2",
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        )
-
-        return {
-            "access_key": settings.AWS_ACCESS_KEY_ID,
-            "secret_key": settings.AWS_SECRET_ACCESS_KEY,
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "AllowAllS3ActionsInUserFolder",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": ["s3:*"],
+                    "Resource": f"arn:aws:s3:::*"
+                },
+            ]
         }
+
+        response = sts.assume_role(
+                RoleArn='arn:xxx:xxx:xxx:xxxx',
+                RoleSessionName='sdfsdfsdf',
+                Policy=json.dumps(policy, separators=(',',':')),
+                DurationSeconds=3600
+            )
+
+        print(response)
+
+        aws =  {
+            "access_key": response["Credentials"]["AccessKeyId"],
+            "secret_key": response["Credentials"]["SecretAccessKey"],
+            "session_token": response["Credentials"]["SessionToken"],
+        }
+
+        return  aws
 
     class Meta:
         type = Credentials

@@ -26,6 +26,8 @@ class CreateObjective(BalderMutation):
         serial_number = graphene.String(required=True)
         magnification = graphene.Float(required=True)
         manufacturer = graphene.String(required=False)
+        na = graphene.Float(required=False)
+        immersion = graphene.String(required=False)
 
     @bounced()
     def mutate(
@@ -34,12 +36,16 @@ class CreateObjective(BalderMutation):
         name,
         serial_number,
         magnification,
+        na =None,
+        immersion=None,
         manufacturer=None,
     ):
         instrument, _ = models.Objective.objects.update_or_create(
             serial_number=serial_number, defaults=dict(
             name=name,
             magnification=magnification,
+            na=na,
+            immersion=immersion,
             **fill_created(info)
             )
         )

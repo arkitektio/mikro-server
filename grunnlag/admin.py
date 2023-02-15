@@ -11,6 +11,7 @@ from .models import (
     UserMeta,
     Stage,
     Position,
+    Dataset,
     DataLink,
 )
 from guardian.admin import GuardedModelAdmin
@@ -106,6 +107,7 @@ admin.site.register(OmeroFile)
 admin.site.register(Omero)
 admin.site.register(Thumbnail)
 admin.site.register(Metric)
+admin.site.register(Dataset)
 admin.site.register(Stage)
 admin.site.register(Position)
 admin.site.register(DataLink)

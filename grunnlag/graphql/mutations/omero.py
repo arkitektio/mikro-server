@@ -17,9 +17,10 @@ class UploadOmeroFile(BalderMutation):
         file = ImageFile(required=True)
         name = graphene.String(required=False)
         experiments = graphene.List(graphene.ID, required=False)
+        datasets = graphene.List(graphene.ID, required=False)
 
     @bounced()
-    def mutate(root, info, *args, file=None, name=None, experiments=None, **kwargs):
+    def mutate(root, info, *args, file=None, name=None, experiments=None, datasets=None,  **kwargs):
         # do something with your file
 
         filename: str = ntpath.basename(file.name)
@@ -41,6 +42,9 @@ class UploadOmeroFile(BalderMutation):
 
         if experiments:
             t.experiments.set(experiments)
+
+        if datasets:
+            t.datasets.set(datasets)
 
         return t
 

@@ -40,7 +40,7 @@ from django.contrib.auth.models import Group as GroupModel
 from balder.registry import register_type
 from komment.types import Comment
 from .linke import LinkableModels, linkable_models, reverse_linkable_models
-
+from grunnlag.scalars import AffineMatrix
 class Tag(BalderObject):
     class Meta:
         model = Tag
@@ -178,6 +178,17 @@ class Table(BalderObject):
         description = bordmodels.Table.__doc__
 
 
+class Dataset(BalderObject):
+
+    pinned = graphene.Boolean(description="Is the table pinned by the active user")
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
+
+    class Meta:
+        model = models.Dataset
+        description = models.Dataset.__doc__
+
 
 
 class Context(BalderObject):
@@ -214,6 +225,7 @@ class Omero(BalderObject):
     physical_size = graphene.Field(PhysicalSize)
     scale = graphene.List(graphene.Float)
     acquisition_date = graphene.DateTime()
+    affine_transformation = AffineMatrix()
     imaging_environment = graphene.Field(ImagingEnvironment)
     objective_settings = graphene.Field(ObjectiveSettings)
     comments = graphene.List(Comment)
@@ -361,7 +373,6 @@ class Vector(graphene.ObjectType):
 class Stage(BalderObject):
     kind = graphene.Field(AcquisitionKind, description="The kind of acquisition")
     pinned = graphene.Boolean(description="Is the table pinned by the active user")
-    physical_size = graphene.List(graphene.Float, description="The physical size of the stage")
     comments = graphene.List(Comment)
 
     def resolve_comments(root, info, *args, **kwargs):
@@ -383,6 +394,9 @@ class Position(BalderObject):
         description="Associated images through Omero",
     )
     comments = graphene.List(Comment)
+    x = graphene.Float(description="pixelSize for x in microns", required=True)
+    y = graphene.Float(description="pixelSize for y in microns", required=True)
+    z = graphene.Float(description="pixelSize for z in microns", required=True)
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()

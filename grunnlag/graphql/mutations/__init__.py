@@ -14,6 +14,7 @@ from .position import CreatePosition
 from .objective import CreateObjective
 from .model import CreateModel
 from .link import Link
+from .dataset import CreateDataset, DeleteDataset
 from .context import CreateContext, DeleteContext
 
 __all__ = [ "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition", "Link"]

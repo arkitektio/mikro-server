@@ -28,7 +28,7 @@ class MatriseBase(models.Model):
         help_text="The location of the Array on the Storage System (S3 or Media-URL)",
     )
     shape = ArrayField(
-        models.IntegerField(), help_text="The arrays shape", blank=True, null=True
+        models.IntegerField(), help_text="The arrays shape format [c,t,z,y,x]", blank=True, null=True
     )
     dims = ArrayField(
         models.CharField(max_length=100),

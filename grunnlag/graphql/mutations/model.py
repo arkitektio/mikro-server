@@ -51,3 +51,28 @@ class CreateModel(BalderMutation):
 
     class Meta:
         type = types.Model
+
+
+class DeleteModelResult(graphene.ObjectType):
+    id = graphene.String()
+
+
+class DeleteModel(BalderMutation):
+    """Delete Experiment
+    
+    This mutation deletes an Experiment and returns the deleted Experiment."""
+
+    class Arguments:
+        id = graphene.ID(
+            description="The ID of the experiment to delete",
+            required=True,
+        )
+
+    @bounced()
+    def mutate(root, info, id, **kwargs):
+        experiment = models.Model.objects.get(id=id)
+        experiment.delete()
+        return {"id": id}
+
+    class Meta:
+        type = DeleteModelResult

@@ -79,9 +79,9 @@ class Antibody(CreatedThroughMixin, CommentableMixin, models.Model):
 class Objective(CreatedThroughMixin, CommentableMixin,  models.Model):
     serial_number = models.CharField(max_length=1000, unique=True)
     name = models.CharField(max_length=1000, unique=True)
-    magnification = models.FloatField()
-
-
+    magnification = models.FloatField(blank=True, null=True)
+    na = models.FloatField(blank=True, null=True)
+    immersion = models.CharField(max_length=1000, blank=True, null=True)
 
 
 
@@ -108,10 +108,35 @@ class ModelDataField(models.FileField):
 
 
 
+class Dataset(CreatedThroughMixin,  CommentableMixin, models.Model):
+    """
+    A dataset is a collection of data files and metadata files.
+    It mimics the concept of a folder in a file system and is the top level
+    object in the data model.
+
+    """
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the experiment was created"
+    )
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
+    name = models.CharField(max_length=200, help_text="The name of the experiment")
+    pinned_by = models.ManyToManyField(
+        get_user_model(),
+        related_name="pinned_datasets",
+        blank=True,
+        help_text="The users that have pinned the experiment",
+    )
+    tags = TaggableManager(help_text="Tags for the experiment")
 
 
+class InDatasetMixin(models.Model):
+    datasets = models.ManyToManyField(Dataset, related_name="%(class)ss",null=True, blank=True)
 
-class Experiment(CreatedThroughMixin,  CommentableMixin, models.Model):
+    class Meta:
+        abstract = True
+
+
+class Experiment(CreatedThroughMixin,  CommentableMixin, InDatasetMixin, models.Model):
     """
     An experiment is a collection of samples and their representations.
     It mimics the concept of an experiment in the lab and is the top level
@@ -119,11 +144,6 @@ class Experiment(CreatedThroughMixin,  CommentableMixin, models.Model):
 
     You can use the experiment to group samples and representations likewise
     to how you would group files into folders in a file system.
-
-
-
-
-
     """
 
     name = models.CharField(max_length=200, help_text="The name of the experiment")
@@ -167,7 +187,7 @@ class Experiment(CreatedThroughMixin,  CommentableMixin, models.Model):
 
 
 
-class Context(CreatedThroughMixin, CommentableMixin, models.Model):
+class Context(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     name = models.CharField(max_length=1000, help_text="The name of the context")
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the context was created"
@@ -222,7 +242,7 @@ class DataLink(models.Model):
             )
         ]
 
-class ExperimentalGroup(CreatedThroughMixin, CommentableMixin,  models.Model):
+class ExperimentalGroup(CreatedThroughMixin, CommentableMixin, models.Model):
     """A group of samples that are part of the same experimental group"""
 
     name = models.CharField(max_length=200, help_text="The experimental groups name")
@@ -257,7 +277,7 @@ class Animal(CreatedThroughMixin, CommentableMixin, models.Model):
     comments = GenericRelation(Comment, help_text="Comments on the experiment")
 
 
-class OmeroFile(CreatedThroughMixin, CommentableMixin, models.Model):
+class OmeroFile(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """An OmeroFile is a file that contains omero-meta data. It is the raw file that was generated
     by the microscope.
 
@@ -299,7 +319,7 @@ class OmeroFile(CreatedThroughMixin, CommentableMixin, models.Model):
     comments = GenericRelation(Comment, help_text="Comments on the experiment")
 
 
-class Model(CreatedThroughMixin, CommentableMixin, models.Model):
+class Model(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """A
 
     Mikro uses the omero-meta data to create representations of the file. See Representation for more information."""
@@ -343,14 +363,7 @@ class Model(CreatedThroughMixin, CommentableMixin, models.Model):
 
 
 
-
-
-
-
-
-
-
-class Sample(CreatedThroughMixin, CommentableMixin, models.Model):
+class Sample(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """Samples are storage containers for representations. A Sample is to be understood analogous to a Biological Sample. It existed in Time (the time of acquisiton and experimental procedure), was measured in space (x,y,z) and in different modalities (c). Sample therefore provide a datacontainer where each Representation of the data shares the same dimensions. Every transaction to our image data is still part of the original acuqistion, so also filtered images are refering back to the sample"""
 
     meta = models.JSONField(null=True, blank=True)
@@ -400,7 +413,7 @@ class Sample(CreatedThroughMixin, CommentableMixin, models.Model):
         super(Sample, self).delete(*args, **kwargs)
 
 # TODO: Rename Stage
-class Stage(CreatedThroughMixin, CommentableMixin, models.Model):
+class Stage(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """An Stage is a set of positions that share a common space on a microscope and can
     be use to translate.
     
@@ -408,7 +421,6 @@ class Stage(CreatedThroughMixin, CommentableMixin, models.Model):
     """
     name = models.CharField(max_length=1000, help_text="The name of the stage")
     kind = models.CharField(max_length=1000)
-    physical_size = models.JSONField(default=list(), help_text="The physical size of a position vector unit in micrometer")
     instrument = models.ForeignKey(Instrument, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the acquistion was created"
@@ -458,7 +470,7 @@ class Position(CreatedThroughMixin, CommentableMixin, models.Model):
 
 
 
-class Representation(CreatedThroughMixin,  CommentableMixin,Matrise):
+class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matrise):
     """A Representation is 5-dimensional representation of an image
 
     Mikro stores each image as a 5-dimensional representation. The dimensions are:
@@ -581,7 +593,7 @@ class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
 
     position = models.ForeignKey(Position, on_delete=models.SET_NULL, null=True, related_name="omeros")
     objective = models.ForeignKey(Objective, on_delete=models.SET_NULL, null=True, related_name="omeros")
-    
+    affine_transformation = models.JSONField(null=True, blank=True, default=list)
     planes = models.JSONField(null=True, blank=True, default=list)
     channels = models.JSONField(null=True, blank=True, default=list)
     scale = models.JSONField(null=True, blank=True, default=list)

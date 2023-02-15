@@ -28,6 +28,7 @@ class CreatePosition(BalderMutation):
         y = graphene.Float(description="The y coord of the position (relative to origin)", required=True)
         z = graphene.Float(description="The z coord of the position (relative to origin)", required=True)
         creator = graphene.ID(description="The creator of this position")
+        tolerance = graphene.Float(description="The tolerance offset before we create a new position", required=False)
         tags = graphene.List(
             graphene.String,
             required=False,
@@ -36,7 +37,7 @@ class CreatePosition(BalderMutation):
 
 
     @bounced(anonymous=False)
-    def mutate(root, info, stage, x, y, z, creator=None, name=None, tags=None):
+    def mutate(root, info, stage, x, y, z, creator=None, name=None, tags=None, tolerance=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
@@ -44,11 +45,25 @@ class CreatePosition(BalderMutation):
 
         stage = models.Stage.objects.get(id=stage)
 
-        position, _ = models.Position.objects.update_or_create(
-            stage=stage, x=x, y=y, z=z,
-            defaults=dict(name=name or f"Position {x} {y} {z} ", tags=tags or [])
-        )
 
+
+        if not tolerance:
+            position, _ = models.Position.objects.update_or_create(
+                stage=stage, x=x, y=y, z=z,
+                defaults=dict(name=name or f"Position {x} {y} {z} ", tags=tags or [])
+            )
+        else:
+            position = models.Position.objects.filter(
+                stage=stage, x__gte=x-tolerance, x__lte=x+tolerance,
+                y__gte=y-tolerance, y__lte=y+tolerance,
+                z__gte=z-tolerance, z__lte=z+tolerance,
+            ).first()
+            if not position:
+                position = models.Position.objects.create(
+                    stage=stage, x=x, y=y, z=z, name=name or f"Position {x} {y} {z} ", tags=tags or []
+                )
+
+        
         return position
 
     class Meta:

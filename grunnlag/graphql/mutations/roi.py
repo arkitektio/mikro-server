@@ -74,6 +74,70 @@ class CreateROI(BalderMutation):
         type = types.ROI
 
 
+class CreateROIS(BalderMutation):
+    """Creates a Sample"""
+
+    class Arguments:
+        representation = graphene.ID(
+            required=True, description="The Representation this ROI belongs to"
+        )
+        vectors_list = graphene.List(graphene.List(
+            InputVector,
+            required=True,
+            description="The Experiments this sample Belongs to",
+        ), description="the List of Vectors")
+        creator = graphene.ID(
+            required=False, description="The email of the creator, only for backend app"
+        )
+        labels = graphene.List(graphene.String, required=False, description="The label of the ROI")
+        tags = graphene.List(
+            graphene.String,
+            required=False,
+            description="Do you want to tag the roi?",
+        )
+        type = graphene.Argument(
+            RoiTypeInput, description="The type of ROI", required=True
+        )
+        meta = GenericScalar(required=False, description="Meta Parameters")
+
+    @bounced(anonymous=False)
+    def mutate(
+        root,
+        info,
+        representation=None,
+        vectors_list=[],
+        creator=None,
+        meta=None,
+        labels=None,
+        type=None,
+        tags=[],
+    ):
+        creator = info.context.user or (
+            get_user_model().objects.get(id=creator) if creator else None
+        )
+        assert creator is not None, "Creator is required if using a backend app"
+
+        rep = models.Representation.objects.get(id=representation)
+
+        if labels:
+            assert len(labels) == len(vectors_list), "If provided Labels and Vectors must have the same length"
+
+        for i, vectors in enumerate(vectors_list):
+            roi = models.ROI.objects.create(
+                creator=creator, vectors=vectors, representation=rep, type=type, label=labels[i] if labels else None
+            )
+
+            if tags:
+                roi.tags.add(*tags)
+
+
+        return rep
+
+    class Meta:
+        type = types.Representation
+
+
+
 class DeleteROIResult(graphene.ObjectType):
     id = graphene.String()
 

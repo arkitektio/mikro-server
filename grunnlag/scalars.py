@@ -26,6 +26,23 @@ class ModelData(Scalar):
         return value
 
 
+class AffineMatrix(Scalar):
+    """ A model"""
+
+    @staticmethod
+    def serialize(dt):
+        return dt
+
+    @staticmethod
+    def parse_literal(node):
+        if isinstance(node, ast.StringValue):
+            return node.value
+
+    @staticmethod
+    def parse_value(value):
+        return value
+
+
 
 class XArrayInput(Scalar):
     """XArray scalar

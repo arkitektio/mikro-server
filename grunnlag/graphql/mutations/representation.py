@@ -111,6 +111,11 @@ class FromXArray(BalderMutation):
             required=False,
             description="A description of the variety",
         )
+        datasets = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which datasets does this representation belong to",
+        )
         xarray = graphene.Argument(XArrayInput, required=True, description="The X Arra")
         tags = graphene.List(
             graphene.String,
@@ -146,6 +151,7 @@ class FromXArray(BalderMutation):
         omero = kwargs.pop("omero", None)
         xarray = kwargs.pop("xarray", None)
         origins = kwargs.pop("origins", None)
+        datasets = kwargs.pop("datasets", None)
         experiments = kwargs.pop("experiments", None)
         file_origins = kwargs.pop("file_origins", None)
         roi_origins = kwargs.pop("roi_origins", None)
@@ -170,6 +176,8 @@ class FromXArray(BalderMutation):
         print(omero)
         logger.info(f"ROIS {roi_origins}")
 
+        rep.save()
+
         if omero:
             omero = models.Omero.objects.create(
                 representation=rep,
@@ -180,6 +188,7 @@ class FromXArray(BalderMutation):
                 acquisition_date=omero.get("acquisition_date", None),
                 objective_settings=omero.get("objective_settings", None),
                 imaging_environment=omero.get("imaging_environment", None),
+                affine_transformation=omero.get("affine_transformation", None),
                 instrument_id=omero.get("instrument", None),
                 position_id=omero.get("position", None),
                 objective_id =omero.get("objective", None),
@@ -193,11 +202,11 @@ class FromXArray(BalderMutation):
             rep.experiments.add(*experiments)
         if file_origins:
             rep.file_origins.add(*file_origins)
-
+        if datasets:
+            rep.datasets.add(*datasets)
         if roi_origins:
             rep.roi_origins.add(*roi_origins)
 
-        rep.save()
 
         return rep
 

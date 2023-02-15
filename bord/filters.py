@@ -23,6 +23,15 @@ class TableFilter(django_filters.FilterSet):
     pinned = django_filters.BooleanFilter(
         method="my_pinned_filter", label="Filter by pinned"
     )
+    created_day = django_filters.DateTimeFilter(
+        field_name="created_at", method="my_created_day_filter"
+
+
+    )
+
+    def my_created_day_filter(self, queryset, name, value):
+        return queryset.filter(created_at__date__year=value.year, created_at__date__month=value.month, created_at__date__day=value.day)
+
 
     def my_pinned_filter(self, queryset, name, value):
         if value:

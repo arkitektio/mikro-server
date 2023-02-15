@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel
 import graphene
 from graphene.types.generic import GenericScalar
-
+from grunnlag.scalars import AffineMatrix
 
 class PhysicalSizeModel(BaseModel):
     x: float = 1
@@ -247,6 +247,8 @@ class OmeroRepresentationInput(graphene.InputObjectType):
     planes = graphene.List(PlaneInput)
     channels = graphene.List(ChannelInput)
     physical_size = graphene.Argument(PhysicalSizeInput)
+    
+    affine_transformation = graphene.Argument(AffineMatrix)
     scale = graphene.List(graphene.Float)
     position  = graphene.ID()
     acquisition_date = graphene.DateTime()

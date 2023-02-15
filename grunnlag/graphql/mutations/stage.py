@@ -9,6 +9,10 @@ from grunnlag import models, types
 from grunnlag.scalars import FeatureValue
 from grunnlag.utils import fill_created
 
+
+
+
+
 class CreateStage(BalderMutation):
     """Creates a Stage
     
@@ -24,7 +28,6 @@ class CreateStage(BalderMutation):
         instrument = graphene.ID(
             required=False, description="The acquisition this position belongs to"
         )
-        physical_size = graphene.List(graphene.Float, required=True, description="The physical size of ONE unit of the stage")
         creator = graphene.ID(description="The creator of this position")
         tags = graphene.List(
             graphene.String,
@@ -34,13 +37,13 @@ class CreateStage(BalderMutation):
 
 
     @bounced(anonymous=False)
-    def mutate(root, info, instrument=None, kind=None, creator=None, name=None , physical_size=None, tags=None):
+    def mutate(root, info, instrument=None, kind=None, creator=None, name=None , tags=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
         assert creator is not None, "Creator is required if using a backend app"
 
-        acqui = models.Stage.objects.create(creator=creator, instrument_id=instrument, kind=kind or "UNKNOWN", name=name, tags=tags or [], physical_size=physical_size, **fill_created(info))
+        acqui = models.Stage.objects.create(creator=creator, instrument_id=instrument, kind=kind or "UNKNOWN", name=name, tags=tags or [], **fill_created(info))
 
 
         return acqui

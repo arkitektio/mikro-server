@@ -4,11 +4,11 @@ from django.utils.module_loading import import_string
 from bord.fields import ParquetField
 from django.conf import settings
 from taggit.managers import TaggableManager
-from grunnlag.models import Representation, Sample, Experiment
+from grunnlag.models import Representation, Sample, Experiment, InDatasetMixin
 import uuid
 
 
-class Table(models.Model):
+class Table(InDatasetMixin, models.Model):
     """ A Table is a collection of tabular data.
 
     It provides a way to store data in a tabular format and associate it with a Representation,
