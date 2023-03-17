@@ -17,3 +17,4 @@ from .model import *
 from .link import *
 from .context import *
 from .dataset import *
+from .relation import *

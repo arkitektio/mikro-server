@@ -12,6 +12,7 @@ from .models import (
     Stage,
     Position,
     Dataset,
+    Relation,
     DataLink,
 )
 from guardian.admin import GuardedModelAdmin
@@ -111,3 +112,4 @@ admin.site.register(Dataset)
 admin.site.register(Stage)
 admin.site.register(Position)
 admin.site.register(DataLink)
+admin.site.register(Relation)

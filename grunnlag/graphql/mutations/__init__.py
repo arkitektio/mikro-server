@@ -16,5 +16,8 @@ from .model import CreateModel
 from .link import Link
 from .dataset import CreateDataset, DeleteDataset
 from .context import CreateContext, DeleteContext
+from .big_file import *
+from .presign import *
+from .relation import CreateRelation
 
 __all__ = [ "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition", "Link"]

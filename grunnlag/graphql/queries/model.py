@@ -10,9 +10,9 @@ class Models(BalderQuery):
     """All Labels
     
     This query returns all Labels that are stored on the platform
-    depending on the user's permissions. Generally, this query will return
+    depending on the user's permissions.s Generally, this query will return
     all Labels that the user has access to. If the user is an amdin
-    or superuser, all Labels will be returned.
+    or superuser, all Labels wsill be returned.
     """
 
     class Meta:

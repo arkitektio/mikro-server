@@ -179,6 +179,13 @@ class Table(BalderObject):
 
 
 class Dataset(BalderObject):
+    representations = BalderFilteredWithOffset(
+        lambda: Representation,
+        model=models.Representation,
+        filterset_class=RepresentationFilter,
+        related_field="representations",
+        description="Associated images through Omero",
+    )
 
     pinned = graphene.Boolean(description="Is the table pinned by the active user")
 
@@ -197,14 +204,39 @@ class Context(BalderObject):
         model = models.Context
         description = models.Context.__doc__
 
+class Relation(BalderObject):
+
+    class Meta:
+        model = models.Relation
+        description = models.Relation.__doc__
+
+
+
 
 
 class DataLink(BalderObject):
-    relation = graphene.String(description="Relation")
-    x = graphene.Field(lambda: GenericObject, description="X")
-    y = graphene.Field(lambda: GenericObject, description="Y")
+    x_id = graphene.ID(description="X", required=True,  deprecation_reason="Use leftId")
+    y_id = graphene.ID(description="Y", required=True, deprecation_reason="Use rightId")
+    x = graphene.Field(lambda: GenericObject, description="X", deprecation_reason="Use left")
+    y = graphene.Field(lambda: GenericObject, description="Y", deprecation_reason="Use right")
     left_type = graphene.Field(LinkableModels, description="Left Type")
     right_type = graphene.Field(LinkableModels, description="Left Type")
+    left = graphene.Field(lambda: GenericObject, description="X")
+    right = graphene.Field(lambda: GenericObject, description="Y")
+    left_id = graphene.ID(description="X", required=True)
+    right_id = graphene.ID(description="Y", required=True)
+
+    def resolve_left(root, info, *args, **kwargs):
+        return root.x
+    
+    def resolve_right(root, info, *args, **kwargs):
+        return root.y
+    
+    def resolve_left_id(root, info, *args, **kwargs):
+        return root.x_id
+    
+    def resolve_right_id(root, info, *args, **kwargs):
+        return root.y_id
 
 
 
@@ -280,6 +312,7 @@ class Representation(LinkRelation, BalderObject):
         related_field="metrics",
         description="Associated metrics of this Image",
     )
+    metric = graphene.Field(Metric, key=graphene.String(required=True))
     latest_thumbnail = graphene.Field(Thumbnail)
     store = graphene.Field(Store)
     tables = BalderFilteredWithOffset(
@@ -304,6 +337,9 @@ class Representation(LinkRelation, BalderObject):
     )
     comments = graphene.List(Comment)
     pinned = graphene.Boolean()
+
+    def resolve_metric(root, info, key, *args, **kwargs):
+        return root.metrics.filter(key=key).first()
 
     def resolve_latest_thumbnail(root, info, *args, **kwargs):
         return root.thumbnails.last()

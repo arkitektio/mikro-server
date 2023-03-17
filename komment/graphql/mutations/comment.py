@@ -10,6 +10,8 @@ import logging
 import datetime
 
 
+UserModel = get_user_model()
+
 class DescendendInput(graphene.InputObjectType):
     children = graphene.List(lambda: DescendendInput, required=False)
     typename = graphene.String(description="The type of the descendent", required=False)
@@ -102,7 +104,6 @@ class CreateComment(BalderMutation):
     def mutate(root, info, type, object, descendents, parent=None):
         creator = info.context.user
         model_class = commentable_models[type]
-        UserModel = get_user_model()
         instance = model_class.objects.get(id=object)
 
         dicted_variables, mentions = recurse_parse_decendents(descendents)
@@ -115,6 +116,53 @@ class CreateComment(BalderMutation):
             text="",
             descendents=descendents,
             parent_id=parent,
+        )
+        exp.mentions.set(users)
+        exp.save()
+
+        return exp
+
+    class Meta:
+        type = types.Comment
+
+class ReplyTo(BalderMutation):
+    """Reply to an Comment 
+    
+    This mutation creates a comment. It takes a commentable_id and a commentable_type.
+    If this is the first comment on the commentable, it will create a new comment thread.
+    If there is already a comment thread, it will add the comment to the thread (by setting
+    it's parent to the last parent comment in the thread).
+
+    CreateComment takes a list of Descendents, which are the comment tree. The Descendents
+    are a recursive structure, where each Descendent can have a list of Descendents as children.
+    The Descendents are either a Leaf, which is a text node, or a MentionDescendent, which is a
+    reference to another user on the platform.
+
+    Please convert your comment tree to a list of Descendents before sending it to the server.
+    TODO: Add a converter from a comment tree to a list of Descendents.
+
+    
+    (only signed in users)"""
+
+    class Arguments:
+        descendents = graphene.List(DescendendInput, required=True, description="The comment tree")
+        parent = graphene.ID(description="The parent comment", required=True)
+
+    @bounced()
+    def mutate(root, info, descendents, parent):
+        creator = info.context.user
+        parent = models.Comment.objects.get(id=parent)
+
+        dicted_variables, mentions = recurse_parse_decendents(descendents)
+
+        users = [UserModel.objects.get(id=m["user"]) for m in mentions]
+
+        exp = models.Comment.objects.create(
+            content_object=parent.content_object,
+            user=creator,
+            text="",
+            descendents=descendents,
+            parent=parent,
         )
         exp.mentions.set(users)
         exp.save()

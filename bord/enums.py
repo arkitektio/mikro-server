@@ -7,7 +7,7 @@ class PandasDType(graphene.Enum):
     INT64 = "int64"
     FLOAT64 = "float64"
     BOOL = "bool"
-    CATEGORY = "category"
+    CATEGORY = "categorical"
     DATETIME65 = "datetime64"
     TIMEDELTA = "timedelta[ns]"
     UNICODE = "unicode"

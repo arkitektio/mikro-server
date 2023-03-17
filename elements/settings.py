@@ -18,7 +18,7 @@ from omegaconf import OmegaConf
 BASE_DIR = Path(__file__).resolve().parent.parent
 conf = OmegaConf.load(os.path.join(BASE_DIR, "config.yaml"))
 
-# Quick-start development settings - unsuitable for production
+# Quick-start developsment sesttings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -188,6 +188,7 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [(conf.redis.host, conf.redis.port)],
+            "prefix": "mikro"
         },
     },
 }

@@ -5,7 +5,6 @@ from storages.backends.s3boto3 import S3Boto3Storage
 
 
 class PrivateMediaStorage(S3Boto3Storage):
-    location = "thumbnails"
     default_acl = "private"
     file_overwrite = False
 
@@ -29,3 +28,18 @@ class PrivateMediaStorage(S3Boto3Storage):
         cache.set(key, result, timeout)
 
         return result
+    
+    def move_inside_bucket(self, bucket_key, new_key):
+        # Move the file from the bucket to the private storage
+        # This is used to move files from the public bucket to the private bucket
+
+        # Get the file from the bucket
+        copy_result = self.connection.meta.client.copy_object(
+            Bucket=self.bucket_name,
+            CopySource=bucket_key,
+            Key=new_key)
+
+        if copy_result['ResponseMetadata']['HTTPStatusCode'] == 200:
+            True
+        else:
+            False

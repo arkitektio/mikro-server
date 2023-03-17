@@ -11,7 +11,17 @@ import boto3
 import json
 
 sts = boto3.client('sts', 
-    endpoint_url='http://minio:9000',
+    endpoint_url=settings.AWS_S3_ENDPOINT_URL,
+    region_name='us-east-1',
+    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+    aws_session_token=None,
+    config=boto3.session.Config(signature_version='s3v4'),
+    verify=False
+)
+
+s3 = boto3.client('s3',
+    endpoint_url=settings.AWS_S3_ENDPOINT_URL,
     region_name='us-east-1',
     aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
@@ -23,10 +33,10 @@ sts = boto3.client('sts',
 
 
 class Credentials(graphene.ObjectType):
-    status: str = graphene.String()
-    access_key: str = graphene.String()
-    secret_key: str = graphene.String()
-    session_token: str = graphene.String()
+    status: str = graphene.String(required=True)
+    access_key: str = graphene.String(required=True)
+    secret_key: str = graphene.String(required=True)
+    session_token: str = graphene.String(required=True)
 
 
 class Request(BalderQuery):
@@ -65,6 +75,7 @@ class Request(BalderQuery):
             "access_key": response["Credentials"]["AccessKeyId"],
             "secret_key": response["Credentials"]["SecretAccessKey"],
             "session_token": response["Credentials"]["SessionToken"],
+            "status": "success"
         }
 
         return  aws
@@ -72,3 +83,5 @@ class Request(BalderQuery):
     class Meta:
         type = Credentials
         operation = "request"
+
+

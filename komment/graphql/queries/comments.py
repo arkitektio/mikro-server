@@ -21,16 +21,20 @@ class CommentsFor(BalderQuery):
     """
 
     class Arguments:
+        deep = graphene.Boolean(required=False)
         model = graphene.Argument(CommentableModelsEnum, required=True)
         id = graphene.ID(required=False)
 
-    def resolve(self, info, model, id):
+    def resolve(self, info, model, id, deep=False):
 
         model = commentable_models[model]
 
         f = models.Comment.objects.filter(
             content_type=ContentType.objects.get_for_model(model), object_id=id
         )
+
+        if not deep:
+            f = f.filter(parent=None)
 
         return f.order_by("-created_at").all()
 

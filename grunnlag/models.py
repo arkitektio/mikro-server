@@ -210,6 +210,13 @@ class Context(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Mode
 
     def __str__(self) -> str:
         return self.name
+    
+
+class Relation(models.Model):
+    name = models.CharField(max_length=1000, help_text="The name of the relation", unique=True)
+    description = models.CharField(max_length=1000, help_text="The description of the relation", null=True, blank=True)
+
+
 
 class DataLink(models.Model):
     x_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="x_content_type")
@@ -218,7 +225,7 @@ class DataLink(models.Model):
     y_id = models.PositiveIntegerField()
     x = GenericForeignKey(ct_field="x_content_type", fk_field="x_id")
     y = GenericForeignKey(ct_field="y_content_type", fk_field="y_id")
-    relation = models.CharField(max_length=1000, help_text="The relation between the two objects")
+    relation = models.ForeignKey(Relation, on_delete=models.CASCADE, help_text="The relation between the two objects")
     left_type = models.CharField(max_length=1000, help_text="The type of the left object")
     right_type = models.CharField(max_length=1000, help_text="The type of the right object")
     context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name="links", null=True, blank=True)
@@ -281,7 +288,7 @@ class OmeroFile(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Mo
     """An OmeroFile is a file that contains omero-meta data. It is the raw file that was generated
     by the microscope.
 
-    Mikro uses the omero-meta data to create representations of the file. See Representation for more information."""
+    Mikro uses the omero-meta datas to create representations of the file. See Representation for more information."""
 
     type = models.CharField(
         max_length=400,
@@ -473,7 +480,7 @@ class Position(CreatedThroughMixin, CommentableMixin, models.Model):
 class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matrise):
     """A Representation is 5-dimensional representation of an image
 
-    Mikro stores each image as a 5-dimensional representation. The dimensions are:
+    Mikro stores each image as sa 5-dimensional representation. The dimensions are:
     - t: time
     - c: channel
     - z: z-stack

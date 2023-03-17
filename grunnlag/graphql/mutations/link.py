@@ -31,25 +31,25 @@ class Link(BalderMutation):
     (only signed in users)"""
 
     class Arguments:
-        x_type = graphene.Argument(LinkableModels, required=True, description="The type model you want to link from")
-        x_id = graphene.ID(
+        left_type = graphene.Argument(LinkableModels, required=True, description="The type model you want to link from")
+        left_id = graphene.ID(
             required=True, description="The id of the model you want to link from"
         )
-        y_type = graphene.Argument(LinkableModels, required=True, description="The type model you want to link to")
-        y_id = graphene.ID(
+        right_type = graphene.Argument(LinkableModels, required=True, description="The type model you want to link to")
+        right_id = graphene.ID(
             required=True, description="The id of the model you want to link to"
         )
         context = graphene.ID(required=False, description="The experiment this link is part of (optional), gives context to the link")
-        relation = graphene.String(required=True, description="The type of relation")
+        relation = graphene.ID(required=True, description="The type of relation")
 
 
-    def mutate(root, info, x_type, x_id, y_type,  y_id, relation, context=None, **kwargs ):
+    def mutate(root, info, left_type, left_id, right_type,  right_id, relation, context=None, **kwargs ):
         creator = info.context.user
-        x_class = linkable_models[x_type]
-        y_class = linkable_models[y_type]
+        x_class = linkable_models[left_type]
+        y_class = linkable_models[right_type]
         # Just chekcing if the user actually has access to the models
-        x_instance = x_class.objects.get(id=x_id)
-        y_instance = y_class.objects.get(id=y_id)
+        x_instance = x_class.objects.get(id=left_id)
+        y_instance = y_class.objects.get(id=right_id)
 
 
         link, _ = models.DataLink.objects.update_or_create(
@@ -57,11 +57,11 @@ class Link(BalderMutation):
             y_content_type=ContentType.objects.get_for_model(y_class),
             x_id=x_instance.id,
             y_id=y_instance.id,
-            relation=relation,
+            relation_id=relation,
             creator=creator if creator else None,
             context_id=context,
-            left_type=x_type,
-            right_type=y_type,
+            left_type=left_type,
+            right_type=right_type,
         )
 
 
@@ -70,3 +70,28 @@ class Link(BalderMutation):
     class Meta:
         type = types.DataLink
 
+
+
+class DeleteLinkResult(graphene.ObjectType):
+    id = graphene.String()
+
+
+class DeleteLink(BalderMutation):
+    """Delete Experiment
+    
+    This mutation deletes an Experiment and returns the deleted Experiment."""
+
+    class Arguments:
+        id = graphene.ID(
+            description="The ID of the experiment to delete",
+            required=True,
+        )
+
+    @bounced()
+    def mutate(root, info, id, **kwargs):
+        experiment = models.DataLink.objects.get(id=id)
+        experiment.delete()
+        return {"id": id}
+
+    class Meta:
+        type = DeleteLinkResult

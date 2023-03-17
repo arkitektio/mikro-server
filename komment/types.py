@@ -64,7 +64,7 @@ class MentionDescendent(graphene.ObjectType):
         interfaces = (Node, Descendent)
 
     def resolve_user(root, info):
-        return get_user_model().objects.get(id=root.get("user"))
+        return get_user_model().objects.get(sub=root.get("user"))
 
 
 @register_type
