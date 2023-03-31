@@ -27,7 +27,6 @@ from django.contrib.contenttypes.models import ContentType
 
 
 class PinnedFilterMixin(django_filters.FilterSet):
-
     pinned = django_filters.BooleanFilter(
         method="my_pinned_filter", label="Filter by pinned"
     )
@@ -45,7 +44,8 @@ class PinnedFilterMixin(django_filters.FilterSet):
                 raise Exception("Pin can only be used by authenticated users")
         else:
             return queryset
-        
+
+
 class IDChoiceField(forms.JSONField):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -66,9 +66,7 @@ class IDChoiceFilter(django_filters.MultipleChoiceFilter):
         super().__init__(*args, **kwargs, field_name="pk")
 
 
-
 class IdsFilter(django_filters.FilterSet):
-
     ids = IDChoiceFilter(label="Filter by values")
 
     def my_values_filter(self, queryset, name, value):
@@ -79,7 +77,6 @@ class IdsFilter(django_filters.FilterSet):
 
 
 class AppFilterMixin(django_filters.FilterSet):
-
     app = django_filters.CharFilter(
         method="my_app_filter", label="Created through which app"
     )
@@ -89,7 +86,6 @@ class AppFilterMixin(django_filters.FilterSet):
 
 
 class TimeFilterMixin(django_filters.FilterSet):
-
     created_after = django_filters.DateTimeFilter(
         field_name="created_at", lookup_expr="gte"
     )
@@ -101,12 +97,14 @@ class TimeFilterMixin(django_filters.FilterSet):
     )
     created_day = django_filters.DateTimeFilter(
         field_name="created_at", method="my_created_day_filter"
-
-
     )
 
     def my_created_day_filter(self, queryset, name, value):
-        return queryset.filter(created_at__date__year=value.year, created_at__date__month=value.month, created_at__date__day=value.day)
+        return queryset.filter(
+            created_at__date__year=value.year,
+            created_at__date__month=value.month,
+            created_at__date__day=value.day,
+        )
 
 
 class EnumChoiceField(forms.CharField):
@@ -142,7 +140,6 @@ class EnumFilter(django_filters.CharFilter):
 
 
 class LinkableModelsFilter(EnumFilter):
-    
     def filter(self, qs, value):
         """Convert the filter value to a primary key before filtering"""
         if value:
@@ -152,15 +149,21 @@ class LinkableModelsFilter(EnumFilter):
         return qs
 
 
-
-
-class StageFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+class StageFilter(
+    PinnedFilterMixin,
+    AppFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
 
 
-class ObjectiveFilter(PinnedFilterMixin, AppFilterMixin,IdsFilter, django_filters.FilterSet):
+class ObjectiveFilter(
+    PinnedFilterMixin, AppFilterMixin, IdsFilter, django_filters.FilterSet
+):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
@@ -174,7 +177,13 @@ class ObjectiveFilter(PinnedFilterMixin, AppFilterMixin,IdsFilter, django_filter
         )
 
 
-class PositionFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+class PositionFilter(
+    PinnedFilterMixin,
+    AppFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     stage = django_filters.ModelChoiceFilter(
         field_name="stage", queryset=Stage.objects.all()
     )
@@ -182,17 +191,33 @@ class PositionFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilt
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
 
-class DatasetFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+
+class DatasetFilter(
+    PinnedFilterMixin,
+    AppFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
 
 
-class OmeroFilter(TimeFilterMixin,IdsFilter,  django_filters.FilterSet):
-    order = django_filters.OrderingFilter(fields={"acquisition_date": "acquired"})
+class OmeroFilter(TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+    order = django_filters.OrderingFilter(
+        fields={"acquisition_date": "acquired"},
+        label="Order the omeros: options are -acquired or acquired",
+    )
 
 
-class ExperimentFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+class ExperimentFilter(
+    PinnedFilterMixin,
+    AppFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
@@ -204,7 +229,14 @@ class ExperimentFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFi
         label="The tags you want to filter by", field_name="tags__name"
     )
 
-class ContextFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+
+class ContextFilter(
+    PinnedFilterMixin,
+    AppFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
@@ -215,16 +247,20 @@ class ContextFilter(PinnedFilterMixin, AppFilterMixin, TimeFilterMixin, IdsFilte
     tags = django_filters.BaseInFilter(
         label="The tags you want to filter by", field_name="tags__name"
     )
+
 
 class RelationFilter(IdsFilter, django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
 
-class DataLinkFilter(TimeFilterMixin,IdsFilter, django_filters.FilterSet):
+
+class DataLinkFilter(TimeFilterMixin, IdsFilter, django_filters.FilterSet):
     relation = django_filters.CharFilter(
-        field_name="relation__name", lookup_expr='iexact', label="Search for relationship of name"
-    ) 
+        field_name="relation__name",
+        lookup_expr="iexact",
+        label="Search for relationship of name",
+    )
     creator = django_filters.ModelChoiceFilter(
         field_name="creator", queryset=get_user_model().objects.all()
     )
@@ -237,8 +273,9 @@ class DataLinkFilter(TimeFilterMixin,IdsFilter, django_filters.FilterSet):
     y_type = LinkableModelsFilter(type=LinkableModels, field_name="y_content_type")
 
 
-
-class ThumbnailFilter(AppFilterMixin,TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+class ThumbnailFilter(
+    AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet
+):
     name = django_filters.CharFilter(
         field_name="representation__name",
         lookup_expr="icontains",
@@ -252,7 +289,13 @@ class ThumbnailFilter(AppFilterMixin,TimeFilterMixin, IdsFilter, django_filters.
     )
 
 
-class ROIFilter(PinnedFilterMixin, AppFilterMixin,TimeFilterMixin,IdsFilter, django_filters.FilterSet):
+class ROIFilter(
+    PinnedFilterMixin,
+    AppFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
@@ -267,7 +310,7 @@ class ROIFilter(PinnedFilterMixin, AppFilterMixin,TimeFilterMixin,IdsFilter, dja
     type = MultiEnumFilter(type=RoiTypeInput, field_name="type")
 
 
-class LabelFilter(AppFilterMixin, TimeFilterMixin,IdsFilter, django_filters.FilterSet):
+class LabelFilter(AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
     representation = django_filters.ModelChoiceFilter(
         queryset=Representation.objects.all(), field_name="representation"
     )
@@ -277,6 +320,7 @@ class LabelFilter(AppFilterMixin, TimeFilterMixin,IdsFilter, django_filters.Filt
         lookup_expr="icontains",
         label="Search for substring of name",
     )
+
 
 class ModelFilter(AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
     creator = django_filters.NumberFilter(field_name="creator")
@@ -289,9 +333,14 @@ class ModelFilter(AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.Fil
         queryset=Context.objects.all(), field_name="contexts"
     )
 
-class FeatureFilter(AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+
+class FeatureFilter(
+    AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet
+):
     label = django_filters.ModelChoiceFilter(
-        queryset=Label.objects.all(), field_name="label", label="The corresponding label that you want to filter by"
+        queryset=Label.objects.all(),
+        field_name="label",
+        label="The corresponding label that you want to filter by",
     )
     creator = django_filters.NumberFilter(field_name="creator")
     keys = django_filters.BaseInFilter(
@@ -308,7 +357,13 @@ class FeatureFilter(AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.F
         return queryset.filter(key__contains=value)
 
 
-class RepresentationFilter(AppFilterMixin, PinnedFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet):
+class RepresentationFilter(
+    AppFilterMixin,
+    PinnedFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     tags = django_filters.BaseInFilter(
         method="my_tag_filter", label="The tags you want to filter by"
     )
@@ -381,7 +436,9 @@ class RepresentationFilter(AppFilterMixin, PinnedFilterMixin, TimeFilterMixin, I
         return queryset.filter(origins=None) if value else queryset
 
 
-class MetricFilter(AppFilterMixin,TimeFilterMixin,  IdsFilter, django_filters.FilterSet):
+class MetricFilter(
+    AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet
+):
     keys = django_filters.BaseInFilter(
         method="my_key_filter", label="The key you want to filter by"
     )
@@ -406,7 +463,13 @@ class MetricFilter(AppFilterMixin,TimeFilterMixin,  IdsFilter, django_filters.Fi
         return queryset.order_by(*value)
 
 
-class SampleFilter(AppFilterMixin, PinnedFilterMixin, TimeFilterMixin,IdsFilter, django_filters.FilterSet):
+class SampleFilter(
+    AppFilterMixin,
+    PinnedFilterMixin,
+    TimeFilterMixin,
+    IdsFilter,
+    django_filters.FilterSet,
+):
     experiments = django_filters.ModelMultipleChoiceFilter(
         queryset=Experiment.objects.all(), field_name="experiments"
     )
@@ -471,7 +534,9 @@ class OmeroFileFilter(TimeFilterMixin, IdsFilter, django_filters.FilterSet):
         fields = ["name"]
 
 
-class InstrumentFilter(TimeFilterMixin, AppFilterMixin, IdsFilter, django_filters.FilterSet):
+class InstrumentFilter(
+    TimeFilterMixin, AppFilterMixin, IdsFilter, django_filters.FilterSet
+):
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
 
     class Meta:

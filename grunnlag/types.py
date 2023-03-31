@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
-from django.db.models import FileField
+from django.db.models import FileField, Q
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
@@ -22,6 +22,7 @@ from grunnlag.filters import (
     OmeroFilter,
     DataLinkFilter,
 )
+
 from bord.enums import PandasDType
 from balder.fields.filtered import BalderFiltered
 from balder.fields.offsetfiltered import BalderFilteredWithOffset
@@ -41,6 +42,8 @@ from balder.registry import register_type
 from komment.types import Comment
 from .linke import LinkableModels, linkable_models, reverse_linkable_models
 from grunnlag.scalars import AffineMatrix
+
+
 class Tag(BalderObject):
     class Meta:
         model = Tag
@@ -57,8 +60,6 @@ def convert_field_to_string(field, registry=None):
 
 
 class Thumbnail(BalderObject):
-
-
     def resolve_image(root, info, *args, **kwargs):
         return root.image.url if root.image else None
 
@@ -104,7 +105,7 @@ class OmeroFile(BalderObject):
 
 
 class Column(graphene.ObjectType):
-    """ A column in a table
+    """A column in a table
 
     A Column describes the associated name and metadata of a column in a table.
     It gives access to the pandas and numpy dtypes of the column.
@@ -197,28 +198,27 @@ class Dataset(BalderObject):
         description = models.Dataset.__doc__
 
 
-
 class Context(BalderObject):
-
     class Meta:
         model = models.Context
         description = models.Context.__doc__
 
-class Relation(BalderObject):
 
+class Relation(BalderObject):
     class Meta:
         model = models.Relation
         description = models.Relation.__doc__
 
 
-
-
-
 class DataLink(BalderObject):
-    x_id = graphene.ID(description="X", required=True,  deprecation_reason="Use leftId")
+    x_id = graphene.ID(description="X", required=True, deprecation_reason="Use leftId")
     y_id = graphene.ID(description="Y", required=True, deprecation_reason="Use rightId")
-    x = graphene.Field(lambda: GenericObject, description="X", deprecation_reason="Use left")
-    y = graphene.Field(lambda: GenericObject, description="Y", deprecation_reason="Use right")
+    x = graphene.Field(
+        lambda: GenericObject, description="X", deprecation_reason="Use left"
+    )
+    y = graphene.Field(
+        lambda: GenericObject, description="Y", deprecation_reason="Use right"
+    )
     left_type = graphene.Field(LinkableModels, description="Left Type")
     right_type = graphene.Field(LinkableModels, description="Left Type")
     left = graphene.Field(lambda: GenericObject, description="X")
@@ -228,27 +228,23 @@ class DataLink(BalderObject):
 
     def resolve_left(root, info, *args, **kwargs):
         return root.x
-    
+
     def resolve_right(root, info, *args, **kwargs):
         return root.y
-    
+
     def resolve_left_id(root, info, *args, **kwargs):
         return root.x_id
-    
+
     def resolve_right_id(root, info, *args, **kwargs):
         return root.y_id
-
-
 
     class Meta:
         model = models.DataLink
         description = models.DataLink.__doc__
 
+
 class LinkRelation:
     pass
-
-
-
 
 
 class Omero(BalderObject):
@@ -270,7 +266,6 @@ class Omero(BalderObject):
         description = models.Omero.__doc__
 
 
-
 class Instrument(BalderObject):
     omeros = BalderFilteredWithOffset(
         Omero,
@@ -282,10 +277,11 @@ class Instrument(BalderObject):
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
-    
+
     class Meta:
         model = models.Instrument
         description = models.Instrument.__doc__
+
 
 class Objective(BalderObject):
     omeros = BalderFilteredWithOffset(
@@ -303,14 +299,39 @@ class Objective(BalderObject):
         model = models.Objective
         description = models.Objective.__doc__
 
-class Representation(LinkRelation, BalderObject):
 
+def resolve_metrics(root, info, *args, flatten=0, **kwargs):
+    if flatten == 0:
+        return models.Metric.objects.filter(representation=root)
+    else:
+        return models.Metric.objects.filter(
+            Q(representation=root)
+            | Q(representation__origins=root)
+            | Q(representation__origins__origins=root)
+        )
+
+
+def resolve_derived(root, info, *args, flatten=0, **kwargs):
+    if flatten == 0:
+        return models.Representation.objects.filter(origins=root)
+    else:
+        return models.Representation.objects.filter(
+            Q(origins=root)
+            | Q(origins__origins=root)
+            | Q(origins__origins__origins=root)
+        )
+
+
+class Representation(LinkRelation, BalderObject):
     identifier: str = graphene.String(description="The Arkitekt identifier")
     metrics = BalderFilteredWithOffset(
         Metric,
         filterset_class=MetricFilter,
-        related_field="metrics",
-        description="Associated metrics of this Image",
+        description="Associated metrics of this Imasge",
+        queryset_resolver=resolve_metrics,
+        flatten=graphene.Int(
+            description="How many levels to flatten the metrics", default_value=0
+        ),
     )
     metric = graphene.Field(Metric, key=graphene.String(required=True))
     latest_thumbnail = graphene.Field(Thumbnail)
@@ -331,9 +352,12 @@ class Representation(LinkRelation, BalderObject):
     derived = BalderFilteredWithOffset(
         lambda: Representation,
         model=models.Representation,
+        queryset_resolver=resolve_derived,
         filterset_class=RepresentationFilter,
-        related_field="derived",
         description="Derived Images from this Image",
+        flatten=graphene.Int(
+            description="How many levels to flatten the metrics", default_value=0
+        ),
     )
     comments = graphene.List(Comment)
     pinned = graphene.Boolean()
@@ -380,7 +404,6 @@ class Sample(BalderObject):
 
 
 class Experiment(BalderObject):
-
     samples = BalderFilteredWithOffset(
         Sample, filterset_class=SampleFilter, related_field="samples"
     )
@@ -421,6 +444,7 @@ class Stage(BalderObject):
         model = models.Stage
         description = models.Stage.__doc__
 
+
 class Position(BalderObject):
     pinned = graphene.Boolean(description="Is the table pinned by the active user")
     omeros = BalderFilteredWithOffset(
@@ -443,7 +467,6 @@ class Position(BalderObject):
     class Meta:
         model = models.Position
         description = models.Position.__doc__
-
 
 
 class ROI(BalderObject):
@@ -516,13 +539,21 @@ class Model(BalderObject):
     def resolve_data(root, info, *args, **kwargs):
         return root.data.url if root.data else None
 
-
     class Meta:
         model = models.Model
         description = models.Model.__doc__
 
 
-
 class GenericObject(graphene.Union):
     class Meta:
-        types = (Representation, ROI, Feature, Label, Model, Sample, Experiment, Stage, Position)
+        types = (
+            Representation,
+            ROI,
+            Feature,
+            Label,
+            Model,
+            Sample,
+            Experiment,
+            Stage,
+            Position,
+        )
