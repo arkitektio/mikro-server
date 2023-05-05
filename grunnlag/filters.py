@@ -13,9 +13,10 @@ from .models import (
     Representation,
     Sample,
     Stage,
+    Omero,
     Context,
 )
-from .enums import RepresentationVariety, RepresentationVarietyInput, RoiTypeInput
+from .enums import RepresentationVariety, RepresentationVarietyInput, RoiTypeInput, Dimension
 from .linke import LinkableModels, linkable_models
 from django import forms
 from graphene_django.forms.converter import convert_form_field
@@ -98,12 +99,20 @@ class TimeFilterMixin(django_filters.FilterSet):
     created_day = django_filters.DateTimeFilter(
         field_name="created_at", method="my_created_day_filter"
     )
+    created_while = django_filters.BaseInFilter(
+        field_name="created_while", method="my_created_while_filter"
+    )
 
     def my_created_day_filter(self, queryset, name, value):
         return queryset.filter(
             created_at__date__year=value.year,
             created_at__date__month=value.month,
             created_at__date__day=value.day,
+        )
+    
+    def my_created_while_filter(self, queryset, name, value):
+        return queryset.filter(
+            created_while__in=value
         )
 
 
@@ -249,11 +258,121 @@ class ContextFilter(
     )
 
 
+class DimensionMapFilter(
+    IdsFilter,
+    django_filters.FilterSet,
+):  
+    name = django_filters.CharFilter(
+        field_name="omero__representation__name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    dims = MultiEnumFilter(type=Dimension, field_name="dimension")
+    index = django_filters.NumberFilter(field_name="index")
+
+
+class ViewFilter(
+    IdsFilter,
+    django_filters.FilterSet,
+):  
+    name = django_filters.CharFilter(
+        field_name="omero__representation__name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    omero = django_filters.ModelChoiceFilter(
+        field_name="omero", queryset=Omero.objects.all()
+    )
+    representation = django_filters.ModelChoiceFilter(
+        field_name="omero__representation", queryset=Representation.objects.all()
+    )
+    z = django_filters.CharFilter(method="z_filter", label="The z you want to filter by either interger or slice string")
+    active_for_z = django_filters.NumberFilter(method="active_z_filter", label="The z you want to filter by either interger or slice string")
+    active_for_t = django_filters.NumberFilter(method="active_t_filter", label="The z you want to filter by either interger or slice string")
+    active_for_x = django_filters.NumberFilter(method="active_x_filter", label="The z you want to filter by either interger or slice string")
+    active_for_y = django_filters.NumberFilter(method="active_y_filter", label="The z you want to filter by either interger or slice string")
+    active_for_c = django_filters.NumberFilter(method="active_c_filter", label="The z you want to filter by either interger or slice string")
+
+
+
+    def z_filter(self, queryset, name, value):
+        if ":" in value:
+            zmin, zmax = value.split(":")
+            if zmin == "":
+                zmin = None
+            else:
+                zmin = int(zmin)
+            if zmax == "":
+                zmax = None
+            else:
+                zmax = int(zmax)
+
+            if zmin and zmax:
+                return queryset.filter(z_min__gte=zmin, z_max__lte=zmax)
+            elif zmin:
+                return queryset.filter(z_min__gte=zmin)
+            elif zmax:
+                return queryset.filter(z_max__lte=zmax)
+            else:
+                return queryset
+
+        else:
+            value = int(value)
+            return queryset.filter(z_min=value, z_max=value)
+        
+    def active_z_filter(self, queryset, name, value):
+        value = int(value)
+        return queryset.filter( (Q(z_max=None) | Q(z_max__lte=value)) & (Q(z_min__gte=value)  | Q(z_min=None)) )
+    
+    def active_y_filter(self, queryset, name, value):
+        value = int(value)
+        return queryset.filter( (Q(y_max=None) | Q(y_max__lte=value)) & (Q(y_min__gte=value)  | Q(y_min=None)) )
+
+    def active_x_filter(self, queryset, name, value):
+        value = int(value)
+        return queryset.filter( (Q(x_max=None) | Q(x_max__lte=value)) & (Q(x_min__gte=value)  | Q(x_min=None)) )
+
+    def active_c_filter(self, queryset, name, value):
+        value = int(value)
+        return queryset.filter( (Q(c_max=None) | Q(c_max__lte=value)) & (Q(c_min__gte=value)  | Q(c_min=None)) )
+    
+    def active_t_filter(self, queryset, name, value):
+        value = int(value)
+        return queryset.filter( (Q(t_max=None) | Q(t_max__lte=value)) & (Q(t_min__gte=value)  | Q(t_min=None)) )
+
+    
+
+
+
 class RelationFilter(IdsFilter, django_filters.FilterSet):
     name = django_filters.CharFilter(
         field_name="name", lookup_expr="icontains", label="Search for substring of name"
     )
 
+class MetasFilter(IdsFilter, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+
+class ChannelFilter(IdsFilter, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+
+
+class EraFilter(IdsFilter, TimeFilterMixin,django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+
+class TimepointFilter(IdsFilter, TimeFilterMixin, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
+    delta_t = django_filters.NumberFilter(field_name="delta_t")
+    order = django_filters.OrderingFilter(fields={"delta_t": "delta_t"})
+
+
+class Filter(IdsFilter, django_filters.FilterSet):
+    name = django_filters.CharFilter(
+        field_name="name", lookup_expr="icontains", label="Search for substring of name"
+    )
 
 class DataLinkFilter(TimeFilterMixin, IdsFilter, django_filters.FilterSet):
     relation = django_filters.CharFilter(
@@ -274,6 +393,21 @@ class DataLinkFilter(TimeFilterMixin, IdsFilter, django_filters.FilterSet):
 
 
 class ThumbnailFilter(
+    AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet
+):
+    name = django_filters.CharFilter(
+        field_name="representation__name",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+    creator = django_filters.ModelChoiceFilter(
+        field_name="creator", queryset=get_user_model().objects.all()
+    )
+    tags = django_filters.BaseInFilter(
+        label="The tags you want to filter by", field_name="tags__name"
+    )
+
+class VideoFilter(
     AppFilterMixin, TimeFilterMixin, IdsFilter, django_filters.FilterSet
 ):
     name = django_filters.CharFilter(

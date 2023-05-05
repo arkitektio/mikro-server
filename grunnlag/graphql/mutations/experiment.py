@@ -6,6 +6,7 @@ from grunnlag import models, types
 from lok import bounced
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 class CreateExperiment(BalderMutation):
     """Create an Experiment
     
@@ -29,17 +30,18 @@ class CreateExperiment(BalderMutation):
             required=False,
             description="Tags for the experiment",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
     def mutate(
-        root, info, name=None, description=None, creator=None, tags=[]
+        root, info, name=None, description=None, creator=None, created_while=None, tags=[]
     ):
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
 
         exp = models.Experiment.objects.create(
-            creator=creator, description=description, name=name, **fill_created(info)
+            creator=creator, description=description, created_while=created_while, name=name, **fill_created(info)
         )
         if tags:
             exp.tags.add(*tags)

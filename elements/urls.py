@@ -37,7 +37,7 @@ urlpatterns = [
     path("graphql", BalderView, name="graphql"),
     path("accounts/", include("django.contrib.auth.urls")),
     path("ht/", include("health_check.urls")),
-] + static("static", document_root=settings.STATIC_ROOT)
+]
 
 
 from django.urls import get_resolver

@@ -18,3 +18,11 @@ from .link import *
 from .context import *
 from .dataset import *
 from .relation import *
+from .video import *
+from .provenance import *
+from .map import *
+from .channel import *
+from .view import *
+from .meta import *
+from .timepoint import *
+from .era import *

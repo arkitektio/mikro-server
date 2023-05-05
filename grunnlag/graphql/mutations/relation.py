@@ -9,6 +9,7 @@ from grunnlag import models, types
 from grunnlag.scalars import FeatureValue
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 class CreateRelation(BalderMutation):
     """Creates a new Relation
     
@@ -22,11 +23,13 @@ class CreateRelation(BalderMutation):
     class Arguments:
         name = graphene.String(description="The name of the relation", required=True)
         description = graphene.String(description="The description of the relation", required=False)
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced(anonymous=False)
-    def mutate(root, info, name, description=None):
+    def mutate(root, info, name, created_while=None, description=None):
 
         rel, _ = models.Relation.objects.update_or_create(
+            created_while=created_while,
             name=name, defaults=dict(description=description)
         )
 

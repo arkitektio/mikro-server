@@ -12,6 +12,7 @@ from grunnlag.utils import fill_created
 
 
 
+from grunnlag.scalars import AssignationID
 
 class CreateStage(BalderMutation):
     """Creates a Stage
@@ -34,16 +35,17 @@ class CreateStage(BalderMutation):
             required=False,
             description="Tags for the experiment",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
 
     @bounced(anonymous=False)
-    def mutate(root, info, instrument=None, kind=None, creator=None, name=None , tags=None):
+    def mutate(root, info, instrument=None, kind=None, creator=None, name=None ,  created_while=None, tags=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
         assert creator is not None, "Creator is required if using a backend app"
 
-        acqui = models.Stage.objects.create(creator=creator, instrument_id=instrument, kind=kind or "UNKNOWN", name=name, tags=tags or [], **fill_created(info))
+        acqui = models.Stage.objects.create(creator=creator, created_while=created_while, instrument_id=instrument, kind=kind or "UNKNOWN", name=name, tags=tags or [], **fill_created(info))
 
 
         return acqui

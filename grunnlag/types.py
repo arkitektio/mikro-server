@@ -4,9 +4,9 @@ from django.db.models import FileField, Q
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
-from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store, ModelData
+from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store, ModelData, Slice
 from grunnlag.omero import (
-    Channel,
+    OmeroChannel,
     ImagingEnvironment,
     ObjectiveSettings,
     PhysicalSize,
@@ -21,6 +21,11 @@ from grunnlag.filters import (
     SampleFilter,
     OmeroFilter,
     DataLinkFilter,
+    DimensionMapFilter,
+    ChannelFilter,
+    ViewFilter,
+    TimepointFilter,
+
 )
 
 from bord.enums import PandasDType
@@ -42,7 +47,8 @@ from balder.registry import register_type
 from komment.types import Comment
 from .linke import LinkableModels, linkable_models, reverse_linkable_models
 from grunnlag.scalars import AffineMatrix
-
+from itertools import chain
+import json 
 
 class Tag(BalderObject):
     class Meta:
@@ -160,7 +166,7 @@ class Table(BalderObject):
         if query:
             pd_thing = pd_thing.query(query)
 
-        return pd_thing.iloc[offset : offset + limit].to_dict("records")
+        return json.loads(pd_thing.iloc[offset : offset + limit].to_json(orient="records", date_format="iso"))
 
     def resolve_columns(root, info, only=[]):
         columns_data = root.store.data.read().schema.pandas_metadata["columns"]
@@ -247,9 +253,74 @@ class LinkRelation:
     pass
 
 
+
+
+
+class DimensionMap(BalderObject):
+
+    class Meta:
+        model = models.DimensionMap
+        description = models.DimensionMap.__doc__
+
+
+def min_max_to_accessor(min, max):
+    if min == None:
+        min = ""
+    if max == None:
+        max = ""
+    if min == max and min != "":
+        return str(min)
+    return f"{min}:{max}"
+
+class View(BalderObject):
+    z  = graphene.Field(Slice)
+    t  = graphene.Field(Slice)
+    c  = graphene.Field(Slice)
+    x  = graphene.Field(Slice)
+    y  = graphene.Field(Slice)
+    accessors = graphene.List(graphene.String)
+    
+
+    def resolve_accessors(root, info, *args, **kwargs):
+        z_accessor = min_max_to_accessor(root.z_min, root.z_max)
+        t_accessor = min_max_to_accessor(root.t_min, root.t_max)
+        c_accessor = min_max_to_accessor(root.c_min, root.c_max)
+        x_accessor = min_max_to_accessor(root.x_min, root.x_max)
+        y_accessor = min_max_to_accessor(root.y_min, root.y_max)
+
+
+        return [c_accessor, t_accessor, z_accessor,  y_accessor, x_accessor]
+
+    class Meta:
+        model = models.View
+        description = models.View.__doc__
+
+
+
+
+
+class Channel(BalderObject):
+    dimension_maps = BalderFilteredWithOffset(
+        DimensionMap,
+        filterset_class=DimensionMapFilter,
+        related_field="dimension_maps",
+        description="Associated maps of dimensions",
+    )
+
+
+    class Meta:
+        model = models.Channel
+        description = models.Channel.__doc__
+
 class Omero(BalderObject):
     planes = graphene.List(Plane)
-    channels = graphene.List(Channel)
+    dimension_maps = BalderFilteredWithOffset(
+        DimensionMap,
+        filterset_class=DimensionMapFilter,
+        related_field="dimension_maps",
+        description="Associated maps of dimensions",
+    )
+    channels = graphene.List(OmeroChannel)
     physical_size = graphene.Field(PhysicalSize)
     scale = graphene.List(graphene.Float)
     acquisition_date = graphene.DateTime()
@@ -257,9 +328,25 @@ class Omero(BalderObject):
     imaging_environment = graphene.Field(ImagingEnvironment)
     objective_settings = graphene.Field(ObjectiveSettings)
     comments = graphene.List(Comment)
+    views = BalderFilteredWithOffset(
+        View,
+        filterset_class=ViewFilter,
+        related_field="views",
+        description="Associated views",
+    )
+    timepoints = BalderFilteredWithOffset(
+        lambda: Timepoint,
+        model = models.Timepoint,
+        filterset_class=TimepointFilter,
+        related_field="timepoints",
+        description="Associated Timepoints",
+    )
+
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
+    
+    
 
     class Meta:
         model = models.Omero
@@ -281,6 +368,50 @@ class Instrument(BalderObject):
     class Meta:
         model = models.Instrument
         description = models.Instrument.__doc__
+
+
+class Timepoint(BalderObject):
+    omeros = BalderFilteredWithOffset(
+        Omero,
+        filterset_class=OmeroFilter,
+        related_field="omeros",
+        description="Associated images through Omero",
+    )
+    comments = graphene.List(Comment)
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
+    
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
+
+    class Meta:
+        model = models.Timepoint
+        description = models.Timepoint.__doc__
+
+
+class Era(BalderObject):
+    comments = graphene.List(Comment)
+    timepoints = BalderFilteredWithOffset(
+        Timepoint,
+        filterset_class=TimepointFilter,
+        related_field="timepoints",
+        description="Associated Timepoints",
+    )
+    pinned = graphene.Boolean()
+
+    def resolve_pinned(root, info, *args, **kwargs):
+        return root.pinned_by.filter(id=info.context.user.id).exists()
+    
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
+
+    class Meta:
+        model = models.Era
+        description = models.Era.__doc__
 
 
 class Objective(BalderObject):
@@ -322,6 +453,29 @@ def resolve_derived(root, info, *args, flatten=0, **kwargs):
         )
 
 
+class Video(BalderObject):
+
+    def resolve_data(root, info, *args, **kwargs):
+        return root.data.url if root.data else None
+
+    class Meta:
+        model = models.Video
+
+
+class Thumbnail(BalderObject):
+    def resolve_image(root, info, *args, **kwargs):
+        return root.image.url if root.image else None
+
+    class Meta:
+        model = models.Thumbnail
+        description = models.Thumbnail.__doc__
+
+class Render(graphene.Union):
+
+    class Meta:
+        types = (Video, Thumbnail)
+
+
 class Representation(LinkRelation, BalderObject):
     identifier: str = graphene.String(description="The Arkitekt identifier")
     metrics = BalderFilteredWithOffset(
@@ -361,6 +515,7 @@ class Representation(LinkRelation, BalderObject):
     )
     comments = graphene.List(Comment)
     pinned = graphene.Boolean()
+    renders = graphene.List(Render)
 
     def resolve_metric(root, info, key, *args, **kwargs):
         return root.metrics.filter(key=key).first()
@@ -376,6 +531,9 @@ class Representation(LinkRelation, BalderObject):
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
+    
+    def resolve_renders(root, info, *args, **kwargs):
+        return chain(root.videos.all(), root.thumbnails.all())
 
     class Meta:
         model = models.Representation

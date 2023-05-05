@@ -6,6 +6,7 @@ from balder.types import BalderMutation
 import graphene
 from grunnlag import models, types
 
+from grunnlag.scalars import AssignationID
 
 class CreateSample(BalderMutation):
     """Creates a Sample"""
@@ -27,6 +28,7 @@ class CreateSample(BalderMutation):
             required=False,
             description="Do you want to tag the representation?",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
         meta = GenericScalar(required=False, description="Meta Parameters")
 
     @bounced(anonymous=False)
@@ -36,6 +38,7 @@ class CreateSample(BalderMutation):
         experiments=[],
         name=None,
         creator=None,
+         created_while=None,
         tags=[],
     ):
         creator = info.context.user or (
@@ -43,7 +46,7 @@ class CreateSample(BalderMutation):
         )
 
         sample = models.Sample.objects.create(
-            creator=creator, name=name or namegenerator.gen()
+            creator=creator, created_while=created_while, name=name or namegenerator.gen()
         )
         if experiments:
             sample.experiments.add(*experiments)

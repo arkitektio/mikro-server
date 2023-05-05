@@ -14,6 +14,7 @@ from .models import (
     Dataset,
     Relation,
     DataLink,
+    Video,
 )
 from guardian.admin import GuardedModelAdmin
 
@@ -113,3 +114,4 @@ admin.site.register(Stage)
 admin.site.register(Position)
 admin.site.register(DataLink)
 admin.site.register(Relation)
+admin.site.register(Video)

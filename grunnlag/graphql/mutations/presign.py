@@ -11,6 +11,7 @@ from grunnlag.scalars import ModelFile
 import logging
 from grunnlag.utils import fill_created
 from grunnlag.graphql.queries.request import s3
+import os
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +36,10 @@ class Presign(BalderMutation):
 
     @classmethod
     def mutate(cls, root, info, file=None):
+
+        file = ntpath.normpath(file)
+        file = os.path.basename(file)
+        print(file)
 
         response = s3.generate_presigned_post("mikromedia",
                                                      file,

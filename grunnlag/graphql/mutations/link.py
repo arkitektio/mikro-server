@@ -10,6 +10,7 @@ import logging
 import datetime
 from django.contrib.contenttypes.models import ContentType
 
+from grunnlag.scalars import AssignationID
 
 class Link(BalderMutation):
     """Create an Comment 
@@ -41,9 +42,10 @@ class Link(BalderMutation):
         )
         context = graphene.ID(required=False, description="The experiment this link is part of (optional), gives context to the link")
         relation = graphene.ID(required=True, description="The type of relation")
+        created_while = AssignationID(required=False, description="The assignation id")
 
 
-    def mutate(root, info, left_type, left_id, right_type,  right_id, relation, context=None, **kwargs ):
+    def mutate(root, info, left_type, left_id, right_type,  right_id, relation, context=None,  created_while=None,**kwargs ):
         creator = info.context.user
         x_class = linkable_models[left_type]
         y_class = linkable_models[right_type]
@@ -62,6 +64,7 @@ class Link(BalderMutation):
             context_id=context,
             left_type=left_type,
             right_type=right_type,
+            created_while=created_while,
         )
 
 

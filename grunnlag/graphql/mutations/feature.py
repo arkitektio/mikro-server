@@ -9,6 +9,7 @@ from grunnlag import models, types
 from grunnlag.scalars import FeatureValue
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 class CreateFeature(BalderMutation):
     """Creates a Feature
     
@@ -26,9 +27,10 @@ class CreateFeature(BalderMutation):
         key = graphene.String(description="The key of the feature")
         value = FeatureValue(description="The value of the feature", required=True)
         creator = graphene.ID(description="The creator of this feature")
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced(anonymous=False)
-    def mutate(root, info, label, key, value, creator=None):
+    def mutate(root, info, label, key, value, created_while=None, creator=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
@@ -37,7 +39,7 @@ class CreateFeature(BalderMutation):
         label = models.Label.objects.get(id=label)
 
         feature = models.Feature.objects.create(
-            creator=creator, label=label, key=key, value=value, **fill_created(info)
+            creator=creator, label=label, key=key,created_while=created_while, value=value, **fill_created(info)
         )
 
         return feature

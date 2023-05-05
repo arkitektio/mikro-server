@@ -8,6 +8,7 @@ from grunnlag.enums import RoiTypeInput
 from grunnlag import models, types
 from grunnlag.scalars import FeatureValue
 
+from grunnlag.scalars import AssignationID
 
 class CreatePosition(BalderMutation):
     """Creates a Feature
@@ -34,10 +35,11 @@ class CreatePosition(BalderMutation):
             required=False,
             description="Tags for the experiment",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
 
     @bounced(anonymous=False)
-    def mutate(root, info, stage, x, y, z, creator=None, name=None, tags=None, tolerance=None):
+    def mutate(root, info, stage, x, y, z, creator=None, name=None, tags=None,  created_while=None, tolerance=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
@@ -50,7 +52,8 @@ class CreatePosition(BalderMutation):
         if not tolerance:
             position, _ = models.Position.objects.update_or_create(
                 stage=stage, x=x, y=y, z=z,
-                defaults=dict(name=name or f"Position {x} {y} {z} ", tags=tags or [])
+                defaults=dict(name=name or f"Position {x} {y} {z} ", tags=tags or [], 
+                created_while=created_while,)
             )
         else:
             position = models.Position.objects.filter(
@@ -60,6 +63,7 @@ class CreatePosition(BalderMutation):
             ).first()
             if not position:
                 position = models.Position.objects.create(
+                    created_while=created_while,
                     stage=stage, x=x, y=y, z=z, name=name or f"Position {x} {y} {z} ", tags=tags or []
                 )
 

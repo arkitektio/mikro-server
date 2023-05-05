@@ -43,6 +43,7 @@ class CreatedThroughMixin(models.Model):
     created_through = models.ForeignKey(
         LokClient, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_created_through"
     )
+    created_while = models.CharField(max_length=1000, null=True, blank=True)
 
     class Meta:
         abstract = True
@@ -212,13 +213,13 @@ class Context(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Mode
         return self.name
     
 
-class Relation(models.Model):
+class Relation(CreatedThroughMixin, models.Model):
     name = models.CharField(max_length=1000, help_text="The name of the relation", unique=True)
-    description = models.CharField(max_length=1000, help_text="The description of the relation", null=True, blank=True)
+    description = models.CharField(max_length=1000, help_text="A verbose description of the relation", null=True, blank=True)
 
 
 
-class DataLink(models.Model):
+class DataLink(CreatedThroughMixin, CommentableMixin, models.Model):
     x_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="x_content_type")
     x_id = models.PositiveIntegerField()
     y_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="y_content_type")
@@ -448,6 +449,27 @@ class Stage(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model)
     tags = TaggableManager()
 
 
+
+
+
+class Channel(CreatedThroughMixin, CommentableMixin, models.Model):
+    name = models.CharField(max_length=1000, help_text="The name of the channel")
+    emission_wavelength = models.FloatField(help_text="The emmission wavelength of the fluorophore in nm", null=True, blank=True)
+    excitation_wavelength = models.FloatField(help_text="The excitation wavelength of the fluorophore in nm", null=True, blank=True)
+    acquisition_mode = models.CharField(max_length=1000, help_text="The acquisition mode of the channel", null=True, blank=True)
+    color = models.CharField(max_length=1000, help_text="The default color for the channel (might be ommited by the rendered)", null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "emission_wavelength","excitation_wavelength"],
+                name="Only one channel per name, emmission_wavelength and excitation_wavelength",
+            )
+        ]
+
+
+
+
 class Position(CreatedThroughMixin, CommentableMixin, models.Model):
     """The relative position of a sample on a microscope stage"""
 
@@ -475,6 +497,47 @@ class Position(CreatedThroughMixin, CommentableMixin, models.Model):
         ]
 
 
+class Era(CreatedThroughMixin, CommentableMixin, models.Model):
+    name = models.CharField(max_length=1000, help_text="The name of the era")
+    start = models.DateTimeField(help_text="The start of the era", null=True, blank=True)
+    end = models.DateTimeField(help_text="The end of the era", null=True, blank=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the experiment was created"
+    )
+    pinned_by = models.ManyToManyField(
+        get_user_model(),
+        related_name="pinned_eras",
+        blank=True,
+        help_text="The users that have pinned the era",
+    )
+    tags = TaggableManager()
+
+
+class Timepoint(CreatedThroughMixin, CommentableMixin, models.Model):
+    """The relative position of a sample on a microscope stage"""
+
+    #Should be stage
+    era = models.ForeignKey(Era, on_delete=models.CASCADE, related_name="timepoints")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the experiment was created"
+    )
+    name = models.CharField(max_length=1000, help_text="The name of the timepoint", null=True, blank=True)
+    delta_t = models.FloatField(null=True, blank=True)
+    pinned_by = models.ManyToManyField(
+        get_user_model(),
+        related_name="pinned_timepoints",
+        blank=True,
+        help_text="The users that have pinned the position",
+    )
+    tags = TaggableManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["era", "delta_t",],
+                name="Only one unique timepoint per era",
+            )
+        ]
 
 
 class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matrise):
@@ -522,6 +585,14 @@ class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matr
     )
     file_origins = models.ManyToManyField(
         OmeroFile,
+        blank=True,
+        null=True,
+        related_name="derived_representations",
+        related_query_name="derived_representations",
+        symmetrical=False,
+    )
+    table_origins = models.ManyToManyField(
+        "bord.Table",
         blank=True,
         null=True,
         related_name="derived_representations",
@@ -598,7 +669,8 @@ class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
         Representation, on_delete=models.CASCADE, related_name="omero"
     )
 
-    position = models.ForeignKey(Position, on_delete=models.SET_NULL, null=True, related_name="omeros")
+    positions = models.ManyToManyField(Position, related_name="omeros")
+    timepoints = models.ManyToManyField(Timepoint, related_name="omeros")
     objective = models.ForeignKey(Objective, on_delete=models.SET_NULL, null=True, related_name="omeros")
     affine_transformation = models.JSONField(null=True, blank=True, default=list)
     planes = models.JSONField(null=True, blank=True, default=list)
@@ -611,6 +683,38 @@ class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
     instrument = models.ForeignKey(
         Instrument, null=True, blank=True, on_delete=models.SET_NULL, related_name="omeros"
     )
+
+class DimensionMap(CreatedThroughMixin, models.Model):
+    omero = models.ForeignKey(Omero, on_delete=models.CASCADE, related_name="dimension_maps")
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="dimension_maps")
+    dimension = models.CharField(max_length=100)
+    index = models.IntegerField(help_text="The index of the channel")
+
+
+
+class View(CreatedThroughMixin, models.Model):
+    omero = models.ForeignKey(Omero, on_delete=models.CASCADE, related_name="views")
+    z_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    z_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    x_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    x_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    y_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    y_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    t_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    t_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    c_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    c_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+
+    # What it maps to
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
+    position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
+    objective = models.ForeignKey(Objective, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
+    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
+    timepoint = models.ForeignKey(Timepoint, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
+
+
+
+
 
 
 class Metric(CreatedThroughMixin, CommentableMixin, models.Model):
@@ -676,13 +780,33 @@ class Thumbnail(CreatedThroughMixin,  CommentableMixin,models.Model):
         Representation,
         on_delete=models.CASCADE,
         related_name="thumbnails",
-        help_text="The Sample this representation belongs to",
+        help_text="The rendered biomage",
     )
     blurhash = models.CharField(max_length=1000, null=True, blank=True)
     image = models.ImageField(
         upload_to="thumbnails", null=True, storage=PrivateMediaStorage()
     )
     major_color = models.CharField(max_length=100, null=True, blank=True)
+
+
+
+class Video(CreatedThroughMixin,  CommentableMixin,models.Model):
+    """A Thumbnail is a render of a representation that is used to display the representation in the UI.
+
+    Thumbnails can also store the major color of the representation. This is used to color the representation in the UI.
+    """
+
+    representations = models.ManyToManyField(
+        Representation,
+        related_name="videos",
+        help_text="The rendered bioimages",
+    )
+    data = models.FileField(
+        upload_to="videos", null=True, storage=PrivateMediaStorage()
+    )
+    frontImage = models.ImageField(
+        upload_to="video_fronts", null=True, storage=PrivateMediaStorage()
+    )
 
 
 class ROI(CreatedThroughMixin,  CommentableMixin,models.Model):

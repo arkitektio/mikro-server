@@ -6,6 +6,7 @@ from grunnlag import models, types
 from lok import bounced
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 class CreateDataset(BalderMutation):
     """Create an Experiment
     
@@ -26,17 +27,18 @@ class CreateDataset(BalderMutation):
             required=False,
             description="The parent of this dataset",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
     def mutate(
-        root, info, name=None, parent=None, tags=[]
+        root, info, name=None, parent=None,created_while=None, tags=[]
     ):
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
         )
 
         exp = models.Dataset.objects.create(
-            name=name, parent=parent, **fill_created(info)
+            name=name, parent=parent, **fill_created(info), created_while=created_while
         )
         if tags:
             exp.tags.add(*tags)
@@ -166,9 +168,44 @@ class ReleaseSamples(BalderMutation):
 
     @bounced()
     def mutate(root, info, samples, dataset, **kwargs):
-        dataset = models.Experiment.objects.get(id=dataset)
+        dataset = models.Dataset.objects.get(id=dataset)
         samples = models.Sample.objects.filter(id__in=samples)
         dataset.samples.remove(*samples)
+        dataset.save()
+        return dataset
+
+    class Meta:
+        type = types.Dataset
+
+class PutDatasets(BalderMutation):
+
+
+    class Arguments:
+        datasets = graphene.List(graphene.ID, required=True)
+        dataset = graphene.ID(required=True)
+
+    @bounced()
+    def mutate(root, info, datasets, dataset, **kwargs):
+        dataset = models.Dataset.objects.get(id=dataset)
+        samples = models.Dataset.objects.filter(id__in=datasets)
+        dataset.children.add(*samples)
+        return dataset
+
+    class Meta:
+        type = types.Dataset
+
+class ReleaseDatasets(BalderMutation):
+
+
+    class Arguments:
+        datasets = graphene.List(graphene.ID, required=True)
+        dataset = graphene.ID(required=True)
+
+    @bounced()
+    def mutate(root, info, samples, dataset, **kwargs):
+        dataset = models.Dataset.objects.get(id=dataset)
+        samples = models.Dataset.objects.filter(id__in=samples)
+        dataset.children.remove(*samples)
         dataset.save()
         return dataset
 
@@ -200,7 +237,7 @@ class ReleaseRepresentations(BalderMutation):
 
     @bounced()
     def mutate(root, info, representations, dataset, **kwargs):
-        dataset = models.Experiment.objects.get(id=dataset)
+        dataset = models.Dataset.objects.get(id=dataset)
         representations = models.Representation.objects.filter(id__in=representations)
         dataset.representations.remove(*representations)
         dataset.save()

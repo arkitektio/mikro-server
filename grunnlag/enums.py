@@ -8,7 +8,14 @@ import graphene
 
 
 
+class Dimension(graphene.Enum):
+    """The dimension of the data"""
 
+    X = "X"
+    Y = "Y"
+    Z = "Z"
+    T = "T"
+    C = "C"
 
 
 

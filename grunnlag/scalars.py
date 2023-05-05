@@ -9,6 +9,42 @@ class ModelFile(Upload):
     """A Model File"""
 
 
+class AssignationID(Scalar):
+    """The context of a transaction (e.g an assignment
+    through a rekuest server)"""
+
+    @staticmethod
+    def serialize(dt):
+        return dt
+
+    @staticmethod
+    def parse_literal(node):
+        if isinstance(node, ast.StringValue):
+            return node.value
+
+    @staticmethod
+    def parse_value(value):
+        return value
+
+
+class Slice(Scalar):
+    """The context of a transaction (e.g an assignment
+    through a rekuest server)"""
+
+    @staticmethod
+    def serialize(dt):
+        return dt
+
+    @staticmethod
+    def parse_literal(node):
+        if isinstance(node, ast.StringValue):
+            return node.value
+
+    @staticmethod
+    def parse_value(value):
+        return value
+
+
 class BigFile(Scalar):
     """A big file uploaded to s3"""
 

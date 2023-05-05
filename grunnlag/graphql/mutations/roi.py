@@ -6,6 +6,7 @@ import graphene
 from grunnlag.enums import RoiTypeInput
 from grunnlag import models, types
 
+from grunnlag.scalars import AssignationID
 
 class InputVector(graphene.InputObjectType):
     x = graphene.Float(description="X-coordinate")
@@ -40,6 +41,7 @@ class CreateROI(BalderMutation):
             RoiTypeInput, description="The type of ROI", required=True
         )
         meta = GenericScalar(required=False, description="Meta Parameters")
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced(anonymous=False)
     def mutate(
@@ -50,6 +52,7 @@ class CreateROI(BalderMutation):
         creator=None,
         meta=None,
         label=None,
+         created_while=None,
         type=None,
         tags=[],
     ):
@@ -62,7 +65,7 @@ class CreateROI(BalderMutation):
 
         print(type)
         roi = models.ROI.objects.create(
-            creator=creator, vectors=vectors, representation=rep, type=type, label=label
+            creator=creator, vectors=vectors, created_while=created_while, representation=rep, type=type, label=label
         )
 
         if tags:
@@ -98,6 +101,7 @@ class CreateROIS(BalderMutation):
         type = graphene.Argument(
             RoiTypeInput, description="The type of ROI", required=True
         )
+        created_while = AssignationID(required=False, description="The assignation id")
         meta = GenericScalar(required=False, description="Meta Parameters")
 
     @bounced(anonymous=False)

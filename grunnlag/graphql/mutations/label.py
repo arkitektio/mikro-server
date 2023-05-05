@@ -7,6 +7,7 @@ import graphene
 from grunnlag.enums import RoiTypeInput
 from grunnlag import models, types
 
+from grunnlag.scalars import AssignationID
 
 class InputVector(graphene.InputObjectType):
     x = graphene.Float(description="X-coordinate")
@@ -36,9 +37,10 @@ class CreateLabel(BalderMutation):
         )
         name = graphene.String(description="The label name")
         creator = graphene.ID(description="The creator of this label")
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced(anonymous=False)
-    def mutate(root, info, instance, representation, creator=None, name=None):
+    def mutate(root, info, instance, representation, creator=None,  created_while=None,name=None):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
@@ -48,6 +50,7 @@ class CreateLabel(BalderMutation):
             instance=instance,
             representation_id=representation,
             creator=creator,
+            created_while=created_while,
             name=name,
         )
 

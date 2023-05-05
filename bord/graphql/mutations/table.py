@@ -4,6 +4,7 @@ from balder.types import BalderMutation
 import graphene
 from bord import models
 from bord.scalar import ParquetInput
+from grunnlag.scalars import AssignationID
 from grunnlag import types
 import logging
 import namegenerator
@@ -65,9 +66,10 @@ class CreateTable(BalderMutation):
             required=False,
             description="Do you want to tag the representation?",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
-    def mutate(root, info, *args, creator=None, **kwargs):
+    def mutate(root, info, *args, creator=None, created_while = None, **kwargs):
         sampleid = kwargs.pop("sample", None)
         repid = kwargs.pop("representation", None)
         expid = kwargs.pop("experiment", None)
@@ -83,6 +85,7 @@ class CreateTable(BalderMutation):
             representation_id=repid,
             experiment_id=expid,
             creator=creator,
+            created_while=created_while,
         )
 
         if tags:
@@ -127,9 +130,10 @@ class FromDF(BalderMutation):
             description="Do you want to tag the representation?",
         )
         df = graphene.Argument(ParquetInput, required=True)
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
-    def mutate(root, info, df, *args, creator=None, **kwargs):
+    def mutate(root, info, df, *args, creator=None, created_while=None,**kwargs):
 
         sampleid = kwargs.pop("sample", None)
         repids = kwargs.pop("rep_origins", None)
@@ -145,6 +149,7 @@ class FromDF(BalderMutation):
             sample_id=sampleid,
             experiment_id=expid,
             creator=creator,
+            created_while=created_while,
             store=df,
         )
 

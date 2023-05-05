@@ -19,5 +19,12 @@ from .context import CreateContext, DeleteContext
 from .big_file import *
 from .presign import *
 from .relation import CreateRelation
+from .video import UploadVideo
+from .map import CreateDimensionMap, DeleteDimensionMap
+from .channel import CreateChannel, DeleteChannel
+from .view import CreateView
+from .timepoint import CreateTimepoint, DeleteTimepoint, PinTimepoint
+from .era import CreateEra, DeleteEra
 
-__all__ = [ "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition", "Link"]
+
+__all__ = [ "CreateChannel", "CreateView", "DeleteView", "DeleteChannel", "CreateDimensionMap", "DeleteDimensionMap", "UploadVideo", "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition", "Link", "CreateDataset", "DeleteDataset", "CreateContext", "DeleteContext", "CreateModel", "CreateRelation", "CreateObjective", "CreateEra", "DeleteEra", "CreateTimepoint", "DeleteTimepoint", "PinTimepoint",  ]

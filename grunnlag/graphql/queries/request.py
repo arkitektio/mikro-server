@@ -66,7 +66,7 @@ class Request(BalderQuery):
                 RoleArn='arn:xxx:xxx:xxx:xxxx',
                 RoleSessionName='sdfsdfsdf',
                 Policy=json.dumps(policy, separators=(',',':')),
-                DurationSeconds=3600
+                DurationSeconds=40000
             )
 
         print(response)

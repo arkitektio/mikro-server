@@ -85,7 +85,7 @@ class PhysicalSizeInput(graphene.InputObjectType):
     c = graphene.Float(description="Physical size of *one* Pixel in the c dimension (in nm)")
 
 
-class Channel(graphene.ObjectType):
+class OmeroChannel(graphene.ObjectType):
     """ A channel in an image
 
     Channels can be highly variable in their properties. This class is a
@@ -97,6 +97,7 @@ class Channel(graphene.ObjectType):
     excitation_wavelength = graphene.Float(description="The excitation wavelength of the fluorophore in nm")
     acquisition_mode = graphene.String(description="The acquisition mode of the channel")
     color = graphene.String(description="The default color for the channel (might be ommited by the rendered)")
+
 
 
 class ChannelInput(graphene.InputObjectType):
@@ -245,12 +246,14 @@ class OmeroRepresentationInput(graphene.InputObjectType):
 
 
     planes = graphene.List(PlaneInput)
+    maps = graphene.List(graphene.ID)
+    timepoints = graphene.List(graphene.ID)
     channels = graphene.List(ChannelInput)
     physical_size = graphene.Argument(PhysicalSizeInput)
     
     affine_transformation = graphene.Argument(AffineMatrix)
     scale = graphene.List(graphene.Float)
-    position  = graphene.ID()
+    positions  = graphene.List(graphene.ID)
     acquisition_date = graphene.DateTime()
     objective_settings = graphene.Argument(ObjectiveSettingsInput)
     imaging_environment = graphene.Argument(ImagingEnvironmentInput)

@@ -6,6 +6,7 @@ from grunnlag import models, types
 from lok import bounced
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 class CreateContext(BalderMutation):
     """Create an Experiment
     
@@ -26,10 +27,11 @@ class CreateContext(BalderMutation):
             required=False,
             description="The experiment this context belongs to",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
     def mutate(
-        root, info, name=None, description=None, creator=None, tags=[], experiment=None
+        root, info, name=None, description=None, creator=None, tags=[], experiment=None, created_while=None,
     ):
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None

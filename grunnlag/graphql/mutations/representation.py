@@ -1,7 +1,7 @@
 import json
 from urllib import request
 from django.contrib.auth import get_user_model
-from grunnlag.scalars import XArrayInput
+from grunnlag.scalars import XArrayInput, AssignationID
 from grunnlag.omero import OmeroRepresentationInput
 from lok import bounced
 from grunnlag.enums import RepresentationVariety, RepresentationVarietyInput
@@ -12,8 +12,9 @@ from grunnlag import models, types
 import logging
 import namegenerator
 from graphene.types.generic import GenericScalar
-
-
+from grunnlag.utils import fill_created
+from grunnlag.scalars import AssignationID
+from grunnlag.inputs import RepresentationViewInput
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +39,7 @@ class UpdateRepresentation(BalderMutation):
 
     @bounced()
     def mutate(
-        root, info, *args, sample=None, tags=None, variety=None, rep=None, origins=None, position=None, **kwargs
+        root, info, *args, sample=None, tags=None, variety=None, rep=None,   origins=None, position=None, **kwargs
     ):
         rep = models.Representation.objects.get(id=rep)
         rep.sample_id = sample or rep.sample_id
@@ -122,11 +123,16 @@ class FromXArray(BalderMutation):
             required=False,
             description="Do you want to tag the repsresentation?",
         )
-
+        created_while = AssignationID(required=False, description="The assignation id")
         file_origins = graphene.List(
             graphene.ID,
             required=False,
             description="Which files were used to create this representation",
+        )
+        table_origins = graphene.List(
+            graphene.ID,
+            required=False,
+            description="Which tables were used to create this representation (e.g simulation parameters)",
         )
         roi_origins = graphene.List(
             graphene.ID,
@@ -140,6 +146,11 @@ class FromXArray(BalderMutation):
         )
         meta = GenericScalar(required=False, description="Meta Parameters")
         omero = graphene.Argument(OmeroRepresentationInput)
+        views = graphene.List(
+            RepresentationViewInput,
+            required=False,
+            description="Views for this representation",
+        )
 
     @bounced()
     def mutate(root, info, *args, creator=None, **kwargs):
@@ -152,9 +163,12 @@ class FromXArray(BalderMutation):
         xarray = kwargs.pop("xarray", None)
         origins = kwargs.pop("origins", None)
         datasets = kwargs.pop("datasets", None)
+        created_while = kwargs.pop("created_while", None)
         experiments = kwargs.pop("experiments", None)
         file_origins = kwargs.pop("file_origins", None)
         roi_origins = kwargs.pop("roi_origins", None)
+        table_origins = kwargs.pop("table_origins", None)
+        views = kwargs.pop("views", None)
 
         creator = info.context.user or (
             get_user_model().objects.get(email=creator) if creator else None
@@ -171,15 +185,19 @@ class FromXArray(BalderMutation):
             creator=creator,
             meta=meta,
             store=xarray,
+            created_while=created_while,
         )
 
         print(omero)
         logger.info(f"ROIS {roi_origins}")
 
         rep.save()
+        omeromodel = None
 
         if omero:
-            omero = models.Omero.objects.create(
+
+
+            omeromodel = models.Omero.objects.create(
                 representation=rep,
                 planes=omero.get("planes", None),
                 channels=omero.get("channels", None),
@@ -190,9 +208,43 @@ class FromXArray(BalderMutation):
                 imaging_environment=omero.get("imaging_environment", None),
                 affine_transformation=omero.get("affine_transformation", None),
                 instrument_id=omero.get("instrument", None),
-                position_id=omero.get("position", None),
                 objective_id =omero.get("objective", None),
             )
+            
+            positions = omero.get("positions", None)
+            print(positions)
+            if positions:
+                omeromodel.positions.set(models.Position.objects.filter(id__in=positions))
+
+            timepoints = omero.get("timepoints", None)
+            print(timepoints)
+            if timepoints:
+                omeromodel.timepoints.set(models.Timepoint.objects.filter(id__in=timepoints))
+
+
+
+            omeromodel.save()
+
+        if views:
+            if not omeromodel:
+                omeromodel = models.Omero.objects.create(representation=rep)
+
+            for view in views:
+                channel = view.pop("channel", None)
+                position = view.pop("position", None)
+                objective = view.pop("objective", None)
+                timepoint = view.pop("timepoint", None)
+
+
+                viewmodel = models.View.objects.create(
+                    omero=omeromodel,
+                    channel_id=channel,
+                    position_id=position,
+                    objective_id=objective,
+                    timepoint_id=timepoint,
+                    **view,
+                    **fill_created(info)
+                )
 
         if tags:
             rep.tags.add(*tags)
@@ -202,11 +254,14 @@ class FromXArray(BalderMutation):
             rep.experiments.add(*experiments)
         if file_origins:
             rep.file_origins.add(*file_origins)
+        if table_origins:
+            rep.table_origins.add(*table_origins)
         if datasets:
             rep.datasets.add(*datasets)
         if roi_origins:
             rep.roi_origins.add(*roi_origins)
 
+        rep.save()
 
         return rep
 

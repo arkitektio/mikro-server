@@ -7,10 +7,11 @@ from grunnlag.enums import OmeroFileType
 from pathlib import Path
 from grunnlag.graphql.queries.request import s3
 import ntpath
-
+from grunnlag.scalars import AssignationID
 import logging
 
 
+from grunnlag.scalars import AssignationID
 logger = logging.getLogger(__name__)
 
 
@@ -22,12 +23,13 @@ class UploadBigFile(BalderMutation):
     class Arguments:
         file = scalars.BigFile(required=True)
         datasets = graphene.List(graphene.ID, required=False)
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
-    def mutate(root, info, *args, file=None, name=None, experiments=None, datasets=None,  **kwargs):
+    def mutate(root, info, *args, file=None, name=None, experiments=None, datasets=None,  created_while=None, **kwargs):
         # do something with yosur file
    
-        bucket, key = file.split("/")
+        key = file
         ending = key.split(".")[-1]
 
 
@@ -41,7 +43,7 @@ class UploadBigFile(BalderMutation):
             filetype = OmeroFileType.UNKNWON
 
         t = models.OmeroFile.objects.create(
-            file=key, name=key, creator=info.context.user, type=filetype
+            file=key, name=key, created_while=created_while, creator=info.context.user, type=filetype
         )
 
         if datasets:

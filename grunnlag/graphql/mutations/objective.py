@@ -11,6 +11,7 @@ import logging
 import namegenerator
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +29,8 @@ class CreateObjective(BalderMutation):
         manufacturer = graphene.String(required=False)
         na = graphene.Float(required=False)
         immersion = graphene.String(required=False)
+        created_while = AssignationID(required=False, description="The assignation id")
+
 
     @bounced()
     def mutate(
@@ -39,12 +42,14 @@ class CreateObjective(BalderMutation):
         na =None,
         immersion=None,
         manufacturer=None,
+         created_while=None,
     ):
         instrument, _ = models.Objective.objects.update_or_create(
             serial_number=serial_number, defaults=dict(
             name=name,
             magnification=magnification,
             na=na,
+            created_while=created_while,
             immersion=immersion,
             **fill_created(info)
             )

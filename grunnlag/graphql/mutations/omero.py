@@ -7,6 +7,7 @@ from grunnlag.enums import OmeroFileType
 from pathlib import Path
 import ntpath
 
+from grunnlag.scalars import AssignationID
 
 class UploadOmeroFile(BalderMutation):
     """Upload a file to Mikro
@@ -18,9 +19,10 @@ class UploadOmeroFile(BalderMutation):
         name = graphene.String(required=False)
         experiments = graphene.List(graphene.ID, required=False)
         datasets = graphene.List(graphene.ID, required=False)
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
-    def mutate(root, info, *args, file=None, name=None, experiments=None, datasets=None,  **kwargs):
+    def mutate(root, info, *args, file=None, name=None, experiments=None, created_while=None, datasets=None,  **kwargs):
         # do something with your file
 
         filename: str = ntpath.basename(file.name)
@@ -37,7 +39,7 @@ class UploadOmeroFile(BalderMutation):
             filetype = OmeroFileType.UNKNWON
 
         t = models.OmeroFile.objects.create(
-            file=file, name=name, creator=info.context.user, type=filetype
+            file=file, name=name, created_while=created_while, creator=info.context.user, type=filetype
         )
 
         if experiments:

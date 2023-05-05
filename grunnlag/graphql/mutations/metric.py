@@ -11,6 +11,7 @@ import logging
 import namegenerator
 
 
+from grunnlag.scalars import AssignationID
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +46,7 @@ class CreateMetric(BalderMutation):
             required=False,
             description="The Email of the user creating the Representation (only for backend apps)",
         )
+        created_while = AssignationID(required=False, description="The assignation id")
 
     @bounced()
     def mutate(
@@ -55,6 +57,7 @@ class CreateMetric(BalderMutation):
         creator=None,
         sample=None,
         experiment=None,
+         created_while=None,
         representation=None,
     ):
         creator = info.context.user or (
@@ -68,6 +71,7 @@ class CreateMetric(BalderMutation):
             creator=creator,
             sample_id=sample,
             experiment_id=experiment,
+            created_while=created_while,
         )
         return metric
 

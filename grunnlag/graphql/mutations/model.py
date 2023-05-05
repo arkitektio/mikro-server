@@ -11,6 +11,7 @@ from grunnlag.scalars import ModelFile
 import logging
 from grunnlag.utils import fill_created
 
+from grunnlag.scalars import AssignationID
 logger = logging.getLogger(__name__)
 
 class CreateModel(BalderMutation):
@@ -26,6 +27,8 @@ class CreateModel(BalderMutation):
         name = graphene.String(required=True)
         contexts = graphene.List(graphene.ID, required=False, description="Which training data does this model use?")
         experiments = graphene.List(graphene.ID, required=False, description="Which training data does this model use?")
+        created_while = AssignationID(required=False, description="The assignation id")
+
 
     @bounced()
     def mutate(
@@ -35,10 +38,11 @@ class CreateModel(BalderMutation):
         kind=None,
         name=None,
         contexts=None,
+         created_while=None,
         experiments=None,
     ):
         model= models.Model.objects.create(
-            kind=kind, data=data, name=name, **fill_created(info),
+            kind=kind, data=data,created_while=created_while, name=name, **fill_created(info),
         )
         if contexts:
             model.contexts.set(contexts)
