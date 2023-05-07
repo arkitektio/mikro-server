@@ -1,7 +1,7 @@
 FROM python:3.8
 LABEL maintainer="jhnnsrs@gmail.com"
 LABEL service="mikro"
-
+RUN pip install --upgrade pip
 
 # Install dependencies
 RUN pip install poetry rich
