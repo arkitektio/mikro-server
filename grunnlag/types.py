@@ -101,6 +101,7 @@ class Metric(BalderObject):
 
 
 class OmeroFile(BalderObject):
+    file = graphene.Field(String, description="The file", required=True)
     thumbnail = graphene.String(description="Url of a thumbnail")
 
     def resolve_file(root, info, *args, **kwargs):
@@ -700,6 +701,20 @@ class Model(BalderObject):
     class Meta:
         model = models.Model
         description = models.Model.__doc__
+
+
+class Graph(BalderObject):
+    comments = graphene.List(Comment)
+
+
+    def resolve_image(root, info, *args, **kwargs):
+        return root.image.url if root.image else None
+
+
+    class Meta:
+        model = bordmodels.Graph
+        description =bordmodels.Graph.__doc__
+
 
 
 class GenericObject(graphene.Union):

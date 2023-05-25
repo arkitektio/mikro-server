@@ -474,6 +474,7 @@ class Position(CreatedThroughMixin, CommentableMixin, models.Model):
     """The relative position of a sample on a microscope stage"""
 
     #Should be stage
+    roi_origins = models.ManyToManyField("ROI", related_name="derived_positions")
     stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name="positions")
     name = models.CharField(max_length=1000, help_text="The name of the possition")
     x = models.FloatField(null=True, blank=True)

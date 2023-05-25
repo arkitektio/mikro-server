@@ -6,7 +6,7 @@ from django.conf import settings
 from taggit.managers import TaggableManager
 from grunnlag.models import Representation, Sample, Experiment, CreatedThroughMixin, InDatasetMixin
 import uuid
-
+from bord.storage import PrivateRenderStorage
 
 class Table(CreatedThroughMixin, InDatasetMixin, models.Model):
     """ A Table is a collection of tabular data.
@@ -65,6 +65,32 @@ class Table(CreatedThroughMixin, InDatasetMixin, models.Model):
             self.store.name = path
 
         return super().save(*args, **kwargs)
+
+
+
+
+class Graph(CreatedThroughMixin, InDatasetMixin, models.Model):
+    tables = models.ManyToManyField(
+        Table, related_name="graphs"
+    )
+    name = models.CharField(max_length=2000)
+    used_columns = models.JSONField(default=list, help_text="List of columns of the Table that are used in this Graph", null=True, blank=True)
+    image = models.ImageField(
+        upload_to="graphs", null=True, storage=PrivateRenderStorage()
+    )
+    tags = TaggableManager()
+    pinned_by = models.ManyToManyField(get_user_model(), related_name="pinned_graphs")
+
+
+
+
+
+
+
+
+
+
+
 
 
 from . import signals

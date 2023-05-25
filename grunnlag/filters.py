@@ -506,11 +506,6 @@ class RepresentationFilter(
         field_name="sample__experiments",
         label="The Experiment the Sample of this Representation belongs to",
     )
-    stages = django_filters.ModelMultipleChoiceFilter(
-        queryset=Stage.objects.all(),
-        field_name="omero__position__stage",
-        label="The Stage this Representation belongs to",
-    )
     samples = django_filters.ModelMultipleChoiceFilter(
         queryset=Sample.objects.all(), field_name="sample"
     )
@@ -535,6 +530,11 @@ class RepresentationFilter(
     derived_tags = django_filters.BaseInFilter(
         method="derived_tag_filter", label="The tags you want to filter by"
     )
+    stages = django_filters.ModelMultipleChoiceFilter(
+        queryset=Stage.objects.all(),
+        method="my_stages_filter",
+        label="The Stage this Representation belongs to",
+    )
 
     class Meta:
         model = Representation
@@ -544,6 +544,16 @@ class RepresentationFilter(
         if value:
             return queryset.filter(tags__name__in=value)
         return queryset
+    
+    def my_stages_filter(self, queryset, name, value):
+        if value:
+            return queryset.filter(
+                Q(omero__positions__stage__in=value)
+                | Q(origins__omero__positions__stage__in=value)
+                | Q(origins__origins__omero__positions__stage__in=value)
+            )
+        return queryset
+    
 
     def my_ids_filter(self, queryset, name, value):
         if value:
@@ -648,9 +658,15 @@ class SampleFilter(
 
 class TagFilter(IdsFilter, django_filters.FilterSet):
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+    values = django_filters.BaseInFilter(
+        label="The tags you want to filter by", method="my_values_filter"
+    )
 
-    def order_filter(self, queryset, name, value):
-        return queryset.order_by(*value)
+    def my_values_filter(self, queryset, name, value):
+        if value:
+            return queryset.filter(slug__in=value)
+        else:
+            return queryset
 
     class Meta:
         model = Tag

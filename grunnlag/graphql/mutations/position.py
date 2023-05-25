@@ -28,6 +28,11 @@ class CreatePosition(BalderMutation):
         x = graphene.Float(description="The x coord of the position (relative to origin)", required=True)
         y = graphene.Float(description="The y coord of the position (relative to origin)", required=True)
         z = graphene.Float(description="The z coord of the position (relative to origin)", required=True)
+        roi_origins = graphene.List(
+            graphene.ID,
+            required=False,
+            description="The Rois that were used to define this position",
+        )
         creator = graphene.ID(description="The creator of this position")
         tolerance = graphene.Float(description="The tolerance offset before we create a new position", required=False)
         tags = graphene.List(
@@ -39,7 +44,7 @@ class CreatePosition(BalderMutation):
 
 
     @bounced(anonymous=False)
-    def mutate(root, info, stage, x, y, z, creator=None, name=None, tags=None,  created_while=None, tolerance=None):
+    def mutate(root, info, stage, x, y, z, creator=None, name=None, tags=None,  created_while=None, tolerance=None, roi_origins=None, **kwargs):
         creator = info.context.user or (
             get_user_model().objects.get(id=creator) if creator else None
         )
@@ -52,8 +57,8 @@ class CreatePosition(BalderMutation):
         if not tolerance:
             position, _ = models.Position.objects.update_or_create(
                 stage=stage, x=x, y=y, z=z,
-                defaults=dict(name=name or f"Position {x} {y} {z} ", tags=tags or [], 
-                created_while=created_while,)
+                defaults=dict(name=name or f"Position {x} {y} {z} ", tags=tags or [], created_while=created_while)
+                
             )
         else:
             position = models.Position.objects.filter(
@@ -66,6 +71,11 @@ class CreatePosition(BalderMutation):
                     created_while=created_while,
                     stage=stage, x=x, y=y, z=z, name=name or f"Position {x} {y} {z} ", tags=tags or []
                 )
+
+        if roi_origins:
+            position.roi_origins.set(models.ROI.objects.filter(id__in=roi_origins))
+            position.save()
+
 
         
         return position
