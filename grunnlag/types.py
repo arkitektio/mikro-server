@@ -4,7 +4,15 @@ from django.db.models import FileField, Q
 from graphene.types.scalars import String
 from graphene_django import DjangoObjectType
 from bord.filters import TableFilter
-from grunnlag.scalars import FeatureValue, File, MetricValue, Parquet, Store, ModelData, Slice
+from grunnlag.scalars import (
+    FeatureValue,
+    File,
+    MetricValue,
+    Parquet,
+    Store,
+    ModelData,
+    Slice,
+)
 from grunnlag.omero import (
     OmeroChannel,
     ImagingEnvironment,
@@ -25,7 +33,6 @@ from grunnlag.filters import (
     ChannelFilter,
     ViewFilter,
     TimepointFilter,
-
 )
 
 from bord.enums import PandasDType
@@ -48,7 +55,8 @@ from komment.types import Comment
 from .linke import LinkableModels, linkable_models, reverse_linkable_models
 from grunnlag.scalars import AffineMatrix
 from itertools import chain
-import json 
+import json
+
 
 class Tag(BalderObject):
     class Meta:
@@ -101,7 +109,7 @@ class Metric(BalderObject):
 
 
 class OmeroFile(BalderObject):
-    file = graphene.Field(String, description="The file", required=True)
+    file = graphene.Field(File, description=" the associaed file", required=False)
     thumbnail = graphene.String(description="Url of a thumbnail")
 
     def resolve_file(root, info, *args, **kwargs):
@@ -132,6 +140,11 @@ class PandasMetaData(graphene.ObjectType):
     columns = graphene.List(Column)
 
 
+def resolve_table_rep_origins(root, info, *args, flatten=0, **kwargs):
+    # TODO: Implement correct django-tree-queries with CTE
+    return models.Representation.objects.filter(derived_tables=root)
+
+
 class Table(BalderObject):
     query = graphene.List(
         GenericScalar,
@@ -143,6 +156,35 @@ class Table(BalderObject):
         limit=graphene.Int(required=False, description="The Limit for the query"),
         query=graphene.String(required=False, description="The Query for the query"),
     )
+    rep_origins = BalderFilteredWithOffset(
+        lambda: Representation,
+        model=models.Representation,
+        filterset_class=RepresentationFilter,
+        related_field="rep_origins",
+        description="Images that were used to create this table",
+        flatten=graphene.Int(
+            description="How many levels to flatten the metrics", default_value=0
+        ),
+        recursive=graphene.Boolean(
+            description="Should the query be recursive. E.g. span all origins of this as well?",
+            default_value=False,
+        ),
+    )
+    table_origins = BalderFilteredWithOffset(
+        lambda: Table,
+        model=bordmodels.Table,
+        filterset_class=TableFilter,
+        related_field="table_origins",
+        description="Tables that were used to create this table",
+        flatten=graphene.Int(
+            description="How many levels to flatten the metrics", default_value=0
+        ),
+        recursive=graphene.Boolean(
+            description="Should the query be recursive. E.g. span all origins of this as well?",
+            default_value=False,
+        ),
+    )
+
     store = graphene.Field(Parquet, description="The parquet store for the table")
     columns = graphene.List(
         Column,
@@ -167,7 +209,11 @@ class Table(BalderObject):
         if query:
             pd_thing = pd_thing.query(query)
 
-        return json.loads(pd_thing.iloc[offset : offset + limit].to_json(orient="records", date_format="iso"))
+        return json.loads(
+            pd_thing.iloc[offset : offset + limit].to_json(
+                orient="records", date_format="iso"
+            )
+        )
 
     def resolve_columns(root, info, only=[]):
         columns_data = root.store.data.read().schema.pandas_metadata["columns"]
@@ -254,11 +300,7 @@ class LinkRelation:
     pass
 
 
-
-
-
 class DimensionMap(BalderObject):
-
     class Meta:
         model = models.DimensionMap
         description = models.DimensionMap.__doc__
@@ -273,14 +315,14 @@ def min_max_to_accessor(min, max):
         return str(min)
     return f"{min}:{max}"
 
+
 class View(BalderObject):
-    z  = graphene.Field(Slice)
-    t  = graphene.Field(Slice)
-    c  = graphene.Field(Slice)
-    x  = graphene.Field(Slice)
-    y  = graphene.Field(Slice)
+    z = graphene.Field(Slice)
+    t = graphene.Field(Slice)
+    c = graphene.Field(Slice)
+    x = graphene.Field(Slice)
+    y = graphene.Field(Slice)
     accessors = graphene.List(graphene.String)
-    
 
     def resolve_accessors(root, info, *args, **kwargs):
         z_accessor = min_max_to_accessor(root.z_min, root.z_max)
@@ -289,15 +331,11 @@ class View(BalderObject):
         x_accessor = min_max_to_accessor(root.x_min, root.x_max)
         y_accessor = min_max_to_accessor(root.y_min, root.y_max)
 
-
-        return [c_accessor, t_accessor, z_accessor,  y_accessor, x_accessor]
+        return [c_accessor, t_accessor, z_accessor, y_accessor, x_accessor]
 
     class Meta:
         model = models.View
         description = models.View.__doc__
-
-
-
 
 
 class Channel(BalderObject):
@@ -308,10 +346,10 @@ class Channel(BalderObject):
         description="Associated maps of dimensions",
     )
 
-
     class Meta:
         model = models.Channel
         description = models.Channel.__doc__
+
 
 class Omero(BalderObject):
     planes = graphene.List(Plane)
@@ -337,17 +375,14 @@ class Omero(BalderObject):
     )
     timepoints = BalderFilteredWithOffset(
         lambda: Timepoint,
-        model = models.Timepoint,
+        model=models.Timepoint,
         filterset_class=TimepointFilter,
         related_field="timepoints",
         description="Associated Timepoints",
     )
 
-
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
-    
-    
 
     class Meta:
         model = models.Omero
@@ -371,6 +406,23 @@ class Instrument(BalderObject):
         description = models.Instrument.__doc__
 
 
+class Camera(BalderObject):
+    omeros = BalderFilteredWithOffset(
+        Omero,
+        filterset_class=OmeroFilter,
+        related_field="omeros",
+        description="Associated images through Omero",
+    )
+    comments = graphene.List(Comment)
+
+    def resolve_comments(root, info, *args, **kwargs):
+        return root.comments.all()
+
+    class Meta:
+        model = models.Camera
+        description = models.Camera.__doc__
+
+
 class Timepoint(BalderObject):
     omeros = BalderFilteredWithOffset(
         Omero,
@@ -383,7 +435,6 @@ class Timepoint(BalderObject):
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
-    
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
@@ -405,7 +456,6 @@ class Era(BalderObject):
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
-    
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
@@ -454,8 +504,29 @@ def resolve_derived(root, info, *args, flatten=0, **kwargs):
         )
 
 
-class Video(BalderObject):
+def resolve_rois(root, info, *args, recursive=False, flatten=0, **kwargs):
+    if recursive or flatten > 0:
+        # TODO: Implement correct django-tree-queries with CTE
+        return models.ROI.objects.filter(
+            Q(representation=root)
+            | Q(representation__origins=root)
+            | Q(repressentation__origins__origins=root)
+        )
+    return models.ROI.objects.filter(representation=root)
 
+
+def resolve_roi_origins(root, info, *args, recursive=False, flatten=0, **kwargs):
+    if recursive or flatten > 0:
+        # TODO: Implement correct django-tree-queries with CTE
+        return models.ROI.objects.filter(
+            Q(derived_representations=root)
+            | Q(derived_representations__derived=root)
+            | Q(representation__derived__derived__derived=root)
+        )
+    return models.ROI.objects.filter(representation=root)
+
+
+class Video(BalderObject):
     def resolve_data(root, info, *args, **kwargs):
         return root.data.url if root.data else None
 
@@ -471,8 +542,8 @@ class Thumbnail(BalderObject):
         model = models.Thumbnail
         description = models.Thumbnail.__doc__
 
-class Render(graphene.Union):
 
+class Render(graphene.Union):
     class Meta:
         types = (Video, Thumbnail)
 
@@ -488,6 +559,9 @@ class Representation(LinkRelation, BalderObject):
             description="How many levels to flatten the metrics", default_value=0
         ),
     )
+    table = graphene.Field(
+        Table, first=graphene.Boolean(description="Should we get the first item?")
+    )  # TODO: Factor out
     metric = graphene.Field(Metric, key=graphene.String(required=True))
     latest_thumbnail = graphene.Field(Thumbnail)
     store = graphene.Field(Store)
@@ -500,9 +574,25 @@ class Representation(LinkRelation, BalderObject):
     rois = BalderFilteredWithOffset(
         lambda: ROI,
         model=models.ROI,
+        queryset_resolver=resolve_rois,
         filterset_class=ROIFilter,
         related_field="rois",
         description="Associated rois",
+    )
+    roi_origins = BalderFilteredWithOffset(
+        lambda: ROI,
+        model=models.ROI,
+        queryset_resolver=resolve_roi_origins,
+        filterset_class=ROIFilter,
+        related_field="roi_origins",
+        description="Originating from rois",
+        flatten=graphene.Int(
+            description="How many levels to flatten the metrics", default_value=0
+        ),
+        recursive=graphene.Boolean(
+            description="Should the query be recursive. E.g. span all origins of this as well?",
+            default_value=False,
+        ),
     )
     derived = BalderFilteredWithOffset(
         lambda: Representation,
@@ -521,6 +611,9 @@ class Representation(LinkRelation, BalderObject):
     def resolve_metric(root, info, key, *args, **kwargs):
         return root.metrics.filter(key=key).first()
 
+    def resolve_table(root, info, *args, **kwargs):
+        return root.tables.first()
+
     def resolve_latest_thumbnail(root, info, *args, **kwargs):
         return root.thumbnails.last()
 
@@ -532,7 +625,7 @@ class Representation(LinkRelation, BalderObject):
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
-    
+
     def resolve_renders(root, info, *args, **kwargs):
         return chain(root.videos.all(), root.thumbnails.all())
 
@@ -628,8 +721,17 @@ class Position(BalderObject):
         description = models.Position.__doc__
 
 
+class RoiDimensions(graphene.ObjectType):
+    width = graphene.Float(description="The dimensions of the image")
+    height = graphene.Float(description="Height of the image")
+
+
 class ROI(BalderObject):
     vectors = graphene.List(Vector, description="The vectors of the ROI")
+    dimensions = graphene.Field(
+        RoiDimensions,
+        description="The dimensions of the ROI. Only valid for rectangular ROIs",
+    )
 
     pinned = graphene.Boolean(description="Is the ROI pinned by the active user")
     comments = graphene.List(Comment)
@@ -639,6 +741,9 @@ class ROI(BalderObject):
 
     def resolve_pinned(root, info, *args, **kwargs):
         return root.pinned_by.filter(id=info.context.user.id).exists()
+
+    def resolve_dimensions(root, info, *args, **kwargs):
+        return {"width": 20, "height": 20}
 
     class Meta:
         model = models.ROI
@@ -706,15 +811,12 @@ class Model(BalderObject):
 class Graph(BalderObject):
     comments = graphene.List(Comment)
 
-
     def resolve_image(root, info, *args, **kwargs):
         return root.image.url if root.image else None
 
-
     class Meta:
         model = bordmodels.Graph
-        description =bordmodels.Graph.__doc__
-
+        description = bordmodels.Graph.__doc__
 
 
 class GenericObject(graphene.Union):

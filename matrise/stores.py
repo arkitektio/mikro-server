@@ -29,7 +29,6 @@ class NotCompatibleException(Exception):
 
 class XArrayStore(FieldFile):
     def _getStore(self):
-
         if isinstance(self.storage, S3Boto3Storage):
             bucket = self.storage.bucket_name
             location = self.storage.location
@@ -59,8 +58,10 @@ class XArrayStore(FieldFile):
         return self._getStore()
 
     def delete(self):
+        if not self.name:
+            raise Exception("No key has been assigned to this store.")
+
         if isinstance(self.storage, S3Boto3Storage):
-            bucket = self.storage.bucket_name
             store = s3fs.S3FileSystem(
                 client_kwargs={"endpoint_url": get_active_settings().S3_ENDPOINT_URL},
                 key=get_active_settings().ACCESS_KEY,
@@ -80,7 +81,6 @@ class XArrayStore(FieldFile):
         apiversion=get_active_settings().API_VERSION,
         fileversion=get_active_settings().FILE_VERSION,
     ):
-
         if apiversion == "0.1":
             if self.instance.unique is None:
                 raise Exception("Please assign a Unique ID first")

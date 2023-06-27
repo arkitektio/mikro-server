@@ -26,3 +26,4 @@ from .view import *
 from .meta import *
 from .timepoint import *
 from .era import *
+from .camera import *

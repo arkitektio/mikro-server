@@ -22,6 +22,7 @@ from matrise.models import Matrise
 from colorfield.fields import ColorField
 from komment.models import Comment
 from lok.models import LokClient
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,15 +40,24 @@ def get_sentinel_user():
 
 
 class CreatedThroughMixin(models.Model):
-    created_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_created_by")
+    created_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_created_by",
+    )
     created_through = models.ForeignKey(
-        LokClient, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(class)s_created_through"
+        LokClient,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_created_through",
     )
     created_while = models.CharField(max_length=1000, null=True, blank=True)
 
     class Meta:
         abstract = True
-
 
 
 class CommentableMixin(models.Model):
@@ -68,7 +78,6 @@ class UserMeta(models.Model):
 
 
 class Antibody(CreatedThroughMixin, CommentableMixin, models.Model):
-
     name = models.CharField(max_length=100)
     creator = models.ForeignKey(get_user_model(), blank=True, on_delete=models.CASCADE)
 
@@ -76,8 +85,7 @@ class Antibody(CreatedThroughMixin, CommentableMixin, models.Model):
         return "{0}".format(self.name)
 
 
-
-class Objective(CreatedThroughMixin, CommentableMixin,  models.Model):
+class Objective(CreatedThroughMixin, CommentableMixin, models.Model):
     serial_number = models.CharField(max_length=1000, unique=True)
     name = models.CharField(max_length=1000, unique=True)
     magnification = models.FloatField(blank=True, null=True)
@@ -85,13 +93,27 @@ class Objective(CreatedThroughMixin, CommentableMixin,  models.Model):
     immersion = models.CharField(max_length=1000, blank=True, null=True)
 
 
+class Camera(CreatedThroughMixin, CommentableMixin, models.Model):
+    serial_number = models.CharField(max_length=1000, unique=True)
+    name = models.CharField(max_length=1000, unique=True)
+    model = models.CharField(max_length=1000, blank=True, null=True)
+    bit_depth = models.IntegerField(blank=True, null=True)
+    sensor_size_x = models.FloatField(blank=True, null=True)
+    sensor_size_y = models.FloatField(blank=True, null=True)
+    physical_sensor_size_x = models.FloatField(blank=True, null=True)
+    physical_sensor_size_y = models.FloatField(blank=True, null=True)
+    physical_sensor_size_unit = models.CharField(max_length=1000, blank=True, null=True)
+    manufacturer = models.CharField(max_length=1000, blank=True, null=True)
 
-class Instrument(CreatedThroughMixin,  CommentableMixin, models.Model):
+
+class Instrument(CreatedThroughMixin, CommentableMixin, models.Model):
     name = models.CharField(max_length=1000, unique=True)
     detectors = models.JSONField(null=True, blank=True, default=list)
     dichroics = models.JSONField(null=True, blank=True, default=list)
     filters = models.JSONField(null=True, blank=True, default=list)
-    objectives = models.ManyToManyField(Objective, blank=True, related_name="instruments")
+    objectives = models.ManyToManyField(
+        Objective, blank=True, related_name="instruments"
+    )
     lot_number = models.CharField(max_length=1000, null=True, blank=True)
     manufacturer = models.CharField(max_length=1000, null=True, blank=True)
     model = models.CharField(max_length=1000, null=True, blank=True)
@@ -106,20 +128,20 @@ class ModelDataField(models.FileField):
     pass
 
 
-
-
-
-class Dataset(CreatedThroughMixin,  CommentableMixin, models.Model):
+class Dataset(CreatedThroughMixin, CommentableMixin, models.Model):
     """
     A dataset is a collection of data files and metadata files.
     It mimics the concept of a folder in a file system and is the top level
     object in the data model.
 
     """
+
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the experiment was created"
     )
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="children"
+    )
     name = models.CharField(max_length=200, help_text="The name of the experiment")
     pinned_by = models.ManyToManyField(
         get_user_model(),
@@ -131,13 +153,15 @@ class Dataset(CreatedThroughMixin,  CommentableMixin, models.Model):
 
 
 class InDatasetMixin(models.Model):
-    datasets = models.ManyToManyField(Dataset, related_name="%(class)ss",null=True, blank=True)
+    datasets = models.ManyToManyField(
+        Dataset, related_name="%(class)ss", null=True, blank=True
+    )
 
     class Meta:
         abstract = True
 
 
-class Experiment(CreatedThroughMixin,  CommentableMixin, InDatasetMixin, models.Model):
+class Experiment(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """
     An experiment is a collection of samples and their representations.
     It mimics the concept of an experiment in the lab and is the top level
@@ -187,13 +211,18 @@ class Experiment(CreatedThroughMixin,  CommentableMixin, InDatasetMixin, models.
     tags = TaggableManager(help_text="Tags for the experiment")
 
 
-
 class Context(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     name = models.CharField(max_length=1000, help_text="The name of the context")
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the context was created"
     )
-    experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="contexts", null=True, blank=True)
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name="contexts",
+        null=True,
+        blank=True,
+    )
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -211,25 +240,45 @@ class Context(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Mode
 
     def __str__(self) -> str:
         return self.name
-    
+
 
 class Relation(CreatedThroughMixin, models.Model):
-    name = models.CharField(max_length=1000, help_text="The name of the relation", unique=True)
-    description = models.CharField(max_length=1000, help_text="A verbose description of the relation", null=True, blank=True)
-
+    name = models.CharField(
+        max_length=1000, help_text="The name of the relation", unique=True
+    )
+    description = models.CharField(
+        max_length=1000,
+        help_text="A verbose description of the relation",
+        null=True,
+        blank=True,
+    )
 
 
 class DataLink(CreatedThroughMixin, CommentableMixin, models.Model):
-    x_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="x_content_type")
+    x_content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, related_name="x_content_type"
+    )
     x_id = models.PositiveIntegerField()
-    y_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, related_name="y_content_type")
+    y_content_type = models.ForeignKey(
+        ContentType, on_delete=models.CASCADE, related_name="y_content_type"
+    )
     y_id = models.PositiveIntegerField()
     x = GenericForeignKey(ct_field="x_content_type", fk_field="x_id")
     y = GenericForeignKey(ct_field="y_content_type", fk_field="y_id")
-    relation = models.ForeignKey(Relation, on_delete=models.CASCADE, help_text="The relation between the two objects")
-    left_type = models.CharField(max_length=1000, help_text="The type of the left object")
-    right_type = models.CharField(max_length=1000, help_text="The type of the right object")
-    context = models.ForeignKey(Context, on_delete=models.CASCADE, related_name="links", null=True, blank=True)
+    relation = models.ForeignKey(
+        Relation,
+        on_delete=models.CASCADE,
+        help_text="The relation between the two objects",
+    )
+    left_type = models.CharField(
+        max_length=1000, help_text="The type of the left object"
+    )
+    right_type = models.CharField(
+        max_length=1000, help_text="The type of the right object"
+    )
+    context = models.ForeignKey(
+        Context, on_delete=models.CASCADE, related_name="links", null=True, blank=True
+    )
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the sample was created"
     )
@@ -245,10 +294,18 @@ class DataLink(CreatedThroughMixin, CommentableMixin, models.Model):
         permissions = [("can_link", "Can link objects")]
         constraints = [
             models.UniqueConstraint(
-                fields=("x_content_type", "x_id", "y_content_type", "y_id", "relation", "context"),
+                fields=(
+                    "x_content_type",
+                    "x_id",
+                    "y_content_type",
+                    "y_id",
+                    "relation",
+                    "context",
+                ),
                 name="Only one relationship of the same kind between two objects in the same context",
             )
         ]
+
 
 class ExperimentalGroup(CreatedThroughMixin, CommentableMixin, models.Model):
     """A group of samples that are part of the same experimental group"""
@@ -289,7 +346,8 @@ class OmeroFile(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Mo
     """An OmeroFile is a file that contains omero-meta data. It is the raw file that was generated
     by the microscope.
 
-    Mikro uses the omero-meta datas to create representations of the file. See Representation for more information."""
+    Mikro uses the omero-meta datas to create representations of the file. See Representation for more information.
+    """
 
     type = models.CharField(
         max_length=400,
@@ -326,11 +384,15 @@ class OmeroFile(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Mo
 
     comments = GenericRelation(Comment, help_text="Comments on the experiment")
 
+    def __str__(self) -> str:
+        return self.name
+
 
 class Model(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """A
 
-    Mikro uses the omero-meta data to create representations of the file. See Representation for more information."""
+    Mikro uses the omero-meta data to create representations of the file. See Representation for more information.
+    """
 
     kind = models.CharField(
         max_length=400,
@@ -368,7 +430,6 @@ class Model(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model)
         blank=True,
         related_name="models",
     )
-
 
 
 class Sample(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
@@ -420,16 +481,20 @@ class Sample(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model
         logger.info("Trying to remove Sample H5File")
         super(Sample, self).delete(*args, **kwargs)
 
+
 # TODO: Rename Stage
 class Stage(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model):
     """An Stage is a set of positions that share a common space on a microscope and can
     be use to translate.
-    
-    
+
+
     """
+
     name = models.CharField(max_length=1000, help_text="The name of the stage")
     kind = models.CharField(max_length=1000)
-    instrument = models.ForeignKey(Instrument, on_delete=models.SET_NULL, null=True, blank=True)
+    instrument = models.ForeignKey(
+        Instrument, on_delete=models.SET_NULL, null=True, blank=True
+    )
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the acquistion was created"
     )
@@ -449,31 +514,44 @@ class Stage(CreatedThroughMixin, CommentableMixin, InDatasetMixin, models.Model)
     tags = TaggableManager()
 
 
-
-
-
 class Channel(CreatedThroughMixin, CommentableMixin, models.Model):
     name = models.CharField(max_length=1000, help_text="The name of the channel")
-    emission_wavelength = models.FloatField(help_text="The emmission wavelength of the fluorophore in nm", null=True, blank=True)
-    excitation_wavelength = models.FloatField(help_text="The excitation wavelength of the fluorophore in nm", null=True, blank=True)
-    acquisition_mode = models.CharField(max_length=1000, help_text="The acquisition mode of the channel", null=True, blank=True)
-    color = models.CharField(max_length=1000, help_text="The default color for the channel (might be ommited by the rendered)", null=True, blank=True)
+    emission_wavelength = models.FloatField(
+        help_text="The emmission wavelength of the fluorophore in nm",
+        null=True,
+        blank=True,
+    )
+    excitation_wavelength = models.FloatField(
+        help_text="The excitation wavelength of the fluorophore in nm",
+        null=True,
+        blank=True,
+    )
+    acquisition_mode = models.CharField(
+        max_length=1000,
+        help_text="The acquisition mode of the channel",
+        null=True,
+        blank=True,
+    )
+    color = models.CharField(
+        max_length=1000,
+        help_text="The default color for the channel (might be ommited by the rendered)",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["name", "emission_wavelength","excitation_wavelength"],
+                fields=["name", "emission_wavelength", "excitation_wavelength"],
                 name="Only one channel per name, emmission_wavelength and excitation_wavelength",
             )
         ]
 
 
-
-
 class Position(CreatedThroughMixin, CommentableMixin, models.Model):
     """The relative position of a sample on a microscope stage"""
 
-    #Should be stage
+    # Should be stage
     roi_origins = models.ManyToManyField("ROI", related_name="derived_positions")
     stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name="positions")
     name = models.CharField(max_length=1000, help_text="The name of the possition")
@@ -492,7 +570,7 @@ class Position(CreatedThroughMixin, CommentableMixin, models.Model):
         permissions = [("download_representation", "Can download Presentation")]
         constraints = [
             models.UniqueConstraint(
-                fields=["stage", "x","y","z"],
+                fields=["stage", "x", "y", "z"],
                 name="Only one unique posistion per stage",
             )
         ]
@@ -500,7 +578,9 @@ class Position(CreatedThroughMixin, CommentableMixin, models.Model):
 
 class Era(CreatedThroughMixin, CommentableMixin, models.Model):
     name = models.CharField(max_length=1000, help_text="The name of the era")
-    start = models.DateTimeField(help_text="The start of the era", null=True, blank=True)
+    start = models.DateTimeField(
+        help_text="The start of the era", null=True, blank=True
+    )
     end = models.DateTimeField(help_text="The end of the era", null=True, blank=True)
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the experiment was created"
@@ -517,12 +597,14 @@ class Era(CreatedThroughMixin, CommentableMixin, models.Model):
 class Timepoint(CreatedThroughMixin, CommentableMixin, models.Model):
     """The relative position of a sample on a microscope stage"""
 
-    #Should be stage
+    # Should be stage
     era = models.ForeignKey(Era, on_delete=models.CASCADE, related_name="timepoints")
     created_at = models.DateTimeField(
         auto_now_add=True, help_text="The time the experiment was created"
     )
-    name = models.CharField(max_length=1000, help_text="The name of the timepoint", null=True, blank=True)
+    name = models.CharField(
+        max_length=1000, help_text="The name of the timepoint", null=True, blank=True
+    )
     delta_t = models.FloatField(null=True, blank=True)
     pinned_by = models.ManyToManyField(
         get_user_model(),
@@ -535,13 +617,16 @@ class Timepoint(CreatedThroughMixin, CommentableMixin, models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["era", "delta_t",],
+                fields=[
+                    "era",
+                    "delta_t",
+                ],
                 name="Only one unique timepoint per era",
             )
         ]
 
 
-class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matrise):
+class Representation(CreatedThroughMixin, InDatasetMixin, CommentableMixin, Matrise):
     """A Representation is 5-dimensional representation of an image
 
     Mikro stores each image as sa 5-dimensional representation. The dimensions are:
@@ -608,6 +693,7 @@ class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matr
         related_query_name="derived_representations",
         symmetrical=False,
     )
+
     sample = models.ForeignKey(
         Sample,
         on_delete=models.CASCADE,
@@ -635,8 +721,18 @@ class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matr
         get_user_model(), on_delete=models.SET(get_sentinel_user), null=True, blank=True
     )
     comments = GenericRelation(Comment, help_text="Comments on the representation")
-    x = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="x_content_type", object_id_field="x_id")
-    y = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="y_content_type", object_id_field="y_id")
+    x = GenericRelation(
+        DataLink,
+        help_text="Comments on the representation",
+        content_type_field="x_content_type",
+        object_id_field="x_id",
+    )
+    y = GenericRelation(
+        DataLink,
+        help_text="Comments on the representation",
+        content_type_field="y_content_type",
+        object_id_field="y_id",
+    )
     pinned_by = models.ManyToManyField(
         get_user_model(),
         related_name="pinned_representations",
@@ -654,11 +750,8 @@ class Representation(CreatedThroughMixin,  InDatasetMixin, CommentableMixin,Matr
         return f"Representation: {self.name}"
 
 
-
-
 # TODO: Rename Context
-class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
-
+class Omero(CreatedThroughMixin, CommentableMixin, models.Model):
 
     """Omero is a through model that stores the real world context of an image
 
@@ -666,13 +759,16 @@ class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
     a stage (Both are models)), objective and other meta data of the image.
 
     """
+
     representation = models.OneToOneField(
         Representation, on_delete=models.CASCADE, related_name="omero"
     )
-
+    cameras = models.ManyToManyField(Camera, related_name="omeros")
     positions = models.ManyToManyField(Position, related_name="omeros")
     timepoints = models.ManyToManyField(Timepoint, related_name="omeros")
-    objective = models.ForeignKey(Objective, on_delete=models.SET_NULL, null=True, related_name="omeros")
+    objective = models.ForeignKey(
+        Objective, on_delete=models.SET_NULL, null=True, related_name="omeros"
+    )
     affine_transformation = models.JSONField(null=True, blank=True, default=list)
     planes = models.JSONField(null=True, blank=True, default=list)
     channels = models.JSONField(null=True, blank=True, default=list)
@@ -682,40 +778,78 @@ class Omero(CreatedThroughMixin,  CommentableMixin,models.Model):
     objective_settings = models.JSONField(null=True, blank=True, default=dict)
     imaging_environment = models.JSONField(null=True, blank=True, default=dict)
     instrument = models.ForeignKey(
-        Instrument, null=True, blank=True, on_delete=models.SET_NULL, related_name="omeros"
+        Instrument,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="omeros",
     )
 
+
 class DimensionMap(CreatedThroughMixin, models.Model):
-    omero = models.ForeignKey(Omero, on_delete=models.CASCADE, related_name="dimension_maps")
-    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="dimension_maps")
+    omero = models.ForeignKey(
+        Omero, on_delete=models.CASCADE, related_name="dimension_maps"
+    )
+    channel = models.ForeignKey(
+        Channel, on_delete=models.CASCADE, related_name="dimension_maps"
+    )
     dimension = models.CharField(max_length=100)
     index = models.IntegerField(help_text="The index of the channel")
 
 
-
 class View(CreatedThroughMixin, models.Model):
     omero = models.ForeignKey(Omero, on_delete=models.CASCADE, related_name="views")
-    z_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    z_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    x_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    x_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    y_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    y_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    t_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    t_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    c_min = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
-    c_max = models.IntegerField(help_text="The index of the channel", null=True, blank=True)
+    z_min = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    z_max = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    x_min = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    x_max = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    y_min = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    y_max = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    t_min = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    t_max = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    c_min = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
+    c_max = models.IntegerField(
+        help_text="The index of the channel", null=True, blank=True
+    )
 
     # What it maps to
-    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
-    position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
-    objective = models.ForeignKey(Objective, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
-    instrument = models.ForeignKey(Instrument, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
-    timepoint = models.ForeignKey(Timepoint, on_delete=models.CASCADE, related_name="views", null=True, blank=True)
-
-
-
-
+    channel = models.ForeignKey(
+        Channel, on_delete=models.CASCADE, related_name="views", null=True, blank=True
+    )
+    position = models.ForeignKey(
+        Position, on_delete=models.CASCADE, related_name="views", null=True, blank=True
+    )
+    objective = models.ForeignKey(
+        Objective, on_delete=models.CASCADE, related_name="views", null=True, blank=True
+    )
+    instrument = models.ForeignKey(
+        Instrument,
+        on_delete=models.CASCADE,
+        related_name="views",
+        null=True,
+        blank=True,
+    )
+    timepoint = models.ForeignKey(
+        Timepoint, on_delete=models.CASCADE, related_name="views", null=True, blank=True
+    )
 
 
 class Metric(CreatedThroughMixin, CommentableMixin, models.Model):
@@ -769,9 +903,7 @@ class Metric(CreatedThroughMixin, CommentableMixin, models.Model):
         ]
 
 
-
-
-class Thumbnail(CreatedThroughMixin,  CommentableMixin,models.Model):
+class Thumbnail(CreatedThroughMixin, CommentableMixin, models.Model):
     """A Thumbnail is a render of a representation that is used to display the representation in the UI.
 
     Thumbnails can also store the major color of the representation. This is used to color the representation in the UI.
@@ -790,8 +922,7 @@ class Thumbnail(CreatedThroughMixin,  CommentableMixin,models.Model):
     major_color = models.CharField(max_length=100, null=True, blank=True)
 
 
-
-class Video(CreatedThroughMixin,  CommentableMixin,models.Model):
+class Video(CreatedThroughMixin, CommentableMixin, models.Model):
     """A Thumbnail is a render of a representation that is used to display the representation in the UI.
 
     Thumbnails can also store the major color of the representation. This is used to color the representation in the UI.
@@ -810,7 +941,7 @@ class Video(CreatedThroughMixin,  CommentableMixin,models.Model):
     )
 
 
-class ROI(CreatedThroughMixin,  CommentableMixin,models.Model):
+class ROI(CreatedThroughMixin, CommentableMixin, models.Model):
     """A ROI is a region of interest in a representation.
 
     This region is to be regarded as a view on the representation. Depending
@@ -853,9 +984,19 @@ class ROI(CreatedThroughMixin,  CommentableMixin,models.Model):
         related_name="rois",
         help_text="The Representation this ROI was original used to create (drawn on)",
     )
-    x = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="x_content_type", object_id_field="x_id")
-    y = GenericRelation(DataLink, help_text="Comments on the representation", content_type_field="y_content_type", object_id_field="y_id")
-    
+    x = GenericRelation(
+        DataLink,
+        help_text="Comments on the representation",
+        content_type_field="x_content_type",
+        object_id_field="x_id",
+    )
+    y = GenericRelation(
+        DataLink,
+        help_text="Comments on the representation",
+        content_type_field="y_content_type",
+        object_id_field="y_id",
+    )
+
     label = models.CharField(
         max_length=1000,
         null=True,
@@ -942,7 +1083,7 @@ class Label(CreatedThroughMixin, CommentableMixin, models.Model):
         ]
 
 
-class Feature(CreatedThroughMixin,  CommentableMixin,models.Model):
+class Feature(CreatedThroughMixin, CommentableMixin, models.Model):
     """A Feature is a numerical key value pair that is attached to a Label.
 
     You can model it for example as a key value pair of a class instance of a segmentation mask.

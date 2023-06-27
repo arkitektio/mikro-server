@@ -116,3 +116,59 @@ class PinTimepoint(BalderMutation):
 
     class Meta:
         type = types.Timepoint
+
+
+
+
+
+
+class AddTimepoint(BalderMutation):
+    """Add Timepoint
+    
+    This mutation adds a position to an experiment and returns the experiment."""
+
+    class Arguments:
+        omero = graphene.ID(required=True, description="The ID of the omero")
+        timepoint = graphene.ID(required=True, description="The ID of the position to remove from representation")
+
+    @bounced()
+    def mutate(root, info, omero, timepoint, view=None, **kwargs):
+        omero = models.Omero.objects.get(id=omero)
+        timepoint = models.Timepoint.objects.get(id=timepoint)
+
+        omero.timepoints.add(timepoint)
+        omero.save()
+
+
+        return omero
+
+    class Meta:
+        type = types.Omero
+
+
+class RemoveTimepoint(BalderMutation):
+    """Add Posistion
+    
+    This mutation adds a position to an experiment and returns the experiment."""
+
+    class Arguments:
+        omero = graphene.ID(required=True, description="The ID of the omero")
+        timepoint = graphene.ID(required=True, description="The ID of the position to add to the representation")
+
+    @bounced()
+    def mutate(root, info, omero, timepoint, view=None, **kwargs):
+        omero = models.Omero.objects.get(id=omero)
+
+        if view:
+            view = models.View.objects.get(id=view)
+
+        timepoint = models.Timepoint.objects.get(id=timepoint)
+
+        omero.timepoints.remove(timepoint)
+        omero.save()
+
+
+        return omero
+
+    class Meta:
+        type = types.Omero

@@ -131,3 +131,59 @@ class PinPosition(BalderMutation):
 
     class Meta:
         type = types.Position
+
+
+class AddPosition(BalderMutation):
+    """Add Posistion
+    
+    This mutation adds a position to an experiment and returns the experiment."""
+
+    class Arguments:
+        omero = graphene.ID(required=True, description="The ID of the omero")
+        position = graphene.ID(required=True, description="The ID of the position to add to the representation")
+
+    @bounced()
+    def mutate(root, info, omero, position, view=None, **kwargs):
+        omero = models.Omero.objects.get(id=omero)
+
+        if view:
+            view = models.View.objects.get(id=view)
+
+        position = models.Position.objects.get(id=position)
+
+        omero.positions.add(position)
+        omero.save()
+
+
+        return omero
+
+    class Meta:
+        type = types.Omero
+
+
+class RemovePosition(BalderMutation):
+    """Remove Posistion
+    
+    This mutation adds a position to an experiment and returns the experiment."""
+
+    class Arguments:
+        omero = graphene.ID(required=True, description="The ID of the omero")
+        position = graphene.ID(required=True, description="The ID of the position to remove from representation")
+
+    @bounced()
+    def mutate(root, info, omero, position, view=None, **kwargs):
+        omero = models.Omero.objects.get(id=omero)
+
+        if view:
+            view = models.View.objects.get(id=view)
+
+        position = models.Position.objects.get(id=position)
+
+        omero.positions.remove(position)
+        omero.save()
+
+
+        return omero
+
+    class Meta:
+        type = types.Omero

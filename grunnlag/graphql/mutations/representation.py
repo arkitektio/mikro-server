@@ -15,6 +15,7 @@ from graphene.types.generic import GenericScalar
 from grunnlag.utils import fill_created
 from grunnlag.scalars import AssignationID
 from grunnlag.inputs import RepresentationViewInput
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,13 +34,24 @@ class UpdateRepresentation(BalderMutation):
             required=False,
             description="Which representations were used to create this representation",
         )
-        position = graphene.ID(required=False, description="The position within an acquisition")
+        position = graphene.ID(
+            required=False, description="The position within an acquisition"
+        )
         tags = graphene.List(graphene.String, required=False, description="Tags")
         sample = graphene.ID(required=False, description="The sample")
 
     @bounced()
     def mutate(
-        root, info, *args, sample=None, tags=None, variety=None, rep=None,   origins=None, position=None, **kwargs
+        root,
+        info,
+        *args,
+        sample=None,
+        tags=None,
+        variety=None,
+        rep=None,
+        origins=None,
+        position=None,
+        **kwargs,
     ):
         rep = models.Representation.objects.get(id=rep)
         rep.sample_id = sample or rep.sample_id
@@ -76,7 +88,6 @@ class DeleteRepresentation(BalderMutation):
             description="The ID of the two deletet Representation", required=True
         )
 
-    @bounced()
     def mutate(root, info, id, **kwargs):
         rep = models.Representation.objects.get(id=id)
         rep.delete()
@@ -84,6 +95,25 @@ class DeleteRepresentation(BalderMutation):
 
     class Meta:
         type = DeleteRepresentationResult
+
+
+class FreeRepresentation(BalderMutation):
+    """Create an experiment (only signed in users)"""
+
+    class Arguments:
+        id = graphene.ID(
+            description="The ID of the two deletet Representation", required=True
+        )
+
+    def mutate(root, info, id, **kwargs):
+        rep = models.Representation.objects.get(id=id)
+        rep.store.delete()
+        rep.store = None
+        rep.save()
+        return rep
+
+    class Meta:
+        type = types.Representation
 
 
 class FromXArray(BalderMutation):
@@ -195,8 +225,6 @@ class FromXArray(BalderMutation):
         omeromodel = None
 
         if omero:
-
-
             omeromodel = models.Omero.objects.create(
                 representation=rep,
                 planes=omero.get("planes", None),
@@ -208,20 +236,29 @@ class FromXArray(BalderMutation):
                 imaging_environment=omero.get("imaging_environment", None),
                 affine_transformation=omero.get("affine_transformation", None),
                 instrument_id=omero.get("instrument", None),
-                objective_id =omero.get("objective", None),
+                objective_id=omero.get("objective", None),
             )
-            
+
             positions = omero.get("positions", None)
             print(positions)
             if positions:
-                omeromodel.positions.set(models.Position.objects.filter(id__in=positions))
+                omeromodel.positions.set(
+                    models.Position.objects.filter(id__in=positions)
+                )
 
             timepoints = omero.get("timepoints", None)
             print(timepoints)
             if timepoints:
-                omeromodel.timepoints.set(models.Timepoint.objects.filter(id__in=timepoints))
+                omeromodel.timepoints.set(
+                    models.Timepoint.objects.filter(id__in=timepoints)
+                )
 
-
+            cameras = omero.get("cameras", None)
+            print(cameras)
+            if cameras:
+                omeromodel.cameras.set(
+                    models.Camera.objects.filter(id__in=timepoints)
+                )
 
             omeromodel.save()
 
@@ -235,7 +272,6 @@ class FromXArray(BalderMutation):
                 objective = view.pop("objective", None)
                 timepoint = view.pop("timepoint", None)
 
-
                 viewmodel = models.View.objects.create(
                     omero=omeromodel,
                     channel_id=channel,
@@ -243,7 +279,7 @@ class FromXArray(BalderMutation):
                     objective_id=objective,
                     timepoint_id=timepoint,
                     **view,
-                    **fill_created(info)
+                    **fill_created(info),
                 )
 
         if tags:

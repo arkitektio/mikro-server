@@ -1,3 +1,4 @@
+from typing import Any, Dict, Tuple
 from django.contrib.postgres.fields.array import ArrayField
 from django.db.models.fields import IntegerField
 from .settings import get_active_settings
@@ -28,7 +29,10 @@ class MatriseBase(models.Model):
         help_text="The location of the Array on the Storage System (S3 or Media-URL)",
     )
     shape = ArrayField(
-        models.IntegerField(), help_text="The arrays shape format [c,t,z,y,x]", blank=True, null=True
+        models.IntegerField(),
+        help_text="The arrays shape format [c,t,z,y,x]",
+        blank=True,
+        null=True,
     )
     dims = ArrayField(
         models.CharField(max_length=100),
@@ -65,7 +69,6 @@ class MatriseBase(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs):
-
         # Initial Model pure save calls will not have an Array and raise Exception
         # Update calls (also through from_xarray) will already have an array that needs to be updated
         try:
@@ -75,12 +78,6 @@ class MatriseBase(models.Model):
             logger.warning("Eached here")
 
         except Exception as e:
-            # We are dealing with an initial Creation, lets create a new Store
-            if not self.store.name:
-                path = active_settings.getPathGeneratorClass().generatePath(self)
-                self.store.name = path
-            logger.exception(e)
-            logger.error("Errorinosienrfoisenfoisneofisneofinsoeifnosienfosienf")
             self.has_array = False
 
         return super().save(*args, **kwargs)

@@ -254,6 +254,7 @@ class OmeroRepresentationInput(graphene.InputObjectType):
     affine_transformation = graphene.Argument(AffineMatrix)
     scale = graphene.List(graphene.Float)
     positions  = graphene.List(graphene.ID)
+    cameras  = graphene.List(graphene.ID)
     acquisition_date = graphene.DateTime()
     objective_settings = graphene.Argument(ObjectiveSettingsInput)
     imaging_environment = graphene.Argument(ImagingEnvironmentInput)

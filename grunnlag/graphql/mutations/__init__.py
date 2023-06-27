@@ -25,6 +25,6 @@ from .channel import CreateChannel, DeleteChannel
 from .view import CreateView
 from .timepoint import CreateTimepoint, DeleteTimepoint, PinTimepoint
 from .era import CreateEra, DeleteEra
-
+from .camera import CreateCamera
 
 __all__ = [ "CreateChannel", "CreateView", "DeleteView", "DeleteChannel", "CreateDimensionMap", "DeleteDimensionMap", "UploadVideo", "CreateExperiment", "DeleteExperiment", "CreateSample", "DeleteSample", "UpdateRepresentation", "FromXArray", "CreateMetric", "UploadThumbnail", "UploadOmeroFile", "DeleteOmeroFile", "Negotiate", "CreateROI", "DeleteROI", "CreateFeature", "CreateLabel", "CreateInstrument", "CreateStage", "CreatePosition", "Link", "CreateDataset", "DeleteDataset", "CreateContext", "DeleteContext", "CreateModel", "CreateRelation", "CreateObjective", "CreateEra", "DeleteEra", "CreateTimepoint", "DeleteTimepoint", "PinTimepoint",  ]

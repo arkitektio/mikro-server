@@ -44,18 +44,26 @@ class Table(BalderQuery):
 
 class ColumnsOf(BalderQuery):
     class Arguments:
-        id = graphene.ID(description="The ID to search by", required=True)
+        table = graphene.ID(description="The ID to search by", required=True)
         dtype = graphene.List(
             PandasDType, description="Filter by dtype", required=False
         )
-        name = graphene.String(description="Filter by name", required=False)
+        values = graphene.List(
+            graphene.ID,
+            description="Filter by the value of the column",
+            required=False,
+        )
 
-    def resolve(root, info, id, name=None, dtype=None):
-        table = models.Table.objects.get(id=id)
+        search = graphene.String(description="Filter by name", required=False)
+
+    def resolve(root, info, search=None, dtype=None, values=None, table=None):
+        table = models.Table.objects.get(id=table)
 
         columns_data = table.store.data.read().schema.pandas_metadata["columns"]
-        if name:
-            columns_data = [c for c in columns_data if c["name"].startswith(name)]
+        if values:
+            return [c for c in columns_data if c["name"] in values]
+        if search:
+            columns_data = [c for c in columns_data if c["name"].startswith(search)]
         if dtype:
             columns_data = [c for c in columns_data if c["pandas_type"] in dtype]
 

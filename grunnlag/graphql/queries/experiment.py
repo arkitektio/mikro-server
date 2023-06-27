@@ -1,5 +1,5 @@
 from balder.types.query.base import BalderQuery
-from graphene import types
+
 import graphene
 from grunnlag.filters import ExperimentFilter
 from grunnlag import types, models

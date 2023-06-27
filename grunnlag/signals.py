@@ -14,7 +14,6 @@ def publish_rep_changes(
     instance: Representation,
     action: str,
 ):
-
     from grunnlag.graphql.subscriptions import MyRepresentations
 
     publish_groups = []
@@ -76,10 +75,10 @@ def exp_post_save(sender, instance=None, created=None, **kwargs):
             [MyExperiments.USERGROUP(instance.creator)],
         )
 
+
 @receiver(post_save, sender=Stage)
 def stage_post_save(sender, instance=None, created=None, **kwargs):
     pass
-
 
 
 @receiver(post_save, sender=Sample)
@@ -174,13 +173,15 @@ def table_post_del(sender, instance=None, **kwargs):
         )
 
 
-@receiver(post_delete, sender=Representation)
-def auto_delete_file_on_delete(sender, instance, **kwargs):
+@receiver(pre_delete, sender=Representation)
+def auto_delete_store_on_delete(sender, instance, **kwargs):
     """
     Deletes file from filesystem
     when corresponding `Representation` object is deleted.
     """
+
     if instance.store:
+        logger.error("DELETING DATA")
         try:
             instance.store.delete()
         except Exception as e:
@@ -195,11 +196,12 @@ def auto_delete_file_on_delete(sender, instance, **kwargs):
         )
 
 
-@receiver(post_delete, sender=OmeroFile)
-def auto_delete_file_on_delete(sender, instance, **kwargs):
+@receiver(pre_delete, sender=OmeroFile)
+def auto_delete_file_on_delete_d(sender, instance, **kwargs):
     """
     Deletes file from filesystem
     when corresponding `Representation` object is deleted.
     """
     if instance.file:
+        print("Deleting file")
         instance.file.delete()

@@ -89,13 +89,23 @@ class ExperimentNameFilter(SingleTextInputFilter):
     parameter_name = "sample__experiments__name__icontains"
 
 
+class DatasetNameFilter(SingleTextInputFilter):
+    title = "Dataset Name"
+    parameter_name = "dataset__name__icontains"
+
+
 class SampleAdmin(admin.ModelAdmin):
     list_filter = ("experiments",)
     search_fields = ("name",)
 
 
 class RepresentationAdmin(GuardedModelAdmin):
-    list_filter = (SampleNameListFilter, ExperimentNameFilter)
+    list_filter = (
+        SampleNameListFilter,
+        ExperimentNameFilter,
+        DatasetNameFilter,
+        ("created_at", admin.DateFieldListFilter),
+    )
 
     def lookup_allowed(self, key, value):
         return True
