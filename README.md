@@ -24,16 +24,11 @@ It provides the following functionality:
 
 ## Installation
 
-Use the provided docker-compose.yaml to run the the service.
+Right now the installation is a bit cumbersome if not used with the Arkitekt platform.
+This will be improved in the future.
 
-```bash
-docker compose up
-```
-
-This docker-compose.yaml will start the following services:
-- mikro
-- postgres
-- minio
+For now please isntall either through [konstruktor](https://github.com/jhnnsrs/konstruktor) or
+via the development build of the arkitket platform [arkitekt-server](https://github.com/jhnnsrs/arkitekt-server)
 
 
 ## Roadmap

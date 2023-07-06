@@ -203,6 +203,7 @@ class Table(BalderObject):
         return root.store.name
 
     def resolve_query(root, info, *args, columns=[], offset=0, limit=200, query=None):
+        limit = max(limit, 300)
         pd_thing = root.store.data.read_pandas().to_pandas()
         pd_thing = pd_thing[columns] if columns else pd_thing
 
