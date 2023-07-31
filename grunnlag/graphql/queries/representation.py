@@ -30,7 +30,6 @@ class MyRepresentations(BalderQuery):
 
 
 class AccessibleRepresentations(BalderQuery):
-
     def resolve(self, info):
         reps = get_objects_for_user(
             info.context.user,
@@ -98,7 +97,7 @@ class RepresentationsForUser(BalderQuery):
 
 class Representation(BalderQuery):
     """Get a single Representation by ID
-    
+
     Returns a single Representation by ID. If the user does not have access
     to the Representation, an error will be raised.
     """
@@ -119,6 +118,29 @@ class Representation(BalderQuery):
         operation = "representation"
 
 
+class Image(BalderQuery):
+    """Get a single Image by ID
+
+    Returns a single Representation by ID. If the user does not have access
+    to the Representation, an error will be raised.
+    """
+
+    class Arguments:
+        id = graphene.ID(description="The ID to search by", required=True)
+
+    def resolve(self, info, id):
+        rep = models.Representation.objects.get(id=id)
+        # assert rep.creator == info.context.user or info.context.user.has_perm(
+        #     "grunnlag.view_representation", rep
+        # ), "You do not have permission to view this representation"
+
+        return models.Representation.objects.get(id=id)
+
+    class Meta:
+        type = types.Representation
+        operation = "image"
+
+
 def get_random_obj_from_queryset(queryset):
     max_pk = queryset.aggregate(max_pk=Max("pk"))["max_pk"]
     if max_pk is None:
@@ -131,13 +153,11 @@ def get_random_obj_from_queryset(queryset):
 
 class RandomRep(BalderQuery):
     """Get a random Representation
-    
+
     Gets a random Representation from the database. This is used for
     testing purposes
-    
+
     """
-
-
 
     resolve = lambda root, info: get_random_obj_from_queryset(
         models.Representation.objects.all()
@@ -150,7 +170,7 @@ class RandomRep(BalderQuery):
 
 class Representations(BalderQuery):
     """All Representations
-    
+
     This query returns all Representations that are stored on the platform
     depending on the user's permissions. Generally, this query will return
     all Representations that the user has access to. If the user is an amdin

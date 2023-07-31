@@ -18,6 +18,7 @@ from omegaconf import OmegaConf
 BASE_DIR = Path(__file__).resolve().parent.parent
 conf = OmegaConf.load(os.path.join(BASE_DIR, "config.yaml"))
 
+
 # Quick-start developsment sesttings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 

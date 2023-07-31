@@ -264,7 +264,6 @@ class OmeroFilter(TimeFilterMixin, IdsFilter, django_filters.FilterSet):
     )
 
 
-
 class ExperimentFilter(
     PinnedFilterMixin,
     AppFilterMixin,
@@ -355,6 +354,9 @@ class ViewFilter(
         method="active_c_filter",
         label="The z you want to filter by either interger or slice string",
     )
+    is_global = django_filters.BooleanFilter(
+        method="is_global_filter", label="Filter by global"
+    )
 
     def z_filter(self, queryset, name, value):
         if ":" in value:
@@ -380,6 +382,23 @@ class ViewFilter(
         else:
             value = int(value)
             return queryset.filter(z_min=value, z_max=value)
+
+    def is_global_filter(self, queryset, name, value):
+        if value:
+            return queryset.filter(
+                z_min=None,
+                z_max=None,
+                t_min=None,
+                t_max=None,
+                x_min=None,
+                x_max=None,
+                y_min=None,
+                y_max=None,
+                c_min=None,
+                c_max=None,
+            )
+        else:
+            return queryset
 
     def active_z_filter(self, queryset, name, value):
         value = int(value)

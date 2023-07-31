@@ -334,6 +334,21 @@ class View(BalderObject):
 
         return [c_accessor, t_accessor, z_accessor, y_accessor, x_accessor]
 
+    def resolve_z(root, info, *args, **kwargs):
+        return min_max_to_accessor(root.z_min, root.z_max)
+
+    def resolve_t(root, info, *args, **kwargs):
+        return min_max_to_accessor(root.t_min, root.t_max)
+
+    def resolve_c(root, info, *args, **kwargs):
+        return min_max_to_accessor(root.c_min, root.c_max)
+
+    def resolve_x(root, info, *args, **kwargs):
+        return min_max_to_accessor(root.x_min, root.x_max)
+
+    def resolve_y(root, info, *args, **kwargs):
+        return min_max_to_accessor(root.y_min, root.y_max)
+
     class Meta:
         model = models.View
         description = models.View.__doc__
@@ -571,6 +586,12 @@ class Representation(LinkRelation, BalderObject):
         filterset_class=TableFilter,
         related_field="tables",
         description="Associated tables",
+    )
+    views = BalderFilteredWithOffset(
+        View,
+        filterset_class=ViewFilter,
+        related_field="views",
+        description="Associated views",
     )
     rois = BalderFilteredWithOffset(
         lambda: ROI,

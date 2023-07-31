@@ -743,6 +743,10 @@ class Representation(CreatedThroughMixin, InDatasetMixin, CommentableMixin, Matr
 
     objects = RepresentationManager()
 
+    @property
+    def views(self):
+        return View.objects.filter(omero__representation=self)
+
     class Meta:
         permissions = [("download_representation", "Can download Presentation")]
 
