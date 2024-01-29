@@ -45,7 +45,7 @@ AWS_S3_FILE_OVERWRITE = False
 AWS_QUERYSTRING_EXPIRE = 3600
 
 
-AWS_STORAGE_BUCKET_NAME = conf.minio.buckets[2].name # last is media
+AWS_STORAGE_BUCKET_NAME = conf.minio.buckets.media # last is media
 AWS_DEFAULT_ACL = "private"
 AWS_S3_USE_SSL = True
 AWS_S3_SECURE_URLS = False  # Should resort to True if using in Production behind TLS
@@ -61,7 +61,7 @@ LOK = {
 SUPERUSERS = [
     {
         "USERNAME": conf.django.admin.username,
-        "EMAIL": conf.django.admin.email,
+        "EMAIL": "fake@fake.com",
         "PASSWORD": conf.django.admin.password,
     }
 ]
@@ -134,7 +134,7 @@ MATRISE = {
     "PRIVATE_URL": f"{conf.minio.protocol}://{conf.minio.host}:{conf.minio.port}",  # TODO: FIx
     "STORAGE_CLASS": "matrise.storages.s3.S3Storage",
     "GENERATOR_CLASS": "matrise.generators.default.DefaultPathGenerator",
-    "BUCKET": conf.minio.buckets[0].name,
+    "BUCKET": conf.minio.buckets.zarr,
 }
 
 BORD = {
@@ -146,7 +146,7 @@ BORD = {
     "PRIVATE_URL": f"{conf.minio.protocol}://{conf.minio.host}:{conf.minio.port}",  # TODO
     "STORAGE_CLASS": "bord.storages.s3.S3Storage",
     "GENERATOR_CLASS": "bord.generators.default.DefaultPathGenerator",
-    "BUCKET": conf.minio.buckets[1].name,
+    "BUCKET": conf.minio.buckets.parquet,
 }
 
 
@@ -184,6 +184,8 @@ DATABASES = {
         "PORT": conf.db.port,
     }
 }
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 CHANNEL_LAYERS = {
     "default": {

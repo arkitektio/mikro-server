@@ -10,7 +10,8 @@ import logging
 def comment_post_save(sender, instance=None, created=None, **kwargs):
     from komment.graphql.subscriptions import MyMentionsSubscription
 
-    if instance.mentions:
+    if instance.mentions and not created:
+        # Mentions are added on save (as it is a m2m field)
         for mention in instance.mentions.all():
             MyMentionsSubscription.broadcast(
                 {"action": "created", "data": instance.id}

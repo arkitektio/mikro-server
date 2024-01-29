@@ -2,14 +2,21 @@ FROM python:3.8
 LABEL maintainer="jhnnsrs@gmail.com"
 LABEL service="mikro"
 
+
 # Install dependencies
 RUN pip install poetry rich
+
+# Configure poetry
+RUN poetry config virtualenvs.create false 
 ENV PYTHONUNBUFFERED=1
+
 
 # Copy dependencies
 COPY pyproject.toml /
-RUN poetry config virtualenvs.create false 
+COPY poetry.lock /
 RUN poetry install
+
+
 
 # Install Arbeid
 RUN mkdir /workspace

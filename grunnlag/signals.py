@@ -44,7 +44,9 @@ def rep_post_save(sender, instance=None, created=None, **kwargs):
     Assign Permission to the Representation
     """
 
-    permissions = ["download_representation", "view_representation"]
+    permissions = ["download_representation", "view_representation"]#
+
+    print("REPRESENTATION SAVED")
     if created:
         logger.info(f"Assigning Permissions {permissions} to Representation")
 
@@ -135,7 +137,7 @@ def table_post_save(sender, instance=None, created=None, **kwargs):
 
 
 @receiver(post_save, sender=ROI)
-def rep_post_save(sender, instance=None, created=None, **kwargs):
+def roi_post_save(sender, instance=None, created=None, **kwargs):
     from grunnlag.graphql.subscriptions import Rois
 
     if instance.representation:

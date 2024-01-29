@@ -33,6 +33,7 @@ from grunnlag.filters import (
     ChannelFilter,
     ViewFilter,
     TimepointFilter,
+    PositionFilter,
 )
 
 from bord.enums import PandasDType
@@ -707,6 +708,13 @@ class Stage(BalderObject):
     kind = graphene.Field(AcquisitionKind, description="The kind of acquisition")
     pinned = graphene.Boolean(description="Is the table pinned by the active user")
     comments = graphene.List(Comment)
+    positions = BalderFilteredWithOffset(
+        lambda: Position,
+        model=models.Position,
+        related_field="positions",
+        filterset_class=PositionFilter,
+        description="Derived Images from this Image",
+    )
 
     def resolve_comments(root, info, *args, **kwargs):
         return root.comments.all()
