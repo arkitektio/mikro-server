@@ -15,6 +15,10 @@ redis:
   host: redis
   port: 6379
 datalayer:
+  # Any ARN-shaped string: MinIO ignores the value and scopes the session by the inline
+  # policy alone. Unset, no role can be assumed and no grant can be issued at all.
+  role_arn: arn:aws:iam::000000000000:role/datalayer
+  session_duration_seconds: 3600
   access_key: ZvBLOQAApECKXISSJyiox192s6RNhVgmN9LZhWFYbdA
   secret_key: rqh27SKddiMciJ2RPSpQF3l_SYtlXNKCA9Fp3NgrYBQ
   host: minio
@@ -28,8 +32,14 @@ datalayer:
     bucket: grumpy-magnolia-capybara
   bigfile:
     bucket: sleazy-tan-seahorse
+  fabriks:
+    bucket: wiry-cerulean-pangolin
 
 authentikate:
+  # authentikate 4.0 requires AUDIENCE. "*" (ANY_AUDIENCE) accepts a token minted
+  # for any service; the `aud` claim itself is still required. Replace with this
+  # service's identifier to check which service the token was minted for.
+  audience: "*"
   issuers:
   - kind: rsa
     iss: lok
@@ -37,6 +47,7 @@ authentikate:
     public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDGFj0zB7j6KrTRFEP+a2Z7toLEwJ0ROF3qSkq6vo2aK5TGRv+D3V/6VhvM2NgtUIO1iqwvf4XETamhHt2xlVzJyoyMAnAGkwkMyQJpI6wG5g7NtrRc1kkeefWbLBVW+aEI++3ec3eD9PUhnjXbQXJwju8l2ldKg2skw2fZWrjfWo0S0CuvB05nXJ8BmmAo65BBv29gGVywzZEApv/Zu16l6ftCZSEKi/zMbK6YxCekl/h3sfK7uGj6uaab7XSqqANHDZDTSotD5ws8UdMb3IP4/qoJiJm0Lsw5XpmFTt9M+ekiv/9HsWjXtzOd0BpqxynlvF1fWDr0HVnrUCh1XMzn
   static_tokens: {}
   provenance:
+    audience: "*"
     issuers:
     - kind: rsa
       iss: rekuest

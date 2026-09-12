@@ -4,15 +4,8 @@ from koherent.models import Task as KoherentTask
 from strawberry import auto
 
 
-@strawberry_django.order_type(models.Image)
-class ImageOrder:
-    created_at: auto
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.Dataset)
-class DatasetOrder:
+@strawberry_django.order_type(models.Folder)
+class FolderOrder:
     created_at: auto
     name: auto
     id: auto
@@ -23,102 +16,35 @@ class FileOrder:
     created_at: auto
     name: auto
     size: auto
+    content_type: auto
     id: auto
 
 
-@strawberry_django.order_type(models.Table)
-class TableOrder:
+@strawberry_django.order_type(models.FileLink)
+class FileLinkOrder:
+    """Ordering for file links."""
+
+    created_at: auto
+    direction: auto
+    id: auto
+
+
+@strawberry_django.order_type(models.ArrayDataset)
+class ArrayDatasetOrder:
     created_at: auto
     name: auto
     id: auto
 
 
-@strawberry_django.order_type(models.Mesh)
-class MeshOrder:
+@strawberry_django.order_type(models.Animation)
+class AnimationOrder:
     created_at: auto
     name: auto
     id: auto
 
 
-@strawberry_django.order_type(models.Snapshot)
-class SnapshotOrder:
-    created_at: auto
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.ROI)
-class ROIOrder:
-    created_at: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.RenderTree)
-class RenderTreeOrder:
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.FileView)
-class FileViewOrder:
-    id: auto
-
-
-@strawberry_django.order_type(models.Stage)
-class StageOrder:
-    created_at: auto
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.Era)
-class EraOrder:
-    created_at: auto
-    begin: auto
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.Experiment)
-class ExperimentOrder:
-    created_at: auto
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.MultiWellPlate)
-class MultiWellPlateOrder:
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.Instrument)
-class InstrumentOrder:
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.Objective)
-class ObjectiveOrder:
-    name: auto
-    magnification: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.Camera)
-class CameraOrder:
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.RGBRenderContext)
-class RGBContextOrder:
-    name: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.ADataset)
-class ADatasetOrder:
+@strawberry_django.order_type(models.SceneSnapshot)
+class SceneSnapshotOrder:
     created_at: auto
     name: auto
     id: auto
@@ -130,9 +56,16 @@ class DataArrayOrder:
     id: auto
 
 
-@strawberry_django.order_type(models.DataRoi)
-class DataRoiOrder:
+@strawberry_django.order_type(models.Annotation)
+class AnnotationOrder:
     name: auto
+    id: auto
+
+
+@strawberry_django.order_type(models.AnnotationCollection)
+class AnnotationCollectionOrder:
+    name: auto
+    created_at: auto
     id: auto
 
 
@@ -152,13 +85,42 @@ class SceneOrder:
     id: auto
 
 
-@strawberry_django.order_type(models.ViewCollection)
-class ViewCollectionOrder:
-    name: auto
+@strawberry_django.order_type(KoherentTask)
+class TaskOrder:
+    created_at: auto
     id: auto
 
 
-@strawberry_django.order_type(KoherentTask)
-class TaskOrder:
+@strawberry_django.order_type(models.CoordinateSystem)
+class CoordinateSystemOrder:
+    name: auto
+    created_at: auto
+    id: auto
+
+
+@strawberry_django.order_type(models.Transformation)
+class TransformationOrder:
+    order: auto
+    created_at: auto
+    id: auto
+
+
+@strawberry_django.order_type(models.MeshCollection)
+class MeshCollectionOrder:
+    version: auto
+    created_at: auto
+    id: auto
+
+
+@strawberry_django.order_type(models.SparseDataset)
+class SparseDatasetOrder:
+    name: auto
+    created_at: auto
+    id: auto
+
+
+@strawberry_django.order_type(models.TableDataset)
+class TableDatasetOrder:
+    name: auto
     created_at: auto
     id: auto

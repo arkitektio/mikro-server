@@ -10,15 +10,23 @@ services:
          POSTGRES_USER: test
       labels:
          - fakts.service=live.arkitekt.postgres
+      # No host port: docker picks a free one and `backend_stack` asks the running
+      # stack which, via `deployment.get_port`. Pinning 5555 here is what made every
+      # sibling suite under mounts/ (kraph, rekuest, elektro, ...) collide with this
+      # one, and made a stack stranded by a crashed run block the next run outright:
+      # dokker isolates by minting a unique compose project per run, and a pinned host
+      # port opts out of that -- two projects still fight over the one host port.
       ports:
-        - 5555:5432
+        - 5432
    redis:
       environment:
          REDIS_HOST: redis
          REDIS_PORT: 6379
       image: redis
+      # Unused by the suite -- settings_test swaps in an InMemoryChannelLayer -- but
+      # still the port that collided most often. Ephemeral for the same reason as db.
       ports:
-         - 6666:6379
+         - 6379
 
 volumes:
    chroma_data:

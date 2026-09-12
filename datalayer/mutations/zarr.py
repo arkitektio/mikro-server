@@ -19,6 +19,13 @@ def finish_zarr_upload(info: Info, input: inputs.FinishZarrUploadInput) -> types
     return cast(types.ZarrStore, dl.finish_zarr_upload(info.context.request.organization.id, input_model))
 
 
+def refresh_zarr_upload(info: Info, input: inputs.RefreshZarrUploadInput) -> types.ZarrUploadGrant:
+    """Reissue upload credentials for a Zarr store whose upload is still in flight."""
+    dl = get_current_datalayer()
+    input_model = input.to_pydantic()
+    return types.ZarrUploadGrant.from_pydantic(dl.refresh_zarr_upload_grant(info.context.request.organization.id, input_model.store_id))
+
+
 def request_zarr_access(info: Info, input: inputs.RequestZarrAccessInput) -> types.ZarrAccessGrant:
     """Request temporary S3 read credentials for a Zarr store."""
     dl = get_current_datalayer()

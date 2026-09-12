@@ -7,9 +7,15 @@ from django.contrib.auth.models import Permission
 from kante.types import Info
 
 
+#: Structure identifiers clients pass in, mapped to the model they name. These are *values*,
+#: not schema names, so no schema diff warns anyone when one changes -- which is why the
+#: retired spellings stay here as aliases rather than being deleted outright.
 identifier_model_map = {
-    "@mikro/image": models.Image,
-    "@mikro/dataset": models.Dataset,
+    "@mikro/arraydataset": models.ArrayDataset,
+    "@mikro/folder": models.Folder,
+    # Back-compat alias: `Dataset` was renamed to `Folder`, but this identifier is a value
+    # clients pass in rather than a schema name, so no schema diff would warn them.
+    "@mikro/dataset": models.Folder,
     "@mikro/file": models.File,
 }
 
@@ -32,14 +38,6 @@ def permissions(
         
     return [types.UserObjectPermission(user=user_permissions.user, permission=user_permissions.permission.codename) for user_permissions in user_permissions]
 
-
-
-# Your identifier-to-model map
-identifier_model_map = {
-    "@mikro/image": models.Image,
-    "@mikro/dataset": models.Dataset,
-    "@mikro/file": models.File,
-}
 
 
 @strawberry.type

@@ -6,6 +6,7 @@ from django.db.models import Avg, Max, Min, Sum, Count
 from django.db.models.functions import TruncHour, TruncDay, TruncWeek, TruncMonth, TruncQuarter, TruncYear
 import strawberry_django
 from kante import Info
+from core.scoping import for_org
 import datetime
 # ---------- Resolver spec ----------
 ResolverSpec = Dict[str, Tuple[Callable[[QuerySet, str], Any], Type, str]]
@@ -212,7 +213,11 @@ def create_stats_type(
 
     # --------- Root field resolver (fixed filter handling + cache init) ---------
     def resolver(info: Info, filters: Optional[Any] = None) -> Any:
-        qs = model.objects.all()
+        # Scope before aggregating: an aggregate over every tenant's rows leaks counts even
+        # though it returns no objects. `for_org` is the same seam the single-object getters
+        # use, so a model with no path to an organization fails loudly here rather than
+        # quietly summing the whole table.
+        qs = for_org(model, info)
         if filters_type and filters is not None:
             # `filters` is an instance or dict per strawberry_django usage
             qs = strawberry_django.filters.apply(filters, qs, info)

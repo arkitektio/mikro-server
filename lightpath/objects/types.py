@@ -3,6 +3,7 @@ from typing import Optional, List
 import strawberry
 from strawberry.experimental import pydantic
 
+from kanne_server import scalars as kanne_scalars
 from lightpath.objects import models
 from lightpath.enums import ChannelKind, PortRole, ElementKind, ObjectiveCorrectionKind, ObjectiveImmersion, PulseKind
 
@@ -27,16 +28,16 @@ class Pose3D:
     orientation: Optional[Euler] = strawberry.field(default=None, description="Euler orientation (optional)")
 
 
-@pydantic.type(models.SpectrumModel, description="Spectral window in nanometers")
+@pydantic.type(models.SpectrumModel, description="Spectral window")
 class Spectrum:
-    min_nm: float = strawberry.field(description="Minimum wavelength (nm)")
-    max_nm: float = strawberry.field(description="Maximum wavelength (nm)")
+    min: kanne_scalars.Length = strawberry.field(description="Minimum wavelength (e.g. '400 nm')")
+    max: kanne_scalars.Length = strawberry.field(description="Maximum wavelength (e.g. '700 nm')")
 
 
 @pydantic.type(models.BeamStateModel, description="Beam properties carried on a light edge")
 class BeamState:
-    wavelength_nm: float | None = strawberry.field(default=None, description="Wavelength (nm)")
-    power_mw: float | None = strawberry.field(default=None, description="Optical power (mW)")
+    wavelength: kanne_scalars.Length | None = strawberry.field(default=None, description="Wavelength (e.g. '488 nm')")
+    power: kanne_scalars.Power | None = strawberry.field(default=None, description="Optical power (e.g. '20 mW')")
     polarization: str | None = strawberry.field(default=None, description="Polarization label")
     mode_hint: str | None = strawberry.field(default=None, description="Mode hint, e.g., TEM00")
 
@@ -70,12 +71,12 @@ class OpticalElement:
 @pydantic.type(models.LaserElementModel, description="Light source")
 class LaserElement(OpticalElement):
     id: strawberry.ID
-    nominal_wavelength_nm: float | None = strawberry.field(description="Source wavelength (nm)")
-    power_mw: float | None = strawberry.field(default=None, description="Source power (mW)")
+    nominal_wavelength: kanne_scalars.Length | None = strawberry.field(description="Source wavelength (e.g. '488 nm')")
+    power: kanne_scalars.Power | None = strawberry.field(default=None, description="Source power (e.g. '20 mW')")
     channel: ChannelKind | None  = strawberry.field(default=None, description="Output channel type")
     laser_medium: Optional[str] = strawberry.field(default=None, description="Laser medium (e.g., 'Ti:Sapphire', 'Nd:YAG')")
     pulse_kind: Optional[PulseKind] = strawberry.field(default=None, description="Pulse type (e.g., 'CW', 'PULSED')")
-    repetition_rate_hz: Optional[float] = strawberry.field(default=None, description="Repetition rate (Hz)")
+    repetition_rate: kanne_scalars.Frequency | None = strawberry.field(default=None, description="Repetition rate (e.g. '80 MHz')")
     has_pockels_cell: Optional[bool] = strawberry.field(default=None, description="Has Pockels cell")
     has_q_switch: Optional[bool] = strawberry.field(default=None, description="Has Q-switch")
 
@@ -98,7 +99,7 @@ class OtherSourceElement(OpticalElement):
 @pydantic.type(models.DetectorElementModel, description="Detector")
 class DetectorElement(OpticalElement):
     id: strawberry.ID
-    nepd_w_per_sqrt_hz: float | None = strawberry.field(default=None, description="Noise-equivalent power density")
+    nepd_w_per_sqrt_hz: float | None = strawberry.field(default=None, description="Noise-equivalent power density (W/√Hz)")
     amplifier_gain_db: float | None = strawberry.field(default=None, description="Amplifier gain (dB)")
     gain: float | None = strawberry.field(default=None, description="Overall gain (unitless)")
 
@@ -106,8 +107,8 @@ class DetectorElement(OpticalElement):
 @pydantic.type(models.CCDElementModel, description="Detector")
 class CCDElement(OpticalElement):
     id: strawberry.ID
-    pixel_size_um: Optional[float] = strawberry.field(default=None, description="Pixel size (µm)")
-    resolution: Optional[List[int]] =  strawberry.field(default=None, description="Pixel size (µm)")
+    pixel_size: kanne_scalars.Length | None = strawberry.field(default=None, description="Pixel size (e.g. '6.5 µm')")
+    resolution: Optional[List[int]] =  strawberry.field(default=None, description="Sensor resolution (width, height) in pixels")
 
 
 @pydantic.type(models.MirrorElementModel, description="Mirror")
@@ -120,7 +121,7 @@ class MirrorElement(OpticalElement):
 @pydantic.type(models.PinholeElementModel, description="Pinhole")
 class PinholeElement(OpticalElement):
     id: strawberry.ID
-    diameter_um: float | None = strawberry.field(default=None, description="Diameter (µm)")
+    diameter: kanne_scalars.Length | None = strawberry.field(default=None, description="Diameter (e.g. '50 µm')")
 
 @pydantic.type(models.BeamSplitterElementModel, description="Beam splitter")
 class BeamSplitterElement(OpticalElement):
@@ -133,7 +134,7 @@ class BeamSplitterElement(OpticalElement):
 @pydantic.type(models.LensElementModel, description="Thin lens")
 class LensElement(OpticalElement):
     id: strawberry.ID
-    focal_length_mm: float = strawberry.field(description="Focal length (mm)")
+    focal_length: kanne_scalars.Length = strawberry.field(description="Focal length (e.g. '200 mm')")
 
 @pydantic.type(models.SampleElementModel, description="The sample")
 class SampleElement(OpticalElement):
@@ -159,9 +160,39 @@ class ObjectiveElement(OpticalElement):
     correction_kind: ObjectiveCorrectionKind | None = strawberry.field(default=None, description="Optical correction type")
     magnification: float | None = strawberry.field(default=None,description="Magnification (e.g., 20 for 20x)")
     numerical_aperture: float | None = strawberry.field(default=None,description="NA")
-    iris: bool = strawberry.field(default=False, description="Has iris (aperture stop)")
-    working_distance_mm: float | None = strawberry.field(default=None, description="Working distance (mm)")
+    iris: bool | None = strawberry.field(default=None, description="Has iris (aperture stop)")
+    brand: str | None = strawberry.field(default=None, description="Brand of the objective")
+    working_distance: kanne_scalars.Length | None = strawberry.field(default=None, description="Working distance (e.g. '2 mm')")
     immersion_medium: ObjectiveImmersion | None = strawberry.field(default=None, description="Immersion medium (e.g., 'OIL', 'WATER')")
+
+
+@pydantic.type(models.ShutterElementModel, description="A blocker: open or closed. An AOTF or EOM used purely as a gate is one of these")
+class ShutterElement(OpticalElement):
+    id: strawberry.ID
+    is_open: bool | None = strawberry.field(default=None, description="Whether the shutter was open at this coordinate")
+    shutter_type: str | None = strawberry.field(default=None, description="How it switches, e.g. 'mechanical', 'AOTF', 'EOM'")
+    gain: float | None = strawberry.field(default=None, description="Drive gain, for an AOTF or EOM (unitless)")
+
+
+@pydantic.type(models.PolarizerElementModel, description="A polarization filter, at an angle")
+class PolarizerElement(OpticalElement):
+    id: strawberry.ID
+    angle_deg: float | None = strawberry.field(default=None, description="Transmission axis angle, in degrees")
+    extinction_ratio: float | None = strawberry.field(default=None, description="Ratio of transmitted to blocked polarization")
+
+
+@pydantic.type(models.WaveplateElementModel, description="A retarder: a fraction of a wave, at an angle")
+class WaveplateElement(OpticalElement):
+    id: strawberry.ID
+    angle_deg: float | None = strawberry.field(default=None, description="Fast-axis angle, in degrees")
+    retardance: float | None = strawberry.field(default=None, description="Retardance in waves, e.g. 0.5 for a half-wave plate")
+    design_wavelength: kanne_scalars.Length | None = strawberry.field(default=None, description="The wavelength the retardance is specified at (e.g. '532 nm')")
+
+
+@pydantic.type(models.ApertureElementModel, description="A stop: a hole of some diameter. A pinhole with no confocal claim attached")
+class ApertureElement(OpticalElement):
+    id: strawberry.ID
+    diameter: kanne_scalars.Length | None = strawberry.field(default=None, description="Aperture diameter (e.g. '5 mm')")
 
 # ---------- Edge ----------
 @pydantic.type(models.LightEdgeModel, description="Directed edge connecting two ports")
@@ -171,7 +202,7 @@ class LightEdge:
     source_port_id: strawberry.ID = strawberry.field(description="Source port UUID")
     target_element_id: strawberry.ID = strawberry.field(description="Target element UUID")
     target_port_id: strawberry.ID = strawberry.field(description="Target port UUID")
-    path_length_mm: float | None = strawberry.field(default=None, description="Path length (mm)")
+    path_length: kanne_scalars.Length | None = strawberry.field(default=None, description="Path length (e.g. '100 mm')")
     medium: str | None = strawberry.field(default="AIR", description="Propagation medium")
     loss_db: float | None = strawberry.field(default=0.0, description="Insertion loss (dB)")
     beam: BeamState | None = strawberry.field(default=None, description="Beam state annotation")

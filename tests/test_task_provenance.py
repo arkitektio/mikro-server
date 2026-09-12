@@ -49,7 +49,7 @@ def clear_provenance(ctx: HttpContext) -> None:
 
 CREATE_DATASET = """
     mutation($name: String!) {
-        createDataset(input: {name: $name}) {
+        createFolder(input: {name: $name}) {
             id
             createdThrough {
                 taskId
@@ -80,13 +80,13 @@ async def test_create_with_provenance(db, authenticated_context: HttpContext):
     )
 
     assert result.data, result.errors
-    created_through = result.data["createDataset"]["createdThrough"]
+    created_through = result.data["createFolder"]["createdThrough"]
     assert created_through is not None
     assert created_through["taskId"] == "task-1"
     assert created_through["assignerSub"] == "1"
     assert created_through["agentClientId"] == "oinsoins"
     assert created_through["assigner"]["sub"] == "1"
-    assert result.data["createDataset"]["createdThroughBy"]["sub"] == "1"
+    assert result.data["createFolder"]["createdThroughBy"]["sub"] == "1"
 
     def check_row() -> None:
         task = Task.objects.get(task_id="task-1")
@@ -108,8 +108,8 @@ async def test_create_without_provenance(db, authenticated_context: HttpContext)
     )
 
     assert result.data, result.errors
-    assert result.data["createDataset"]["createdThrough"] is None
-    assert result.data["createDataset"]["createdThroughBy"] is None
+    assert result.data["createFolder"]["createdThrough"] is None
+    assert result.data["createFolder"]["createdThroughBy"] is None
     assert await sync_to_async(Task.objects.count)() == 0
 
 
@@ -133,7 +133,7 @@ async def test_task_row_shared_between_mutations(db, authenticated_context: Http
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_filter_by_created_through_task(db, authenticated_context: HttpContext):
-    """Datasets are filterable by the task id they were created through."""
+    """Folders are filterable by the task id they were created through."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-3"))
 
     result = await schema.execute(
@@ -154,7 +154,7 @@ async def test_filter_by_created_through_task(db, authenticated_context: HttpCon
     result = await schema.execute(
         """
         query($taskId: String!) {
-            datasets(filters: {createdThroughTask: $taskId}) {
+            folders(filters: {createdThroughTask: $taskId}) {
                 name
             }
         }
@@ -164,13 +164,13 @@ async def test_filter_by_created_through_task(db, authenticated_context: HttpCon
     )
 
     assert result.data, result.errors
-    assert [d["name"] for d in result.data["datasets"]] == ["From task"]
+    assert [d["name"] for d in result.data["folders"]] == ["From task"]
 
     # assignedBy hits the denormalized created_through_by column.
     result = await schema.execute(
         """
         query($sub: ID!) {
-            datasets(filters: {assignedBy: $sub}) {
+            folders(filters: {assignedBy: $sub}) {
                 name
             }
         }
@@ -180,13 +180,13 @@ async def test_filter_by_created_through_task(db, authenticated_context: HttpCon
     )
 
     assert result.data, result.errors
-    assert [d["name"] for d in result.data["datasets"]] == ["From task"]
+    assert [d["name"] for d in result.data["folders"]] == ["From task"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_filter_by_created_through_ids(db, authenticated_context: HttpContext):
-    """Datasets are filterable by the task's and the assigner's database IDs."""
+    """Folders are filterable by the task's and the assigner's database IDs."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-5"))
 
     result = await schema.execute(
@@ -210,7 +210,7 @@ async def test_filter_by_created_through_ids(db, authenticated_context: HttpCont
     result = await schema.execute(
         """
         query($task: ID!) {
-            datasets(filters: {createdThrough: $task}) {
+            folders(filters: {createdThrough: $task}) {
                 name
             }
         }
@@ -219,13 +219,13 @@ async def test_filter_by_created_through_ids(db, authenticated_context: HttpCont
         context_value=authenticated_context,
     )
     assert result.data, result.errors
-    assert [d["name"] for d in result.data["datasets"]] == ["From task"]
+    assert [d["name"] for d in result.data["folders"]] == ["From task"]
 
     # createdThroughBy matches the assigner's database user ID on the denormalized column.
     result = await schema.execute(
         """
         query($user: ID!) {
-            datasets(filters: {createdThroughBy: $user}) {
+            folders(filters: {createdThroughBy: $user}) {
                 name
             }
         }
@@ -234,7 +234,7 @@ async def test_filter_by_created_through_ids(db, authenticated_context: HttpCont
         context_value=authenticated_context,
     )
     assert result.data, result.errors
-    assert [d["name"] for d in result.data["datasets"]] == ["From task"]
+    assert [d["name"] for d in result.data["folders"]] == ["From task"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -246,7 +246,7 @@ async def test_provenance_entry_links_task(db, authenticated_context: HttpContex
     result = await schema.execute(
         """
         mutation($name: String!) {
-            createDataset(input: {name: $name}) {
+            createFolder(input: {name: $name}) {
                 id
                 provenanceEntries {
                     kind
@@ -262,7 +262,7 @@ async def test_provenance_entry_links_task(db, authenticated_context: HttpContex
     )
 
     assert result.data, result.errors
-    entries = result.data["createDataset"]["provenanceEntries"]
+    entries = result.data["createFolder"]["provenanceEntries"]
     assert entries, "Expected a CREATE provenance entry"
     assert entries[0]["task"] is not None
     assert entries[0]["task"]["taskId"] == "task-4"

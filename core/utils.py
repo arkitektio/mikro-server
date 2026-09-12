@@ -39,3 +39,18 @@ def paginate_querysets(
 
     # Return the paginated items and the total count
     return items
+
+
+def paginate_list(items: "list[Any]", offset: int = 0, limit: int | None = None) -> "list[Any]":
+    """Offset/limit over a list that is not a queryset.
+
+    The sibling of :func:`paginate_querysets` for the computed queries -- the options a picker
+    is offered are derived from a graph walk and a schema walk, not selected from a table, so
+    there is no queryset to slice in the database. Small by construction: the walk is bounded by
+    the fact component and by the join depth, which is what makes paging in Python honest here
+    rather than a scalability claim it cannot keep.
+    """
+    sliced = items[offset:] if offset else list(items)
+    if isinstance(limit, int) and limit >= 0:
+        sliced = sliced[:limit]
+    return sliced

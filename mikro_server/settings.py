@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "kante",
     "channels",
     "django_probes",
+    "kanne_server",
     "core",
     "datalayer",
     "health_check",
@@ -97,6 +98,13 @@ CHANNEL_LAYERS = {
 
 
 DATALAYER = conf.datalayer.model_dump(exclude_none=True) if conf.datalayer else {}
+
+# How long a store's bytes survive after the last data row referencing them is deleted.
+# `purge_orphaned_stores` (run it from cron) collects anything older; nothing is freed until
+# it does. The window exists so an accidental delete is recoverable -- the same job an S3
+# lifecycle rule would do, kept in Postgres where it is visible and has minute rather than
+# day granularity.
+DATALAYER_STORE_GRACE_DAYS = 7
 
 CORS_ALLOW_ALL_ORIGINS = True
 

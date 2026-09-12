@@ -1,13 +1,13 @@
 """Filter tests for the files and tables queries (FileFilter, TableFilter)."""
 
 import pytest
-from asgiref.sync import sync_to_async
 
-from core.models import Table
+from core.enums import FileLinkDirectionChoices
+from core.models import ArrayDataset, FileLink
 from kante.context import HttpContext
 from mikro_server.schema import schema
 
-from tests.seed import create_dataset, create_file
+from tests.seed import create_folder, create_file
 
 FILE_QUERY = """
     query List($filters: FileFilter) {
@@ -36,20 +36,20 @@ async def table_names(ctx, filters):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_file_filter_by_dataset(db, authenticated_context: HttpContext):
-    ds_a = await create_dataset(authenticated_context, "A")
-    ds_b = await create_dataset(authenticated_context, "B")
+async def test_file_filter_by_folder(db, authenticated_context: HttpContext):
+    ds_a = await create_folder(authenticated_context, "A")
+    ds_b = await create_folder(authenticated_context, "B")
     await create_file(authenticated_context, "InA", ds_a)
     await create_file(authenticated_context, "InB", ds_b)
 
-    assert await file_names(authenticated_context, {"dataset": str(ds_a.id)}) == {"InA"}
-    assert await file_names(authenticated_context, {"datasets": [str(ds_a.id), str(ds_b.id)]}) == {"InA", "InB"}
+    assert await file_names(authenticated_context, {"folder": str(ds_a.id)}) == {"InA"}
+    assert await file_names(authenticated_context, {"folders": [str(ds_a.id), str(ds_b.id)]}) == {"InA", "InB"}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_file_filter_by_size_and_content_type(db, authenticated_context: HttpContext):
-    ds = await create_dataset(authenticated_context, "DS")
+    ds = await create_folder(authenticated_context, "DS")
     await create_file(authenticated_context, "Small", ds, size=100, content_type="text/csv")
     await create_file(authenticated_context, "Big", ds, size=10_000, content_type="image/tiff")
 
@@ -60,52 +60,35 @@ async def test_file_filter_by_size_and_content_type(db, authenticated_context: H
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_file_filter_by_not_derived(db, authenticated_context: HttpContext):
-    ds = await create_dataset(authenticated_context, "DS")
-    original = await create_file(authenticated_context, "Original", ds)
-    derived = await create_file(authenticated_context, "Derived", ds)
-    await sync_to_async(derived.origins.add)(original)
+    """`notDerived` separates the files a converter read from the files written out of data here.
 
-    assert await file_names(authenticated_context, {"notDerived": True}) == {"Original"}
-    assert await file_names(authenticated_context, {"notDerived": False}) == {"Derived"}
+    It used to read the `File.origins` M2M, which no resolver ever wrote -- so it answered
+    `true` for every file and `false` for none, and this test passed by only ever adding to
+    that M2M by hand. It now reads the file's links, which the mutations actually write.
+    """
+    ctx = authenticated_context
+    ds = await create_folder(ctx, "DS")
+    await create_file(ctx, "Original", ds)
+    exported = await create_file(ctx, "Derived", ds)
+
+    dataset = await ArrayDataset.objects.acreate(name="Source data", creator=ctx.request.user, organization=ctx.request.organization)
+    await FileLink.objects.acreate(
+        file=exported,
+        dataset=dataset,
+        direction=FileLinkDirectionChoices.RENDITION.value,
+        creator=ctx.request.user,
+        organization=ctx.request.organization,
+    )
+
+    assert await file_names(ctx, {"notDerived": True}) == {"Original"}
+    assert await file_names(ctx, {"notDerived": False}) == {"Derived"}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_file_filter_by_search(db, authenticated_context: HttpContext):
-    ds = await create_dataset(authenticated_context, "DS")
+    ds = await create_folder(authenticated_context, "DS")
     await create_file(authenticated_context, "measurements.csv", ds)
     await create_file(authenticated_context, "raw.tiff", ds)
 
     assert await file_names(authenticated_context, {"search": "MEASURE"}) == {"measurements.csv"}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_table_filter_by_dataset_and_name(db, authenticated_context: HttpContext):
-    ds_a = await create_dataset(authenticated_context, "A")
-    ds_b = await create_dataset(authenticated_context, "B")
-    ctx = authenticated_context
-    await Table.objects.acreate(
-        name="Localizations", dataset=ds_a, creator=ctx.request.user, organization=ctx.request.organization
-    )
-    await Table.objects.acreate(
-        name="Metrics", dataset=ds_b, creator=ctx.request.user, organization=ctx.request.organization
-    )
-
-    assert await table_names(ctx, {"dataset": str(ds_a.id)}) == {"Localizations"}
-    assert await table_names(ctx, {"name": {"iContains": "metric"}}) == {"Metrics"}
-    assert await table_names(ctx, {"search": "Localizations"}) == {"Localizations"}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_table_filter_by_datasets(db, authenticated_context: HttpContext):
-    """The plural datasets filter matches tables in any of the given datasets."""
-    ds_a = await create_dataset(authenticated_context, "A")
-    ds_b = await create_dataset(authenticated_context, "B")
-    ds_c = await create_dataset(authenticated_context, "C")
-    ctx = authenticated_context
-    for name, ds in (("In A", ds_a), ("In B", ds_b), ("In C", ds_c)):
-        await Table.objects.acreate(name=name, dataset=ds, creator=ctx.request.user, organization=ctx.request.organization)
-
-    assert await table_names(ctx, {"datasets": [str(ds_a.id), str(ds_b.id)]}) == {"In A", "In B"}

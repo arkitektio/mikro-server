@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from core.duck import DuckLayer
+from datalayer.duck import DuckLayer
 
 
 class Command(BaseCommand):

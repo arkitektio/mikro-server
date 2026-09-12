@@ -71,6 +71,11 @@ class DatalayerBucket(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     bucket: str = Field(description="S3 bucket name.")
+    # Declared rather than left to `extra="allow"`: two logical buckets may point at one
+    # physical bucket, and the subpath is what keeps their objects apart. It reaches the grant
+    # policy through `build_object_key`, so getting it wrong widens or narrows what a client
+    # can read.
+    subpath: Optional[str] = Field(default=None, description="Optional key prefix within the bucket, so several logical buckets can share one physical bucket.")
 
 
 class DatalayerSettings(BaseModel):
@@ -88,6 +93,11 @@ class DatalayerSettings(BaseModel):
     zarr: DatalayerBucket = Field(description="Bucket for Zarr arrays. Required for this service.")
     parquet: DatalayerBucket = Field(description="Bucket for Parquet tables. Required for this service.")
     bigfile: DatalayerBucket = Field(description="Bucket for large binary files (BigFileStore). Required for this service.")
+    # Optional, unlike its four siblings: a required fifth bucket would refuse to start against
+    # every config.yaml written before it existed. A deployment that registers no fabriks store
+    # never needs one, and one that does gets a clear error from `get_bucket_config` rather
+    # than a startup failure it cannot connect to the feature it did not enable.
+    fabriks: Optional[DatalayerBucket] = Field(default=None, description="Bucket for fabriks stores (mesh collections stored as a prefix of Parquet files). Optional; may share a physical bucket with another entry via `subpath`.")
 
 
 class Settings(BaseSettings):

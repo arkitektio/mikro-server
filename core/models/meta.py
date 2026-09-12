@@ -2,7 +2,7 @@ from django.db import models
 from koherent.fields import ProvenanceField, HistoricForeignKey
 from authentikate.models import Organization
 
-from .dataset import File
+from .folder import File
 
 
 class MetaSchema(models.Model):

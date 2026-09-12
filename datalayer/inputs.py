@@ -83,6 +83,15 @@ class FinishZarrUploadInput:
     pass
 
 
+@pydantic.input(model=base_models.RefreshZarrUploadInput, all_fields=True)
+class RefreshZarrUploadInput:
+    """
+    Docstring for RefreshZarrUploadInput
+    """
+
+    pass
+
+
 @pydantic.input(model=base_models.RequestZarrAccessInput, all_fields=True)
 class RequestZarrAccessInput:
     """
@@ -96,6 +105,123 @@ class RequestZarrAccessInput:
 class RequestGeneralZarrAccessInput:
     """
     Docstring for RequestGeneralZarrAccessInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestSparseUploadInput, all_fields=True)
+class RequestSparseUploadInput:
+    """
+    Docstring for RequestSparseUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.FinishSparseUploadInput, all_fields=True)
+class FinishSparseUploadInput:
+    """
+    Docstring for FinishSparseUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RefreshSparseUploadInput, all_fields=True)
+class RefreshSparseUploadInput:
+    """
+    Docstring for RefreshSparseUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestSparseAccessInput, all_fields=True)
+class RequestSparseAccessInput:
+    """
+    Docstring for RequestSparseAccessInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestGeneralSparseAccessInput, all_fields=True)
+class RequestGeneralSparseAccessInput:
+    """
+    Docstring for RequestGeneralSparseAccessInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestFabriksUploadInput, all_fields=True)
+class RequestFabriksUploadInput:
+    """
+    Docstring for RequestFabriksUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.FinishFabriksUploadInput, all_fields=True)
+class FinishFabriksUploadInput:
+    """
+    Docstring for FinishFabriksUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestFabriksAccessInput, all_fields=True)
+class RequestFabriksAccessInput:
+    """
+    Docstring for RequestFabriksAccessInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestGeneralFabriksAccessInput, all_fields=True)
+class RequestGeneralFabriksAccessInput:
+    """
+    Docstring for RequestGeneralFabriksAccessInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestKonnektionUploadInput, all_fields=True)
+class RequestKonnektionUploadInput:
+    """
+    Docstring for RequestKonnektionUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.FinishKonnektionUploadInput, all_fields=True)
+class FinishKonnektionUploadInput:
+    """
+    Docstring for FinishKonnektionUploadInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestKonnektionAccessInput, all_fields=True)
+class RequestKonnektionAccessInput:
+    """
+    Docstring for RequestKonnektionAccessInput
+    """
+
+    pass
+
+
+@pydantic.input(model=base_models.RequestGeneralKonnektionAccessInput, all_fields=True)
+class RequestGeneralKonnektionAccessInput:
+    """
+    Docstring for RequestGeneralKonnektionAccessInput
     """
 
     pass

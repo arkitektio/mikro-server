@@ -1,7 +1,673 @@
+<!-- Frozen. Releases are tag-only since the move to tag-only semantic-release,
+so this file is no longer generated; entries below stop at the last release that
+predates the switch. Current release notes live on the GitHub Releases page. -->
+
 # CHANGELOG
 
 
-## v2.0.0 (2026-06-29)
+## v2.0.0-rc.35 (2026-09-02)
+
+### Features
+
+- Update attribute plans
+  ([`6a03073`](https://github.com/arkitektio/mikro-server-next/commit/6a0307360d9b1f34e5f7745de5f898413b8c9ec7))
+
+
+## v2.0.0-rc.34 (2026-09-01)
+
+### Features
+
+- Vector and other layers
+  ([`3bc8a61`](https://github.com/arkitektio/mikro-server-next/commit/3bc8a61bddafe8299a3fae7dfdae6da235553dae))
+
+
+## v2.0.0-rc.33 (2026-08-28)
+
+### Bug Fixes
+
+- Surface annotations
+  ([`27aadcf`](https://github.com/arkitektio/mikro-server-next/commit/27aadcf7dac39b2e1b5db61bd148e6dc624da76d))
+
+- With by_transofrmation childen
+  ([`2b962e1`](https://github.com/arkitektio/mikro-server-next/commit/2b962e1773e364c8abf14959bd6ec6471d3865c5))
+
+### Features
+
+- Intensity laayer
+  ([`7a24866`](https://github.com/arkitektio/mikro-server-next/commit/7a248667e4ee7a623e6b12407f1176cac75a3be4))
+
+
+## v2.0.0-rc.32 (2026-08-24)
+
+
+## v2.0.0-rc.31 (2026-08-21)
+
+### Features
+
+- Place per-index registrations end to end, and derive two duplicated facts
+  ([`ced4055`](https://github.com/arkitektio/mikro-server-next/commit/ced405519e83ecf23ae39e1688f561552efe4841))
+
+Two duplicated facts, and one defect seen from two sides.
+
+**`Transformation.version` is gone; the number is counted from provenance.** The column recorded
+  what `ProvenanceField` already records: every save writes a history row, and the counter had to be
+  remembered separately by every writer. Only `updateTransformation` remembered, so any other write
+  left a chain that had moved reading as though it had not. `Transformation.version` stays a GraphQL
+  field -- the `(id, version)` cache key in `docs/attribute-plans-api.md` is unchanged, and a fresh
+  edge still reads 1 -- and `transform_version` sums the rows along a chain in one query. A rename
+  now moves it too, which errs towards recomputing a bounding box that did not need it rather than
+  trusting one that did.
+
+**No axis type ordering is required any more.** `assert_axis_type_order` held array-backed systems
+  to RFC-5's time-then-channel-then-space MUST. Nothing reads it: `resolve_render_axes` finds the
+  time, channel and phasor axes by type, and only the relative order of the SPACE axes matters.
+  `create_table_axes` had already reasoned this out and skipped the check, recording that `x, y, t`
+  was refused while `t, x, y` was accepted though both derive the same answer. For arrays it refused
+  `(z, c, y, x)` and `(c, z, y, x)` -- how acquisitions are ordinarily written. What still holds is
+  that an axis' `order` is the store's dimension order, which `assert_axes_describe_the_store`
+  checks.
+
+**UNMAPPABLE is claimed only when the data reaches nowhere.** `_blocked_by_unmappable` returned true
+  if *any* lineage edge was unmappable, so a fusion with one unmappable parent was badged impossible
+  though registering its other parent places it -- and whoever read the badge was told not to look
+  for the gap they could have closed. It now requires that no traversable edge leave the source at
+  all, and `SceneGraph.placement_state` asks the same question through the same traversal, so
+  creation-time refusal and query-time state cannot drift apart.
+
+**The selector is plumbed through the readers that were blind to it.** `adjacency_of` was the only
+  reader of `selector_admits`; every other consumer walked with no `at`, which dropped scoped edges
+  from the graph entirely. So a dataset registered per channel was invisible to `is_placeable_in` --
+  with the scoped hop mid-chain, `createLayer` refused the very layer the feature exists to allow --
+  reported UNREGISTERED / UNKNOWN / NONE from `placement`, `placementValidity` and
+  `placementInvariance`, and never appeared in `inView`.
+
+Existence and position are different questions: whether data has a place does not depend on where
+  the asker stands, only which place does. `adjacency_of` takes `admit_scoped` for the existence
+  question, `PlacementState.CONDITIONAL` and `ExtentState.CONDITIONAL` say "placed, but ask again
+  with `at`", and `placement`, `placementValidity`, `placementInvariance` and `inView` all take the
+  `at` that `pathToWorld` and `asAffine` already did. Nothing composes a map from a scoped edge
+  without fixing its coordinate.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_017d1bWpdSg8CQtCtCDqV4Gk
+
+
+## v2.0.0-rc.30 (2026-08-21)
+
+### Bug Fixes
+
+- Add
+  ([`5939e8e`](https://github.com/arkitektio/mikro-server-next/commit/5939e8e406a1623ab6dcaa6675920dc0b90fb187))
+
+
+## v2.0.0-rc.29 (2026-08-20)
+
+### Bug Fixes
+
+- Coordinate transform update
+  ([`7e872ad`](https://github.com/arkitektio/mikro-server-next/commit/7e872ad84a39f20bbc93e9ff7573da37e1da481b))
+
+- Coordinate trenasofmr update
+  ([`2fcca48`](https://github.com/arkitektio/mikro-server-next/commit/2fcca48cf634472206cd16f631d5b87f7843bcb0))
+
+
+## v2.0.0-rc.28 (2026-08-19)
+
+### Features
+
+- New sporadik sparse datasets
+  ([`039df1a`](https://github.com/arkitektio/mikro-server-next/commit/039df1a13851175a9ee77f4f2c7ed7ec724ea5a8))
+
+
+## v2.0.0-rc.27 (2026-08-19)
+
+### Bug Fixes
+
+- Toaffine
+  ([`a890846`](https://github.com/arkitektio/mikro-server-next/commit/a890846d6d95c9062a965d70ed57aec661e9d27f))
+
+### Features
+
+- With sparse array concept
+  ([`4a9b6ad`](https://github.com/arkitektio/mikro-server-next/commit/4a9b6ad0ff49a495388556f26f662f8452b7a181))
+
+
+## v2.0.0-rc.26 (2026-08-18)
+
+
+## v2.0.0-rc.25 (2026-08-18)
+
+### Bug Fixes
+
+- Guards for the tableset and mesh collections
+  ([`d7febe2`](https://github.com/arkitektio/mikro-server-next/commit/d7febe2bdd24629e58f4e468b8a76cd56dae2a7c))
+
+### Features
+
+- New color by and filter by
+  ([`4207443`](https://github.com/arkitektio/mikro-server-next/commit/420744396658ad1c22a077fc8c6a79bf5041c78e))
+
+
+## v2.0.0-rc.24 (2026-08-18)
+
+### Features
+
+- Add mesh layer color options
+  ([`6cf3bdc`](https://github.com/arkitektio/mikro-server-next/commit/6cf3bdc2aa2327c1b30c6feb2747c7c217ecb28f))
+
+
+## v2.0.0-rc.23 (2026-08-17)
+
+
+## v2.0.0-rc.22 (2026-08-17)
+
+### Bug Fixes
+
+- Datalayer fixes (unsigend requests)
+  ([`ec34ce1`](https://github.com/arkitektio/mikro-server-next/commit/ec34ce19f88edfcb11ede7e458a359fd34acaeda))
+
+
+## v2.0.0-rc.21 (2026-08-16)
+
+### Bug Fixes
+
+- Attribute plans
+  ([`02768e2`](https://github.com/arkitektio/mikro-server-next/commit/02768e2878d9fff3703d07e8f511dd8b964c9b2c))
+
+### Features
+
+- Removal of old schema
+  ([`2e478e6`](https://github.com/arkitektio/mikro-server-next/commit/2e478e6bc5890d74f40fa12403c44a98f519dd24))
+
+- Remove of old types
+  ([`835dd10`](https://github.com/arkitektio/mikro-server-next/commit/835dd107fe79e290c0bf0876ed86b331e4207539))
+
+
+## v2.0.0-rc.20 (2026-08-15)
+
+### Bug Fixes
+
+- Fabirks support
+  ([`85ac9cd`](https://github.com/arkitektio/mikro-server-next/commit/85ac9cd878a4a9c77704be5426d77e0f111ebc70))
+
+
+## v2.0.0-rc.19 (2026-08-11)
+
+
+## v2.0.0-rc.18 (2026-08-11)
+
+### Bug Fixes
+
+- Add label layers
+  ([`eac8bf7`](https://github.com/arkitektio/mikro-server-next/commit/eac8bf7e6f15b6e690a2b970e796ad3f112a33b3))
+
+
+## v2.0.0-rc.17 (2026-08-11)
+
+### Bug Fixes
+
+- With folder
+  ([`9b8cf49`](https://github.com/arkitektio/mikro-server-next/commit/9b8cf49c09b81048fa16e2655c46fb09913d8afe))
+
+
+## v2.0.0-rc.16 (2026-08-11)
+
+### Bug Fixes
+
+- Add dataset into folder
+  ([`d6836bf`](https://github.com/arkitektio/mikro-server-next/commit/d6836bfb4d042613eb3e8ee535666a3ef9c354c2))
+
+
+## v2.0.0-rc.15 (2026-08-11)
+
+### Bug Fixes
+
+- Rename to folder
+  ([`77b1a3e`](https://github.com/arkitektio/mikro-server-next/commit/77b1a3e7838f63020d6625d560b7154f7f1c8960))
+
+- Rename to folder
+  ([`bed76c4`](https://github.com/arkitektio/mikro-server-next/commit/bed76c4b1dd3d1c5873aef44b5e090b135f65382))
+
+
+## v2.0.0-rc.14 (2026-08-04)
+
+### Bug Fixes
+
+- More stuff on tables
+  ([`140a212`](https://github.com/arkitektio/mikro-server-next/commit/140a2129941936a754ac8ca0b8718aa859c3736c))
+
+
+## v2.0.0-rc.13 (2026-08-04)
+
+### Bug Fixes
+
+- With proper filters
+  ([`79d2a9f`](https://github.com/arkitektio/mikro-server-next/commit/79d2a9fbfede63ce114f1fce5ade06fa2be27532))
+
+
+## v2.0.0-rc.12 (2026-08-04)
+
+### Bug Fixes
+
+- Add exportOf and sourceFile to lik datasets with files
+  ([`4e310fa`](https://github.com/arkitektio/mikro-server-next/commit/4e310fa33e5b07353b25097108258677bc7f9c81))
+
+- Orphaned dataset + cron remover
+  ([`6289451`](https://github.com/arkitektio/mikro-server-next/commit/6289451c1784a6b029474794651dccdfc04566b2))
+
+
+## v2.0.0-rc.11 (2026-08-02)
+
+
+## v2.0.0-rc.10 (2026-08-02)
+
+### Documentation
+
+- More at the coordinate system (fields vs references)
+  ([`5566af4`](https://github.com/arkitektio/mikro-server-next/commit/5566af40eb5061dab065f57e994422b0c4e216fc))
+
+- The two derivation call sequences, and a FIELD is not a derivation
+  ([`693ba51`](https://github.com/arkitektio/mikro-server-next/commit/693ba51b4fb600f510b79d887e0bb81ff1e56c9a))
+
+`docs/derivation-api.md` walks both directions end to end: an SMLM localization table and the
+  reconstruction rendered from it (table -> image, a real SCALE, so registering the table places the
+  render), and a stack, its segmentation and its measurement table (image -> mask -> table,
+  BY_DIMENSION then UNMAPPABLE, so the lineage is recorded and no geometry claimed). Both are
+  executed by `test_the_documented_sequences_run_end_to_end`, the same guarantee
+  `field-transforms-api.md` already has: a doc that names a field the schema does not have is worse
+  than no doc, because it reads as verified.
+
+Writing it caught a regression from the container-keying change. A FIELD edge points mask -> table,
+  so under container keys `derivedFrom` on a mask with a dereference reported the *table* as the
+  thing the mask was derived from. It was hidden before by accident rather than by rule: the
+  dataset-keyed predicate resolved the output through the table's own derivation edge back to the
+  mask, compared equal, and dropped it. `is_derivation_edge` now excludes FIELD outright, which is
+  the line RFC-7 already draws for the attribute-plan walk -- FIELD edges are payload, never
+  connectivity. A FIELD is a lookup; the table's provenance is its own separate edge.
+
+`field-transforms-api.md` was stale in two ways and is corrected: its `derivedFrom` entry predated
+  the transform union (the map is nested under `transform` now, and the entry's own `kind` is the
+  *source* discriminator), and it selected `coordinateSystem { kind }`, which RFC-9 retired in
+  favour of `residents`.
+
+594 green.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+### Features
+
+- Lineagegraph walks the derivation edges out from one container
+  ([`0430205`](https://github.com/arkitektio/mikro-server-next/commit/0430205db280185fe8391515c93911309481c06b))
+
+`derivedFrom` and `derivedResidents` each answer one hop. Nothing answered "where did this come
+  from, and what came out of it" transitively, and `coordinateGraph` cannot stand in: it crosses
+  every edge touching a space, so a registration drags in every other dataset registered into the
+  same world. That is a neighbourhood, not a provenance.
+
+`lineageGraph(coordinateSystem:, maxDepth:)` crosses derivation edges only (`is_derivation_edge`,
+  the same predicate `derivedFrom` uses), in both directions -- asking a source what came out of it
+  and asking a product what went into it are the same graph read from two ends. Nodes come back as
+  *containers* rather than spaces, because a dataset's grid, its levels and its lenses are one node
+  in a provenance story rather than three.
+
+Kind-blind, like `derivation_edges` and unlike `lineage_ancestors`: that one walks the spatial
+  lineage and stops at an UNMAPPABLE primary, since data whose geometry did not survive inherits no
+  placement. This is the historical lineage, where the UNMAPPABLE hop is the point -- it is how a
+  measurement table hangs off the mask it was measured from. Each edge carries its kind, so a client
+  wanting only the placing chain filters on it.
+
+Fixes a bug in the previous commit, which nothing would have caught: a container key's first half
+  was written by `container_map` as "dataset" and read back through `ADataset.__name__.lower()` as
+  "adataset", so every dataset silently vanished from `derivedResidents` and from any reverse
+  lookup. The key now lives on `CONTAINERS` beside the model, with `MODEL_BY_KEY` for the reverse,
+  and `test_the_wider_field_reports_dataset_children_too` pins it -- a test with only a table child
+  passes either way, which is why the original slipped through.
+
+593 green.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+
+## v2.0.0-rc.9 (2026-08-02)
+
+### Bug Fixes
+
+- Lightpath
+  ([`4749622`](https://github.com/arkitektio/mikro-server-next/commit/47496226b7d0f826dabd7919351ac8b390b6def5))
+
+### Features
+
+- A derivation runs between containers, whichever kind they are
+  ([`bce250d`](https://github.com/arkitektio/mikro-server-next/commit/bce250d0cc50a60d7f76bc8a788dbde558d35cb4))
+
+"This data was computed from that data" was only ever expressible between two array datasets.
+  `createADataset(derivedFrom:)` named a `Lens` and nothing else; `createTableDataset`,
+  `createMeshCollection` and `createAnnotationCollection` named a bare `coordinateSystem`, so a
+  caller had to look the source's *system* id up by hand and no collection could be a source at all.
+  A parameter table could not say which instance map its rows came from, and an image reconstructed
+  from a table of SMLM localizations could not say so in either direction.
+
+One `DerivedFromInput` union now, keyed by source kind -- the third `@unionElementOf` instance,
+  after TransformInput and OpticalElementInput. Six members (LENS, DATASET, TABLE_DATASET,
+  MESH_COLLECTION, ANNOTATION_COLLECTION, COORDINATE_SYSTEM), each declaring the parent's common
+  fields, resolved through the `resolve_source_system` registrations already use. All four creators
+  take a priority-ordered list of them and share one writer, `write_derivation_edges`.
+
+An omitted `transform` now means **UNMAPPABLE**, not IDENTITY. Naming a source records the lineage
+  and claims no geometry -- the truth for a measurement table whose rows are not anywhere, and the
+  principle `createTableDataset` already stated while the other three broke it. Placement is
+  inherited only across a transform the caller stated.
+
+Breaking, three distinct ways: - `coordinateSystem` on the three collection creators is replaced by
+  `derivedFrom`, and their `derivedFrom` read fields are lists. - the omitted-transform default
+  flips, so derived data stops inheriting placement until its caller says how the spaces relate. - a
+  multi-parent call whose first entry omits `transform` while a later one states it now *raises*,
+  because an UNMAPPABLE primary may not hide a mappable parent. - `axes` is required on the two
+  collections. It used to default to a copy of the source's, justified by "an identity into a system
+  with different axes is not an identity, and the rank check would say so" -- which dies with the
+  IDENTITY default, since `assert_edge_rank` returns early for an UNMAPPABLE.
+
+`ADataset.derivedDatasets` stays honestly narrow; `derivedResidents` is the wider question, because
+  a field called derivedDatasets returning a table would be a field whose name lies.
+
+Also fixed: `createTableDataset` was not atomic, so an edge whose rank its axes refused left an
+  orphan table behind -- the same bug the two collections had.
+
+No migration: a derivation was already just a Transformation edge. 590 green.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+### Refactoring
+
+- The fact tree is keyed by container, not by dataset
+  ([`8356bbf`](https://github.com/arkitektio/mikro-server-next/commit/8356bbf77870ce2c89c2a9297798b5401698687c))
+
+`residence_map` knew only about datasets, so a mesh, table or annotation collection was simply
+  absent from every placement structure and each caller patched the hole its own way. That made a
+  non-ADataset unnameable as a derivation parent -- not refused, but silently dropped:
+  `derivation_edges` resolved an edge's output to an `ADataset` and discarded the edge when it could
+  not, so a dataset derived from a table would have read back with no parent at all.
+
+`container_map` replaces it. A collection keys to itself, a dataset's grid, lenses and levels all
+  key to the dataset, and a resident-less space keys to itself -- which is what tells a registration
+  from a lineage. One predicate, `is_derivation_edge`, now answers "is this a derivation" for
+  `derivation_edges`, `collection_derivation_edge` and `edge_universe`, so the three cannot drift
+  apart about it. Both halves are load-bearing: the output must land in a container *and* in a
+  different one.
+
+Two bugs fall out, both pre-existing:
+
+- `collection_derivation_edge` took the earliest edge out of a collection's system, kind-blind and
+  order-blind. A freestanding collection later registered with `createTransformation` reported that
+  *registration* as its `derivedFrom`. - `EdgeUniverse` had to fetch a collection's derivation edge
+  separately and re-file it under the dataset it landed in, because the collection had no key of its
+  own. A collection is an ordinary bucket now and all of that is gone, together with the
+  `collection_systems` parameter that existed to feed it.
+
+The six-container list was hand-written in six places with six shapes; it is `CONTAINERS` once. Two
+  orders are kept and both are load-bearing: presentation (outermost first, which `residents`
+  returns) and keying (dataset last, so a space its dataset lives in resolves to the dataset).
+
+No API change and no migration: 583 tests green before and after.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+
+## v2.0.0-rc.8 (2026-08-01)
+
+
+## v2.0.0-rc.7 (2026-07-10)
+
+### Bug Fixes
+
+- Assert dataset
+  ([`920ad3e`](https://github.com/arkitektio/mikro-server-next/commit/920ad3e0706504f2caa0eb2150dbe87b2d13735e))
+
+- Attribute plans + scene bootstrap read residents; 408/494
+  ([`b0fb25f`](https://github.com/arkitektio/mikro-server-next/commit/b0fb25fd7c1557dbd8c148fd8f187e2ed5f612d6))
+
+- Attribute plans read table residents; 346/494
+  ([`67ac43d`](https://github.com/arkitektio/mikro-server-next/commit/67ac43d7fca850760769898800d91c4bcd34f792))
+
+- Drop the last owner-FK select_relateds; 261/494
+  ([`dfec21a`](https://github.com/arkitektio/mikro-server-next/commit/dfec21abb089bddf2baced93843d3854231e5a5f))
+
+- Elipsis and spheres
+  ([`0ba447f`](https://github.com/arkitektio/mikro-server-next/commit/0ba447f81ceea56bb72d708e2355cd22a521c713))
+
+- Input uniotons
+  ([`96201f4`](https://github.com/arkitektio/mikro-server-next/commit/96201f4ad75a9c3c7301b8534e52080ae0c5388b))
+
+- Less coord systems
+  ([`16fe92f`](https://github.com/arkitektio/mikro-server-next/commit/16fe92f7d6ff19c4e6966fe7cb19beb984fa6607))
+
+- Less coordinate system
+  ([`1b06052`](https://github.com/arkitektio/mikro-server-next/commit/1b06052ef5e1fd7cdb2f8f2079d73f962e965ded))
+
+- Make corodinate system less "mirrored"
+  ([`3e11727`](https://github.com/arkitektio/mikro-server-next/commit/3e11727fee4b12fd0e2f1c6f4aea0b614c2fc7a5))
+
+- More omengfness
+  ([`f5c2251`](https://github.com/arkitektio/mikro-server-next/commit/f5c225180dde9ad2095ef88fc75629cbc76ac29b))
+
+- More omnegffness
+  ([`ad1acdc`](https://github.com/arkitektio/mikro-server-next/commit/ad1acdc1ff40a7da61be04cea13b3ae8e6b5cbb3))
+
+- More scene
+  ([`a8e1c8d`](https://github.com/arkitektio/mikro-server-next/commit/a8e1c8dd3bb7b35a4a58b9389e04bd3197dc57a9))
+
+- More stuff
+  ([`696f366`](https://github.com/arkitektio/mikro-server-next/commit/696f366dce8e74aa4aaacbb3886c7976d51af081))
+
+- New graphs
+  ([`ca95d12`](https://github.com/arkitektio/mikro-server-next/commit/ca95d1212853d456f0acf46dbcf50732e6b67260))
+
+- Parquetlike
+  ([`94ede38`](https://github.com/arkitektio/mikro-server-next/commit/94ede38d1b3a525e0bc923cadfedbd930d39f76f))
+
+- Placement validit<
+  ([`d345a97`](https://github.com/arkitektio/mikro-server-next/commit/d345a97c3c6f26c55afce03bd9d1e9704ec2f4a0))
+
+- Purge old data
+  ([`768c7fd`](https://github.com/arkitektio/mikro-server-next/commit/768c7fd3b09fbba129c6bddc3d4112714652d357))
+
+- Relaxed constraints and made coordinate system first class
+  ([`db87ddd`](https://github.com/arkitektio/mikro-server-next/commit/db87ddd37aaa5edd319b59f9117e84c1c4e9b7d3))
+
+- Renaming issues
+  ([`0fe1c32`](https://github.com/arkitektio/mikro-server-next/commit/0fe1c32ade956a4ed7e5766eb23fcf3514d42a1c))
+
+- Residence map tolerates being read during construction; 341/494
+  ([`770a876`](https://github.com/arkitektio/mikro-server-next/commit/770a876e86b2913bda66828a879c04a5eedacea5))
+
+- Roi optimiztazion
+  ([`30fbcba`](https://github.com/arkitektio/mikro-server-next/commit/30fbcba927d1a7493b3dfe2386549d9effaece01))
+
+- Scene bootstrap reads residents; every space is adoptable
+  ([`1eccdb5`](https://github.com/arkitektio/mikro-server-next/commit/1eccdb5d660a3a79e71abd37ed11383980829950))
+
+- Scene now walks coordinate system
+  ([`0040ab8`](https://github.com/arkitektio/mikro-server-next/commit/0040ab89744048bda3ecb01bd1856f18b25d779d))
+
+- Seed the residence map before it is first read; 329/494
+  ([`65a57fb`](https://github.com/arkitektio/mikro-server-next/commit/65a57fbbf99f32060a82dc60bb80a52d7af3c8bf))
+
+- Shared-space guard reads residents; 347/494
+  ([`9c70a2a`](https://github.com/arkitektio/mikro-server-next/commit/9c70a2a7377dd0900415bbf21b657b599abec60e))
+
+- Strip owner FKs from every select_related; 318/494
+  ([`9b1576e`](https://github.com/arkitektio/mikro-server-next/commit/9b1576ebcbdd0bbde09d81857fb06bfe8f54fcaf))
+
+- The bootstrap follows one edge back to find a calibrated space's data
+  ([`35b88f9`](https://github.com/arkitektio/mikro-server-next/commit/35b88f9289c726cb9af543272fb5b4b612810ca6))
+
+A calibrated space has no residents, so `system_dataset` cannot answer 'which dataset is this a view
+  of' -- under ownership that space carried a dataset FK and it was a column read. `dataset_behind`
+  is the inverse of `calibrated_neighbours`: residents first, one hop upstream only for a frame
+  nothing lives in. Caught by test_a_calibrated_dataset_registers_through_its_physical_system.
+
+- With animation
+  ([`5861ab4`](https://github.com/arkitektio/mikro-server-next/commit/5861ab4a3410367610659f178e3e5445579a3b0a))
+
+- With more attribute plans
+  ([`c1e9194`](https://github.com/arkitektio/mikro-server-next/commit/c1e91946b983aa20625ac9b25830d901e287b0bc))
+
+- With stuff
+  ([`44cf7b6`](https://github.com/arkitektio/mikro-server-next/commit/44cf7b676a5372b8472c33e02dc5fe86ff14a16e))
+
+- With table datset
+  ([`cb3b067`](https://github.com/arkitektio/mikro-server-next/commit/cb3b067c3f8c9d072d98d3f8b1373071f9b1e9d8))
+
+### Documentation
+
+- Rfc-9 records what the suite rewrite pinned
+  ([`e407677`](https://github.com/arkitektio/mikro-server-next/commit/e407677b03662971e7dd68c7626920d4a7c0e358))
+
+- Rfc-9, residence
+  ([`86e365b`](https://github.com/arkitektio/mikro-server-next/commit/86e365b544f97337da3542ac69fd3152e4bf4c1c))
+
+Records what ownership was carrying, why none of it survived, and the directional insight that makes
+  the flip cheap rather than dear: residence asks data -> space, which is a local column, where
+  ownership asked space -> data. Also records what is designed but not built.
+
+### Features
+
+- In between
+  ([`3f37a77`](https://github.com/arkitektio/mikro-server-next/commit/3f37a77974a0afa218572e583978ac81e45b8bc6))
+
+- New stuff
+  ([`3dd16eb`](https://github.com/arkitektio/mikro-server-next/commit/3dd16eb71dc39bbaf80534efc876413a99f88862))
+
+- Reject unplaced layers instead of auto-registering; bootstrap always authors the mirror edge
+  ([`08b68ec`](https://github.com/arkitektio/mikro-server-next/commit/08b68ecf39e62256661efd7f1c7f3ccc44e998e2))
+
+A scene is membership + render graph only: the transform between two coordinate systems is authored
+  exactly once, explicitly, via createTransformation / addRegistrationToScene -- never fabricated as
+  a side effect of a layer mutation.
+
+BREAKING CHANGE: createTableDataset no longer accepts `scene`; all create*Layer mutations reject a
+  source with no traversable path to the scene's world, distinguishing UNMAPPABLE (nothing can ever
+  place this) from UNREGISTERED (author the edge first); updateLayer applies the same gate when
+  rebinding scene/lens; createMeshLayer now takes meshCollection instead of the legacy mesh;
+  legacy-table point/track layers require coordinateSystem; ensure_registered and its assumed-edge
+  fabrication are removed. bootstrapScene always authors exactly one identity registration for the
+  staged dataset -- from its calibration (VALIDATED, "(mirror)") or its intrinsic pixels (UNKNOWN,
+  "(assumed)") -- including derived and UNMAPPABLE-derived datasets, whose dedicated world mirrors
+  their own axes. Adds a stored `description` to Axis and TableColumn, threaded through the
+  axis/column inputs and GraphQL types (migration 0023).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+### Performance Improvements
+
+- Batch the last two per-row residence reads
+  ([`70b6e30`](https://github.com/arkitektio/mikro-server-next/commit/70b6e30364dff5c69ab4f0a79cc93b43d7c7aeac))
+
+scenes_by_sole_dataset asked per registration and again per scene world. Both were column reads
+  under ownership and became queries under residence; the sole-occupancy map now resolves both in
+  the same batch. All three query-count suites are green again.
+
+- Batch the two per-source queries residence introduced
+  ([`494200a`](https://github.com/arkitektio/mikro-server-next/commit/494200aa720a2a28515c497956a793f55912456e))
+
+placeable_system_ids_in called system_dataset per registration, and _fetch_collection_edges asked
+  each layer's space what lived in it. Both are now one batched read -- a residence_map over the
+  registration inputs, and the layer's own collection FK. The query-count tests were the only thing
+  that would have caught either.
+
+- Prefetch residents in the scene's reachable systems; suite green at 491
+  ([`8602b5d`](https://github.com/arkitektio/mikro-server-next/commit/8602b5dadc4f3b1b5ea266dc445a9e2d88a0d8d9))
+
+Scene.coordinateSystems returns a plain list too, so selecting residents paid six reverse queries
+  per space -- and a scene reaches more spaces as it gains layers, which is the growth the flatness
+  test forbids.
+
+### Refactoring
+
+- Creation paths write residence; 260/494 green
+  ([`026fb40`](https://github.com/arkitektio/mikro-server-next/commit/026fb400c9d4dc3519353b7255a6db1124b7d1d7))
+
+- Graph.py speaks residence, not ownership
+  ([`d4645ef`](https://github.com/arkitektio/mikro-server-next/commit/d4645ef41d8886fc3b107ae61fe052c7d2c013db))
+
+Deletes the fact/claim machinery outright -- is_registration_target, fact_edges, claim_root,
+  _assert_one_claim_per_space -- since every one of its consumers goes with it, and deletes
+  create_calibration: a calibrated space is now an ordinary space with an edge into it.
+
+Ownership readers are inverted rather than ported. residence_map() reads coordinate_system_id off
+  the data rows (three batched IN queries, flat in both spaces and residents) instead of traversing
+  back from a space, which is the direction the residence model makes cheap.
+
+_SHARED_SIDE_MIRROR becomes _UNINHABITED: 'a space nothing lives in', which is a better rule than
+  the one it replaces because it names what a world is rather than how its edges were made.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+- Residence reaches the graph modules, types and filters
+  ([`9aeca92`](https://github.com/arkitektio/mikro-server-next/commit/9aeca92dff15dc5d62f8a3b2aee503a36acc832f))
+
+scene_graph/space_graph thread a residence map instead of reading owner columns; space_graph now
+  fetches the *residents* of the candidate spaces rather than the spaces and their seven FKs, which
+  is the direction the model makes cheap.
+
+kind, isAdoptableWorld, CoordinateSystemOwner, ADataset.calibrations and the calibration mutations
+  are gone. CoordinateSystem.residents replaces kind: what a space is follows from what lives in it,
+  and 'nothing lives here' is the only distinction the four-value label really carried.
+
+calibrated_neighbours() replaces dataset.calibrations for the scene bootstrap, the phasor bin width
+  and the calibrated filter.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+## v2.0.0-rc.6 (2026-07-10)
+
+### Bug Fixes
+
+- Unique together
+  ([`4d99afb`](https://github.com/arkitektio/mikro-server-next/commit/4d99afb5c3c47b5ddcd7839817c5f9739717877a))
+
+- Wrongly assuemd UUID for lightports
+  ([`6409a45`](https://github.com/arkitektio/mikro-server-next/commit/6409a451913546d781c72e831cdcf57fb649bd92))
+
+
+## v2.0.0-rc.5 (2026-07-10)
+
+### Bug Fixes
+
+- Massive updates to the knne scalars and input types
+  ([`266a194`](https://github.com/arkitektio/mikro-server-next/commit/266a1942930c4beeb9696b9a50cdc72244fd57b3))
+
+
+## v2.0.0-rc.4 (2026-07-07)
+
+### Bug Fixes
+
+- More mutations
+  ([`6b175a5`](https://github.com/arkitektio/mikro-server-next/commit/6b175a5dad7c289217051189dc9f29592441776d))
+
+
+## v2.0.0-rc.3 (2026-07-07)
+
+### Bug Fixes
+
+- New layers plus kanne_scalars
+  ([`9eeed5b`](https://github.com/arkitektio/mikro-server-next/commit/9eeed5b0f3a6502fb3998bba3998f476064425ac))
+
+- Tests
+  ([`980e962`](https://github.com/arkitektio/mikro-server-next/commit/980e962781c1c6dede4a55623f56d616d0883ae0))
+
+
+## v2.0.0-rc.2 (2026-06-30)
+
+### Bug Fixes
+
+- Removal of scope filtering
+  ([`8d4e5e0`](https://github.com/arkitektio/mikro-server-next/commit/8d4e5e0096a89f726fec5a2848db170e718aa9e6))
+
+
+## v2.0.0-rc.1 (2026-06-29)
 
 
 ## v1.0.0 (2026-06-25)

@@ -16,79 +16,47 @@ migrations, which reference e.g. ``core.models.create_default_color``).
 # runtime storage I/O goes through ``datalayer.datalayer.get_current_datalayer()``,
 # never through boto3/zarr directly.
 from datalayer.models import (
+    SparseStore,
     ZarrStore,
     BigFileStore,
     ParquetStore,
     MediaStore,
+    FabriksStore,
+    KonnektionStore,
 )
 
-from .dataset import (
-    DatasetManager,
-    Dataset,
+from .folder import (
+    FolderManager,
+    Folder,
     File,
-    Table,
-    Experiment,
-    Mesh,
-)
-from .instrumentation import (
-    Objective,
-    Camera,
-    Instrument,
-)
-from .image import (
-    Image,
-    Render,
-    Blurhash,
-    Video,
-    Snapshot,
+    FileLink,
 )
 from .meta import (
     MetaSchema,
     UnstructuredMeta,
 )
-from .stage import (
-    Stage,
-    MultiWellPlate,
-    Era,
+from .coords import (
+    CoordinateSystem,
+    Axis,
+    Transformation,
+    MeshCollection,
+    NetworkCollection,
 )
-from .roi import (
-    ROIGroup,
-    random_color,
-    ROI,
+from .table_dataset import (
+    TableDataset,
+    Column,
 )
-from .view import (
-    ViewCollection,
-    View,
-    OpticsView,
-    LightpathView,
-    ScaleView,
-    AlphaView,
-    ContinousScanView,
-    WellPositionView,
-    ChannelView,
-    ReferenceView,
-    FileView,
-    HistogramView,
-    TableView,
-    DerivedView,
-    ROIView,
-    Accessor,
-    LabelAccessor,
-    ImageAccessor,
-    RGBRenderContext,
-    RenderTree,
-    AcquisitionView,
-    create_default_color,
-    RGBView,
-    TimepointView,
-    LabelView,
-    MaskView,
-    InstanceMaskView,
-    AffineTransformationView,
-    CropView,
+from .sparse_dataset import (
+    SparseDataset,
+    SparseArray,
+    SparseAxisReference,
 )
-from .adataset import (
-    ADataset,
+from .annotation import (
+    AnnotationCollection,
+    Annotation,
+)
+from .array_dataset import (
+    ArrayDataset,
     DataArray,
     CoordinateAnchor,
     OptikitState,
@@ -96,12 +64,14 @@ from .adataset import (
     ValueHistogram,
     ChannelLabel,
     LightPath,
-    OmePlaneMetadata,
+    PhasorHistogram,
+    PhasorCalibration,
     Lens,
     Scene,
+    SceneSnapshot,
+    Animation,
+    AnimationWaypoint,
     Layer,
-    DataRoi,
-    LineageLink,
 )
 
 __all__ = [
@@ -109,67 +79,36 @@ __all__ = [
     "ZarrStore",
     "BigFileStore",
     "ParquetStore",
+    "FabriksStore",
+    "KonnektionStore",
     "MediaStore",
-    # dataset
-    "DatasetManager",
-    "Dataset",
+    # folder
+    "FolderManager",
+    "Folder",
     "File",
-    "Table",
-    "Experiment",
-    "Mesh",
-    # instrumentation
-    "Objective",
-    "Camera",
-    "Instrument",
-    # image
-    "Image",
-    "Render",
-    "Blurhash",
-    "Video",
-    "Snapshot",
+    "FileLink",
     # meta
     "MetaSchema",
     "UnstructuredMeta",
-    # stage
-    "Stage",
-    "MultiWellPlate",
-    "Era",
-    # roi
-    "ROIGroup",
-    "random_color",
-    "ROI",
-    # view
-    "ViewCollection",
-    "View",
-    "OpticsView",
-    "LightpathView",
-    "ScaleView",
-    "AlphaView",
-    "ContinousScanView",
-    "WellPositionView",
-    "ChannelView",
-    "ReferenceView",
-    "FileView",
-    "HistogramView",
-    "TableView",
-    "DerivedView",
-    "ROIView",
-    "Accessor",
-    "LabelAccessor",
-    "ImageAccessor",
-    "RGBRenderContext",
-    "RenderTree",
-    "AcquisitionView",
-    "create_default_color",
-    "RGBView",
-    "TimepointView",
-    "LabelView",
-    "MaskView",
-    "InstanceMaskView",
-    "AffineTransformationView",
-    "CropView",
-    # adataset
-    "ADataset",
+    # coords (the RFC-5 coordinate system graph)
+    "CoordinateSystem",
+    "Axis",
+    "Transformation",
+    "MeshCollection",
+    "NetworkCollection",
+    # table dataset
+    "TableDataset",
+    "Column",
+    # sparse dataset
+    "SparseDataset",
+    "SparseArray",
+    "SparseAxisReference",
+    "SparseStore",
+    # annotations
+    "AnnotationCollection",
+    "Annotation",
+    # array_dataset
+    "ArrayDataset",
     "DataArray",
     "CoordinateAnchor",
     "OptikitState",
@@ -177,10 +116,12 @@ __all__ = [
     "ValueHistogram",
     "ChannelLabel",
     "LightPath",
-    "OmePlaneMetadata",
+    "PhasorHistogram",
+    "PhasorCalibration",
     "Lens",
     "Scene",
+    "SceneSnapshot",
+    "Animation",
+    "AnimationWaypoint",
     "Layer",
-    "DataRoi",
-    "LineageLink",
 ]

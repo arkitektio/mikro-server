@@ -1,5 +1,6 @@
 import strawberry
 import strawberry_django
+from strawberry.scalars import JSON
 from typing import TYPE_CHECKING, Annotated, Optional
 from core import filters, order, scalars
 from kante.types import Info
@@ -12,7 +13,7 @@ import kante
 from authentikate import models as amodels
 
 if TYPE_CHECKING:
-    from core.types.image import Dataset
+    from core.types.folder import Folder
 
 
 @strawberry.type(description="A generic key-value descriptor attached to an object. Clients use descriptors to read arbitrary structured metadata without a dedicated field.")
@@ -51,7 +52,7 @@ class Membership:
     organization: Organization
     roles: list[str]
     is_active: bool
-    datasets: list[Annotated["Dataset", strawberry.lazy("core.types.image")]]
+    folders: list[Annotated["Folder", strawberry.lazy("core.types.folder")]]
 
 
 @kante.django_type(amodels.Client, description="An OAuth client (application) that can act against the API, e.g. the app a change was made through.")
@@ -72,13 +73,32 @@ class HistoryKind(str, Enum):
     DELETE = "-"
 
 
+#: What the JSON scalar can encode as-is. Anything else -- a datetime, a Decimal, a UUID, a
+#: model instance -- goes through ``str``, since strawberry's JSON scalar serializes through
+#: the stdlib encoder.
+_JSON_NATIVE = (str, int, float, bool, type(None))
+
+
+def _to_json_safe(value: object) -> object:
+    """Coerce a raw history value to something the JSON scalar can encode, recursively."""
+    if isinstance(value, _JSON_NATIVE):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_safe(item) for item in value]
+    return str(value)
+
+
 @strawberry.type(description="A change made to a model.")
 class ModelChange:
     """The change made to a model."""
 
     field: str = strawberry.field(description="The field that was changed.")
-    old_value: str | None = strawberry.field(description="The old value of the field.")
-    new_value: str | None = strawberry.field(description="The new value of the field.")
+    old_value: str | None = strawberry.field(description="The old value of the field, rendered as text.")
+    new_value: str | None = strawberry.field(description="The new value of the field, rendered as text.")
+    old_value_json: JSON | None = strawberry.field(description="The old value of the field, preserving its native JSON type.")
+    new_value_json: JSON | None = strawberry.field(description="The new value of the field, preserving its native JSON type.")
 
 
 @kante.django_type(
@@ -148,7 +168,21 @@ class ProvenanceEntry:
 
         delta = new_record.diff_against(old_record)
         for change in delta.changes:
-            changes.append(ModelChange(field=change.field, old_value=change.old, new_value=change.new))
+            # `diff_against` yields the *raw* column values -- a JSONField's list, an FK's
+            # model instance, a datetime -- and both text fields are `String`. Handing a
+            # list to a String scalar is not a null, it is a GraphQLError that fails the
+            # whole query, so one JSON column made every provenance read on that model
+            # unanswerable. Stringify for the text pair, keep the native value on the JSON
+            # pair, and let None stay null rather than becoming the literal "None".
+            changes.append(
+                ModelChange(
+                    field=change.field,
+                    old_value=None if change.old is None else str(change.old),
+                    new_value=None if change.new is None else str(change.new),
+                    old_value_json=None if change.old is None else _to_json_safe(change.old),
+                    new_value_json=None if change.new is None else _to_json_safe(change.new),
+                )
+            )
 
         return changes
 
