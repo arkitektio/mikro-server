@@ -21,7 +21,7 @@ datalayer:
   session_duration_seconds: 3600
   access_key: ZvBLOQAApECKXISSJyiox192s6RNhVgmN9LZhWFYbdA
   secret_key: rqh27SKddiMciJ2RPSpQF3l_SYtlXNKCA9Fp3NgrYBQ
-  host: minio
+  host: rustfs
   port: 9000
   protocol: http
   media:

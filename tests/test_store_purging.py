@@ -37,7 +37,7 @@ def buckets(monkeypatch):
     """A real (moto-backed) S3 with the configured buckets created.
 
     `endpoint_url` is dropped for the duration: moto patches botocore's default AWS endpoints
-    and does **not** intercept a client pointed at `http://minio:9000`, which is what the real
+    and does **not** intercept a client pointed at `http://rustfs:9000`, which is what the real
     config carries -- a client built against it tries to open a socket and fails. Removing
     host/port makes `endpoint_url` None, which is the shape moto understands.
 
