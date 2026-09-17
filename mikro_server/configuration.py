@@ -63,6 +63,7 @@ class RedisSettings(BaseModel):
 
     host: str = Field(description="Redis host.")
     port: int = Field(default=6379, description="Redis port.")
+    channel_prefix: str = Field(default="mikro", description="Key prefix for the channels_redis channel layer. Must be unique per service: every service on a shared redis used to send under the same prefix, so identically-named groups (e.g. \"files\") delivered one service's events to another's subscribers.")
 
 
 class DatalayerBucket(BaseModel):
