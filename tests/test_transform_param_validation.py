@@ -1056,13 +1056,14 @@ async def test_a_correspondence_may_not_cross_axis_kinds(authenticated_context: 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_clocks_anchored_differently_may_not_be_related_silently(authenticated_context: HttpContext):
+async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offset(authenticated_context: HttpContext):
     """`epoch` says `wall_clock = epoch + t * unit`, and nothing ever read it.
 
     So a path across two spaces with different epochs treated their `t = 0` as the same instant:
     a 09:00 acquisition aligned against an 11:00 one was two hours wrong, with no error anywhere.
     Refused rather than composed -- an offset folded in from a column neither endpoint's
-    parameters mention is a fact stored where no query can find it. Say it as a TRANSLATION.
+    parameters mention is a fact stored where no query can find it. Say it as a TRANSLATION, or an
+    AFFINE when the clocks also drift; both are accepted (they used to be refused as well).
     """
     import datetime
 
@@ -1085,3 +1086,17 @@ async def test_two_clocks_anchored_differently_may_not_be_related_silently(authe
     await sync_to_async(graph_logic.build_registration_edge)(input_system=morning, output_system=same, kind="IDENTITY", ctx=ctx)
     unanchored = await sync_to_async(clock)("Unanchored", None)
     await sync_to_async(graph_logic.build_registration_edge)(input_system=morning, output_system=unanchored, kind="IDENTITY", ctx=ctx)
+
+    # Stating the offset is what the refusal asks for, and it is accepted: a TRANSLATION, and an
+    # AFFINE whose factor is a few ppm off one -- which is how drift between two clocks is written.
+    await sync_to_async(graph_logic.build_registration_edge)(input_system=morning, output_system=later, kind="TRANSLATION", translation=[-7200.0], ctx=ctx)
+    drifting = await sync_to_async(clock)("Drifting", eleven)
+    await sync_to_async(graph_logic.build_registration_edge)(input_system=morning, output_system=drifting, kind="AFFINE", affine=[[1.000012, -7200.0]], ctx=ctx)
+    # What states no offset still asserts that the two zeros coincide, and stays refused.
+    scaled = await sync_to_async(clock)("Scaled", eleven)
+    with pytest.raises(ValueError, match="states no offset"):
+        await sync_to_async(graph_logic.build_registration_edge)(input_system=morning, output_system=scaled, kind="SCALE", scale=[1.000012], ctx=ctx)
+    with pytest.raises(ValueError, match="states no offset"):
+        await sync_to_async(graph_logic.build_registration_edge)(
+            input_system=morning, output_system=scaled, kind="BY_DIMENSION", input_axes=["t"], output_axes=["t"], scale=[1.000012], ctx=ctx
+        )
