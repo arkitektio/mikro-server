@@ -1008,7 +1008,7 @@ class ImageLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.IMAGE.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.IMAGE.value
 
     @kante.django_field(description="The composable in-layer render graph, if this layer defines one")
     def render_graph(self, info: Info) -> LayerRenderGraph | None:
@@ -1051,7 +1051,7 @@ class IntensityLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.INTENSITY.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.INTENSITY.value
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
     def level_paths(self, info: Info) -> List["LevelPlacement"]:
@@ -1086,7 +1086,7 @@ class RgbLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.RGB.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.RGB.value
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
     def level_paths(self, info: Info) -> List["LevelPlacement"]:
@@ -1114,7 +1114,7 @@ class PhasorLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.PHASOR.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.PHASOR.value
 
     @kante.django_field(description="Which axis is reduced to a phasor, at which harmonic, and how the resulting (g, s) becomes color")
     def phasor_render(self, info: Info) -> PhasorRender | None:
@@ -1156,7 +1156,7 @@ class VectorLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.VECTOR.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.VECTOR.value
 
     @kante.django_field(
         description=(
@@ -1191,7 +1191,7 @@ class LabelLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.LABEL.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.LABEL.value
 
     @kante.django_field(description="How this layer's object ids become color: the hashing, the transparent background id, contour-or-fill, the selection, and any `colorBy`")
     def label_render(self, info: Info) -> LabelRender | None:
@@ -1366,7 +1366,7 @@ class AnnotationLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.ANNOTATION.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.ANNOTATION.value
 
 
 def _coordinate_column_named(layer: "models.Layer", axis_name: str) -> str | None:
@@ -1493,7 +1493,7 @@ class PointLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.POINT.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.POINT.value
 
 
 @kante.django_type(
@@ -1541,7 +1541,7 @@ class TrackLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.TRACK.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.TRACK.value
 
 
 @kante.django_type(
@@ -1601,7 +1601,7 @@ class MeshLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.MESH.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.MESH.value
 
 
 @kante.django_type(
@@ -1660,7 +1660,7 @@ class NetworkLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return obj.kind == enums.LayerKind.NETWORK.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.NETWORK.value
 
 
 # The aggregate behind the homepage statistics sidebars. It replaces the Image-shaped

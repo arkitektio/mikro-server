@@ -449,14 +449,13 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
     that actually happens when a concrete type is written by copying its neighbour.
     """
     import os
-    from types import SimpleNamespace
 
     import django
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mikro_server.settings_test")
     django.setup()
 
-    from core import enums
+    from core import enums, models
     from core.types.layers import layer_types
     from mikro_server.schema import schema
 
@@ -466,7 +465,7 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
         name = layer_type.__name__
         assert f"type {name} implements Layer" in sdl, f"{name} is registered but absent from the SDL"
         for kind in enums.LayerKind:
-            if layer_type.is_type_of(SimpleNamespace(kind=kind.value), None):
+            if layer_type.is_type_of(models.Layer(kind=kind.value), None):
                 claims[kind.value].append(name)
 
     unclaimed = sorted(kind for kind, names in claims.items() if not names)
@@ -505,7 +504,7 @@ def test_every_kind_that_draws_a_lens_is_a_lens_backed_kind() -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mikro_server.settings_test")
     django.setup()
 
-    from core import enums
+    from core import enums, models
     from core.logic import graph as graph_logic
     from core.types.layers import layer_types
 
@@ -514,7 +513,7 @@ def test_every_kind_that_draws_a_lens_is_a_lens_backed_kind() -> None:
         if "lens" not in getattr(layer_type, "__annotations__", {}):
             continue
         for kind in enums.LayerKind:
-            if layer_type.is_type_of(SimpleNamespace(kind=kind.value), None):
+            if layer_type.is_type_of(models.Layer(kind=kind.value), None):
                 lens_kinds.add(kind.value)
 
     stale = sorted(enums.LENS_BACKED_KINDS - lens_kinds)

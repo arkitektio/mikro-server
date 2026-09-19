@@ -117,6 +117,11 @@ STRAWBERRY_DJANGO = {
     "DEFAULT_PK_FIELD_NAME": "id",
 }
 
+# Federation's `_entities` resolves references through this queryset, so an id
+# fetched that way is scoped exactly like `get_x`. kante >= 2.3.0 reads it; an
+# older kante ignores it and answers `_entities` unscoped.
+KANTE_REFERENCE_QUERYSET = "core.scoping.for_org"
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

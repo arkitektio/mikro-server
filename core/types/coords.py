@@ -408,8 +408,11 @@ class IdentityTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.IDENTITY.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.IDENTITY.value
 
 
 @kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A per-axis multiplication, with one entry per input axis")
@@ -420,8 +423,11 @@ class ScaleTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.SCALE.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.SCALE.value
 
     @kante.django_field(
         description="The per-axis scale factors, in the axis order of the input system, expressed in the units of the output system's axes (dimensionless between pixel systems, e.g. within a pyramid). Absolute, not relative to another level"
@@ -439,8 +445,11 @@ class TranslationTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.TRANSLATION.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.TRANSLATION.value
 
     @kante.django_field(description="The per-axis offsets, in the axis order of the input system")
     def translation(self, info: Info) -> List[float]:
@@ -456,8 +465,11 @@ class AffineTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.AFFINE.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.AFFINE.value
 
     @kante.django_field(description="The affine matrix, M x (N+1), rows outermost. The last column is the translation")
     def affine(self, info: Info) -> List[List[float]]:
@@ -473,8 +485,11 @@ class RotationTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.ROTATION.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.ROTATION.value
 
     @kante.django_field(description="The rotation matrix")
     def affine(self, info: Info) -> List[List[float]]:
@@ -490,8 +505,11 @@ class MapAxisTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.MAP_AXIS.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.MAP_AXIS.value
 
     @kante.django_field(description="The names of the input axes, positionally matched to `outputAxes`")
     def input_axes(self, info: Info) -> List[str]:
@@ -512,8 +530,11 @@ class SequenceTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.SEQUENCE.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.SEQUENCE.value
 
     transformations: List[Transformation] = kante.django_field(
         field_name="children",
@@ -529,8 +550,11 @@ class ByDimensionTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.BY_DIMENSION.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.BY_DIMENSION.value
 
     transformations: List[Transformation] = kante.django_field(
         field_name="children",
@@ -546,8 +570,11 @@ class FieldTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.FIELD.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.FIELD.value
 
     # A node, not the store this edge used to carry: the array is data before it is a map --
     # a label mask has its own lineage, provenance and placement -- and a payload can hold
@@ -578,8 +605,11 @@ class UnmappableTransformation(Transformation):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column."""
-        return obj.kind == enums.TransformKind.UNMAPPABLE.value
+        """Discriminate on the model's `kind` column.
+
+        The model check comes first: `_entities` resolves the `_Entity` union by
+        asking every member, so this also sees rows of other models."""
+        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.UNMAPPABLE.value
 
     @kante.django_field(description="Why the geometry does not survive, if the author said. Purely descriptive: the kind is what the graph acts on, and an absent reason does not make the edge any less of a statement")
     def reason(self, info: Info) -> str | None:
