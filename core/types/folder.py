@@ -42,6 +42,7 @@ class File:
     id: auto
     name: auto
     store: BigFileStore
+    folder: Optional["Folder"] = kante.django_field(description="The folder this file is filed in, or null once its folder was deleted (deleting a folder unfiles what is in it and destroys nothing). Organisational only: it says where a user keeps the file, nothing about its contents")
 
     @kante.django_field(
         description=(
