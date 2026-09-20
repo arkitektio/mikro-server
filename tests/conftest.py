@@ -17,6 +17,20 @@ from dokker import PortNotFoundError, testing
 
 
 
+@pytest.fixture(scope="session", autouse=True)
+def embedding_model_warm():
+    """Load the embedding model once per session, outside any test's DB transaction.
+
+    Every save of a Folder / ArrayDataset / TableDataset embeds its text, so the first one
+    would otherwise pay the model load (a one-time download into the Hugging Face cache on a
+    cold box) inside a test.
+    """
+    from embeddings import engine
+
+    engine.warm_up()
+    yield
+
+
 @pytest.fixture(scope="function")
 def s3(aws_credentials):
     with mock_aws():
@@ -80,10 +94,11 @@ def backend_stack():
                 time.sleep(0.2)
 
         # The suite builds its schema with run-syncdb (migrations disabled), so the
-        # cube extension migration never runs here -- but CREATE TABLE for
-        # Annotation.bbox_cube needs the type to exist. Install it into template1
-        # so the test database pytest-django creates from it inherits it, and into
-        # testdb itself for anything connecting directly.
+        # extension migrations never run here -- but CREATE TABLE for
+        # Annotation.bbox_cube needs `cube` and the embedding columns
+        # (Folder/ArrayDataset/TableDataset.embedding) need `vector`. Install them
+        # into template1 so the test database pytest-django creates from it inherits
+        # them, and into testdb itself for anything connecting directly.
         for dbname in ("template1", "testdb"):
             with psycopg.connect(
                 dbname=dbname,
@@ -94,6 +109,7 @@ def backend_stack():
                 autocommit=True,
             ) as connection:
                 connection.execute("CREATE EXTENSION IF NOT EXISTS cube")
+                connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
         yield db_port
 

@@ -5,6 +5,7 @@ from koherent.fields import ProvenanceField
 from authentikate.models import Organization, Membership
 from taggit.managers import TaggableManager
 from datalayer.models import BigFileStore, ParquetStore
+from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
 
 from core import enums
 from core.creation import CreationContext
@@ -27,7 +28,7 @@ class FolderManager(models.Manager):
         return potential
 
 
-class Folder(models.Model):
+class Folder(EmbeddedDescriptionMixin, models.Model):
     """
     A folder is a collection of data files and metadata files.
     It mimics the concept of a folder in a file system and is the top level
@@ -78,7 +79,8 @@ class Folder(models.Model):
         related_name="assigned_%(class)ss",
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
-    provenance = ProvenanceField()
+    # The embedding columns are storage, not an edit: keep them out of the history rows.
+    provenance = ProvenanceField(excluded_fields=["embedding", "embedding_model"])
     tags = TaggableManager()
 
     objects = FolderManager()
@@ -98,6 +100,8 @@ class Folder(models.Model):
                 name="only_one_folder_per_parent_and_name",
             ),
         ]
+        # The embedding healer's "any row not by the current model?" probe.
+        indexes = [*embedding_indexes("folder")]
 
 
 class File(models.Model):

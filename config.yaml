@@ -53,6 +53,18 @@ authentikate:
       iss: rekuest
       kid: rekuest-key-2
       public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDGFj0zB7j6KrTRFEP+a2Z7toLEwJ0ROF3qSkq6vo2aK5TGRv+D3V/6VhvM2NgtUIO1iqwvf4XETamhHt2xlVzJyoyMAnAGkwkMyQJpI6wG5g7NtrRc1kkeefWbLBVW+aEI++3ec3eD9PUhnjXbQXJwju8l2ldKg2skw2fZWrjfWo0S0CuvB05nXJ8BmmAo65BBv29gGVywzZEApv/Zu16l6ftCZSEKi/zMbK6YxCekl/h3sfK7uGj6uaab7XSqqANHDZDTSotD5ws8UdMb3IP4/qoJiJm0Lsw5XpmFTt9M+ekiv/9HsWjXtzOd0BpqxynlvF1fWDr0HVnrUCh1XMzn
+embeddings:
+  # Semantic `search` over folders and datasets: name + description are embedded on save
+  # by a small static model that runs inside the service (no GPU, no extra service) and
+  # stored in a pgvector column. All keys have defaults; the block may be omitted.
+  # `dimensions` is also the width of the database columns -- changing the model's width
+  # is a migration, see CONFIG.md. The Docker image bakes the weights and sets
+  # EMBEDDINGS__MODEL_PATH itself.
+  enabled: true
+  model: minishlab/potion-base-8M
+  dimensions: 256
+  distance_threshold: 0.55
+  sweep_interval: 30
 postgres:
   db_name: mikro_db
   engine: django.db.backends.postgresql

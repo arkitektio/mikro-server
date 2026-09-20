@@ -13,6 +13,7 @@ from strawberry_django.filters import FilterLookup
 from kante.types import Info
 from django.db.models import Count, Exists, F, OuterRef, Q, QuerySet
 from django.db.models.functions import Coalesce
+from embeddings.search import hybrid_search
 import kante
 
 
@@ -205,6 +206,31 @@ class NameSearchFilterMixin:
         return Q(**{f"{prefix}name__icontains": value})
 
 
+# The two mixins below are the semantic twins of the two above, for the models that carry an
+# embedding (``embeddings.models.EmbeddedDescriptionMixin``: Folder, ArrayDataset,
+# TableDataset). Same lexical leg, OR "the query means the description"; lexical hits rank
+# first, then by similarity. Nested use (``prefix``) stays lexical -- the filter agent's
+# parent is what gets ordered, not the child.
+@strawberry.input
+class SemanticSearchFilterMixin:
+    """``search`` = full-text on the name OR semantic similarity to name + description."""
+
+    @kante.filter_field(description="Search by name (full-text) or by the meaning of the query against name and description. Textual matches rank first, then by similarity; an explicit `ordering` replaces that ranking")
+    def search(self, info: Info, queryset: QuerySet, value: str, prefix: str) -> tuple[QuerySet, Q]:
+        """Annotate the distance and OR the semantic predicate onto the full-text one."""
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__search": value}))
+
+
+@strawberry.input
+class SemanticNameSearchFilterMixin:
+    """``search`` = substring of the name OR semantic similarity to name + description."""
+
+    @kante.filter_field(description="Search by name (case-insensitive substring) or by the meaning of the query against name and description. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking")
+    def search(self, info: Info, queryset: QuerySet, value: str, prefix: str) -> tuple[QuerySet, Q]:
+        """Annotate the distance and OR the semantic predicate onto the substring one."""
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}))
+
+
 @strawberry.input
 class CreatedAtFilterMixin:
     @kante.filter_field(description="Filter for items created before this datetime")
@@ -275,7 +301,7 @@ class ZarrStoreFilter:
 
 
 @kante.filter_type(models.Folder)
-class FolderFilter(IdsFilterMixin, SearchFilterMixin, OwnedFilterMixin, PinnedFilterMixin, TagsFilterMixin, CreatedThroughFilterMixin):
+class FolderFilter(IdsFilterMixin, SemanticSearchFilterMixin, OwnedFilterMixin, PinnedFilterMixin, TagsFilterMixin, CreatedThroughFilterMixin):
     id: auto
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]
@@ -422,7 +448,7 @@ class FileLinkFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin
 
 
 @kante.filter_type(models.ArrayDataset)
-class ArrayDatasetFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     id: auto
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]
@@ -950,7 +976,7 @@ class SparseDatasetFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixi
 
 
 @kante.filter_type(models.TableDataset)
-class TableDatasetFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+class TableDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     id: auto
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]

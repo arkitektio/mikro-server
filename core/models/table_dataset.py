@@ -24,6 +24,7 @@ from django.contrib.auth import get_user_model
 from authentikate.models import Organization
 from datalayer.models import ParquetStore
 from koherent.fields import ProvenanceField
+from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
 from django_choices_field import TextChoicesField
 
 from core import enums
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from core.models.coords import CoordinateSystem
 
 
-class TableDataset(models.Model):
+class TableDataset(EmbeddedDescriptionMixin, models.Model):
     """A parquet-backed table whose rows are scientific records, placed by its coordinate columns.
 
     **Not editable.** The store, the declared columns and the coordinate system they derive
@@ -103,12 +104,15 @@ class TableDataset(models.Model):
         related_name="assigned_%(class)ss",
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
-    provenance = ProvenanceField()
+    # The embedding columns are storage, not an edit: keep them out of the history rows.
+    provenance = ProvenanceField(excluded_fields=["embedding", "embedding_model"])
 
     class Meta:
         """Meta options for the table dataset."""
 
         ordering = ["-created_at"]
+        # The embedding healer's "any row not by the current model?" probe.
+        indexes = [*embedding_indexes("table_dataset")]
 
     def __str__(self) -> str:
         """The table dataset's name."""

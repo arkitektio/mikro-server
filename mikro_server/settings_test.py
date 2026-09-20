@@ -65,3 +65,7 @@ DATABASE_ROUTERS = []
 
 # Use in-memory channel layer for tests instead of Redis
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+# The embedding healer re-embeds stale rows in the background. Tests call
+# ``embeddings.healer.reembed_stale`` explicitly instead, so a pass can never race an assertion.
+EMBEDDINGS_HEALER_ENABLED = False
