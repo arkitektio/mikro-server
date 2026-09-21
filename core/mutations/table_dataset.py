@@ -17,6 +17,7 @@ from kante.types import Info
 from pydantic import BaseModel, ConfigDict, Field
 
 import kante
+from datalayer.datalayer import get_current_datalayer
 from kanne_server import scalars as kanne_scalars
 
 from core import enums, models, scalars, types
@@ -247,7 +248,7 @@ def _resolve_store(info: Info, identifier: str, name: str) -> "models.ParquetSto
     if not store.populated:
         # `fill_info` is still called from the create path -- nothing invokes
         # `finishParquetUpload` -- so this is reached only if that call also failed.
-        store.fill_info()
+        store.fill_info(get_current_datalayer())
     if store.columns is None:
         raise ValueError(
             f"Parquet store {store.pk} has no recorded schema, so nothing is known about what '{name}' would hold. Its columns are read by `fill_info` when the upload is "

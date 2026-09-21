@@ -42,9 +42,8 @@ def from_file_like(
 ) -> types.File:
     parsed = input.to_pydantic()
     store = get_for_org(models.BigFileStore, info, id=parsed.file)
-    store.fill_info()
-
     dl = get_current_datalayer()
+    store.fill_info(dl)
 
     ctx = CreationContext.from_info(info)
     folder = get_for_org(models.Folder, info, id=parsed.folder) if parsed.folder else models.Folder.objects.get_current_default(ctx)
@@ -58,7 +57,12 @@ def from_file_like(
         # client that passed "cells.czi" got whatever name the upload grant happened to
         # record -- the store's is the fallback, not the answer.
         name=parsed.file_name or store.original_file_name,
-        size=dl.get_object_size(store.bucket, store.key),
+        # The store's own measurement, not a second HEAD. `fill_info` above has just read
+        # this, so re-reading it here could only produce a number that disagrees -- and the
+        # call it replaces passed the raw `key` rather than `build_object_key(...)`, so under
+        # a bucket with a configured `subpath` it would have been asking about the wrong
+        # object. Null when the measurement failed, which `File.size` allows.
+        size=store.size_bytes,
         content_type=store.content_type,
         store=store,
         **ctx.provenance_kwargs(),

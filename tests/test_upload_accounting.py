@@ -203,3 +203,127 @@ def test_a_measured_store_reports_both_numbers_to_clients(buckets, organization)
 
     assert {"max_bytes", "size_bytes"} <= set(types.ZarrStore.__annotations__)
     assert settings.DATALAYER is not None
+
+
+CREATE_ARRAY_DATASET = """
+mutation Create($input: CreateArrayDatasetInput!) {
+  createArrayDataset(input: $input) {
+    id
+    dataArrays { level store { id sizeBytes } }
+  }
+}
+"""
+
+_YX = [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_store_finalized_by_a_create_mutation_records_its_size(buckets, authenticated_context):  # noqa: F811
+    """The path that actually carries traffic, and the one that used to record nothing.
+
+    `createArrayDataset` calls `fill_info` on every level itself; it never invokes
+    `finishZarrUpload`. Measuring beside the finish mutation therefore left `sizeBytes` null
+    for essentially every real dataset, which is why the measurement now lives inside
+    `fill_info` -- the one point both entry paths reach.
+    """
+    from asgiref.sync import sync_to_async
+
+    from mikro_server.schema import schema
+
+    # The setup is ordinary synchronous ORM work and the test body is not, so it is pushed into
+    # a thread rather than rewritten async: `request_store` and `write_zarr` are shared with
+    # every sync test in this module and are worth keeping in one shape.
+    @sync_to_async
+    def seed():
+        organization = authenticated_context.request.organization
+        level_0 = request_store(buckets, organization)
+        level_1 = request_store(buckets, organization)
+        return level_0, level_1, {str(level_0.pk): write_zarr(buckets, level_0, chunk_bytes=512), str(level_1.pk): write_zarr(buckets, level_1, chunk_bytes=128)}
+
+    level_0, level_1, written = await seed()
+
+    result = await schema.execute(
+        CREATE_ARRAY_DATASET,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "name": "measured",
+                "data": str(level_0.pk),
+                "scales": [{"level": 1, "array": str(level_1.pk)}],
+                "axes": _YX,
+            }
+        },
+    )
+
+    assert not result.errors, str(result.errors and result.errors[0])
+    arrays = result.data["createArrayDataset"]["dataArrays"]
+    assert len(arrays) == 2
+    for array in arrays:
+        store_id = array["store"]["id"]
+        assert array["store"]["sizeBytes"] == written[store_id], f"level {array['level']} reported the wrong size"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organization):  # noqa: F811
+    """The other half of the `is_prefix` split, exercised through `fill_info` rather than a listing.
+
+    A bigfile is one key, so its size is a HEAD. Worth pinning beside the zarr case because the
+    two take entirely different calls and only one of them is forgiving about a trailing slash.
+    """
+    from datalayer.models import BigFileStore
+
+    grant = buckets.generate_bigfile_upload_grant(organization.id, base_models.RequestBigFileUploadInput(original_file_name="cells.czi"))
+    store = BigFileStore.objects.get(id=grant.store)
+    body = b"y" * 2048
+    buckets._s3.put_object(Bucket=buckets.get_bucket_config("bigfile").bucket, Key=buckets.build_object_key("bigfile", store.key), Body=body)
+
+    store.fill_info(buckets)
+
+    store.refresh_from_db()
+    assert store.populated is True
+    assert store.size_bytes == len(body)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(buckets, organization, monkeypatch):  # noqa: F811
+    """The non-fatal contract has to hold on the create path too, not just behind the finish mutation.
+
+    `fill_info` is now where the measurement happens, so this is the call that must not be able
+    to lose a store over a bookkeeping read.
+    """
+    store = request_store(buckets, organization)
+    write_zarr(buckets, store)
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("listing is unavailable")
+
+    monkeypatch.setattr(datalayer_module.Datalayer, "measure_prefix_bytes", refuse)
+    store.fill_info(buckets)
+
+    store.refresh_from_db()
+    assert store.populated is True
+    assert store.size_bytes is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_failed_measurement_does_not_erase_a_recorded_size(buckets, organization, monkeypatch):  # noqa: F811
+    """A re-`fill_info` that cannot measure must leave the last good number alone.
+
+    Null means "not measured". Overwriting a real size with it would turn a transient listing
+    failure into a permanent loss of the only record of how big a dataset is.
+    """
+    store = request_store(buckets, organization)
+    written = write_zarr(buckets, store, chunk_bytes=256)
+    store.fill_info(buckets)
+    store.refresh_from_db()
+    assert store.size_bytes == written
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("listing is unavailable")
+
+    monkeypatch.setattr(datalayer_module.Datalayer, "measure_prefix_bytes", refuse)
+    store.fill_info(buckets)
+
+    store.refresh_from_db()
+    assert store.size_bytes == written

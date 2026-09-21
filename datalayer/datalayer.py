@@ -1267,46 +1267,41 @@ class Datalayer:
         store = model_class.objects.get(id=store_id, organization_id=organization_id)
         if valid:
             store.fill_info(self)
-            self._record_delivered_size(store)
+            self._warn_on_overrun(store)
         else:
             store.populated = False
             store.save(update_fields=["populated"])
         return cast(StoreModel, store)
 
-    def _record_delivered_size(self, store: "models.DatalayerStore") -> None:
-        """Measure what an upload actually delivered and record it on the store.
+    def _warn_on_overrun(self, store: "models.DatalayerStore") -> None:
+        """Log an upload that delivered more than the ``max_bytes`` its grant advertised.
 
-        The only point at which the ``max_bytes`` a grant advertised can be checked against
-        what arrived: S3 enforces no size limit on a credential grant, so an upload that
-        exceeds its budget succeeds and finishes valid. Recording both numbers makes that
-        visible instead of merely true.
+        The only point at which the budget can be checked at all: S3 enforces no size limit on
+        a credential grant, so an upload that exceeds its budget succeeds and finishes valid.
+        Recording both numbers makes that visible instead of merely true.
 
-        **Measurement, not enforcement.** An overrun is logged and the store is still
-        populated, because refusing here would reject uploads that were never told a real
-        budget -- every zarr grant advertises the configured default, which clients do not
-        size. Deciding what a cap should mean is a separate change to the grant request.
+        **Measurement, not enforcement.** An overrun is logged and the store stays populated,
+        because refusing here would reject uploads that were never told a real budget -- every
+        zarr grant advertises the configured default, which clients do not size. Deciding what
+        a cap should mean is a separate change to the grant request.
 
-        Never fails the finish: a store whose bytes cannot be measured is still a finished
-        store, and losing the upload over a failed accounting read would be a worse trade.
+        The measuring itself happens in ``fill_info``, not here: the core create mutations
+        finalize a store without ever reaching this method, and a size recorded only on the
+        finish path was null for most stores. This reads what ``fill_info`` wrote, and says
+        nothing when it could not write anything.
         """
-        try:
-            delivered = store.measure_bytes(self)
-        except Exception:
-            logger.warning("Could not measure the bytes delivered for %s store %s; leaving size_bytes unset.", store.bucket, store.pk, exc_info=True)
+        delivered = store.size_bytes
+        if delivered is None or store.max_bytes is None or delivered <= store.max_bytes:
             return
 
-        store.size_bytes = delivered
-        store.save(update_fields=["size_bytes"])
-
-        if store.max_bytes is not None and delivered > store.max_bytes:
-            logger.warning(
-                "%s store %s delivered %d bytes against an advertised budget of %d (%.1fx). Nothing rejected it: a session policy bounds what a credential may write, not how much.",
-                store.bucket,
-                store.pk,
-                delivered,
-                store.max_bytes,
-                delivered / store.max_bytes,
-            )
+        logger.warning(
+            "%s store %s delivered %d bytes against an advertised budget of %d (%.1fx). Nothing rejected it: a session policy bounds what a credential may write, not how much.",
+            store.bucket,
+            store.pk,
+            delivered,
+            store.max_bytes,
+            delivered / store.max_bytes,
+        )
 
     def finish_media_upload(self, organization_id: int, input: base_models.FinishMediaUploadInput) -> "models.MediaStore":
         """Mark a media upload as complete.
