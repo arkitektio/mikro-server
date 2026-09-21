@@ -32,6 +32,7 @@ from core.logic import graph as graph_logic
 from core.logic import identification as identification_logic
 from core.logic import tables as tables_logic
 from core.mutations._generic import make_delete, self_owner
+from core.mutations.array_dataset import CoordinateAnchorInput, CoordinateAnchorInputModel, _get_or_create_anchor, _write_anchor_spokes, assert_anchors_name_axes
 from core.scoping import get_for_org
 
 #: The degenerate space of a table with no coordinate columns: one axis enumerating the
@@ -142,6 +143,7 @@ class CreateTableDatasetInputModel(BaseModel):
     folder: str | None = None
     derived_from: list[DerivedFromSpec] | None = None
     source_files: list[SourceFileInputModel] | None = None
+    anchors: list[CoordinateAnchorInputModel] | None = None
 
 
 @kante.pydantic_input(
@@ -178,6 +180,14 @@ class CreateTableDatasetInput:
     source_files: list[SourceFileInput] | None = strawberry.field(
         default=None,
         description="Optional statement of which files this table was loaded from -- the CSV or parquet a converter read. **Not a `derivedFrom` entry, deliberately**: a derivation is an edge of the coordinate graph and relates two spaces, while a file has no space. This records lineage between bytes and data and leaves the graph untouched",
+    )
+    anchors: list[CoordinateAnchorInput] | None = strawberry.field(
+        default=None,
+        description=(
+            "Optional coordinate anchors pinning metadata spokes -- a microscope state, OME metadata, a value histogram, a channel label, a light path -- to values of the table's "
+            "coordinate columns: each `axisAnchors` entry names an axis-typed column and the (integer) value along it, and an empty `axisAnchors` list is an anchor global over the "
+            "whole table. The same hub an array dataset uses, so a measurement table carries the acquisition facts of the image it was segmented out of. Phasor spokes are array-only"
+        ),
     )
 
 
@@ -411,6 +421,11 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
 
     _validate_declaration(file_columns, model.columns, model.name)
 
+    # An anchor is keyed by the coordinate columns' names and read back by name, so one that
+    # pins a column the table does not have would silently label nothing. Checked before
+    # anything is written.
+    assert_anchors_name_axes(model.anchors or [], [column.name for column in model.columns if column.axis_type is not None], what="table")
+
     # The axis-typed columns, in declaration (= file) order, ARE the space. There is no
     # separate axes list to reorder them with, deliberately: a table has no byte order, its
     # axes are named columns every consumer addresses by name, and an edge that wants a
@@ -500,6 +515,10 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             produces=[axis_name for axis_name, _ in keyed],
             ctx=ctx,
         )
+
+        for anchor_input in model.anchors or []:
+            anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
+            _write_anchor_spokes(anchor, anchor_input)
 
     return dataset
 

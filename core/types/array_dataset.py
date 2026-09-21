@@ -158,6 +158,9 @@ class ArrayDataset:
         description="Every change made to this dataset: who created it, and every subsequent rename or redescription, attributed to the client, user and task it happened under. Only `name` and `description` can change -- the arrays, the axes and the coordinate systems built from them are fixed at creation"
     )
     created_through: Task | None = kante.django_field(description="The task this dataset was created through, if any")
+    anchors: List["CoordinateAnchor"] = kante.django_field(
+        description="The coordinate anchors of this dataset, each pinning metadata spokes -- a microscope state, OME metadata, a value histogram, a channel label -- to some of its level-0 coordinates"
+    )
     created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
     data_arrays: List["DataArray"] = kante.django_field(description="The multiscale data arrays belonging to this dataset")
 
@@ -411,28 +414,43 @@ class PhasorCalibration:
     models.CoordinateAnchor,
     filters=filters.CoordinateAnchorFilter,
     pagination=True,
-    description="The axis-agnostic hub that pins metadata spokes (microscope state, OME metadata, value histograms, channel labels, light paths, phasor distributions and calibrations) to specific coordinates of a dataset",
+    description=(
+        "The axis-agnostic hub that pins metadata spokes (microscope state, OME metadata, value histograms, channel labels, light paths, phasor distributions and calibrations) to "
+        "specific coordinates of an array dataset or a table dataset. Exactly one of `dataset` and `table` is set"
+    ),
 )
 class CoordinateAnchor:
-    """The axis-agnostic hub that pins metadata spokes (microscope state, OME metadata, value histograms, channel labels, light paths, phasor distributions and calibrations) to specific coordinates of a dataset"""
+    """The axis-agnostic hub that pins metadata spokes to specific coordinates of an array dataset or a table dataset."""
 
     id: auto
+    dataset: Optional[ArrayDataset] = kante.django_field(description="The array dataset this anchor pins into, or null for a table anchor")
+    table: Optional[Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(description="The table dataset this anchor pins into, or null for an array anchor")
     # The reverse accessor from OptikitState.anchor is `microscope`, not `optikit_state`.
     microscope: OptikitState | None = kante.django_field(description="The microscope state recorded at this coordinate")
     value_histogram: ValueHistogram | None
     channel_label: ChannelLabel | None
     light_graph: LightPath | None
+    # Declared below this type, hence the forward reference.
+    ome_metadata: Optional["OmeMetadata"] = kante.django_field(description="The OME image metadata recorded at this coordinate")
     # Lists, not single spokes: one anchor may carry a phasor at several harmonics, and over
     # several axes -- neither of which the anchor's coordinates can pin.
     phasor_histograms: list[PhasorHistogram]
     phasor_calibrations: list[PhasorCalibration]
 
     @kante.django_field(
-        description="The coordinates this anchor is pinned to, e.g. {'c': 0, 't': 5}. Level-0 pixel indices, i.e. coordinates of the dataset's INTRINSIC system. An anchor that omits an axis is global along it"
+        description=(
+            "The coordinates this anchor is pinned to, e.g. {'c': 0, 't': 5}. For an array dataset these are level-0 pixel indices, i.e. coordinates of its INTRINSIC system; for a "
+            "table dataset they are values of its coordinate columns, keyed by column name. An anchor that omits an axis is global along it"
+        )
     )
     def coordinates(self, info: Info) -> scalars.Any:
         """The coordinates this anchor is pinned to."""
         return self.coordinates
+
+    @classmethod
+    def get_queryset(cls, queryset, info, **kwargs):
+        """Scope the list to the request's organization, through the anchor's own denormalised column."""
+        return build_prescoped_queryset(info, queryset)
 
 
 @kante.django_type(

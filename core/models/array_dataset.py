@@ -12,6 +12,10 @@ from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
 from core import base_models
 from core.logic import coords as coords_logic
 from core.models.coords import CoordinateSystem, Transformation, MeshCollection  # noqa: F401  (re-exported via core.models)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.models.table_dataset import TableDataset
 
 
 class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
@@ -310,17 +314,70 @@ class DataArray(models.Model):
 
 
 class CoordinateAnchor(models.Model):
-    """The Axis-Agnostic Hub."""
+    """The Axis-Agnostic Hub: the one place metadata spokes are pinned to coordinates.
+
+    An anchor belongs to exactly one container: an :class:`ArrayDataset`, whose coordinates
+    are level-0 pixel indices keyed by axis name, or a :class:`TableDataset`, whose
+    coordinates are values of its coordinate columns keyed by column name. Either way an
+    omitted axis means "global along it", and the spokes hanging off the anchor are the
+    same models -- a measurement table taken on a microscope carries the same acquisition
+    facts as the image it was segmented out of.
+
+    ``organization`` is denormalised on purpose. Tenant scoping (:mod:`core.scoping`) walks
+    only non-nullable foreign keys to find the organization, and with two nullable
+    containers there is no required path to walk. The same shape as :class:`FileLink`.
+    """
 
     id = models.BigAutoField(primary_key=True)
-    dataset = models.ForeignKey(ArrayDataset, related_name="anchors", on_delete=models.CASCADE)
+    dataset = models.ForeignKey(
+        ArrayDataset,
+        related_name="anchors",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The array dataset this anchor pins into. Null for a table anchor",
+    )
+    table = models.ForeignKey(
+        "TableDataset",
+        related_name="anchors",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The table dataset this anchor pins into. Null for an array anchor",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="coordinate_anchors",
+        help_text="The organization of the anchor's container, denormalised so tenant scoping has a required path to walk",
+    )
     coordinates = models.JSONField(
         default=dict,
-        help_text="The coordinates this anchor is pinned to, keyed by axis name, e.g. {'c': 0, 't': 5}. Level-0 pixel indices (the dataset's INTRINSIC space). An omitted axis means global along it",
+        help_text=(
+            "The coordinates this anchor is pinned to, keyed by axis name, e.g. {'c': 0, 't': 5}. For an array dataset these are level-0 pixel indices (its INTRINSIC space); "
+            "for a table dataset they are values of its coordinate columns, keyed by column name. An omitted axis means global along it"
+        ),
     )
 
     class Meta:
         indexes = [GinIndex(fields=["coordinates"], name="anchor_coords_gin")]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(dataset__isnull=False, table__isnull=True) | Q(dataset__isnull=True, table__isnull=False),
+                name="coordinate_anchor_has_exactly_one_container",
+            )
+        ]
+
+    @property
+    def container(self) -> "ArrayDataset | TableDataset":
+        """The dataset or table this anchor belongs to: the owner for scoping and deletion."""
+        return self.dataset if self.dataset_id is not None else self.table
+
+    def save(self, *args, **kwargs) -> None:
+        """Fill ``organization`` from the container so every write path stays a one-liner."""
+        if self.organization_id is None and self.container is not None:
+            self.organization_id = self.container.organization_id
+        super().save(*args, **kwargs)
 
 
 class OptikitState(models.Model):

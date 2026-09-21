@@ -454,58 +454,8 @@ def create_array_dataset(
     file_link_logic.write_file_links(info, container=dataset, source_files=model.source_files or [], ctx=ctx)
 
     for anchor in model.anchors or []:
-        coordinate_anchor = models.CoordinateAnchor.objects.create(
-            dataset=dataset,
-            coordinates={axis_anchor.axis: axis_anchor.value for axis_anchor in anchor.axis_anchors},
-        )
-
-        if anchor.microscope:
-            # The same write path as the lightpath graph: the typed model's dump IS the
-            # stored JSON, so the column never grows a shape the types cannot express.
-            models.OptikitState.objects.create(
-                anchor=coordinate_anchor,
-                state=anchor.microscope.model_dump(),
-            )
-
-        if anchor.ome_metadata:
-            logger.debug("Creating OME metadata for coordinate anchor with coordinates %s", coordinate_anchor.coordinates)
-            models.OmeMetadata.objects.create(
-                anchor=coordinate_anchor,
-                metadata=_parse_json_object(anchor.ome_metadata.metadata_string, "anchor.omeMetadata.metadataString"),
-            )
-
-        if anchor.value_histogram:
-            models.ValueHistogram.objects.create(
-                anchor=coordinate_anchor,
-                histogram=anchor.value_histogram.histogram,
-                bins=anchor.value_histogram.bins,
-                min=anchor.value_histogram.min,
-                max=anchor.value_histogram.max,
-                p1=anchor.value_histogram.p1,
-                p99=anchor.value_histogram.p99,
-            )
-
-        if anchor.label:
-            models.ChannelLabel.objects.create(
-                anchor=coordinate_anchor,
-                label=anchor.label.label,
-            )
-
-        if anchor.light_graph:
-            # The storage graph's dump, not the input's: `to_graph` builds the union the
-            # read side rebuilds, so the column cannot grow a shape the types cannot
-            # express -- which is what the comment above claims for every spoke, and what
-            # dumping the input model directly quietly broke for this one.
-            models.LightPath.objects.create(
-                anchor=coordinate_anchor,
-                graph=anchor.light_graph.to_graph().model_dump(mode="json"),
-            )
-
-        if anchor.phasor_histogram:
-            _write_phasor_histogram(coordinate_anchor, anchor.phasor_histogram, axis_specs)
-
-        if anchor.phasor_calibration:
-            _write_phasor_calibration(coordinate_anchor, anchor.phasor_calibration, axis_specs)
+        coordinate_anchor = _get_or_create_anchor(dataset, anchor.axis_anchors)
+        _write_anchor_spokes(coordinate_anchor, anchor, axis_specs=axis_specs)
 
     return dataset
 
@@ -584,16 +534,105 @@ def _write_phasor_calibration(anchor: "models.CoordinateAnchor", input: PhasorCa
     return calibration
 
 
-def _get_or_create_anchor(dataset: "models.ArrayDataset", axis_anchors: list[AxisAnchorInputModel] | None) -> "models.CoordinateAnchor":
-    """The anchor at these coordinates on this dataset, creating it if it is new.
+#: The spokes that describe an *array* and nothing else: a phasor is the DFT of a pixel's
+#: profile along an array axis, and its writers need the dataset's axis specs. A table has
+#: no pixels, so on a table anchor these are refused rather than stored meaninglessly.
+_ARRAY_ONLY_SPOKES: tuple[str, ...] = ("phasor_histogram", "phasor_calibration")
 
-    Get-or-create rather than create: a phasor distribution and an intensity histogram at the
-    same coordinate are two spokes of *one* anchor, and a second anchor at the same coordinates
-    would split the metadata of one pixel across two anchors.
+
+def _get_or_create_anchor(container: "models.ArrayDataset | models.TableDataset", axis_anchors: list[AxisAnchorInputModel] | None) -> "models.CoordinateAnchor":
+    """Get-or-create rather than create: two spokes at one coordinate are two spokes of *one* anchor.
+
+    A phasor distribution and an intensity histogram at the same coordinate, or a microscope
+    state stated at ingest and a channel label attached later, all hang off the same hub.
+    Keyed on the container -- an array dataset or a table dataset -- and the coordinates; the
+    two namespaces cannot collide because an anchor has exactly one container.
     """
     coordinates = {axis_anchor.axis: axis_anchor.value for axis_anchor in axis_anchors or []}
-    anchor, _ = models.CoordinateAnchor.objects.get_or_create(dataset=dataset, coordinates=coordinates)
+    key = {"dataset": container} if isinstance(container, models.ArrayDataset) else {"table": container}
+    anchor, _ = models.CoordinateAnchor.objects.get_or_create(coordinates=coordinates, **key)
     return anchor
+
+
+def assert_anchors_name_axes(anchors: list, axis_names: list[str], *, what: str = "dataset") -> None:
+    """Refuse an anchor pinned along an axis the container does not have, or pinned twice.
+
+    An anchor's ``coordinates`` are keyed by axis name and read back by name, so ``{"z": 3}``
+    on a table whose coordinate columns are ``(x, y)`` is not an error anywhere downstream --
+    it is a label that silently labels nothing. Two anchors with the same coordinates are
+    refused for the same reason a spoke is one-to-one: the second would be a rival answer to
+    the first.
+    """
+    seen: list[dict] = []
+    for anchor in anchors:
+        coordinates = {entry.axis: entry.value for entry in anchor.axis_anchors}
+        if len(coordinates) != len(anchor.axis_anchors):
+            raise ValueError(f"An anchor names an axis once, but {[entry.axis for entry in anchor.axis_anchors]} repeats one. One position per axis; a second position is a second anchor.")
+        unknown = sorted(set(coordinates) - set(axis_names))
+        if unknown:
+            if not axis_names:
+                raise ValueError(f"This {what} has no coordinate columns, so its anchors can only be global ({{}}), but an anchor pins {unknown}.")
+            raise ValueError(f"An anchor pins the axes its {what} has, but {unknown} {'is' if len(unknown) == 1 else 'are'} not among {axis_names}.")
+        if coordinates in seen:
+            raise ValueError(f"Two anchors are pinned to the same coordinates {coordinates or '{} (the whole ' + what + ')'}. One anchor per coordinate: put every spoke for it on the one anchor.")
+        seen.append(coordinates)
+
+
+def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnchorInputModel, *, axis_specs: list | None = None) -> None:
+    """Write every spoke the input states onto ``anchor``, replacing one already there.
+
+    The one write path for anchor metadata, whether stated at ingest (``createArrayDataset``,
+    ``createTableDataset``) or attached afterwards (``createCoordinateAnchor``). Each
+    one-to-one spoke is ``update_or_create``: a later statement replaces the earlier one,
+    which is what the phasor writers already do and what "attach after the fact" needs to be
+    idempotent. ``axis_specs`` is only needed for the phasor spokes, which an array has and a
+    table does not.
+    """
+    if anchor.table_id is not None:
+        offending = [name for name in _ARRAY_ONLY_SPOKES if getattr(input, name) is not None]
+        if offending:
+            raise ValueError(f"{', '.join(repr(name) for name in offending)} {'is an array-only spoke' if len(offending) == 1 else 'are array-only spokes'} and cannot be attached to a table anchor.")
+
+    if input.microscope:
+        # The same write path as the lightpath graph: the typed model's dump IS the
+        # stored JSON, so the column never grows a shape the types cannot express.
+        models.OptikitState.objects.update_or_create(anchor=anchor, defaults={"state": input.microscope.model_dump()})
+
+    if input.ome_metadata:
+        logger.debug("Creating OME metadata for coordinate anchor with coordinates %s", anchor.coordinates)
+        models.OmeMetadata.objects.update_or_create(
+            anchor=anchor,
+            defaults={"metadata": _parse_json_object(input.ome_metadata.metadata_string, "anchor.omeMetadata.metadataString")},
+        )
+
+    if input.value_histogram:
+        models.ValueHistogram.objects.update_or_create(
+            anchor=anchor,
+            defaults={
+                "histogram": input.value_histogram.histogram,
+                "bins": input.value_histogram.bins,
+                "min": input.value_histogram.min,
+                "max": input.value_histogram.max,
+                "p1": input.value_histogram.p1,
+                "p99": input.value_histogram.p99,
+            },
+        )
+
+    if input.label:
+        models.ChannelLabel.objects.update_or_create(anchor=anchor, defaults={"label": input.label.label})
+
+    if input.light_graph:
+        # The storage graph's dump, not the input's: `to_graph` builds the union the
+        # read side rebuilds, so the column cannot grow a shape the types cannot
+        # express -- which is what the comment above claims for every spoke, and what
+        # dumping the input model directly quietly broke for this one.
+        models.LightPath.objects.update_or_create(anchor=anchor, defaults={"graph": input.light_graph.to_graph().model_dump(mode="json")})
+
+    if input.phasor_histogram:
+        _write_phasor_histogram(anchor, input.phasor_histogram, axis_specs or [])
+
+    if input.phasor_calibration:
+        _write_phasor_calibration(anchor, input.phasor_calibration, axis_specs or [])
 
 
 class CreatePhasorHistogramInputModel(PhasorHistogramInputModel):

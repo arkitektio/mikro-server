@@ -28,6 +28,7 @@ from .scene_snapshot import create_scene_snapshot, delete_scene_snapshot, pin_sc
 from .animation import create_animation, update_animation, delete_animation
 from .unstructured_meta import attach_unstructured_meta
 from .array_dataset import create_array_dataset, update_array_dataset, set_default_scene, delete_array_dataset, delete_data_array, create_phasor_histogram, create_phasor_calibration
+from .coordinate_anchor import create_coordinate_anchor
 from .coordinate_system import clear_coordinate_system, create_coordinate_system, delete_coordinate_system, delete_orphaned_coordinate_systems, update_coordinate_system
 from .lens import create_lens, delete_lens
 from .scene import clear_scene, create_scene, create_scene_from_coordinate_system, update_scene, delete_scene

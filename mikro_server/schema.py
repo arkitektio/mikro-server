@@ -91,6 +91,8 @@ class Query:
     data_arrays: list[types.DataArray] = field(description="List data arrays (the multiscale zarr arrays backing array datasets)")
     data_array: types.DataArray = field(description="Get a single data array by ID")
 
+    coordinate_anchors: list[types.CoordinateAnchor] = field(description="List coordinate anchors (the hubs pinning metadata spokes to coordinates of an array dataset or a table dataset)")
+
     annotations: list[types.Annotation] = field(description="List annotations (human-drawn shapes, each in its collection's coordinate system)")
     annotation: types.Annotation = field(description="Get a single annotation by ID")
 
@@ -423,6 +425,14 @@ class Mutation:
         description="Attach an instrument-response correction to a dataset, taking a raw phasor to a calibrated one",
     )
     delete_data_array = mutation(resolver=mutations.delete_data_array, description="Delete an existing data array")
+    create_coordinate_anchor = mutation(
+        resolver=mutations.create_coordinate_anchor,
+        description=(
+            "Attach metadata spokes to an array dataset or a table dataset after ingest: a microscope state, OME metadata, a value histogram, a channel label or a light path, "
+            "pinned to some of its coordinates. Get-or-create on (container, coordinates): a second call at the same coordinates adds its spokes to the one anchor, and a spoke "
+            "stated twice is replaced"
+        ),
+    )
 
     # A physical space is not a kind of thing (RFC-9): it is an ordinary
     # coordinate system with a transformation edge into it, so `createCoordinateSystem` plus
