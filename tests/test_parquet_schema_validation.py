@@ -132,6 +132,8 @@ def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_con
         lambda self, store: [base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=False)],
     )
     monkeypatch.setattr(Datalayer, "build_store_path", lambda self, bucket, key: f"s3://{bucket}/{key}")
+    # The codec probe reads the same footer over S3; `test_parquet_codecs.py` owns it.
+    monkeypatch.setattr(Datalayer, "parquet_codecs_of", lambda self, location: {"ZSTD"})
 
     store = models.ParquetStore.objects.create(organization=authenticated_context.request.organization, key="abc123", bucket="parquet")
     store.fill_info()

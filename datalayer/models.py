@@ -7,6 +7,8 @@ from uuid import uuid4
 from django.db import models
 from polymorphic.models import PolymorphicModel
 from datalayer import base_models, sporadik
+from datalayer import fabriks as fabriks_format
+from datalayer import konnektion as konnektion_format
 from datalayer.datalayer import AccessGrant, Datalayer
 
 if TYPE_CHECKING:
@@ -393,6 +395,9 @@ class ParquetStore(DatalayerStore):
         """
         layer = datalayer or Datalayer()
         self.path = self.build_store_path(layer)
+        # Before the columns: a file the viewer cannot decode is not one to register, and the
+        # codec is in the same footer the DESCRIBE reads.
+        layer.refuse_unreadable_table(self)
         self.columns = [column.model_dump() for column in layer.get_parquet_schema(self)]
         self.populated = True
         self.save(update_fields=["path", "columns", "populated"])
@@ -462,11 +467,13 @@ class FabriksStore(DatalayerStore):
         Raises:
             FileNotFoundError: If the manifest is missing -- which is also how an interrupted
                 upload presents, and why it is refused rather than tolerated.
-            ValueError: If the manifest is malformed or declares an unsupported version.
+            ValueError: If the manifest is malformed or declares an unsupported version, or
+                if the parts are compressed with a codec the scene viewer cannot decode.
         """
         layer = datalayer or Datalayer()
         self.path = self.build_store_path(layer)
         metadata = layer.get_fabriks_metadata(self)
+        layer.refuse_unreadable_collection_parts(self.path, fabriks_format.cells_path_of(metadata.files), kind="mesh")
         self.spec_version = metadata.spec_version
         self.grid = metadata.grid
         self.encoding = metadata.encoding
@@ -559,6 +566,7 @@ class KonnektionStore(DatalayerStore):
         layer = datalayer or Datalayer()
         self.path = self.build_store_path(layer)
         metadata = layer.get_konnektion_metadata(self)
+        layer.refuse_unreadable_collection_parts(self.path, konnektion_format.cells_path_of(metadata.files), kind="network")
         self.spec_version = metadata.spec_version
         self.grid = metadata.grid
         self.encoding = metadata.encoding

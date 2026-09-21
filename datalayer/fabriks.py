@@ -139,6 +139,16 @@ class Manifest:
         return self.catalog_path("objects", OBJECT_CATALOG_PATH)
 
 
+def cells_path_of(files: dict[str, Any]) -> str:
+    """Where a manifest's ``files`` says the cell catalog is, or where the format puts it.
+
+    The one part a finish reads past the manifest: the smallest file in the prefix, always
+    present, and written with the same Parquet codec as every other part.
+    """
+    declared = files.get("cells")
+    return CELL_CATALOG_PATH if declared is None else _entry_path(declared)
+
+
 def _entry_path(raw: Any) -> str:
     """One file entry's path, accepting the bare string a hand-written manifest may use.
 

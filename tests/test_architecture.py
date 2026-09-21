@@ -22,6 +22,7 @@ DATALAYER_MODULES = [
     "apps.py",
     "base_models.py",
     "datalayer.py",
+    "codecs.py",
     "duck.py",
     "fields.py",
     "inputs.py",

@@ -9,7 +9,7 @@ from botocore.config import Config
 from django.conf import settings
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from datalayer import base_models
+from datalayer import base_models, codecs
 from datalayer import fabriks as fabriks_format
 from datalayer import konnektion as konnektion_format
 
@@ -268,6 +268,49 @@ class Datalayer:
     def parquet_source(self, store: "models.ParquetStore") -> str:
         """The ``s3://`` URL DuckDB reads a parquet store through."""
         return f"s3://{self.get_bucket_config('parquet').bucket}/{store.key}"
+
+    def parquet_codecs_of(self, location: str) -> set[str]:
+        """Every compression codec named in a Parquet's footer, read **without the rows**.
+
+        Parquet records compression per *column chunk*, not per file, so ``parquet_metadata()``
+        is asked for all of them rather than one. Footer only, through the same S3-configured
+        DuckDB :meth:`get_parquet_schema` uses -- no pyarrow, which the server does not have.
+
+        Args:
+            location: An ``s3://`` URL, or a local path in a test.
+
+        Returns:
+            The distinct codec names, upper-cased as DuckDB spells them.
+        """
+        from datalayer.duck import get_current_duck
+
+        # Bound to a name for the reason `get_parquet_schema` states: the relation's connection
+        # must outlive the expression that built it.
+        duck = get_current_duck()
+        rows = duck.sql(f"SELECT DISTINCT compression FROM parquet_metadata('{location}');").fetchall()
+        return {str(row[0]).upper() for row in rows}
+
+    def refuse_unreadable_table(self, store: "models.ParquetStore") -> None:
+        """Refuse a table whose codec the table viewer cannot decode. See :mod:`datalayer.codecs`."""
+        location = self.parquet_source(store)
+        codecs.refuse_unreadable_codecs(self.parquet_codecs_of(location), codecs.TABLE_CODECS, where=f"The parquet at {location}", reader=codecs.TABLE_READER)
+
+    def refuse_unreadable_collection_parts(self, store_path: str, part: str, *, kind: str) -> None:
+        """Refuse a collection whose parts the scene viewer cannot decode. See :mod:`datalayer.codecs`.
+
+        One footer read of one part: a writer uses one codec for every file in the prefix, so the
+        cell catalog answers for all of them.
+
+        Args:
+            store_path: The store's ``s3://bucket/prefix``.
+            part: The part's path inside the prefix, as the manifest names it.
+            kind: ``"mesh"`` or ``"network"``, for the message.
+        """
+        bucket_name, prefix = self._parse_s3_path(store_path)
+        location = f"s3://{bucket_name}/{prefix.rstrip('/')}/{part}"
+        codecs.refuse_unreadable_codecs(
+            self.parquet_codecs_of(location), codecs.PART_CODECS, where=f"The {kind} collection at {store_path} (its part {part})", reader=codecs.PART_READER
+        )
 
     def get_parquet_schema(self, store: "models.ParquetStore") -> list[base_models.ParquetColumn]:
         """Read the columns a parquet file declares, in file order.
