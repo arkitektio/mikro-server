@@ -48,6 +48,8 @@ class SettingModel(BaseModel):
         filled = [slot for slot in (self.quantity, self.number, self.text, self.flag) if slot is not None]
         if len(filled) > 1:
             raise ValueError(f"Setting {self.name!r} fills more than one value slot; a setting holds exactly one value, so record two settings instead.")
+        if not filled:
+            raise ValueError(f"Setting {self.name!r} fills no value slot; a setting holds exactly one of quantity, number, text or flag, so a setting with nothing to say is not recorded -- leave it out.")
         return self
 
 
@@ -57,6 +59,12 @@ class DeviceStateModel(BaseModel):
     label: str = Field(description="The device's identity in the setup, e.g. 'filter-wheel-1'")
     kind: str | None = Field(None, description="A free-form device kind, e.g. 'laser', 'filter-wheel'")
     settings: list[SettingModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _says_something(self) -> "DeviceStateModel":
+        if not self.settings:
+            raise ValueError(f"Device {self.label!r} records no settings; a device state asserts a device was involved and then says nothing about it, so leave it out instead.")
+        return self
 
 
 class OptikitStateModel(BaseModel):
