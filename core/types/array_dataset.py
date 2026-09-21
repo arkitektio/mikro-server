@@ -416,15 +416,16 @@ class PhasorCalibration:
     pagination=True,
     description=(
         "The axis-agnostic hub that pins metadata spokes (microscope state, OME metadata, value histograms, channel labels, light paths, phasor distributions and calibrations) to "
-        "specific coordinates of an array dataset or a table dataset. Exactly one of `dataset` and `table` is set"
+        "specific coordinates of an array, table or sparse dataset. Exactly one of `dataset`, `table` and `sparse` is set"
     ),
 )
 class CoordinateAnchor:
-    """The axis-agnostic hub that pins metadata spokes to specific coordinates of an array dataset or a table dataset."""
+    """The axis-agnostic hub that pins metadata spokes to specific coordinates of an array, table or sparse dataset."""
 
     id: auto
-    dataset: Optional[ArrayDataset] = kante.django_field(description="The array dataset this anchor pins into, or null for a table anchor")
-    table: Optional[Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(description="The table dataset this anchor pins into, or null for an array anchor")
+    dataset: Optional[ArrayDataset] = kante.django_field(description="The array dataset this anchor pins into, or null otherwise")
+    table: Optional[Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(description="The table dataset this anchor pins into, or null otherwise")
+    sparse: Optional[Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")]] = kante.django_field(description="The sparse dataset this anchor pins into, or null otherwise")
     # The reverse accessor from OptikitState.anchor is `microscope`, not `optikit_state`.
     microscope: OptikitState | None = kante.django_field(description="The microscope state recorded at this coordinate")
     value_histogram: ValueHistogram | None
@@ -440,7 +441,7 @@ class CoordinateAnchor:
     @kante.django_field(
         description=(
             "The coordinates this anchor is pinned to, e.g. {'c': 0, 't': 5}. For an array dataset these are level-0 pixel indices, i.e. coordinates of its INTRINSIC system; for a "
-            "table dataset they are values of its coordinate columns, keyed by column name. An anchor that omits an axis is global along it"
+            "table dataset they are values of its coordinate columns, keyed by column name; for a sparse dataset they are positions along its enumerated axes. An anchor that omits an axis is global along it"
         )
     )
     def coordinates(self, info: Info) -> scalars.Any:

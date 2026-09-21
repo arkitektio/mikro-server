@@ -767,6 +767,7 @@ class CoordinateAnchorFilter(IdsFilterMixin):
     id: auto
     dataset: Optional[FilterLookup[strawberry.ID]]
     table: Optional[FilterLookup[strawberry.ID]]
+    sparse: Optional[FilterLookup[strawberry.ID]]
 
 
 @kante.filter_type(models.OptikitState)

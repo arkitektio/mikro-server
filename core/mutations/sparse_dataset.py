@@ -41,6 +41,7 @@ from core.logic import graph as graph_logic
 from core.logic import identification as identification_logic
 from core.logic import pickers
 from core.mutations._generic import make_delete, self_owner
+from core.mutations.array_dataset import CoordinateAnchorInput, CoordinateAnchorInputModel, _get_or_create_anchor, _write_anchor_spokes, assert_anchors_name_axes
 from core.scoping import get_for_org
 
 #: The lowest rank a sparse dataset can have. Two, because a single compressed axis needs at
@@ -67,6 +68,7 @@ class CreateSparseDatasetInputModel(BaseModel):
     folder: str | None = None
     derived_from: list[DerivedFromSpec] | None = None
     source_files: list[SourceFileInputModel] | None = None
+    anchors: list[CoordinateAnchorInputModel] | None = None
 
 
 @kante.pydantic_input(
@@ -100,6 +102,14 @@ class CreateSparseDatasetInput:
     folder: strawberry.ID | None = strawberry.field(default=None, description="The folder to file it in")
     derived_from: list[DerivedFromInput] | None = strawberry.field(default=None, description="The data this matrix was computed from")
     source_files: list[SourceFileInput] | None = strawberry.field(default=None, description="The files it was converted from")
+    anchors: list[CoordinateAnchorInput] | None = strawberry.field(
+        default=None,
+        description=(
+            "Optional coordinate anchors pinning metadata spokes to positions along the matrix's enumerated axes: each `axisAnchors` entry names one of its axes and a position "
+            "along it, and an empty `axisAnchors` list is an anchor global over the whole matrix. The same hub an array dataset uses, so a per-object matrix carries the "
+            "acquisition facts of the recording it was computed from. Array-only spokes are refused"
+        ),
+    )
 
 
 def _resolve_store(info: Info, identifier: str, name: str) -> "models.SparseStore":
@@ -228,6 +238,9 @@ def create_sparse_dataset(info: Info, input: CreateSparseDatasetInput) -> types.
     # A field that exists only to be got wrong is one refusal and one input field fewer without it.
     store = _resolve_store(info, model.store, model.name)
     by_axis = _assert_store_agrees(store, model.axes, model.name)
+    # An anchor is keyed by axis name and read back by name, so one that pins an axis the
+    # matrix does not have would silently label nothing. Checked before anything is written.
+    assert_anchors_name_axes(model.anchors or [], [axis.name for axis in model.axes], what="sparse dataset")
     targets, keyed = _resolve_identifications(info, model)
 
     # Atomic for the reason `create_table_dataset` is: the row, its axes and its references are
@@ -280,6 +293,10 @@ def create_sparse_dataset(info: Info, input: CreateSparseDatasetInput) -> types.
             ctx=ctx,
             produces=[axis for axis, _ in keyed],
         )
+
+        for anchor_input in model.anchors or []:
+            anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
+            _write_anchor_spokes(anchor, anchor_input)
 
     return dataset
 

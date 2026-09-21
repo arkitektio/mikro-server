@@ -540,17 +540,24 @@ def _write_phasor_calibration(anchor: "models.CoordinateAnchor", input: PhasorCa
 _ARRAY_ONLY_SPOKES: tuple[str, ...] = ("phasor_histogram", "phasor_calibration")
 
 
-def _get_or_create_anchor(container: "models.ArrayDataset | models.TableDataset", axis_anchors: list[AxisAnchorInputModel] | None) -> "models.CoordinateAnchor":
+#: Which anchor column each container kind is keyed on.
+_CONTAINER_FIELDS: dict[type, str] = {models.ArrayDataset: "dataset", models.TableDataset: "table", models.SparseDataset: "sparse"}
+
+
+def _get_or_create_anchor(container: "models.ArrayDataset | models.TableDataset | models.SparseDataset", axis_anchors: list[AxisAnchorInputModel] | None) -> "models.CoordinateAnchor":
     """Get-or-create rather than create: two spokes at one coordinate are two spokes of *one* anchor.
 
     A phasor distribution and an intensity histogram at the same coordinate, or a microscope
     state stated at ingest and a channel label attached later, all hang off the same hub.
-    Keyed on the container -- an array dataset or a table dataset -- and the coordinates; the
-    two namespaces cannot collide because an anchor has exactly one container.
+    Keyed on the container -- an array, table or sparse dataset -- and the coordinates; the
+    namespaces cannot collide because an anchor has exactly one container.
     """
     coordinates = {axis_anchor.axis: axis_anchor.value for axis_anchor in axis_anchors or []}
-    key = {"dataset": container} if isinstance(container, models.ArrayDataset) else {"table": container}
-    anchor, _ = models.CoordinateAnchor.objects.get_or_create(coordinates=coordinates, **key)
+    try:
+        field = next(field for kind, field in _CONTAINER_FIELDS.items() if isinstance(container, kind))
+    except StopIteration:
+        raise TypeError(f"A coordinate anchor pins into an array, table or sparse dataset, not a {type(container).__name__}.") from None
+    anchor, _ = models.CoordinateAnchor.objects.get_or_create(coordinates=coordinates, **{field: container})
     return anchor
 
 
@@ -588,10 +595,10 @@ def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnc
     idempotent. ``axis_specs`` is only needed for the phasor spokes, which an array has and a
     table does not.
     """
-    if anchor.table_id is not None:
+    if anchor.dataset_id is None:
         offending = [name for name in _ARRAY_ONLY_SPOKES if getattr(input, name) is not None]
         if offending:
-            raise ValueError(f"{', '.join(repr(name) for name in offending)} {'is an array-only spoke' if len(offending) == 1 else 'are array-only spokes'} and cannot be attached to a table anchor.")
+            raise ValueError(f"{', '.join(repr(name) for name in offending)} {'is an array-only spoke' if len(offending) == 1 else 'are array-only spokes'} and cannot be attached to a table or sparse anchor.")
 
     if input.microscope:
         # The same write path as the lightpath graph: the typed model's dump IS the

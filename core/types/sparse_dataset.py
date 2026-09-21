@@ -18,6 +18,7 @@ from core.types._shared import apply_link_filters
 from core.logic import graph as graph_logic
 
 if TYPE_CHECKING:
+    from core.types.array_dataset import CoordinateAnchor
     from core.types.file_link import FileLink
     from core.types.folder import Folder
     from core.types.table_dataset import TableDataset
@@ -94,6 +95,12 @@ class SparseDataset:
     axis_references: List[SparseAxisReference] = kante.django_field(description="The axes identified by a table rather than by a keying source")
     provenance_entries: List[ProvenanceEntry] = kante.django_field(description="The recorded history of this dataset. Only `name` and `description` can change")
     created_through: Task | None = kante.django_field(description="The task this dataset was created through, if any")
+    anchors: List[Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(
+        description=(
+            "The coordinate anchors of this matrix, each pinning metadata spokes to positions along its enumerated axes, keyed by axis name, or to the whole matrix when its "
+            "coordinates are empty. The same hub an array dataset uses, so a per-object matrix carries the acquisition facts of the recording it was computed from"
+        )
+    )
     created_through_by: User | None = kante.django_field(description="Who assigned that task")
 
     @kante.django_field(description="The matrix's axis names, in the order its stores' `shape` is written")

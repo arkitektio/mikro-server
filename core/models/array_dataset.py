@@ -15,6 +15,7 @@ from core.models.coords import CoordinateSystem, Transformation, MeshCollection 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from core.models.sparse_dataset import SparseDataset
     from core.models.table_dataset import TableDataset
 
 
@@ -317,9 +318,10 @@ class CoordinateAnchor(models.Model):
     """The Axis-Agnostic Hub: the one place metadata spokes are pinned to coordinates.
 
     An anchor belongs to exactly one container: an :class:`ArrayDataset`, whose coordinates
-    are level-0 pixel indices keyed by axis name, or a :class:`TableDataset`, whose
-    coordinates are values of its coordinate columns keyed by column name. Either way an
-    omitted axis means "global along it", and the spokes hanging off the anchor are the
+    are level-0 pixel indices keyed by axis name; a :class:`TableDataset`, whose
+    coordinates are values of its coordinate columns keyed by column name; or a
+    :class:`SparseDataset`, whose coordinates are positions along its enumerated axes. Either
+    way an omitted axis means "global along it", and the spokes hanging off the anchor are the
     same models -- a measurement table taken on a microscope carries the same acquisition
     facts as the image it was segmented out of.
 
@@ -335,7 +337,7 @@ class CoordinateAnchor(models.Model):
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        help_text="The array dataset this anchor pins into. Null for a table anchor",
+        help_text="The array dataset this anchor pins into. Null otherwise",
     )
     table = models.ForeignKey(
         "TableDataset",
@@ -343,7 +345,15 @@ class CoordinateAnchor(models.Model):
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        help_text="The table dataset this anchor pins into. Null for an array anchor",
+        help_text="The table dataset this anchor pins into. Null otherwise",
+    )
+    sparse = models.ForeignKey(
+        "SparseDataset",
+        related_name="anchors",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The sparse dataset this anchor pins into. Null otherwise",
     )
     organization = models.ForeignKey(
         Organization,
@@ -355,7 +365,8 @@ class CoordinateAnchor(models.Model):
         default=dict,
         help_text=(
             "The coordinates this anchor is pinned to, keyed by axis name, e.g. {'c': 0, 't': 5}. For an array dataset these are level-0 pixel indices (its INTRINSIC space); "
-            "for a table dataset they are values of its coordinate columns, keyed by column name. An omitted axis means global along it"
+            "for a table dataset they are values of its coordinate columns, keyed by column name; for a sparse dataset they are positions along its enumerated axes. An omitted axis "
+            "means global along it"
         ),
     )
 
@@ -363,15 +374,23 @@ class CoordinateAnchor(models.Model):
         indexes = [GinIndex(fields=["coordinates"], name="anchor_coords_gin")]
         constraints = [
             models.CheckConstraint(
-                condition=Q(dataset__isnull=False, table__isnull=True) | Q(dataset__isnull=True, table__isnull=False),
+                condition=(
+                    Q(dataset__isnull=False, table__isnull=True, sparse__isnull=True)
+                    | Q(dataset__isnull=True, table__isnull=False, sparse__isnull=True)
+                    | Q(dataset__isnull=True, table__isnull=True, sparse__isnull=False)
+                ),
                 name="coordinate_anchor_has_exactly_one_container",
             )
         ]
 
     @property
-    def container(self) -> "ArrayDataset | TableDataset":
-        """The dataset or table this anchor belongs to: the owner for scoping and deletion."""
-        return self.dataset if self.dataset_id is not None else self.table
+    def container(self) -> "ArrayDataset | TableDataset | SparseDataset":
+        """The dataset, table or sparse dataset this anchor belongs to: the owner for scoping and deletion."""
+        if self.dataset_id is not None:
+            return self.dataset
+        if self.table_id is not None:
+            return self.table
+        return self.sparse
 
     def save(self, *args, **kwargs) -> None:
         """Fill ``organization`` from the container so every write path stays a one-liner."""
