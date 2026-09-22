@@ -17,6 +17,7 @@ from core.logic import graph as graph_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
 from core.types._shared import apply_link_filters
+from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
     # Only for the lazy annotation on the file-link fields below; importing it at runtime
@@ -73,6 +74,10 @@ class Column:
 )
 class TableDataset:
     """A parquet-backed table dataset."""
+
+    @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    def embedding(self) -> Embedding | None:
+        return embedding_of(self)
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this table dataset is filed in. Organisational only: it says where a user keeps this table, never where its rows sit in space -- that is `coordinateSystem` and the edges out of it"

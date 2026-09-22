@@ -12,6 +12,7 @@ from kante.context import HttpContext
 from core.models import ArrayDataset, Folder, TableDataset
 from embeddings import engine
 from embeddings.healer import reembed_all, reembed_stale
+from mikro_server.schema import schema
 from tests.seed import _seed_parquet_store_sync, create_folder
 
 
@@ -109,3 +110,39 @@ async def test_disabled_writes_no_vector(db, authenticated_context: HttpContext)
         assert folder.embedding is None
         assert folder.embedding_model == ""
         assert await sync_to_async(reembed_stale)(Folder) == 0
+
+
+EMBEDDING_QUERY = "query($id: ID!){ folder(id: $id){ name embedding } }"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_stored_vector_is_published_with_its_model_id(authenticated_context: HttpContext) -> None:
+    """A vector without the model that produced it is not comparable to anything, so the
+    descriptor travels inside the value rather than beside it."""
+    from embeddings.strawberry import format_embedding
+
+    folder = await create_folder(authenticated_context, name="Segmentations")
+    await folder.arefresh_from_db()
+
+    result = await schema.execute(EMBEDDING_QUERY, context_value=authenticated_context, variable_values={"id": str(folder.pk)})
+    assert not result.errors, result.errors
+    published = result.data["folder"]["embedding"]
+
+    model_id, _, floats = published.partition(":")
+    assert model_id == engine.model_id()
+    # The floats round-trip exactly, so a client can reuse the vector it was handed.
+    assert [float(component) for component in floats.split(",")] == folder.embedding
+    assert published == format_embedding(folder.embedding, engine.model_id())
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_unindexed_row_publishes_null(authenticated_context: HttpContext) -> None:
+    folder = await create_folder(authenticated_context, name="Unindexed")
+    await Folder.objects.filter(pk=folder.pk).aupdate(embedding=None, embedding_model="")
+
+    result = await schema.execute(EMBEDDING_QUERY, context_value=authenticated_context, variable_values={"id": str(folder.pk)})
+    assert not result.errors, result.errors
+
+    assert result.data["folder"]["embedding"] is None

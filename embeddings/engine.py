@@ -132,12 +132,16 @@ def warm_up() -> None:
         _model()
 
 
-def source_text(name: str | None, description: str | None) -> str | None:
-    """The text a row is embedded from: name and description, each stripped, newline-joined.
+def source_text(*texts: str | None) -> str | None:
+    """The text a row is embedded from: its source fields, each stripped, newline-joined.
 
-    ``None`` when both are blank -- such a row has no vector (never a zero vector).
+    ``None`` when they are all blank -- such a row has no vector (never a zero vector).
+
+    Variadic, rather than ``(name, description)``: the mixin splats a model's
+    ``embedding_source_fields`` into this, and models that carry their text in one field
+    (an app's identifier, a repo's name) or in three raised ``TypeError`` on their first save.
     """
-    parts = [part.strip() for part in (name, description) if part and part.strip()]
+    parts = [part.strip() for part in texts if part and part.strip()]
     return "\n".join(parts) if parts else None
 
 

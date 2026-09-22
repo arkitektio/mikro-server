@@ -56,3 +56,60 @@ def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q) 
     # and rows of another model are excluded from the vector leg and reachable lexically only.
     semantic = Q(embedding_model=engine.model_id()) & Q(**{f"{distance}__lt": engine.distance_threshold()})
     return queryset, lexical | semantic
+
+
+#: How many neighbours a "show me similar rows" read returns when the caller does not say.
+DEFAULT_NEIGHBOURS = 10
+
+
+def neighbourhood(
+    queryset: QuerySet[Any],
+    vector: Any,
+    *,
+    exclude_pk: Any = None,
+    threshold: float | None = None,
+) -> tuple[QuerySet[Any], Q]:
+    """``queryset`` ordered by distance to ``vector``, with the predicate that selects it.
+
+    The other half of the semantic story: :func:`hybrid_search` answers "what matches this
+    text", this one answers "what is like this row" -- the grouping a catalogue needs when
+    two teams ship the same action under two names.
+
+    Returned as ``(queryset, Q)`` rather than as a finished queryset so a filter can compose
+    it with its siblings and with pagination. Nothing is sliced here: "the ten nearest, then
+    narrowed by kind" would hand back nothing whenever the matching rows sit at rank eleven.
+
+    ``threshold`` is not applied unless asked for. ``engine.distance_threshold()`` is tuned
+    for "does this row answer that query"; imposing it on a neighbourhood would produce an
+    empty list for every row that happens to sit in a sparse corner of the space, which reads
+    as "this action is unique" when it means "nothing is *very* close".
+
+    Rows embedded by a different model are excluded, as in :func:`hybrid_search`: their
+    vectors come from another space and their distances are not comparable.
+    """
+    if vector is None or not engine.enabled():
+        return queryset, Q(pk__in=[])
+
+    if "_neighbour_distance" not in queryset.query.annotations:
+        queryset = queryset.annotate(_neighbour_distance=CosineDistance("embedding", vector))
+    queryset = queryset.order_by("_neighbour_distance", "pk")
+
+    predicate = Q(embedding_model=engine.model_id()) & Q(embedding__isnull=False)
+    if exclude_pk is not None:
+        predicate &= ~Q(pk=exclude_pk)
+    if threshold is not None:
+        predicate &= Q(_neighbour_distance__lt=threshold)
+    return queryset, predicate
+
+
+def neighbours(
+    queryset: QuerySet[Any],
+    vector: Any,
+    *,
+    exclude_pk: Any = None,
+    limit: int = DEFAULT_NEIGHBOURS,
+    threshold: float | None = None,
+) -> QuerySet[Any]:
+    """The ``limit`` rows of ``queryset`` nearest to ``vector``, nearest first."""
+    queryset, predicate = neighbourhood(queryset, vector, exclude_pk=exclude_pk, threshold=threshold)
+    return queryset.filter(predicate)[:limit]

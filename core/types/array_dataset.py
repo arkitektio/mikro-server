@@ -41,6 +41,7 @@ from core.logic import phasor as phasor_logic
 from core.logic import scene_graph
 
 from core.types.auth import ProvenanceEntry, Task, User
+from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
     # Only for the lazy annotation on the file-link fields below; importing it at runtime
@@ -123,6 +124,10 @@ def _default_scene_snapshot(info: Info, dataset) -> "SceneSnapshot | None":
 )
 class ArrayDataset:
     """A multi-dimensional array dataset with named dimensions, described by its intrinsic pixel-grid coordinate system."""
+
+    @kante.django_field(description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    def embedding(self) -> Embedding | None:
+        return embedding_of(self)
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this dataset is filed in. Organisational only: it says where a user keeps this dataset, never where the data sits in space -- that is `intrinsicSystem` and the edges out of it"

@@ -19,6 +19,7 @@ from core import enums, filters, models, order
 from core.types._shared import apply_link_filters, build_prescoped_queryset
 from core.types.auth import Organization, ProvenanceEntry, Task, User
 from datalayer.types import BigFileStore
+from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
     # Runtime imports here would cycle: each of these modules imports this one back.
@@ -98,6 +99,11 @@ class Folder:
     name: str
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this folder")
     is_default: bool
+
+    @kante.django_field(description="This folder's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    def embedding(self) -> Embedding | None:
+        return embedding_of(self)
+
     created_at: datetime.datetime
     creator: User | None
     created_through: Optional[Task] = kante.django_field(description="The task this folder was created through, if any")

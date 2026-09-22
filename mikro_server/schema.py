@@ -34,6 +34,7 @@ from kanne_server import scalars as kanne_scalars
 from strawberry.schema.config import StrawberryConfig
 from core.logic import tables as table_logic
 from core.scoping import get_for_org
+from embeddings.strawberry import scalar_map as embedding_scalars
 
 ID = Annotated[StrawberryID, strawberry.argument(description="The unique identifier of an object")]
 T = TypeVar("T")
@@ -769,5 +770,5 @@ schema = kante.Schema(
     # The union member inputs above are referenced by no field: they are published for
     # codegen, and the directive on each says which flat union input it belongs to.
     schema_directives=[unionElementOf],
-    config=StrawberryConfig(scalar_map={**core_scalars.SCALAR_MAP, **datalayer_scalars.SCALAR_MAP, **kanne_scalars.SCALAR_MAP}),
+    config=StrawberryConfig(scalar_map={**core_scalars.SCALAR_MAP, **datalayer_scalars.SCALAR_MAP, **kanne_scalars.SCALAR_MAP, **embedding_scalars}),
 )
