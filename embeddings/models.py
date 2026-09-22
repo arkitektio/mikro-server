@@ -116,8 +116,8 @@ class EmbeddedDescriptionMixin(models.Model):
         source = self.embedding_source_text()
         try:
             self.embedding = engine.embed_texts([source])[0] if source is not None else None
-        except engine.EmbeddingsUnavailable:
-            logger.warning("Could not embed %s %s; leaving it for the healer", type(self).__name__, self.pk, exc_info=True)
+        except engine.EmbeddingsUnavailable as e:
+            logger.warning("Could not embed %s %s (%s); leaving it for the healer", type(self).__name__, self.pk, e)
             self.embedding = None
             self.embedding_model = ""
             return

@@ -66,8 +66,9 @@ def reembed_stale(model_cls: type[EmbeddedDescriptionMixin], batch_size: int | N
     while max_batches is None or batches < max_batches:
         try:
             done = reembed_batch(model_cls, batch_size)
-        except engine.EmbeddingsUnavailable:
-            logger.warning("Embedding model unavailable; %s rows stay stale until it loads", model_cls.__name__, exc_info=True)
+        except engine.EmbeddingsUnavailable as e:
+            # Expected until the model loads: one line, no traceback.
+            logger.warning("Embedding model unavailable (%s); %s rows stay stale until it loads", e, model_cls.__name__)
             break
         total += done
         batches += 1

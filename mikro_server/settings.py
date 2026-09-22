@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
+import os
 from .configuration import Settings
+from .logs import build_logging
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -246,3 +248,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 INCREMENTER = "1"
+
+
+# Console logging: one plain line per record on root; see logs.py. ``LOG_LEVEL=DEBUG``
+# (env) brings back per-event detail; ``django.enable_rich_logging`` renders with rich.
+LOGGING = build_logging(
+    level=os.environ.get("LOG_LEVEL", conf.django.log_level),
+    rich=conf.django.enable_rich_logging,
+)

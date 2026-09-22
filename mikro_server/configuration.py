@@ -36,6 +36,8 @@ class DjangoSettings(BaseModel):
 
     secret_key: str = Field(description="Django SECRET_KEY for cryptographic signing. Secret — must be set.")
     debug: bool = Field(default=False, description="Enable Django debug mode (never in production).")
+    log_level: str = Field(default="INFO", description="Root logger level (e.g. DEBUG, INFO, WARNING). The LOG_LEVEL env var overrides it.")
+    enable_rich_logging: bool = Field(default=False, description="Render console logs with rich (colours, boxed tracebacks). A dev convenience; off by default, as plain one-line records suit container logs.")
     hosts: List[str] = Field(default_factory=lambda: ["*"], description="ALLOWED_HOSTS entries.")
     use_x_forwarded_host: bool = Field(default=True, description="Trust the X-Forwarded-Host header behind a reverse proxy.")
     admin: Optional[AdminSettings] = Field(default=None, description="Superuser provisioned on first boot.")

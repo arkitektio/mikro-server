@@ -35,8 +35,8 @@ def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q) 
         return queryset, lexical
     try:
         vector = engine.embed_query(value)
-    except engine.EmbeddingsUnavailable:
-        logger.warning("Embeddings unavailable; search %r is substring-only", value, exc_info=True)
+    except engine.EmbeddingsUnavailable as e:
+        logger.warning("Embeddings unavailable (%s); search %r is substring-only", e, value)
         return queryset, lexical
     if vector is None:
         return queryset, lexical

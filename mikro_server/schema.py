@@ -1,4 +1,5 @@
 from kante.types import Info
+from mikro_server.logs import QuietErrorsSchema
 import strawberry
 from strawberry_django.optimizer import DjangoOptimizerExtension
 from authentikate.strawberry.extension import AuthentikateExtension
@@ -749,7 +750,11 @@ class Subscription:
     files = subscription(resolver=subscriptions.files, description="Subscribe to real-time file updates")
 
 
-schema = kante.Schema(
+class Schema(QuietErrorsSchema, kante.Schema):
+    """kante.Schema, logging expected resolver errors as one line and bugs with a traceback (see logs.py)."""
+
+
+schema = Schema(
     query=Query,
     subscription=Subscription,
     mutation=Mutation,
