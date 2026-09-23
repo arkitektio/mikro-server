@@ -3,6 +3,7 @@ import kante
 import strawberry
 from pydantic import BaseModel, Field
 from core import types, models, scalars
+from core.scoping import get_for_org
 
 
 class UnstructuredMetaInputModel(BaseModel):
@@ -27,10 +28,12 @@ def attach_unstructured_meta(
     input: UnstructuredMetaInput,
 ) -> types.UnstructuredMeta:
     parsed = input.to_pydantic()
+    # Both looked up in the request's organization: raw ids attached metadata to any org's
+    # file and handed back any org's schema.
     view = models.UnstructuredMeta.objects.create(
-        file_id=parsed.file,
+        file=get_for_org(models.File, info, id=parsed.file),
         name=parsed.name,
         meta=parsed.meta,
-        schema_id=parsed.schema,
+        schema=get_for_org(models.MetaSchema, info, id=parsed.schema) if parsed.schema else None,
     )
     return view

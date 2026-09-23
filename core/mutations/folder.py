@@ -75,6 +75,15 @@ class RevertInput:
     history_id: strawberry.ID = strawberry.field(description="The ID of the provenance history entry to revert the folder to")
 
 
+def _scoped_parent(info: Info, parent: str | None) -> models.Folder | None:
+    """The parent folder, looked up in the request's organization.
+
+    A raw ``parent_id`` let a folder nest under another organization's folder, and from there
+    ``parent`` and ``children`` read straight across the boundary.
+    """
+    return get_for_org(models.Folder, info, id=parent) if parent else None
+
+
 def create_folder(
     info: Info,
     input: CreateFolderInput,
@@ -84,7 +93,7 @@ def create_folder(
     ctx = CreationContext.from_info(info)
     view = models.Folder.objects.create(
         name=parsed.name,
-        parent_id=parsed.parent if parsed.parent else None,
+        parent=_scoped_parent(info, parsed.parent),
         creator=ctx.user,
         organization=ctx.organization,
         membership=ctx.membership,
@@ -101,7 +110,7 @@ def ensure_folder(
     ctx = CreationContext.from_info(info)
     view, _ = models.Folder.objects.get_or_create(
         name=parsed.name,
-        parent_id=parsed.parent if parsed.parent else None,
+        parent=_scoped_parent(info, parsed.parent),
         creator=ctx.user,
         organization=ctx.organization,
         membership=ctx.membership,
@@ -122,6 +131,10 @@ def update_folder(
         id=parsed.id,
     )
     view.name = parsed.name
+    # Only when given: `parent` is optional on this input, and treating its absence as
+    # "unnest" would silently move every folder a client merely renames.
+    if parsed.parent:
+        view.parent = _scoped_parent(info, parsed.parent)
     view.save()
     return view
 

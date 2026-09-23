@@ -16,7 +16,7 @@ from kante.types import Info
 from strawberry import auto
 
 from core import enums, filters, models, order
-from core.types._shared import apply_link_filters, build_prescoped_queryset
+from core.types._shared import apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.types.auth import Organization, ProvenanceEntry, Task, User
 from datalayer.types import BigFileStore
 from embeddings.strawberry import Embedding, embedding_of
@@ -84,7 +84,7 @@ class File:
     pagination=True,
     description="A folder is a collection of the things mikro stores. It mimics a folder in a file system and is the top-level container for organising data.",
 )
-class Folder:
+class Folder(OrgScoped):
     id: auto
     files: List["File"]
     # The four containers `FileLink` calls "a thing holding data". Being in a folder says

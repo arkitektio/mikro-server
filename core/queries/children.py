@@ -4,7 +4,7 @@ import strawberry
 from typing import Annotated, Union
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from enum import Enum
-from core.scoping import get_for_org
+from core.scoping import get_for_org, scope_queryset
 from kante.types import Info
 
 
@@ -78,7 +78,9 @@ def children(
     search_query = SearchQuery(search) if search else None
 
     for accessor, name_field, description_field in _CHILD_SOURCES:
-        queryset = getattr(folder, accessor).all()
+        # Scoped again per accessor: the folder is ours, but a row filed into it from another
+        # organization (possible before `createFolder` scoped its parent) must not ride along.
+        queryset = scope_queryset(getattr(folder, accessor).all(), info)
 
         if search_query is not None:
             fields = [name_field] + ([description_field] if description_field else [])

@@ -6,9 +6,8 @@ single-item queries, subscriptions) must go through :func:`for_org`,
 :func:`get_for_org` or :func:`aget_for_org` instead of ``Model.objects`` so
 one organization cannot read or mutate another organization's rows.
 
-Guardian object-level permissions are assigned (core.signals,
-core.mutations.permission) but deliberately not checked on reads; if
-object-level read enforcement is ever wanted, :func:`for_org` is the
+Guardian object-level permissions are assigned (core.signals) but deliberately
+not checked on reads; if object-level read enforcement is ever wanted, :func:`for_org` is the
 designated seam — every scoped read funnels through it.
 """
 
@@ -58,8 +57,9 @@ def organization_path(model: type[django_models.Model]) -> str | None:
     return _find_org_path(model, _MAX_PATH_DEPTH)
 
 
-def for_org(model: type[django_models.Model], info: Info) -> django_models.QuerySet:
-    """Return ``model``'s queryset limited to the request's organization."""
+def scope_queryset(queryset: django_models.QuerySet, info: Info) -> django_models.QuerySet:
+    """Narrow an existing ``queryset`` to the request's organization."""
+    model = queryset.model
     path = organization_path(model)
     if path is None:
         if model.__name__ not in UNSCOPED_MODELS:
@@ -67,8 +67,13 @@ def for_org(model: type[django_models.Model], info: Info) -> django_models.Query
                 f"{model.__name__} has no path to an organization and is not "
                 "registered in core.scoping.UNSCOPED_MODELS"
             )
-        return model.objects.all()
-    return model.objects.filter(**{path: info.context.request.organization})
+        return queryset
+    return queryset.filter(**{path: info.context.request.organization})
+
+
+def for_org(model: type[django_models.Model], info: Info) -> django_models.QuerySet:
+    """Return ``model``'s queryset limited to the request's organization."""
+    return scope_queryset(model.objects.all(), info)
 
 
 def get_for_org(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:

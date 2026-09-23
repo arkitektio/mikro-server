@@ -16,7 +16,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import apply_link_filters
+from core.types._shared import apply_link_filters, OrgScoped
 from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ class Column:
     pagination=True,
     description="A parquet-backed table whose rows are scientific records (segmented objects, localizations, cells). It owns a coordinate system whose axes are its coordinate columns, which is what makes a localization table placeable; a table with no coordinate columns enumerates its rows and its lineage edge is UNMAPPABLE. Its store, its columns and that coordinate system are fixed at creation -- only `name` and `description` can be updated, and a recomputation is a new table rather than an edit of this one. Read the rows directly from the Parquet store with a datalayer access grant rather than paginating through GraphQL",
 )
-class TableDataset:
+class TableDataset(OrgScoped):
     """A parquet-backed table dataset."""
 
     @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")

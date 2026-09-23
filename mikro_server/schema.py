@@ -9,6 +9,7 @@ from core import mutations
 from core import queries
 from core import subscriptions
 import strawberry_django
+from strawberry_django.fields.field import StrawberryDjangoField
 from koherent.strawberry.extension import KoherentExtension
 from lightpath.constants import interface_types
 from lightpath.inputs.types import element_union_types
@@ -50,6 +51,19 @@ def field(permission_classes=None, **kwargs):
     return strawberry_django.field(extensions=[AuthExtension()], **kwargs)
 
 
+class CreatedByCallerField(StrawberryDjangoField):
+    """A list field narrowed to rows the caller created -- the `my*` fields.
+
+    A field class rather than a resolver, because a resolver makes strawberry_django drop the
+    filters/ordering/pagination arguments. Organization scoping still comes from the type's
+    ``get_queryset``, which the parent runs.
+    """
+
+    def get_queryset(self, queryset, info, **kwargs):
+        # Narrow before the parent paginates: a sliced queryset can no longer be filtered.
+        return super().get_queryset(queryset.filter(creator=info.context.request.user), info, **kwargs)
+
+
 def mutation(roles: list[str] | None = None, **kwargs) -> strawberry.mutation:
     """A wrapper for mutation that adds default permission classes and extensions."""
 
@@ -76,7 +90,7 @@ def _paginate(items: "Iterable[T]", pagination: OffsetPaginationInput | None) ->
 class Query:
     tasks: list[types.Task] = field(description="List the Rekuest tasks under which objects were created or changed")
     folders: list[types.Folder] = field(description="List folders (collections of images, files and tables)")
-    myfolders: list[types.Folder] = field(description="List folders created by the current user")
+    myfolders: list[types.Folder] = field(field_cls=CreatedByCallerField, description="List folders created by the current user")
 
     scenes: list[types.Scene] = field(description="List scenes (compositions of layers over array datasets)")
     scene: types.Scene = field(description="Get a single scene by ID")
@@ -211,7 +225,7 @@ class Query:
     animations: list[types.Animation] = field(description="List animations (named camera tours through a scene)")
 
     files: list[types.File] = field(description="List files (raw microscopy files such as .czi or .ome.tiff)")
-    myfiles: list[types.File] = field(description="List files created by the current user")
+    myfiles: list[types.File] = field(field_cls=CreatedByCallerField, description="List files created by the current user")
 
 
     permissions = field(
@@ -731,11 +745,6 @@ class Mutation:
     create_animation = mutation(resolver=mutations.create_animation, description="Author a named camera tour of a scene")
     update_animation = mutation(resolver=mutations.update_animation, description="Re-author a camera tour: rename it, or replace its stops")
     delete_animation = mutation(resolver=mutations.delete_animation, description="Delete an existing camera tour")
-
-    assign_user_permission = mutation(
-        resolver=mutations.assign_user_permission,
-        description="Assign a user permission to an object",
-    )
 
 
 @strawberry.type

@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from guardian.models import UserObjectPermission 
 from django.contrib.auth.models import Permission
 from kante.types import Info
+from core.scoping import get_for_org
 
 
 #: Structure identifiers clients pass in, mapped to the model they name. These are *values*,
@@ -32,6 +33,9 @@ def permissions(
     if model is None:
         raise ValueError(f"Unknown identifier: {identifier}")
     
+
+    # The grants name users of the object's organization; only that organization may list them.
+    get_for_org(model, info, pk=object)
 
     content_type = ContentType.objects.get_for_model(model)
     user_permissions = UserObjectPermission.objects.filter(object_pk=object, content_type=content_type, user__sub__isnull=False).all()

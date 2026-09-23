@@ -256,6 +256,30 @@ def other_org_context(db, backend_stack) -> HttpContext:
 
 
 @pytest.fixture(scope="function")
+def same_user_other_org_context(db, backend_stack) -> HttpContext:
+    """The user of ``authenticated_context`` (sub 1), acting in "other_org" (token "test-other-org")."""
+    user, _ = User.objects.get_or_create(
+        sub="1", iss="static_issuer", defaults={"username": "static_issuer_1"}
+    )
+    client, _ = Client.objects.get_or_create(client_id="oinsoins")
+    org, _ = Organization.objects.get_or_create(slug="other_org")
+    membership, _ = Membership.objects.get_or_create(
+        user=user,
+        organization=org,
+    )
+
+    request = UniversalRequest(
+        _extensions={"token": "test-other-org"},
+        _client=client,  # type: ignore
+        _user=user,  # type: ignore
+        _organization=org,  # type: ignore
+    )
+    request.set_membership(membership)  # type: ignore
+
+    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer test-other-org"}, type="http")
+
+
+@pytest.fixture(scope="function")
 def simple_api_context(db, backend_stack) -> HttpContext:
     user, _ = User.objects.get_or_create(
         sub="1", iss="static_issuer", defaults={"username": "static_issuer_1"}

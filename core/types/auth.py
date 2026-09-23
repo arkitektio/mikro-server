@@ -10,6 +10,8 @@ from koherent.models import ProvenanceEntryModel as ProvenanceEntryModel
 from koherent.models import Task as TaskModel
 import kante
 
+from core.types._shared import OrgScoped
+
 from authentikate import models as amodels
 
 if TYPE_CHECKING:
@@ -40,7 +42,6 @@ class User:
     id: strawberry.ID
     sub: str
     preferred_username: str
-    active_organization: Organization | None = None
 
 
 @kante.django_type(amodels.Membership, description="A user's membership in an organization, carrying the roles they hold there.")
@@ -108,7 +109,7 @@ class ModelChange:
     pagination=True,
     description="A validated Rekuest task under which objects were created or changed.",
 )
-class Task:
+class Task(OrgScoped):
     """A validated Rekuest task under which objects were created or changed."""
 
     id: strawberry.ID

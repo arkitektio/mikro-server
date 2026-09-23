@@ -38,7 +38,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
 from core.types.auth import ProvenanceEntry, User
-from core.types._shared import apply_link_filters
+from core.types._shared import apply_link_filters, OrgScoped, OrgScopedOrNested
 
 
 if TYPE_CHECKING:
@@ -131,7 +131,7 @@ def _placeable_ids(info: Info, system) -> set[int]:
     pagination=True,
     description="A named coordinate space: a node in the transformation graph. Its axes are ordered, and that order is the order of the array's dimensions",
 )
-class CoordinateSystem:
+class CoordinateSystem(OrgScoped):
     """A named coordinate space: a node in the transformation graph."""
 
     id: auto
@@ -300,7 +300,7 @@ class Selector:
     models.Transformation,
     description="A directed edge of the coordinate graph, mapping `input` to `output`. Direction is always forward. The concrete kind (Scale, Translation, Affine, Sequence, ...) carries the parameters",
 )
-class Transformation:
+class Transformation(OrgScopedOrNested):
     """A directed edge of the coordinate graph, mapping `input` to `output`."""
 
     id: auto
@@ -359,7 +359,8 @@ class Transformation:
     created_at: datetime.datetime
     creator: User | None
 
-    # Optimizer *hints*, not a get_queryset override: the axis lists are derived from the
+    # Optimizer *hints*, not a relation-selecting get_queryset (the interface's only narrows
+    # by organization): the axis lists are derived from the
     # endpoints' axes, so those have to ride along with the edge. Passing them as hints
     # lets the optimizer merge them into the queryset it is already building; replacing
     # the queryset instead would throw away the caller's prefetch (a SEQUENCE's children
@@ -755,7 +756,7 @@ class LineageGraph:
     pagination=True,
     description="An immutable, versioned collection of meshes, stored as one fabriks prefix. Ask its `store` for an access grant and query the Parquet directly (e.g. with DuckDB) rather than paginating meshes through GraphQL",
 )
-class MeshCollection:
+class MeshCollection(OrgScoped):
     """An immutable, versioned collection of meshes, backed by Parquet stores rather than rows."""
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
@@ -838,7 +839,7 @@ class MeshCollection:
     pagination=True,
     description="An immutable, versioned collection of networks, stored as one konnektion prefix. Ask its `store` for an access grant and query the Parquet directly (e.g. with DuckDB) rather than paginating nodes through GraphQL",
 )
-class NetworkCollection:
+class NetworkCollection(OrgScoped):
     """An immutable, versioned collection of node/edge networks, backed by Parquet stores rather than rows."""
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(

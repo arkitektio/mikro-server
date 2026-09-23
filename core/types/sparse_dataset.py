@@ -14,7 +14,7 @@ from core import filters, models, order, scalars
 from core.logic import file_link as file_link_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import apply_link_filters
+from core.types._shared import apply_link_filters, OrgScoped
 from core.logic import graph as graph_logic
 
 if TYPE_CHECKING:
@@ -83,7 +83,7 @@ class SparseAxisReference:
         "stores, axes and coordinate system are fixed at creation; a recomputation is a new dataset"
     ),
 )
-class SparseDataset:
+class SparseDataset(OrgScoped):
     """A sparse matrix dataset."""
 
     id: auto

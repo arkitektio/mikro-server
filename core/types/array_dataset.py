@@ -28,7 +28,7 @@ from core.types.coords import (
 )
 import kante
 from datalayer.types import MediaStore, ZarrStore
-from core.types._shared import apply_link_filters, build_prescoped_queryset
+from core.types._shared import apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.type_gen import create_stats_type
 
 from kanne_server import scalars as kanne_scalars
@@ -122,7 +122,7 @@ def _default_scene_snapshot(info: Info, dataset) -> "SceneSnapshot | None":
     pagination=True,
     description="A multi-dimensional array dataset. Its dimensions and their types live on the axes of its INTRINSIC (pixel grid) coordinate system; physical units live on the physical spaces it has edges into; its pyramid levels are DataArrays, each mapping into its grid",
 )
-class ArrayDataset:
+class ArrayDataset(OrgScoped):
     """A multi-dimensional array dataset with named dimensions, described by its intrinsic pixel-grid coordinate system."""
 
     @kante.django_field(description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
@@ -279,7 +279,7 @@ class ArrayDataset:
     pagination=True,
     description="One level of a dataset's resolution pyramid: a zarr-backed array, with its own voxel-index coordinate system and a stored edge into the dataset's intrinsic space",
 )
-class DataArray:
+class DataArray(OrgScoped):
     """One level of a dataset's resolution pyramid, with the edge that places it in the dataset's intrinsic space."""
 
     id: auto
@@ -483,7 +483,7 @@ class OmeMetadata:
     ordering=order.SceneOrder,
     description="A composition of layers over a shared world coordinate system. The scene carries no units of its own -- they are per-axis, on the axes of its world system",
 )
-class Scene:
+class Scene(OrgScoped):
     """A composition of layers over a shared world coordinate system."""
 
     id: auto
@@ -558,7 +558,7 @@ class Slice:
     pagination=True,
     description="A Lens is a way of looking at a dataset: a dimensional selection (slices) over a dataset that defines a view of its data",
 )
-class Lens:
+class Lens(OrgScoped):
     """A selection over a dataset. Its shape and axes are derived from the dataset and the slices."""
 
     id: auto
@@ -904,7 +904,11 @@ class Layer:
         The axes come as a `prefetch_related` because they are a reverse relation, which
         `select_related` cannot follow: `asAffine` reads the source system's axis order to
         label its matrix's columns, and asking for it per layer is a query per layer.
+
+        Also scopes to the request's organization -- it once only selected relations, which
+        made `layers` and `layer(id)` read every organization's layers.
         """
+        queryset = build_prescoped_queryset(info, queryset)
         return queryset.select_related(*scene_graph.LAYER_PLACEMENT_RELATIONS).prefetch_related(*scene_graph.LAYER_SOURCE_AXIS_PREFETCH)
 
     @kante.django_field(

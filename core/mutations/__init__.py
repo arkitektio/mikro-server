@@ -18,7 +18,6 @@ from .folder import (
     put_annotation_collections_in_folder,
     release_annotation_collections_from_folder,
 )
-from .permission import assign_user_permission
 from .file import (
     from_file_like,
     delete_file,
