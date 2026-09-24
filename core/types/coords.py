@@ -306,8 +306,32 @@ class Transformation(OrgScopedOrNested):
     id: auto
     kind: enums.TransformKind
     name: str | None
-    input: CoordinateSystem | None
-    output: CoordinateSystem | None
+
+    # Resolved and joined, not left to the optimizer. `CoordinateSystem` is org-scoped (it has
+    # a `get_queryset`), and for such a type the optimizer turns a plain FK into
+    # `Prefetch("input", queryset=<scoped>)`. The axis fields below hint `input__axes` as a
+    # string, and Django refuses one lookup seen with two querysets -- "'input' lookup was
+    # already seen with a different queryset" -- which is what broke every pyramid level's
+    # `toParent.transformations`. The scoping is redundant here anyway: the endpoint is
+    # reached through an edge the request already read scoped, and an edge never spans
+    # organizations. `select_related` keeps it one join; the axes ride the same hint.
+    @kante.django_field(
+        select_related=["input"],
+        prefetch_related=["input__axes"],
+        description="The system this edge maps from. Null for the child of a SEQUENCE or BY_DIMENSION, which takes its endpoints from the wrapper",
+    )
+    def input(self, info: Info) -> CoordinateSystem | None:
+        """The input system."""
+        return self.input
+
+    @kante.django_field(
+        select_related=["output"],
+        prefetch_related=["output__axes"],
+        description="The system this edge maps to. Null for the child of a SEQUENCE or BY_DIMENSION, which takes its endpoints from the wrapper",
+    )
+    def output(self, info: Info) -> CoordinateSystem | None:
+        """The output system."""
+        return self.output
 
     # A field, not a column. Every write to this edge already leaves a history row through
     # `provenance`, so counting them answers "has this been rewritten since you last looked"

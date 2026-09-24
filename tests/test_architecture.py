@@ -587,3 +587,44 @@ def test_every_query_field_is_scoped_to_the_organization() -> None:
             unscoped.append(f"{name} ({django_type.__name__}.get_queryset does not filter by organization)")
 
     assert not unscoped, "Query fields readable across organizations:\n  " + "\n  ".join(unscoped)
+
+
+def test_no_string_prefetch_hint_crosses_a_scoped_relation() -> None:
+    """A string prefetch hint must not start with a relation the optimizer prefetches itself.
+
+    For a relation whose target type has a ``get_queryset`` (every ``OrgScoped`` type), the
+    optimizer builds ``Prefetch(<relation>, queryset=<scoped>)``. A hint on a sibling field
+    that walks the same relation as a plain string -- ``"input__axes"`` next to
+    ``input: CoordinateSystem`` -- makes Django see one lookup with two querysets, and the
+    whole field fails at request time with "'input' lookup was already seen with a different
+    queryset" (every pyramid level's ``toParent.transformations``, once ``CoordinateSystem``
+    became scoped). Nothing fails at import or in a query that happens to select only one of
+    the two, so this is checked statically: such a relation must be a resolved field with
+    ``select_related`` hints (see ``Transformation.input``), or the hint must go.
+    """
+    from strawberry_django.fields.field import StrawberryDjangoField
+    from strawberry_django.optimizer import get_possible_type_definitions
+    from strawberry_django.utils.typing import get_django_definition
+
+    from mikro_server.schema import schema
+
+    clashes = set()
+    for graphql_type in schema._schema.type_map.values():
+        definition = (getattr(graphql_type, "extensions", None) or {}).get("strawberry-definition")
+        if definition is None or not hasattr(definition, "fields") or not get_django_definition(definition.origin):
+            continue
+        # Relations left to the optimizer: plain Django fields, no resolver of their own.
+        optimized = {field.django_name: field for field in definition.fields if isinstance(field, StrawberryDjangoField) and field.base_resolver is None}
+        for field in definition.fields:
+            store = getattr(field, "store", None)
+            for hint in store.prefetch_related if store else ():
+                if not isinstance(hint, str) or "__" not in hint:
+                    continue
+                relation = optimized.get(hint.split("__", 1)[0])
+                if relation is None:
+                    continue
+                targets = [target.origin for target in get_possible_type_definitions(relation.type)]
+                if any(hasattr(target, "get_queryset") for target in targets):
+                    clashes.add(f"{definition.origin.__name__}.{field.python_name} hints {hint!r} across `{relation.python_name}`, which the optimizer prefetches scoped")
+
+    assert not clashes, "String prefetch hints that clash with a scoped relation's Prefetch:\n  " + "\n  ".join(sorted(clashes))
