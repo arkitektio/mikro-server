@@ -1009,6 +1009,16 @@ class Layer(models.Model):
     red_index = models.IntegerField(null=True, blank=True, help_text="(rgb) The index along the intensity axis carrying the red component")
     green_index = models.IntegerField(null=True, blank=True, help_text="(rgb) The index along the intensity axis carrying the green component")
     blue_index = models.IntegerField(null=True, blank=True, help_text="(rgb) The index along the intensity axis carrying the blue component")
+    # Gains, not a colour temperature: a temperature is one camera model's opinion of what the
+    # three multipliers should be, and the multipliers are what a renderer applies. Applied to
+    # each component before the shared contrast window, so a colour cast is corrected without
+    # giving up the one-window rule that makes the three a single picture.
+    white_balance = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="(rgb) Per-component gains [red, green, blue], each > 0, multiplied into the components before the shared contrast limits. Null: no correction, the same as [1, 1, 1]",
+    )
 
     # --- phasor render settings ---
     # JSON rather than columns, for the reason `label_render` is: a phasor's transfer maps

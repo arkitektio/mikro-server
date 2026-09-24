@@ -13,6 +13,7 @@ mirrored axis, an inverted pair of box corners normalises, and an unusual-but-fi
 is somebody's real measurement -- none of them belong here.
 """
 
+import math
 from typing import Annotated
 
 from pydantic import AfterValidator
@@ -70,6 +71,22 @@ def assert_contrast_limits(clim_min: float | None, clim_max: float | None) -> No
     """
     if clim_min is not None and clim_max is not None and clim_min > clim_max:
         raise ValueError(f"`climMin` is the lower contrast limit, so it cannot exceed `climMax`, but got {clim_min} > {clim_max}. Use `invert` to run the mapping backwards.")
+
+
+def assert_white_balance(gains: list[float] | None) -> None:
+    """Reject a white balance that is not three positive, finite gains.
+
+    One gain per component, in red, green, blue order. Zero or a negative gain is not a
+    correction but the loss of a component -- the same picture with a channel deleted -- and
+    that is a different layer (an ImageLayer), not a white balance.
+    """
+    if gains is None:
+        return
+    if len(gains) != 3:
+        raise ValueError(f"`whiteBalance` is one gain per component -- [red, green, blue] -- so it needs exactly 3 values, got {len(gains)}.")
+    for component, gain in zip(("red", "green", "blue"), gains):
+        if not math.isfinite(gain) or gain <= 0:
+            raise ValueError(f"`whiteBalance` gains must be positive and finite, but the {component} gain is {gain}. Use 1 to leave a component unchanged.")
 
 
 def assert_positive(value: float, *, field: str, because: str) -> None:

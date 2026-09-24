@@ -14,7 +14,7 @@ from core.logic.column_options import mesh_collection_system
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.input_unions import prose_errors
-from core.inputs.validators import Alpha, assert_contrast_limits, assert_rgba
+from core.inputs.validators import Alpha, assert_contrast_limits, assert_rgba, assert_white_balance
 from core.scoping import get_for_org
 from core.mutations._generic import make_delete
 from core.render.layer import inputs as layer_inputs
@@ -506,6 +506,7 @@ class CreateRgbLayerInputModel(BaseModel):
     blue_index: int = 2
     clim_min: float | None = None
     clim_max: float | None = None
+    white_balance: list[float] | None = None
     opacity: Alpha | None = None
     visible: bool | None = None
     order: int | None = None
@@ -513,6 +514,7 @@ class CreateRgbLayerInputModel(BaseModel):
     @model_validator(mode="after")
     def _contrast_limits_are_a_range(self) -> "CreateRgbLayerInputModel":
         assert_contrast_limits(self.clim_min, self.clim_max)
+        assert_white_balance(self.white_balance)
         return self
 
 
@@ -527,6 +529,7 @@ class CreateRgbLayerInput:
     blue_index: int | None = strawberry.field(default=None, description="Channel index mapped to blue (default 2)")
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units, applied to all three channels")
     clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units, applied to all three channels")
+    white_balance: list[float] | None = strawberry.field(default=None, description="Per-component gains [red, green, blue], each > 0, multiplied into the components before the contrast limits. Omit for no correction")
     opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
     visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
     order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
@@ -573,6 +576,7 @@ def create_rgb_layer(info: Info, input: CreateRgbLayerInput) -> types.RgbLayer:
         blue_index=blue,
         clim_min=model.clim_min,
         clim_max=model.clim_max,
+        white_balance=model.white_balance,
     )
 
 
@@ -1777,6 +1781,7 @@ class UpdateRgbLayerInputModel(BaseModel):
     blue_index: int | None = None
     clim_min: float | None = None
     clim_max: float | None = None
+    white_balance: list[float] | None = None
     opacity: Alpha | None = None
     visible: bool | None = None
     order: int | None = None
@@ -1793,6 +1798,7 @@ class UpdateRgbLayerInput:
     blue_index: int | None = strawberry.field(default=None, description="Channel index mapped to blue")
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units, applied to all three channels")
     clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units, applied to all three channels")
+    white_balance: list[float] | None = strawberry.field(default=None, description="Per-component gains [red, green, blue], each > 0. A patch like every field here, so omitting it keeps the current gains; send [1, 1, 1] to remove the correction")
     opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
     visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
     order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
@@ -1824,6 +1830,9 @@ def update_rgb_layer(info: Info, input: UpdateRgbLayerInput) -> types.RgbLayer:
         setattr(layer, field, index)
     layer.clim_min = clim_min
     layer.clim_max = clim_max
+    if model.white_balance is not None:
+        assert_white_balance(model.white_balance)
+        layer.white_balance = model.white_balance
     _patch_layer_compositing(layer, model)
     layer.save()
     return layer

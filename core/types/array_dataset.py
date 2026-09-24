@@ -1111,6 +1111,9 @@ class RgbLayer(Layer):
     blue_index: int
     clim_min: float | None
     clim_max: float | None
+    white_balance: List[float] | None = kante.django_field(
+        description="Per-component gains [red, green, blue], multiplied into the components before the shared contrast limits. Null: no correction, the same as [1, 1, 1]",
+    )
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:

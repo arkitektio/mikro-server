@@ -1178,6 +1178,69 @@ async def test_rgb_refuses_an_axis_with_fewer_than_three_channels(db, authentica
     assert "at least three positions" in str(result.errors[0])
 
 
+_RGB_WB = "fragment WB on RgbLayer { id whiteBalance }"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_rgb_white_balance_is_optional_set_and_patched(db, authenticated_context: HttpContext):
+    """Null by default; set on create; a patch that omits it keeps it; [1, 1, 1] resets it."""
+    axis_names, shape, descriptors = _CYX
+    lens = await _seed_lens(authenticated_context, axis_names=axis_names, shape=shape, descriptors=descriptors)
+    scene = await _seed_scene(authenticated_context, lens)
+    create = _RGB_WB + " mutation M($input: CreateRgbLayerInput!) { createRgbLayer(input: $input) { ...WB } }"
+    update = _RGB_WB + " mutation M($input: UpdateRgbLayerInput!) { updateRgbLayer(input: $input) { ...WB } }"
+
+    result = await schema.execute(create, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.id), "lens": str(lens.id)}})
+    assert not result.errors, result.errors
+    assert result.data["createRgbLayer"]["whiteBalance"] is None
+
+    result = await schema.execute(create, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.id), "lens": str(lens.id), "whiteBalance": [1.8, 1.0, 1.4]}})
+    assert not result.errors, result.errors
+    layer = result.data["createRgbLayer"]
+    assert layer["whiteBalance"] == [1.8, 1.0, 1.4]
+
+    result = await schema.execute(update, context_value=authenticated_context, variable_values={"input": {"id": layer["id"], "climMax": 200.0}})
+    assert not result.errors, result.errors
+    assert result.data["updateRgbLayer"]["whiteBalance"] == [1.8, 1.0, 1.4], "a patch that omits it keeps it"
+
+    result = await schema.execute(update, context_value=authenticated_context, variable_values={"input": {"id": layer["id"], "whiteBalance": [1, 1, 1]}})
+    assert not result.errors, result.errors
+    assert result.data["updateRgbLayer"]["whiteBalance"] == [1.0, 1.0, 1.0]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("gains", "expected"),
+    [([1.0, 1.0], "exactly 3"), ([1.0, 1.0, 1.0, 1.0], "exactly 3"), ([1.0, 0.0, 1.0], "green gain is 0"), ([-1.0, 1.0, 1.0], "red gain is -1")],
+)
+async def test_rgb_refuses_a_malformed_white_balance(db, authenticated_context: HttpContext, gains: list, expected: str):
+    """Three positive gains or nothing -- on create and on update alike."""
+    axis_names, shape, descriptors = _CYX
+    lens = await _seed_lens(authenticated_context, axis_names=axis_names, shape=shape, descriptors=descriptors)
+    scene = await _seed_scene(authenticated_context, lens)
+
+    result = await schema.execute(
+        "mutation M($input: CreateRgbLayerInput!) { createRgbLayer(input: $input) { id } }",
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.id), "lens": str(lens.id), "whiteBalance": gains}},
+    )
+    assert result.errors and expected in str(result.errors[0])
+
+    result = await schema.execute(
+        "mutation M($input: CreateRgbLayerInput!) { createRgbLayer(input: $input) { id } }",
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.id), "lens": str(lens.id)}},
+    )
+    result = await schema.execute(
+        "mutation M($input: UpdateRgbLayerInput!) { updateRgbLayer(input: $input) { id } }",
+        context_value=authenticated_context,
+        variable_values={"input": {"id": result.data["createRgbLayer"]["id"], "whiteBalance": gains}},
+    )
+    assert result.errors and expected in str(result.errors[0])
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_flat_layer_still_walks_its_pyramid(db, authenticated_context: HttpContext):
