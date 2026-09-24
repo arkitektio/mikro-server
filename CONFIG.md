@@ -181,12 +181,16 @@ and large binaries here.
 | `zarr` | — (use YAML) | object | **required** | Bucket for Zarr arrays. `{ bucket: <name> }`. |
 | `parquet` | — (use YAML) | object | **required** | Bucket for Parquet tables. `{ bucket: <name> }`. |
 | `bigfile` | — (use YAML) | object | **required** | Bucket for large binary files (BigFileStore). `{ bucket: <name> }`. |
+| `upload_roles` | — (use YAML) | list[str] | `[admin, editor, bot]` | Organization roles allowed to request, refresh and finish upload grants. Holding any one is enough. |
+| `quotas` | — (use YAML) | object | no limits | Per-organization, per-user and per-upload byte quotas. See [Upload quotas](#upload-quotas). |
 
-Each bucket binding is an object with a single required field:
+Each bucket binding is an object:
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `bucket` | str | **required** | S3 bucket name. |
+| `subpath` | str | `null` | Key prefix within the bucket, so several logical buckets can share one physical bucket. |
+| `default_max_bytes` | bytes | `100MiB` | Per-upload budget advertised on grants when no quota sets `max_upload_bytes`. |
 
 ```yaml
 datalayer:
@@ -203,6 +207,41 @@ datalayer:
     bucket: mikro-parquet
   bigfile:
     bucket: mikro-bigfile
+```
+
+#### Upload quotas
+
+Set by the hub owner, in config only (no API changes them). Each limit resolves most
+specific first: the user's entry in their organization, then the organization's entry, then
+`default`. Organizations are keyed by the token `org` claim, which since authentikate 4.0 is
+the lok organization **id** (as a string, e.g. `"3"`), not its name. A key that matches
+nothing falls through to `default` silently. Users are keyed by the token `sub`. Unset everywhere means unlimited, except `max_upload_bytes`, which falls back
+to the bucket's `default_max_bytes`. Byte values accept ints or strings like `500GiB`/`2TB`.
+
+| Key | Levels | Description |
+|---|---|---|
+| `max_upload_bytes` | default, org, user | Largest single store. Advertised on the grant as `maxBytes`; a declared `fileSize` above it is refused. |
+| `max_user_bytes` | default, org, user | Total bytes one user may hold in one organization. |
+| `max_org_bytes` | default, org | Total bytes one organization may hold. |
+
+Quotas are checked when a grant is issued: S3 cannot cap bytes mid-write. Usage is the measured
+`size_bytes` of stores still in use (orphaned stores do not count), so an overrun is caught
+by the next grant rather than prevented. Stores written before creators were tracked count
+toward their organization only.
+
+```yaml
+datalayer:
+  upload_roles: [admin, editor, bot]
+  quotas:
+    default:
+      max_upload_bytes: 500GiB
+    organizations:
+      "3":                     # the token `org` claim: the lok organization id
+        max_org_bytes: 5TiB
+        max_user_bytes: 1TiB
+        users:
+          "<user sub>":        # the token `sub` claim
+            max_user_bytes: 3TiB
 ```
 
 ### `embeddings` — semantic search

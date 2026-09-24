@@ -10,7 +10,7 @@ def request_media_upload(info: Info, input: inputs.RequestMediaUploadInput) -> t
 
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.MediaUploadGrant(**dl.generate_media_upload_grant(info.context.request.organization.id, input_model).model_dump())
+    return types.MediaUploadGrant(**dl.generate_media_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user).model_dump())
 
 
 def finish_media_upload(info: Info, input: inputs.FinishMediaUploadInput) -> types.MediaStore:

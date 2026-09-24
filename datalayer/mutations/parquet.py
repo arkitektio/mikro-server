@@ -9,7 +9,7 @@ def request_parquet_upload(info: Info, input: inputs.RequestParquetUploadInput) 
     """Request temporary S3 upload credentials for a parquet store."""
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.ParquetUploadGrant.from_pydantic(dl.generate_parquet_upload_grant(info.context.request.organization.id, input_model))
+    return types.ParquetUploadGrant.from_pydantic(dl.generate_parquet_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user))
 
 
 def finish_parquet_upload(info: Info, input: inputs.FinishParquetUploadInput) -> types.ParquetStore:

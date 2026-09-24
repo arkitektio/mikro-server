@@ -10,7 +10,7 @@ with a ``ValidationError`` if they are not supplied via config or environment.
 import os
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ByteSize, ConfigDict, Field
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -79,6 +79,35 @@ class DatalayerBucket(BaseModel):
     # policy through `build_object_key`, so getting it wrong widens or narrows what a client
     # can read.
     subpath: Optional[str] = Field(default=None, description="Optional key prefix within the bucket, so several logical buckets can share one physical bucket.")
+    default_max_bytes: Optional[ByteSize] = Field(default=None, description="Per-upload byte budget advertised on this bucket's grants when no quota sets `max_upload_bytes`. Accepts `500GiB`-style strings. Unset: 100 MiB.")
+
+
+class QuotaLimits(BaseModel):
+    """Byte limits at one level of the quota tree. Unset inherits from the level above; null at every level is unlimited.
+
+    Byte values accept ints or strings such as ``500GiB`` / ``2TB``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_upload_bytes: Optional[ByteSize] = Field(default=None, description="Largest single store (upload) a user may write. Advertised on the grant as `maxBytes`; a declared `fileSize` above it is refused.")
+    max_user_bytes: Optional[ByteSize] = Field(default=None, description="Total bytes one user may hold in one organization. A new upload grant is refused once it would pass this.")
+
+
+class OrganizationQuota(QuotaLimits):
+    """Quota for one organization, plus per-user overrides inside it."""
+
+    max_org_bytes: Optional[ByteSize] = Field(default=None, description="Total bytes the whole organization may hold.")
+    users: Dict[str, QuotaLimits] = Field(default_factory=dict, description="Per-user overrides in this organization, keyed by the user's token `sub`.")
+
+
+class QuotaSettings(BaseModel):
+    """Upload quotas, set by the hub owner. Resolved most specific first: user in org, then org, then `default`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default: OrganizationQuota = Field(default_factory=OrganizationQuota, description="Limits for every organization without its own entry (its `users` map is ignored).")
+    organizations: Dict[str, OrganizationQuota] = Field(default_factory=dict, description="Per-organization quotas, keyed by the token `org` claim -- since authentikate 4.0 the lok organization *id* as a string (e.g. `3`), not a readable name.")
 
 
 class DatalayerSettings(BaseModel):
@@ -101,6 +130,8 @@ class DatalayerSettings(BaseModel):
     # never needs one, and one that does gets a clear error from `get_bucket_config` rather
     # than a startup failure it cannot connect to the feature it did not enable.
     fabriks: Optional[DatalayerBucket] = Field(default=None, description="Bucket for fabriks stores (mesh collections stored as a prefix of Parquet files). Optional; may share a physical bucket with another entry via `subpath`.")
+    upload_roles: List[str] = Field(default_factory=lambda: ["admin", "editor", "bot"], description="Organization roles allowed to request upload grants. Holding any one of them is enough.")
+    quotas: QuotaSettings = Field(default_factory=QuotaSettings, description="Per-organization, per-user and per-upload byte quotas.")
 
 
 class EmbeddingsSettings(BaseModel):

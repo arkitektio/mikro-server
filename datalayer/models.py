@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
+from django.conf import settings
 from django.db import models
 from polymorphic.models import PolymorphicModel
 from datalayer import base_models, sporadik
@@ -74,6 +75,14 @@ class DatalayerStore(PolymorphicModel):
         "authentikate.Organization",
         on_delete=models.CASCADE,
         help_text="The organization this store belongs to.",
+    )
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The user who requested the upload grant, whose storage quota the bytes count against. Null for stores written before this was recorded.",
     )
     path = models.CharField(max_length=1000, null=True, blank=True, help_text="The object-store URI of the file", unique=True)
     key = models.CharField(max_length=1000, help_text="The object key/path within the datalayer bucket.")

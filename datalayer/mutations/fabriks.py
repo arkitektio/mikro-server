@@ -17,7 +17,7 @@ def request_fabriks_upload(info: Info, input: inputs.RequestFabriksUploadInput) 
     """Request temporary S3 upload credentials for a fabriks store's prefix."""
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.FabriksUploadGrant.from_pydantic(dl.generate_fabriks_upload_grant(info.context.request.organization.id, input_model))
+    return types.FabriksUploadGrant.from_pydantic(dl.generate_fabriks_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user))
 
 
 def finish_fabriks_upload(info: Info, input: inputs.FinishFabriksUploadInput) -> types.FabriksStore:

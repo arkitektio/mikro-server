@@ -1,4 +1,5 @@
 from datalayer import base_models
+from datalayer.scalars import ByteCount
 from strawberry.experimental import pydantic
 
 
@@ -8,7 +9,7 @@ class RequestMediaUploadInput:
     Docstring for RequestMediaUploadInput
     """
 
-    pass
+    file_size: ByteCount | None = None
 
 
 @pydantic.input(model=base_models.FinishMediaUploadInput, all_fields=True)
@@ -44,7 +45,7 @@ class RequestBigFileUploadInput:
     Docstring for RequestMediaUploadInput
     """
 
-    pass
+    file_size: ByteCount | None = None
 
 
 @pydantic.input(model=base_models.FinishBigFileUploadInput, all_fields=True)

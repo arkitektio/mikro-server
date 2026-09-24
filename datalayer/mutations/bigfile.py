@@ -10,7 +10,7 @@ def request_bigfile_upload(
     """Request temporary S3 upload credentials for a big file."""
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.BigFileUploadGrant.from_pydantic(dl.generate_bigfile_upload_grant(info.context.request.organization.id, input_model))
+    return types.BigFileUploadGrant.from_pydantic(dl.generate_bigfile_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user))
 
 
 def finish_bigfile_upload(

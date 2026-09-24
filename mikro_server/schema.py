@@ -29,6 +29,8 @@ from strawberry_django.pagination import OffsetPaginationInput
 from authentikate import models as ak_models
 from koherent import models as koherent_models
 import datalayer.mutations as datalayer_mutations
+from datalayer.datalayer import DatalayerConfig
+from django.conf import settings
 import datalayer.scalars as datalayer_scalars
 import kante
 from core import scalars as core_scalars
@@ -67,7 +69,17 @@ class CreatedByCallerField(StrawberryDjangoField):
 def mutation(roles: list[str] | None = None, **kwargs) -> strawberry.mutation:
     """A wrapper for mutation that adds default permission classes and extensions."""
 
-    return strawberry_django.mutation(extensions=[AuthExtension(any_role_of=roles or ["admin", "bot"])], **kwargs)
+    return strawberry_django.mutation(extensions=[AuthExtension(any_role_of=roles or ["admin", "editor", "bot"])], **kwargs)
+
+
+def upload_mutation(**kwargs) -> strawberry.mutation:
+    """A mutation that hands out (or finishes) upload credentials: gated by ``datalayer.upload_roles``.
+
+    Holding any one of the configured roles is enough. Read once, at schema build -- a change to
+    the config takes a restart, like every other setting.
+    """
+    roles = DatalayerConfig(**getattr(settings, "DATALAYER", {})).upload_roles
+    return kante.django_mutation(extensions=[AuthExtension(any_role_of=roles)], **kwargs)
 
 
 def subscription(**kwargs) -> strawberry.subscription:
@@ -283,11 +295,11 @@ class Query:
 @strawberry.type
 class Mutation:
 
-    request_media_upload = kante.django_mutation(
+    request_media_upload = upload_mutation(
         description="Upload media and return a URL for access",
         resolver=datalayer_mutations.request_media_upload,
     )
-    finish_media_upload = kante.django_mutation(
+    finish_media_upload = upload_mutation(
         description="Finalize a media upload after the client has written the object",
         resolver=datalayer_mutations.finish_media_upload,
     )
@@ -300,11 +312,11 @@ class Mutation:
         resolver=datalayer_mutations.request_general_media_access,
     )
 
-    request_bigfile_upload = kante.django_mutation(
+    request_bigfile_upload = upload_mutation(
         description="Request an upload grant for a big file store",
         resolver=datalayer_mutations.request_bigfile_upload,
     )
-    finish_bigfile_upload = kante.django_mutation(
+    finish_bigfile_upload = upload_mutation(
         description="Finalize a big file upload after the client has written the object",
         resolver=datalayer_mutations.finish_bigfile_upload,
     )
@@ -313,15 +325,15 @@ class Mutation:
         resolver=datalayer_mutations.request_bigfile_access,
     )
 
-    request_zarr_upload = kante.django_mutation(
+    request_zarr_upload = upload_mutation(
         description="Request an upload grant for a Zarr store",
         resolver=datalayer_mutations.request_zarr_upload,
     )
-    finish_zarr_upload = kante.django_mutation(
+    finish_zarr_upload = upload_mutation(
         description="Finalize a Zarr upload after the client has written the object",
         resolver=datalayer_mutations.finish_zarr_upload,
     )
-    refresh_zarr_upload = kante.django_mutation(
+    refresh_zarr_upload = upload_mutation(
         description=(
             "Reissue upload credentials for a Zarr store whose upload is still in flight. A grant's credentials expire, and clients hold the session token as a static credential, so a "
             "write large enough to outlive its session dies partway through. This returns a fresh session against the same prefix so the write can carry on. Refuses a store that is "
@@ -338,21 +350,21 @@ class Mutation:
         resolver=datalayer_mutations.request_general_zarr_access,
     )
 
-    request_sparse_upload = kante.django_mutation(
+    request_sparse_upload = upload_mutation(
         description=(
             "Request an upload grant for a sparse store. The grant covers the whole prefix, so one request authorizes the group's metadata and all three of its arrays. It declares "
             "nothing about the matrix: the group states its encoding, shape and chunking, and the server reads them when the upload is finished"
         ),
         resolver=datalayer_mutations.request_sparse_upload,
     )
-    finish_sparse_upload = kante.django_mutation(
+    finish_sparse_upload = upload_mutation(
         description=(
             "Finalize a sparse upload, which is when the group's own metadata is read. A missing encoding, a missing array, or an `indptr` whose length contradicts the declared shape "
             "are all refused here -- that is what an interrupted upload looks like, and catching it now beats a reader discovering it later"
         ),
         resolver=datalayer_mutations.finish_sparse_upload,
     )
-    refresh_sparse_upload = kante.django_mutation(
+    refresh_sparse_upload = upload_mutation(
         description=(
             "Reissue upload credentials for a sparse store whose upload is still in flight, for the reason `refreshZarrUpload` exists: three chunked arrays of a large matrix take "
             "long enough that a write can outlive its session token. Refuses a store that is already populated -- that is an overwrite, not a resumption"
@@ -368,11 +380,11 @@ class Mutation:
         resolver=datalayer_mutations.request_general_sparse_access,
     )
 
-    request_fabriks_upload = kante.django_mutation(
+    request_fabriks_upload = upload_mutation(
         description="Request an upload grant for a fabriks store. The grant covers the whole prefix, so one request authorizes the manifest, both catalogs and every level",
         resolver=datalayer_mutations.request_fabriks_upload,
     )
-    finish_fabriks_upload = kante.django_mutation(
+    finish_fabriks_upload = upload_mutation(
         description="Finalize a fabriks upload. This reads the store's `fabriks.json` and refuses a prefix that has none -- which is what an interrupted upload looks like, since the manifest is written last",
         resolver=datalayer_mutations.finish_fabriks_upload,
     )
@@ -384,11 +396,11 @@ class Mutation:
         description="Request temporary S3 read credentials for fabriks stores in the organization",
         resolver=datalayer_mutations.request_general_fabriks_access,
     )
-    request_konnektion_upload = kante.django_mutation(
+    request_konnektion_upload = upload_mutation(
         description="Request an upload grant for a konnektion store. The grant covers the whole prefix, so one request authorizes the manifest, both catalogs and every level",
         resolver=datalayer_mutations.request_konnektion_upload,
     )
-    finish_konnektion_upload = kante.django_mutation(
+    finish_konnektion_upload = upload_mutation(
         description="Finalize a konnektion upload. This reads the store's `konnektion.json` and refuses a prefix that has none -- which is what an interrupted upload looks like, since the manifest is written last",
         resolver=datalayer_mutations.finish_konnektion_upload,
     )
@@ -401,11 +413,11 @@ class Mutation:
         resolver=datalayer_mutations.request_general_konnektion_access,
     )
 
-    request_parquet_upload = kante.django_mutation(
+    request_parquet_upload = upload_mutation(
         description="Request an upload grant for a Parquet store",
         resolver=datalayer_mutations.request_parquet_upload,
     )
-    finish_parquet_upload = kante.django_mutation(
+    finish_parquet_upload = upload_mutation(
         description="Finalize a Parquet upload after the client has written the object",
         resolver=datalayer_mutations.finish_parquet_upload,
     )

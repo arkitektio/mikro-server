@@ -232,6 +232,31 @@ def bot_context(db, backend_stack) -> HttpContext:
 
 
 @pytest.fixture(scope="function")
+def editor_context(db, backend_stack) -> HttpContext:
+    """A user holding only the "editor" role (static token "editortest") in the SAME org as authenticated_context."""
+    user, _ = User.objects.get_or_create(
+        sub="3", iss="static_issuer", defaults={"username": "static_issuer_3"}
+    )
+    client, _ = Client.objects.get_or_create(client_id="oinsoins")
+    org, _ = Organization.objects.get_or_create(slug="static_org")
+    membership, _ = Membership.objects.get_or_create(
+        user=user,
+        organization=org,
+        defaults={"roles": ["editor"]},
+    )
+
+    request = UniversalRequest(
+        _extensions={"token": "editortest"},
+        _client=client,  # type: ignore
+        _user=user,  # type: ignore
+        _organization=org,  # type: ignore
+    )
+    request.set_membership(membership)  # type: ignore
+
+    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer editortest"}, type="http")
+
+
+@pytest.fixture(scope="function")
 def other_org_context(db, backend_stack) -> HttpContext:
     """A context for a user in a different organization (static token "othertest")."""
     user, _ = User.objects.get_or_create(

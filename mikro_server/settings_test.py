@@ -41,6 +41,10 @@ AUTHENTIKATE = {
         # "bot" satisfies the admin/bot mutation gate but is not an org admin, so
         # the creator/assignee guard actually applies to them.
         "bottest": {"sub": "2", "roles": ["bot"]},
+        # An "editor": writes data and requests upload grants, but is not an org admin.
+        "editortest": {"sub": "3", "roles": ["editor"]},
+        # A "viewer": in the org, but holding no role that may write or upload.
+        "viewertest": {"sub": "4", "roles": ["viewer"]},
     },
 }
 

@@ -9,7 +9,7 @@ def request_zarr_upload(info: Info, input: inputs.RequestZarrUploadInput) -> typ
     """Request temporary S3 upload credentials for a Zarr store."""
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.ZarrUploadGrant.from_pydantic(dl.generate_zarr_upload_grant(info.context.request.organization.id, input_model))
+    return types.ZarrUploadGrant.from_pydantic(dl.generate_zarr_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user))
 
 
 def finish_zarr_upload(info: Info, input: inputs.FinishZarrUploadInput) -> types.ZarrStore:

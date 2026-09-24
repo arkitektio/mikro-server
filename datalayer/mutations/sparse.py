@@ -17,7 +17,7 @@ def request_sparse_upload(info: Info, input: inputs.RequestSparseUploadInput) ->
     """Request temporary S3 upload credentials for a sparse store."""
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.SparseUploadGrant.from_pydantic(dl.generate_sparse_upload_grant(info.context.request.organization.id, input_model))
+    return types.SparseUploadGrant.from_pydantic(dl.generate_sparse_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user))
 
 
 def finish_sparse_upload(info: Info, input: inputs.FinishSparseUploadInput) -> types.SparseStore:

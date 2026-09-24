@@ -17,7 +17,7 @@ def request_konnektion_upload(info: Info, input: inputs.RequestKonnektionUploadI
     """Request temporary S3 upload credentials for a konnektion store's prefix."""
     dl = get_current_datalayer()
     input_model = input.to_pydantic()
-    return types.KonnektionUploadGrant.from_pydantic(dl.generate_konnektion_upload_grant(info.context.request.organization.id, input_model))
+    return types.KonnektionUploadGrant.from_pydantic(dl.generate_konnektion_upload_grant(info.context.request.organization.id, input_model, user=info.context.request.user))
 
 
 def finish_konnektion_upload(info: Info, input: inputs.FinishKonnektionUploadInput) -> types.KonnektionStore:

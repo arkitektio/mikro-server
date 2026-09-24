@@ -36,6 +36,7 @@ DATALAYER_MODULES = [
     "mutations/sparse.py",
     "mutations/zarr.py",
     "konnektion.py",
+    "quota.py",
     "scalars.py",
     "sporadik.py",
     "types.py",
