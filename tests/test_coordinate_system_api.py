@@ -47,7 +47,7 @@ SYSTEM = """
 query System($id: ID!) {
   coordinateSystem(id: $id) {
     id
-    creator { id }
+    creator { id sub preferredUsername }
     residents {
       __typename
       ... on ArrayDataset { id name }
