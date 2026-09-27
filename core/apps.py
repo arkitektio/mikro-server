@@ -15,3 +15,7 @@ class CoreConfig(AppConfig):
         stops the service before it serves a wrong search.
         """
         import embeddings.checks  # noqa: F401
+
+        # The hub's rekuest: actions and model signals, connected in every process (web,
+        # shell, management commands) — not only once the URLconf has loaded.
+        import mikro_server.service  # noqa: F401

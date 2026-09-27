@@ -124,8 +124,8 @@ STRAWBERRY_DJANGO = {
 # static model that runs in this process (no service, no GPU, ~1 ms per row). Their filters'
 # ``search`` OR "cosine distance below DISTANCE_THRESHOLD" onto the lexical match. DIMENSIONS
 # is also the width of the database columns: the ``embeddings`` system checks refuse to start
-# when the model, this setting and a column disagree. Rows filled by another model are
-# re-embedded by an in-process loop (see ``mikro_server/asgi.py``), never by a command.
+# when the model, this setting and a column disagree. Rows filled by another model are re-embedded by
+# the ``reembed_stale`` action the hub's rekuest schedules (``mikro_server/service.py``).
 EMBEDDINGS = {
     "ENABLED": conf.embeddings.enabled,
     "MODEL": conf.embeddings.model,
@@ -135,9 +135,20 @@ EMBEDDINGS = {
     "SWEEP_INTERVAL": conf.embeddings.sweep_interval,
     "SWEEP_BATCH_SIZE": conf.embeddings.sweep_batch_size,
 }
-# The in-process healer that re-embeds stale rows. Off under the test suite, which calls
-# ``embeddings.healer.reembed_stale`` directly so a background pass never races an assertion.
-EMBEDDINGS_HEALER_ENABLED = True
+# The hub's rekuest runs this service's periodic work (``reembed_stale``) through the vendored
+# ``rekuest_service`` package; without the block nothing is scheduled.
+REKUEST_HOOK = (
+    {"REKUEST_URL": conf.rekuest_hook.rekuest_url, "SERVICE": conf.rekuest_hook.service, "MAX_SKEW": conf.rekuest_hook.max_skew}
+    if conf.rekuest_hook
+    else None
+)
+# This instance's key and the hub trust bundle (``rekuest_service.trust``): requests to and from
+# rekuest are signed with instance keys the coord vouches for — no shared secrets.
+INSTANCE = (
+    {"PRIVATE_KEY": conf.instance.private_key, "TRUST_JWKS_URI": conf.instance.trust.jwks_uri, "TRUST_JWKS": conf.instance.trust.jwks}
+    if conf.instance
+    else None
+)
 
 # Federation's `_entities` resolves references through this queryset, so an id
 # fetched that way is scoped exactly like `get_x`. kante >= 2.3.0 reads it; an

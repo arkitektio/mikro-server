@@ -20,6 +20,7 @@ from kante.path import dynamicpath
 from django.http import HttpResponse
 from health_check.views import MainView
 from django.views.decorators.csrf import csrf_exempt
+from mikro_server.service import service as rekuest_service
 
 def fakts_challenge(request):
     """
@@ -34,4 +35,6 @@ urlpatterns = [
     dynamicpath("admin/", admin.site.urls),
     dynamicpath("ht",  csrf_exempt(MainView.as_view()), name="health_check"),
     dynamicpath(".well-known/fakts-challenge", fakts_challenge, name="fakts-challenge"),
+    # The hub's rekuest runs this service's periodic work through here (internal network only).
+    *rekuest_service.urls,
 ]

@@ -148,8 +148,30 @@ class EmbeddingsSettings(BaseModel):
     model_path: Optional[str] = Field(default=None, description="Directory holding the weights of `model` (save_pretrained layout). The Docker image bakes them under /opt/models and sets EMBEDDINGS__MODEL_PATH; unset, model2vec downloads from Hugging Face on first use.")
     dimensions: int = Field(default=256, description="Vector width of `model`. Also the width of the database columns, so changing it is a migration. Checked against both at startup.")
     distance_threshold: float = Field(default=0.55, description="Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic `search` hit.")
-    sweep_interval: int = Field(default=30, description="Seconds between in-process passes that re-embed rows whose `embedding_model` is not `model`.")
+    sweep_interval: int = Field(default=300, description="How often (seconds) the hub's rekuest runs `reembed_stale`, which re-embeds rows whose `embedding_model` is not `model` (the default schedule this service declares).")
     sweep_batch_size: int = Field(default=200, description="Rows re-embedded per pass.")
+
+
+class RekuestHookSettings(BaseModel):
+    """This service as a HookAgent of the hub's rekuest (the vendored ``rekuest_service`` package)."""
+
+    rekuest_url: str = Field(default="http://rekuest:80/rekuest", description="rekuest's base URL on the internal network; runs are reported to its `agi/http/<agent>` intake.")
+    service: str = Field(default="mikro", description="The name rekuest knows this service by (its `rekuest.service_agents[].service`); signals are sent as it.")
+    max_skew: int = Field(default=30, description="Clock skew (seconds) tolerated on a signed request; tokens themselves live 60 s.")
+
+
+class InstanceTrustSettings(BaseModel):
+    """Where the hub's instance public keys come from: the coord's bundle, or inline."""
+
+    jwks_uri: Optional[str] = Field(default=None, description="The coord's hub-keys URL (the fakts `self.hub_keys_url`).")
+    jwks: Optional[Dict[str, Any]] = Field(default=None, description="The bundle inline (a JWKS whose keys carry `service`), for a hub not enrolled yet.")
+
+
+class InstanceSettings(BaseModel):
+    """This instance's key — its only secret towards the hub's other services — and whom it trusts."""
+
+    private_key: str = Field(description="Ed25519 private key (PKCS#8 PEM). Signs this service's requests to rekuest. Secret — must be set.")
+    trust: InstanceTrustSettings = Field(default_factory=InstanceTrustSettings, description="The hub's trust bundle.")
 
 
 class Settings(BaseSettings):
@@ -163,6 +185,8 @@ class Settings(BaseSettings):
     authentikate: AuthentikateSettings = Field(description="Token-verification config (authentikate).")
     datalayer: DatalayerSettings = Field(description="S3 storage connection and buckets.")
     embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings, description="Semantic search model and thresholds.")
+    rekuest_hook: Optional[RekuestHookSettings] = Field(default=None, description="Let the hub's rekuest run this service's periodic work (`reembed_stale`). Without it stale embeddings are not healed.")
+    instance: Optional[InstanceSettings] = Field(default=None, description="This instance's key and the hub trust bundle (signed requests to and from rekuest, no shared secrets).")
 
     @classmethod
     def settings_customise_sources(

@@ -22,6 +22,7 @@ from core.logic import graph as graph_logic
 from core.mutations._generic import assert_can_delete, make_delete, self_owner, dataset_owner
 from core.scoping import get_for_org
 import logging
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +350,7 @@ def assert_axes_describe_the_store(axes: list, store: "models.ZarrStore") -> Non
         )
 
 
+@transaction.atomic
 def create_array_dataset(
     info: Info,
     input: CreateArrayDatasetInput,
@@ -457,6 +459,8 @@ def create_array_dataset(
         coordinate_anchor = _get_or_create_anchor(dataset, anchor.axis_anchors)
         _write_anchor_spokes(coordinate_anchor, anchor, axis_specs=axis_specs)
 
+    # The hub's rekuest hears of this dataset through its model signal (mikro_server/service.py),
+    # after the commit — when the axes and levels written above exist too.
     return dataset
 
 

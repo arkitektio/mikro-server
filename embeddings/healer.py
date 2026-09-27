@@ -1,4 +1,4 @@
-"""Re-embed rows filled by another model (or none), from inside the serving process.
+"""Re-embed rows filled by another model (or none), in bounded row-locked passes.
 
 The stale set is ``embedding_model != EMBEDDINGS.MODEL`` -- rows written before embeddings were
 enabled, rows whose model failed to load at write time, and everything after the configured
@@ -7,27 +7,24 @@ replicas sweeping at once take disjoint rows and a replica dying mid-batch relea
 Rows are written with ``bulk_update``: no ``save()``, so no signals, no history rows, no
 broadcasts -- a re-embed is not an edit.
 
-No management command and no cron. rekuest runs :func:`reembed_stale` from its reaper tick;
-a service without a sweep loop starts :func:`ensure_healer_started` from its ASGI entrypoint.
+Nothing here loops. rekuest runs :func:`reembed_stale` from its reaper; every other service
+exposes :func:`reembed_all` as the ``reembed_stale`` action its hub's rekuest schedules
+(``<service>_server/service.py``, vendored ``rekuest_service``). Either way each pass is
+one bounded call, and any number of them may run at once.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import random
 from collections.abc import Sequence
 from typing import Any
 
-from channels.db import database_sync_to_async
 from django.db import models, transaction
 
 from embeddings import engine
 from embeddings.models import EMBEDDING_FIELDS, EmbeddedDescriptionMixin
 
 logger = logging.getLogger(__name__)
-
-_healer_task: asyncio.Task[None] | None = None
 
 
 def stale_queryset(model_cls: type[EmbeddedDescriptionMixin]) -> models.QuerySet[Any]:
@@ -82,29 +79,3 @@ def reembed_stale(model_cls: type[EmbeddedDescriptionMixin], batch_size: int | N
 def reembed_all(model_classes: Sequence[type[EmbeddedDescriptionMixin]], batch_size: int | None = None, max_batches: int | None = None) -> int:
     """:func:`reembed_stale` over several models; the total rows written."""
     return sum(reembed_stale(model_cls, batch_size, max_batches) for model_cls in model_classes)
-
-
-async def run_healer_loop(model_classes: Sequence[type[EmbeddedDescriptionMixin]], interval: float | None = None) -> None:
-    """Sweep forever, ``interval`` seconds apart; the first pass runs at once.
-
-    One bad iteration never ends the loop. Cancellation ends it.
-    """
-    await asyncio.sleep(random.uniform(0, 0.5))  # replicas started together should not tick in lockstep
-    while True:
-        try:
-            await database_sync_to_async(reembed_all)(model_classes, max_batches=5)
-        except asyncio.CancelledError:
-            return
-        except Exception:
-            logger.error("Embedding healer pass failed; continuing.", exc_info=True)
-        await asyncio.sleep(interval if interval is not None else engine.sweep_interval())
-
-
-def ensure_healer_started(model_classes: Sequence[type[EmbeddedDescriptionMixin]], interval: float | None = None) -> None:
-    """Start :func:`run_healer_loop` once per process; a cheap no-op on every later call."""
-    global _healer_task
-    if not engine.enabled():
-        return
-    if _healer_task is not None and not _healer_task.done():
-        return
-    _healer_task = asyncio.ensure_future(run_healer_loop(model_classes, interval))
