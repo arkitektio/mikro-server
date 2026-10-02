@@ -93,6 +93,30 @@ def instance_key() -> OKPKey | None:
         return key
 
 
+# --- the fakts alias challenge ----------------------------------------------------------------
+
+#: The domain tag of a signed fakts alias challenge (``fakts.challenge.CHALLENGE_DOMAIN``).
+CHALLENGE_DOMAIN = "fakts-challenge-v1"
+#: fakts sends 32 characters; anything much longer is not a nonce.
+MAX_NONCE_LENGTH = 256
+
+
+def sign_challenge(nonce: str, key: OKPKey | None = None) -> str | None:
+    """The signature a fakts client expects for ``nonce``, or None when there is no key to sign with.
+
+    A client that was told this instance's ``challenge_key`` probes an alias with ``?nonce=`` and
+    accepts only ``base64(Ed25519(key, "fakts-challenge-v1:" + nonce))`` — standard base64, the raw
+    64-byte signature. The domain tag keeps this apart from the service JWTs the same key signs:
+    a JWS signing input is base64url and never starts with it.
+    """
+    if not nonce or len(nonce) > MAX_NONCE_LENGTH:
+        raise TrustError("Not a challenge nonce")
+    key = key or instance_key()
+    if key is None:
+        return None
+    return base64.b64encode(key.private_key.sign(f"{CHALLENGE_DOMAIN}:{nonce}".encode())).decode("ascii")
+
+
 # --- the trust bundle ------------------------------------------------------------------------
 
 

@@ -14,6 +14,7 @@ rekuest, on the internal network, has a reason to call it — though every reque
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import json
 import logging
@@ -24,6 +25,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from asgiref.sync import iscoroutinefunction, markcoroutinefunction
 from django.conf import settings
 from django.db import close_old_connections
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -142,6 +144,46 @@ def _report(service: Service, config: dict[str, Any], agent_id: str, message: di
     except Exception as error:  # noqa: BLE001  never raises: a lost delivery is rekuest's to time out
         logger.warning("Could not report %s for task %s to rekuest: %s", message.get("type"), message.get("task"), error)
         return False
+
+
+def _challenge_answer(request: HttpRequest, response: HttpResponse) -> HttpResponse:
+    """``response``, or the signed answer when the request is a fakts challenge of a healthy service."""
+    nonce = request.GET.get("nonce")
+    if request.method != "GET" or nonce is None or response.status_code != 200:
+        return response
+    try:
+        signature = trust.sign_challenge(nonce)
+    except trust.TrustError:
+        return JsonResponse({"error": "Not a challenge nonce"}, status=400)
+    if signature is None:
+        return response
+    return JsonResponse({"signature": signature})
+
+
+def answers_challenge(view: Any) -> Any:
+    """Make a health view answer fakts' signed alias challenge (wrap the ``ht`` route with it).
+
+    ``GET ht?nonce=<nonce>`` is answered with ``{"signature": ...}`` (:func:`trust.sign_challenge`)
+    — only when the health view itself answers 200, so a signature still means "up". Without a
+    nonce, or without an instance key, the health view's own response passes through untouched.
+    Wraps sync and async views alike::
+
+        dynamicpath("ht", answers_challenge(csrf_exempt(MainView.as_view())), name="health_check")
+    """
+    if iscoroutinefunction(view):
+
+        @functools.wraps(view)
+        async def async_wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+            return _challenge_answer(request, await view(request, *args, **kwargs))
+
+        markcoroutinefunction(async_wrapped)
+        return async_wrapped
+
+    @functools.wraps(view)
+    def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        return _challenge_answer(request, view(request, *args, **kwargs))
+
+    return wrapped
 
 
 def _prefixed(route: str) -> str:
