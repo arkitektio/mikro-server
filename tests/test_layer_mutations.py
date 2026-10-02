@@ -451,6 +451,7 @@ async def test_create_volume_layer(db, authenticated_context: HttpContext):
     # the two mutations take separate input models, and a field added to one and not the
     # other is accepted by the schema and then silently dropped.
     assert data["color"] == [255, 150, 0, 255]
+    assert data["colormap"] == "INTENSITY"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -988,9 +989,9 @@ async def test_an_intensity_layer_carries_a_solid_tint(db, authenticated_context
     data = result.data["createIntensityLayer"]
     assert data["kind"] == "INTENSITY"
     assert data["color"] == [0, 255, 200, 255]
-    # Both, and the tint wins on read. The grey default still lands beside it rather than
-    # being suppressed: clearing the colour later gives back the layer it would have had.
-    assert data["colormap"] == "GREY"
+    # Either/or: the tint stands in for the colormap, so the map stored beside it is the one
+    # that adds no hue of its own -- not the grey default, which the layer would never draw.
+    assert data["colormap"] == "INTENSITY"
 
     layer = await models.Layer.objects.aget(id=data["id"])
     assert layer.render_graph is None, "a tint is a field now, not a reason to author a graph"
@@ -998,23 +999,93 @@ async def test_an_intensity_layer_carries_a_solid_tint(db, authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_tint_patch_leaves_the_colormap_alone(db, authenticated_context: HttpContext):
-    """The two coexist on the row, so patching one must not silently reset the other."""
+async def test_a_tint_patch_takes_the_colormap_with_it(db, authenticated_context: HttpContext):
+    """Either/or holds on the row, not only within one input: tinting a layer that was drawn
+    through MAGMA leaves no MAGMA behind for a client to read back and believe."""
     seeded = await _seed_intensity_layer(authenticated_context, colormap="MAGMA")
 
-    result = await schema.execute(
-        """
-        mutation M($input: UpdateIntensityLayerInput!) {
-            updateIntensityLayer(input: $input) { id colormap color }
-        }
-        """,
-        context_value=authenticated_context,
-        variable_values={"input": {"id": seeded["id"], "color": [255, 0, 255, 255]}},
-    )
+    result = await schema.execute(_UPDATE_TINT, context_value=authenticated_context, variable_values={"input": {"id": seeded["id"], "color": [255, 0, 255, 255]}})
     assert not result.errors, result.errors
     data = result.data["updateIntensityLayer"]
     assert data["color"] == [255, 0, 255, 255]
-    assert data["colormap"] == "MAGMA"
+    assert data["colormap"] == "INTENSITY"
+
+
+_UPDATE_TINT = """
+    mutation M($input: UpdateIntensityLayerInput!) {
+        updateIntensityLayer(input: $input) { id colormap color }
+    }
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["createIntensityLayer", "createVolumeLayer"])
+async def test_a_tint_beside_another_colormap_is_refused(db, authenticated_context: HttpContext, mutation: str):
+    """Two answers to one question, refused rather than resolved -- on both mutations that
+    share the intensity body, since they take separate input models."""
+    axis_names, shape, descriptors = _CYX
+    lens = await _seed_lens(authenticated_context, axis_names=axis_names, shape=shape, descriptors=descriptors)
+    scene = await _seed_scene(authenticated_context, lens)
+
+    result = await schema.execute(
+        f"mutation M($input: {mutation[0].upper()}{mutation[1:]}Input!) {{ {mutation}(input: $input) {{ id }} }}",
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.id), "lens": str(lens.id), "color": [0, 255, 200, 255], "colormap": "MAGMA"}},
+    )
+    assert result.errors, "a tint and a colormap were both accepted"
+    assert "Set either `color` or `colormap`" in result.errors[0].message
+    assert not await models.Layer.objects.filter(scene=scene).aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_tint_beside_the_intensity_colormap_is_the_same_statement(db, authenticated_context: HttpContext):
+    """INTENSITY is what a tint's colormap is, so saying both is saying it twice. A client
+    echoing a tinted layer back -- `colormap` and `color` as it read them -- must not be refused."""
+    seeded = await _seed_intensity_layer(authenticated_context, color=[0, 255, 200, 255], colormap="INTENSITY")
+
+    result = await schema.execute(_UPDATE_TINT, context_value=authenticated_context, variable_values={"input": {"id": seeded["id"], "color": [255, 0, 0, 255], "colormap": "INTENSITY"}})
+    assert not result.errors, result.errors
+    assert result.data["updateIntensityLayer"] == {"id": seeded["id"], "colormap": "INTENSITY", "color": [255, 0, 0, 255]}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_tint_patch_refuses_another_colormap_and_changes_nothing(db, authenticated_context: HttpContext):
+    seeded = await _seed_intensity_layer(authenticated_context, colormap="MAGMA")
+
+    result = await schema.execute(_UPDATE_TINT, context_value=authenticated_context, variable_values={"input": {"id": seeded["id"], "color": [255, 0, 255, 255], "colormap": "PLASMA"}})
+    assert result.errors, "a tint and a colormap were both accepted"
+    assert "Set either `color` or `colormap`" in result.errors[0].message
+
+    layer = await models.Layer.objects.aget(id=seeded["id"])
+    assert (layer.colormap, layer.color) == ("magma", None)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_colormap_patch_replaces_the_tint(db, authenticated_context: HttpContext):
+    """The way back from a tint. A null `color` means "unchanged", so it cannot be the
+    spelling for "no tint" -- naming a colormap is, because the two are either/or."""
+    seeded = await _seed_intensity_layer(authenticated_context, color=[0, 255, 200, 255])
+
+    result = await schema.execute(_UPDATE_TINT, context_value=authenticated_context, variable_values={"input": {"id": seeded["id"], "colormap": "MAGMA"}})
+    assert not result.errors, result.errors
+    assert result.data["updateIntensityLayer"] == {"id": seeded["id"], "colormap": "MAGMA", "color": None}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_patch_that_names_neither_keeps_the_tint(db, authenticated_context: HttpContext):
+    """The patch discipline: a gamma change is not a reason to lose the tint, and neither is
+    restating the INTENSITY colormap the tint already carries."""
+    seeded = await _seed_intensity_layer(authenticated_context, color=[0, 255, 200, 255])
+
+    for patch in ({"gamma": 2.0}, {"colormap": "INTENSITY"}):
+        result = await schema.execute(_UPDATE_TINT, context_value=authenticated_context, variable_values={"input": {"id": seeded["id"], **patch}})
+        assert not result.errors, result.errors
+        assert result.data["updateIntensityLayer"] == {"id": seeded["id"], "colormap": "INTENSITY", "color": [0, 255, 200, 255]}
 
 
 @pytest.mark.django_db(transaction=True)

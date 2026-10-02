@@ -987,9 +987,10 @@ class Layer(models.Model):
     # and no named map that means it; before this column that fact alone forced the whole
     # layer onto a render graph.
     #
-    # `default=None` for `colormap`'s reason below, and it overrides rather than excludes:
-    # both may be set, and the colour wins. That is `TransferFunction`'s rule, and the two
-    # disagreeing about what a tint beside a map means would be worse than either answer.
+    # `default=None` for `colormap`'s reason below. For an intensity layer it excludes rather
+    # than overrides: a tinted layer's `colormap` is INTENSITY, and the mutations refuse any
+    # other map beside a tint (`core.mutations.layer._tint_colormap`). A vector layer still
+    # keeps `TransferFunction`'s rule -- both may be set, and the colour wins.
     color = models.JSONField(
         null=True,
         blank=True,

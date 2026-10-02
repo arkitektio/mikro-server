@@ -580,6 +580,27 @@ def create_rgb_layer(info: Info, input: CreateRgbLayerInput) -> types.RgbLayer:
     )
 
 
+def _tint_colormap(colormap: enums.ColorMap | None, color: list[int] | None) -> enums.ColorMap | None:
+    """The colormap an intensity input means, given the tint sent beside it. Either/or.
+
+    A tint is not drawn *over* a colormap, it stands in for one: the channel's own intensity
+    scaled into that colour. So a tinted layer's colormap is INTENSITY -- the map that adds
+    no hue of its own -- and never whatever was sent or defaulted beside it. Any other
+    colormap sent with a tint is two answers to one question, and refused rather than
+    resolved: silently letting the colour win stored a map the layer never drew, and a
+    client reading `colormap` back was told something false.
+    """
+    if color is None:
+        return colormap
+    if colormap is not None and colormap != enums.ColorMap.INTENSITY:
+        raise ValueError(
+            f"Set either `color` or `colormap`, not both: got the tint {color} beside the colormap '{colormap.value}'. "
+            "A tint replaces the colormap rather than combining with it -- the channel's intensity is drawn in that one colour -- "
+            "so a tinted layer's colormap is always 'intensity'. Drop `colormap` to tint the channel, or drop `color` to draw it through the map."
+        )
+    return enums.ColorMap.INTENSITY
+
+
 class CreateIntensityLayerInputModel(BaseModel):
     lens: str
     scene: str
@@ -607,6 +628,11 @@ class CreateIntensityLayerInputModel(BaseModel):
         assert_contrast_limits(self.clim_min, self.clim_max)
         return self
 
+    @model_validator(mode="after")
+    def _tint_or_colormap(self) -> "CreateIntensityLayerInputModel":
+        self.colormap = _tint_colormap(self.colormap, self.color)
+        return self
+
 
 @prose_errors
 @kante.pydantic_input(CreateIntensityLayerInputModel, description="Create a single-channel intensity layer rendered through a colormap (e.g. a fluorescence channel)")
@@ -615,8 +641,8 @@ class CreateIntensityLayerInput:
     lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the data")
     intensity_axis: str | None = strawberry.field(default=None, description="The channel axis to index. Defaults to the lens' first channel axis; may be null for single-valued data.")
     intensity_index: int | None = strawberry.field(default=None, description="The channel index to render (default 0)")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through (default 'grey')")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Overrides `colormap` where both are given -- for a channel whose colour is a measured fact (an emission wavelength, or what the acquisition software saved) and matches no named map")
+    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through (default 'grey'). Set either this or `color`, not both")
+    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. For a channel whose colour is a measured fact (an emission wavelength, or what the acquisition software saved) and matches no named map. Either/or with `colormap`: a tinted layer's colormap is stored as 'intensity', and any other colormap sent beside a tint is refused")
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
     clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
     gamma: float | None = strawberry.field(default=None, description="Gamma correction (default 1.0)")
@@ -665,10 +691,9 @@ def _create_intensity_layer(info: Info, model, *, projection_mode: enums.Project
         order=model.order,
         intensity_axis=intensity_axis,
         intensity_index=intensity_index,
+        # Either/or: a tint has already made this INTENSITY (`_tint_colormap`), so the grey
+        # default is only ever the default of a layer that has no tint.
         colormap=model.colormap or enums.ColorMap.GREY,
-        # Both, and the colour wins on read -- `TransferFunction`'s rule. The grey default
-        # still lands beside a tint rather than being suppressed by it: a client that later
-        # clears the colour gets the same layer it would have had, not a colourless one.
         color=model.color,
         clim_min=model.clim_min,
         clim_max=model.clim_max,
@@ -1583,6 +1608,11 @@ class CreateVolumeLayerInputModel(BaseModel):
         assert_contrast_limits(self.clim_min, self.clim_max)
         return self
 
+    @model_validator(mode="after")
+    def _tint_or_colormap(self) -> "CreateVolumeLayerInputModel":
+        self.colormap = _tint_colormap(self.colormap, self.color)
+        return self
+
 
 @prose_errors
 @kante.pydantic_input(CreateVolumeLayerInputModel, description="Create a single-channel layer rendered as a 3D volume projection (MIP / attenuated-MIP / volume / isosurface) over its z-axis")
@@ -1592,8 +1622,8 @@ class CreateVolumeLayerInput:
     mode: enums.ProjectionMode | None = strawberry.field(default=None, description="The 3D projection / rendering mode over the z-axis (default 'mip')")
     intensity_axis: str | None = strawberry.field(default=None, description="The channel axis to index. Defaults to the lens' first channel axis; may be null for single-valued data.")
     intensity_index: int | None = strawberry.field(default=None, description="The channel index to render (default 0)")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through (default 'grey')")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Overrides `colormap` where both are given")
+    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through (default 'grey'). Set either this or `color`, not both")
+    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Either/or with `colormap`: a tinted layer's colormap is stored as 'intensity', and any other colormap sent beside a tint is refused")
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
     clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
     gamma: float | None = strawberry.field(default=None, description="Gamma correction (default 1.0)")
@@ -1718,6 +1748,11 @@ class UpdateIntensityLayerInputModel(BaseModel):
             assert_rgba(color, field="color", maximum=255)
         return color
 
+    @model_validator(mode="after")
+    def _tint_or_colormap(self) -> "UpdateIntensityLayerInputModel":
+        self.colormap = _tint_colormap(self.colormap, self.color)
+        return self
+
 
 @prose_errors
 @kante.pydantic_input(UpdateIntensityLayerInputModel, description="Update an intensity layer's render settings. Every field is a patch: what is not sent keeps its current value")
@@ -1726,8 +1761,8 @@ class UpdateIntensityLayerInput:
     name: str | None = strawberry.field(default=None, description="A human-readable name for the layer, e.g. the channel it draws")
     intensity_axis: str | None = strawberry.field(default=None, description="The channel axis to index")
     intensity_index: int | None = strawberry.field(default=None, description="The channel index to render")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, overriding the colormap: four components, each 0..255. Omitting this keeps the current tint -- there is no spelling here for 'go back to the colormap', because null already means 'unchanged'")
+    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through. Set either this or `color`, not both. Sent alone it replaces a tint the layer carries -- the way back from a tint to a colormap -- except 'intensity', which is the map a tint already has and leaves it in place")
+    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Sets the layer's colormap to 'intensity'; any other colormap sent beside it is refused. Omitting this keeps the current tint, because null already means 'unchanged' -- send a `colormap` to go back to one")
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
     clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
     gamma: float | None = strawberry.field(default=None, description="Gamma correction applied to the normalized intensities")
@@ -1759,8 +1794,14 @@ def update_intensity_layer(info: Info, input: UpdateIntensityLayerInput) -> type
     layer.intensity_index = intensity_index
     layer.clim_min = clim_min
     layer.clim_max = clim_max
+    # Either/or on the row too, not only within one input. A tint arrives with its colormap
+    # already resolved to INTENSITY (`_tint_colormap`); a colormap sent alone replaces the
+    # tint, which is the spelling for "go back to the colormap" that a null `color` cannot
+    # be. INTENSITY alone is the one map a tint already carries, so it leaves the tint be.
     if model.colormap is not None:
         layer.colormap = model.colormap
+        if model.color is None and model.colormap != enums.ColorMap.INTENSITY:
+            layer.color = None
     if model.color is not None:
         layer.color = model.color
     if model.gamma is not None:
