@@ -1343,6 +1343,8 @@ class Annotation:
     fill_color: list[int] | None = kante.django_field(description="The fill color of the geometry, as RGBA, or null for no fill")
     stroke_width: float = kante.django_field(description="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale")
     filled: bool = kante.django_field(description="Whether the geometry is filled with fill_color")
+    # Nullable: the creator FK is SET_NULL, so a shape outlives the user who drew it.
+    creator: User | None = kante.django_field(description="The user that drew this annotation, or null when that user is gone or a client created it without one")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation")
 
     @kante.django_field(description="The coordinate system this annotation's vectors are expressed in: its collection's own system")

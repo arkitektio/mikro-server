@@ -253,6 +253,39 @@ async def test_collection_xor_scene(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_an_annotation_names_who_drew_it(db, authenticated_context: HttpContext):
+    """`creator` is the user that drew the shape, readable straight off the annotation."""
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx)
+
+    created = await schema.execute(
+        CREATE,
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.id), "kind": "POINT", "vectors": [[0.0, 0.0, 0.0]]}},
+    )
+    assert not created.errors, created.errors
+
+    result = await schema.execute(
+        "query ($id: ID!) { annotation(id: $id) { id creator { sub } } }",
+        context_value=ctx,
+        variable_values={"id": created.data["createAnnotation"]["id"]},
+    )
+    assert not result.errors, result.errors
+    assert result.data["annotation"]["creator"] == {"sub": ctx.request.user.sub}
+
+    # SET_NULL: the shape outlives its author, and then names nobody.
+    await sync_to_async(models.Annotation.objects.update)(creator=None)
+    orphaned = await schema.execute(
+        "query ($id: ID!) { annotation(id: $id) { id creator { sub } } }",
+        context_value=ctx,
+        variable_values={"id": created.data["createAnnotation"]["id"]},
+    )
+    assert not orphaned.errors, orphaned.errors
+    assert orphaned.data["annotation"]["creator"] is None
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_drawing_into_a_collection_appends_only(db, authenticated_context: HttpContext):
     """The collection path never touches layers or edges."""
     ctx = authenticated_context
