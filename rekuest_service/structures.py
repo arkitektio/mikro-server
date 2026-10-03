@@ -2,11 +2,13 @@
 
 A structure is a model the service holds, known to the hub by its identifier
 (``@mikro/arraydataset``). Its declaration is the one place that says which descriptors the
-objects carry (``descriptors``) and how to compute them (``describe``): the signals sent for the
-model, the manifest rekuest reads and the service's own ``descriptors`` GraphQL field all read it.
+objects carry (``descriptors``) and how to compute them (``describe``): the manifest rekuest
+reads, the service's own ``descriptors`` GraphQL field and any signal declared for the structure
+all read it.
 
-A structure only HAS descriptors. What an action requires of an input or provides with an output
-is said on that action's ports, in terms of these keys.
+A structure only HAS descriptors, and declaring one announces nothing: what is signalled about it
+is a separate declaration (``Service.model_signal``). What an action requires of an input or
+provides with an output is said on that action's ports, in terms of these keys.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ class Descriptor:
 
 @dataclass(frozen=True)
 class Structure:
-    """A hosted structure. ``signal`` is the handle of its model signal; None when it is never signalled."""
+    """A hosted structure: a model, its identifier, and the descriptors of its objects."""
 
     identifier: str
     model: Any
@@ -54,16 +56,13 @@ class Structure:
     description: str | None
     descriptors: tuple[Descriptor, ...]
     describer: Callable[[Any], dict[str, Any]] | None
-    organization: Callable[[Any], str | None] | None
-    kinds: tuple[str, ...]
-    signal: Any = None
 
     @property
     def keys(self) -> tuple[str, ...]:
         return tuple(d.key for d in self.descriptors)
 
     def describe(self, obj: Any) -> dict[str, Any]:
-        """The flat descriptor dict of ``obj`` — what its signals carry and its ``descriptors`` field returns."""
+        """The flat descriptor dict of ``obj`` — what signals for it carry and its ``descriptors`` field returns."""
         return dict(self.describer(obj)) if self.describer is not None else {}
 
     def manifest(self) -> dict[str, Any]:

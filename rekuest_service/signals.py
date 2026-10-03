@@ -13,7 +13,7 @@ a causing task it was not called in.
 
 Best-effort, on purpose: the POST happens after the surrounding transaction commits (a rolled
 back object is never announced), in a thread, and a failure is one warning line. Nothing here
-retries, queues or loops. The module-level :func:`emit` sends through the default service.
+retries, queues or loops.
 """
 
 from __future__ import annotations
@@ -44,25 +44,12 @@ def current_provenance_token() -> str | None:
     return getattr(provenance, "raw", None) if provenance is not None else None
 
 
-def emit(kind: str, identifier: str, object: Any, *, organization: str, descriptors: dict[str, Any] | None = None) -> None:
-    """Announce ``kind`` of ``identifier:object`` through the default service (kept for existing callers)."""
-    from rekuest_service.service import KINDS, default_service
-
-    if kind not in KINDS:
-        raise ValueError(f"A signal kind is one of {KINDS}, not {kind!r}")
-    handle = default_service.signals.get(identifier)
-    if handle is not None and kind in handle.declaration.kinds:
-        handle.emit(object, organization=organization, descriptors=descriptors, kind=kind)
-    else:
-        default_service._emit(kind, identifier, object, organization=organization, descriptors=descriptors)
-
-
 _outbox: queue.Queue = queue.Queue(maxsize=10_000)
 _sender: threading.Thread | None = None
 _sender_lock = threading.Lock()
 
 
-def enqueue(config: dict[str, Any], service: str, issuer: str, message: dict[str, Any], key: Any = None) -> None:
+def enqueue(config: dict[str, Any], service: str, issuer: str, audience: str, message: dict[str, Any], key: Any = None) -> None:
     """Hand a signal to this process's sender thread: one at a time, in commit order.
 
     One thread, not one per signal — a sync that touches a thousand rows must not start a
@@ -75,28 +62,26 @@ def enqueue(config: dict[str, Any], service: str, issuer: str, message: dict[str
             _sender = threading.Thread(target=_drain, name="rekuest-signal-sender", daemon=True)
             _sender.start()
     try:
-        _outbox.put_nowait((config, service, issuer, message, key))
+        _outbox.put_nowait((config, service, issuer, audience, message, key))
     except queue.Full:
         logger.warning("Signal outbox full; dropping %s %s:%s", message["kind"], message["identifier"], message["object"])
 
 
 def _drain() -> None:
     while True:
-        config, service, issuer, message, key = _outbox.get()
+        config, service, issuer, audience, message, key = _outbox.get()
         try:
-            send(config, service, issuer, message, key)
+            send(config, service, issuer, audience, message, key)
         finally:
             _outbox.task_done()
 
 
-def send(config: dict[str, Any], service: str, issuer: str, message: dict[str, Any], key: Any = None) -> bool:
+def send(config: dict[str, Any], service: str, issuer: str, audience: str, message: dict[str, Any], key: Any = None) -> bool:
     """POST one signal to rekuest's signal intake, signed with this instance's key. Never raises."""
-    from rekuest_service.service import Service
-
     body = json.dumps(message).encode()
     url = f"{config['REKUEST_URL'].rstrip('/')}/agi/signal/{service}"
     try:
-        authorization = trust.sign("POST", urlparse(url).path, body, issuer=issuer, audience=Service.rekuest_identifier(), key=key)
+        authorization = trust.sign("POST", urlparse(url).path, body, issuer=issuer, audience=audience, key=key)
     except trust.TrustError as error:
         logger.warning("Could not sign a signal: %s", error)
         return False

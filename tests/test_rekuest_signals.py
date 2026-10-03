@@ -81,7 +81,7 @@ def _dataset_created(intake) -> dict:
 @pytest.fixture
 def intake(settings):
     server = _Intake()
-    settings.REKUEST_HOOK = {"REKUEST_URL": server.url, "SERVICE": "mikro"}
+    settings.REKUEST_SERVICE = {"REKUEST_URL": server.url, "SERVICE": "mikro"}
     settings.INSTANCE = INSTANCE
     yield server
     server.server.shutdown()
@@ -147,8 +147,8 @@ async def test_without_a_task_the_signal_carries_no_token(intake, authenticated_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_nothing_is_sent_when_rekuest_hook_is_not_configured(intake, settings, authenticated_context: HttpContext):
-    settings.REKUEST_HOOK = None
+async def test_nothing_is_sent_when_rekuest_is_not_configured(intake, settings, authenticated_context: HttpContext):
+    settings.REKUEST_SERVICE = None
     await _create(authenticated_context, "unconfigured")
     time.sleep(0.5)
     assert intake.received == []
@@ -158,22 +158,11 @@ def test_the_manifest_declares_exactly_the_keys_mikro_sends(settings):
     from django.test import Client as HttpClient
     from django.urls import reverse
 
-    settings.REKUEST_HOOK = {"REKUEST_URL": "http://127.0.0.1:9", "SERVICE": "mikro"}
+    settings.REKUEST_SERVICE = {"REKUEST_URL": "http://127.0.0.1:9", "SERVICE": "mikro"}
     settings.INSTANCE = INSTANCE
-    url = reverse("rekuest_hook_manifest")  # loads the URLconf, which registers the declarations
+    url = reverse("rekuest_service_manifest")  # loads the URLconf, which registers the declarations
     authorization = trust.sign("GET", url, b"", issuer="live.arkitekt.rekuest", audience="live.arkitekt.mikro", key=REKUEST_KEY)
-    response = HttpClient().get(url, headers={"Authorization": authorization, "X-Rekuest-Agent": "1"})
+    response = HttpClient().get(url, headers={"Authorization": authorization})
     (declared,) = [s for s in response.json()["signals"] if s["identifier"] == "@mikro/arraydataset"]
     assert declared["kinds"] == ["CREATED", "UPDATED", "DELETED"]
     assert sorted(declared["descriptors"]) == sorted(array_descriptors(["CHANNEL", "SPACE"], [2, 8]))
-
-
-@pytest.mark.django_db(transaction=True)
-def test_an_undeclared_signal_warns_but_is_still_sent(intake, caplog):
-    from rekuest_service.signals import emit
-
-    with caplog.at_level("WARNING", logger="rekuest_service"):
-        emit("DELETED", "@mikro/arraydataset", 7, organization="org")
-    assert "without declaring it" in caplog.text
-    (received,) = intake.wait()
-    assert json.loads(received["body"])["kind"] == "DELETED"

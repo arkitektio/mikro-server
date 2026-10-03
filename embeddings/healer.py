@@ -8,9 +8,9 @@ Rows are written with ``bulk_update``: no ``save()``, so no signals, no history 
 broadcasts -- a re-embed is not an edit.
 
 Nothing here loops. rekuest runs :func:`reembed_stale` as an upkeep job; every other service
-offers :func:`reembed_all` as the ``reembed_stale`` action of its HookAgent
-(``<service>_server/service.py``, vendored ``rekuest_service``), which the hub's rekuest
-schedules in every organization — each run sweeping that organization's rows. Either way each
+offers :func:`reembed_all` as the ``reembed_stale`` action of its hook agent
+(``<service>_server/hook_agent.py``, vendored ``rekuest_hook``), which an organization may
+schedule in rekuest — each run sweeping that organization's rows. Either way each
 pass is one bounded call, and any number of them may run at once.
 """
 

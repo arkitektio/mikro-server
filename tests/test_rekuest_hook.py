@@ -1,4 +1,4 @@
-"""This service's HookAgent as seen by the hub's rekuest (vendored ``rekuest_service``).
+"""This process's hook agent as seen by the hub's rekuest (vendored ``rekuest_hook``).
 
 The manifest rekuest reads, the signed requests both sides exchange (instance keys vouched for
 by the hub's trust bundle, no shared secret), and the ``reembed_stale`` action itself against
@@ -13,7 +13,8 @@ from django.urls import reverse
 from joserfc.jwk import OKPKey
 
 from rekuest_service import trust
-from mikro_server.service import agent, service
+from mikro_server.hook_agent import agent
+from mikro_server.service import service
 
 REKUEST_KEY = OKPKey.generate_key("Ed25519")
 SERVICE_KEY = OKPKey.generate_key("Ed25519")
@@ -26,7 +27,7 @@ def hooked(settings):
         "PRIVATE_KEY": SERVICE_KEY.as_pem(private=True).decode(),
         "TRUST_JWKS": {
             "keys": [
-                {**trust.public_jwk(SERVICE_KEY), "service": service.identifier},
+                {**trust.public_jwk(SERVICE_KEY), "service": agent.identifier},
                 {**trust.public_jwk(REKUEST_KEY), "service": "live.arkitekt.rekuest"},
             ]
         },
@@ -35,7 +36,7 @@ def hooked(settings):
 
 
 def _as_rekuest(method: str, url: str, body: bytes = b"", *, key=REKUEST_KEY, audience=None) -> dict:
-    authorization = trust.sign(method, url, body, issuer="live.arkitekt.rekuest", audience=audience or service.identifier, key=key)
+    authorization = trust.sign(method, url, body, issuer="live.arkitekt.rekuest", audience=audience or agent.identifier, key=key)
     return {"Authorization": authorization, "X-Rekuest-Agent": "11"}
 
 
@@ -69,6 +70,8 @@ def test_reembed_stale_runs_one_bounded_pass():
     assert result == {"reembedded": 0}
 
 
-def test_the_service_itself_offers_no_actions():
-    assert not hasattr(service, "action")
-    assert service.manifest()["actions"] == agent.manifest()
+def test_the_service_and_the_agent_are_separate_declarations():
+    assert "actions" not in service.manifest() and not hasattr(service, "action")
+    assert set(agent.manifest()) == {"agent", "identifier", "description", "actions", "manifest_version"}
+    # Offered, not wired: nothing in an action says when it runs.
+    assert all(set(action) == {"interface", "name", "description"} for action in agent.manifest()["actions"])

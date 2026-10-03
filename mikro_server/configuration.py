@@ -148,15 +148,15 @@ class EmbeddingsSettings(BaseModel):
     model_path: Optional[str] = Field(default=None, description="Directory holding the weights of `model` (save_pretrained layout). The Docker image bakes them under /opt/models and sets EMBEDDINGS__MODEL_PATH; unset, model2vec downloads from Hugging Face on first use.")
     dimensions: int = Field(default=256, description="Vector width of `model`. Also the width of the database columns, so changing it is a migration. Checked against both at startup.")
     distance_threshold: float = Field(default=0.55, description="Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic `search` hit.")
-    sweep_interval: int = Field(default=300, description="How often (seconds) the hub's rekuest runs `reembed_stale`, which re-embeds rows whose `embedding_model` is not `model` (the default schedule this service declares).")
+    sweep_interval: int = Field(default=300, description="No longer used: `reembed_stale` (which re-embeds rows whose `embedding_model` is not `model`) is only offered as an action, and scheduling it is the organization's own automation. Kept so existing configs load.")
     sweep_batch_size: int = Field(default=200, description="Rows re-embedded per pass.")
 
 
 class RekuestHookSettings(BaseModel):
-    """This service as a HookAgent of the hub's rekuest (the vendored ``rekuest_service`` package)."""
+    """How this process reaches the hub's rekuest: as a service (``rekuest_service``) and as a hook agent (``rekuest_hook``)."""
 
     rekuest_url: str = Field(default="http://rekuest:80/rekuest", description="rekuest's base URL on the internal network; runs are reported to its `agi/http/<agent>` intake.")
-    service: str = Field(default="mikro", description="The name rekuest knows this service by (its `rekuest.service_agents[].service`); signals are sent as it.")
+    service: str = Field(default="mikro", description="The name rekuest knows this process by: its `rekuest.services[].name` (signals are sent as it) and its `rekuest.hook_agents[].name`.")
     max_skew: int = Field(default=30, description="Clock skew (seconds) tolerated on a signed request; tokens themselves live 60 s.")
 
 

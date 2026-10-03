@@ -135,10 +135,16 @@ EMBEDDINGS = {
     "SWEEP_INTERVAL": conf.embeddings.sweep_interval,
     "SWEEP_BATCH_SIZE": conf.embeddings.sweep_batch_size,
 }
-# The hub's rekuest runs this service's periodic work (``reembed_stale``) through the vendored
-# ``rekuest_service`` package; without the block nothing is scheduled.
-REKUEST_HOOK = (
+# Two declarations reach the hub's rekuest from this process, each with its own setting: the
+# service (what exists here: ``rekuest_service``) and the hook agent (what can be done here:
+# ``rekuest_hook``). Both read where rekuest is from the same ``rekuest_hook`` config block.
+REKUEST_SERVICE = (
     {"REKUEST_URL": conf.rekuest_hook.rekuest_url, "SERVICE": conf.rekuest_hook.service, "MAX_SKEW": conf.rekuest_hook.max_skew}
+    if conf.rekuest_hook
+    else None
+)
+REKUEST_HOOK = (
+    {"REKUEST_URL": conf.rekuest_hook.rekuest_url, "AGENT": conf.rekuest_hook.service, "MAX_SKEW": conf.rekuest_hook.max_skew}
     if conf.rekuest_hook
     else None
 )

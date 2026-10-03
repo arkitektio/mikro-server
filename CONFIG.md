@@ -261,7 +261,7 @@ Every key has a default; the block may be omitted.
 | `model_path` | `EMBEDDINGS__MODEL_PATH` | str | `null` | Directory holding the weights of `model`. The Docker image bakes them under `/opt/models/embeddings` and sets this itself (with `HF_HUB_OFFLINE=1`); unset, model2vec downloads from Hugging Face on first use. |
 | `dimensions` | `EMBEDDINGS__DIMENSIONS` | int | `256` | Vector width of `model` — and of the database columns. Checked against both at startup (`embeddings.E001` / `E002`). |
 | `distance_threshold` | `EMBEDDINGS__DISTANCE_THRESHOLD` | float | `0.55` | Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic hit. Lower is stricter. |
-| `sweep_interval` | `EMBEDDINGS__SWEEP_INTERVAL` | int | `300` | How often the hub's rekuest runs `reembed_stale`, which re-embeds stale rows (the default schedule this service declares; needs `rekuest_hook`). |
+| `sweep_interval` | `EMBEDDINGS__SWEEP_INTERVAL` | int | `300` | No longer used: the action is only offered, and scheduling it is the organization's own automation in rekuest. Kept so existing configs load. |
 | `sweep_batch_size` | `EMBEDDINGS__SWEEP_BATCH_SIZE` | int | `200` | Rows re-embedded per batch. |
 
 Rows that were written before embeddings were enabled, while the model could not be loaded,
@@ -284,17 +284,19 @@ image is offline.
 
 ---
 
-### `rekuest_hook` — periodic work run by the hub's rekuest (optional)
+### `rekuest_hook` — how this process reaches the hub's rekuest (optional)
 
-This service as a HookAgent of the hub's rekuest (vendored `rekuest_service` package, mounted at
-`_rekuest/hook`; keep that path off the public edge). rekuest must list it under
-`rekuest.service_agents`; it then runs `reembed_stale` every
-`embeddings.sweep_interval` seconds. Without this block stale embeddings are not healed.
+Two separate things use it. The **service** (vendored `rekuest_service`, mounted at
+`_rekuest/service`) says what exists here: rekuest lists it under `rekuest.services` and
+catalogues its structures and signals. The **hook agent** (vendored `rekuest_hook`, mounted at
+`_rekuest/hook`) offers this process's actions: rekuest lists it under `rekuest.hook_agents` and
+gives every organization the agent. Nothing is scheduled by itself; when an action runs is the
+organization's own automation. Keep `_rekuest/` off the public edge.
 
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `rekuest_url` | `REKUEST_HOOK__REKUEST_URL` | str | `http://rekuest:80/rekuest` | rekuest on the internal network; runs are reported to its intake. |
-| `service` | `REKUEST_HOOK__SERVICE` | str | `mikro` | The name rekuest knows this service by (`rekuest.service_agents[].service`); signals are sent as it. |
+| `service` | `REKUEST_HOOK__SERVICE` | str | `mikro` | The name rekuest knows this process by: its `rekuest.services[].name` (signals are sent as it) and its `rekuest.hook_agents[].name`. |
 | `max_skew` | `REKUEST_HOOK__MAX_SKEW` | int | `30` | Clock skew (seconds) tolerated on a signed request; tokens live 60 s. |
 
 ### `instance` — this instance's key and the hub trust bundle

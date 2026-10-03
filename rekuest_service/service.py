@@ -4,26 +4,30 @@
 
     service = Service("mikro", description="Microscopy data")
 
-    # A model the service hosts: the descriptors of its objects, and a signal for every save and delete.
-    service.structure(ArrayDataset, "@mikro/arraydataset", organization=organization_of(),
-                      descriptors=ARRAY_DESCRIPTORS, describe=array_descriptors)
+    # A model the service hosts, and the descriptors of its objects:
+    dataset = service.structure(ArrayDataset, "@mikro/arraydataset", descriptors=ARRAY_DESCRIPTORS, describe=array_descriptors)
 
-    # An event that is not a model's save or delete:
-    dataset_created = service.signal("@mikro/arraydataset", kinds=["CREATED"], descriptors=ARRAY_DESCRIPTOR_KEYS)
-    dataset_created.emit(dataset.pk, organization=dataset.organization.slug, descriptors={...})
+    # Separately: what it announces. Every save and delete of a hosted model ...
+    service.model_signal(dataset, organization=organization_of())
 
-and in ``urls.py``: ``urlpatterns = [..., *service.urls]``. The endpoints are bound to THIS
-service — no module-level registry is consulted — so what the manifest lists is exactly what the
-declaration says. rekuest reads that manifest (``GET <hook_url>/manifest``) when it provisions
-the service: structures become its catalog of what this service hosts, signals become the
-declarations triggers are checked against.
+    # ... or an event that is not a model's save or delete:
+    imported = service.signal("@mikro/arraydataset", kinds=["CREATED"], descriptors=ARRAY_DESCRIPTOR_KEYS)
+    imported.emit(dataset.pk, organization=dataset.organization.slug, descriptors={...})
 
-A service declares no actions. Work rekuest can ask of it is offered by its HookAgent
-(:mod:`rekuest_service.agent`): an agent like any app's, reached over HTTP, whose actions take
-and return this service's structures.
+and in ``urls.py``: ``urlpatterns = [..., *service.urls]``. The endpoint is bound to THIS service,
+so what the manifest lists is exactly what the declaration says. rekuest reads that manifest
+(``GET <url>/manifest``) when it catalogues the service: structures become its catalog of what
+this service hosts, signals become the declarations triggers are checked against.
 
-The name is what rekuest knows the service by (``rekuest.service_agents[].service``); a
-``SERVICE`` in ``settings.REKUEST_HOOK`` overrides it, e.g. for a second instance of one service.
+Hosting and announcing are two declarations. A structure says what exists and how its objects are
+described; a signal says what is announced about it. A structure with no signal is hosted
+silently: nothing about hosting implies an announcement.
+
+A service declares no actions and knows of no agent. Work rekuest can ask for is offered by
+agents, which are something else entirely (a HookAgent is the ``rekuest_hook`` package's).
+
+The name is what rekuest knows the service by (``rekuest.services[].name``); a ``SERVICE`` in
+``settings.REKUEST_SERVICE`` overrides it, e.g. for a second instance of one service.
 """
 
 from __future__ import annotations
@@ -44,9 +48,8 @@ logger = logging.getLogger(__name__)
 
 KINDS = ("CREATED", "UPDATED", "DELETED")
 
-#: 2: the manifest also lists ``structures``. A reader that does not find the key is looking at
-#: an older service and must not read its absence as "hosts nothing".
-MANIFEST_VERSION = 2
+#: 3: structures and signals only; a service's manifest lists no actions (2 still did).
+MANIFEST_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -114,48 +117,61 @@ class Signal:
 class Service:
     """One service's declaration towards its hub's rekuest: what it hosts, what it announces.
 
-    A service declares structures and signals, hub-wide facts about its data. It declares no
-    actions: work rekuest can ask for belongs to the service's :class:`~rekuest_service.HookAgent`.
+    Structures and signals, hub-wide facts about its data, each declared on its own. No actions.
     """
 
-    def __init__(self, name: str | None, *, identifier: str | None = None, description: str | None = None, key: Any = None) -> None:
+    def __init__(self, name: str, *, identifier: str | None = None, description: str | None = None, key: Any = None) -> None:
         self.name = name
         #: The key this service signs with; None (the rule) = this instance's key
         #: (``settings.INSTANCE``). Set when one process plays several services (tests).
         self.key = key
         #: The fakts identifier this instance signs as (``iss``) — what the coord's trust bundle
         #: lists its key under. Defaults to ``live.arkitekt.<name>``.
-        self.identifier = identifier or (f"live.arkitekt.{name}" if name else None)
+        self.identifier = identifier or f"live.arkitekt.{name}"
         self.description = description
-        #: The service's HookAgent, once one is declared (``HookAgent(service)``).
-        self.hook_agent: Any = None
         self._signals: dict[str, Signal] = {}
         self._structures: dict[str, Structure] = {}
-        self._warned_undeclared: set[tuple[str, str]] = set()
 
-    # --- declaring -----------------------------------------------------------------------
+    # --- hosting -------------------------------------------------------------------------
 
-    def signal(self, identifier: str, *, kinds: Iterable[str] = ("CREATED",), descriptors: Iterable[str] = (), description: str | None = None) -> Signal:
-        """Declare that this service emits ``kinds`` of ``identifier`` objects with these descriptor keys."""
-        kinds = tuple(kinds)
-        bad = [k for k in kinds if k not in KINDS]
-        if bad or not kinds:
-            raise ValueError(f"A signal kind is one of {KINDS}, not {bad or 'nothing'}")
-        declaration = SignalDeclaration(identifier, kinds, tuple(descriptors), description)
-        existing = self._signals.get(identifier)
+    def structure(
+        self,
+        model: Any,
+        identifier: str,
+        *,
+        descriptors: Iterable[Descriptor | str] = (),
+        describe: Callable[[Any], dict[str, Any]] | None = None,
+        label: str | None = None,
+        description: str | None = None,
+    ) -> Structure:
+        """Declare that this service hosts ``model`` as the structure ``identifier``.
+
+        ``descriptors`` lists the descriptors its objects carry (a bare key is an untyped
+        :class:`Descriptor`); ``describe(obj)`` computes them, as a flat ``{key: value}``. Said
+        here once: the manifest, :meth:`describe` and any signal declared for the structure
+        (:meth:`model_signal`) read this declaration.
+
+        Hosting announces nothing. Whether saves and deletes of the model are signalled is a
+        separate declaration.
+        """
+        check_identifier(identifier)
+        declared_descriptors = tuple(d if isinstance(d, Descriptor) else Descriptor(d) for d in descriptors)
+        if len({d.key for d in declared_descriptors}) != len(declared_descriptors):
+            raise ValueError(f"The structure {identifier!r} declares a descriptor key twice")
+        if label is None and hasattr(model, "_meta"):
+            label = str(model._meta.verbose_name).title()
+
+        declared = Structure(identifier, model, label, description, declared_descriptors, describe)
+        existing = self._structures.get(identifier)
         if existing is not None:
-            if existing.declaration != declaration:
-                raise ValueError(f"The signal {identifier!r} is declared twice, differently")
+            if existing.model is not model or existing.manifest() != declared.manifest():
+                raise ValueError(f"The structure {identifier!r} is declared twice, differently")
             return existing
-        handle = Signal(self, declaration)
-        self._signals[identifier] = handle
-        return handle
-
-    # --- what rekuest reads --------------------------------------------------------------
-
-    @property
-    def signals(self) -> dict[str, Signal]:
-        return dict(self._signals)
+        other = next((s for s in self._structures.values() if s.model is model), None)
+        if other is not None:
+            raise ValueError(f"{model.__name__} is already hosted as {other.identifier!r}; a model is one structure")
+        self._structures[identifier] = declared
+        return declared
 
     @property
     def structures(self) -> dict[str, Structure]:
@@ -176,126 +192,66 @@ class Service:
         declared = self.structure_for(obj)
         return declared.describe(obj) if declared is not None else {}
 
-    def manifest(self) -> dict[str, Any]:
-        return {
-            "service": self.service_name(),
-            "identifier": self.signing_identifier(),
-            "description": self.description,
-            # Not the service's: its HookAgent's, when it has one. One document, so rekuest reads both in one request.
-            "actions": self.hook_agent.manifest() if self.hook_agent is not None else [],
-            "signals": [s.declaration.manifest() for s in self._signals.values()],
-            "structures": [s.manifest() for s in self._structures.values()],
-            "manifest_version": MANIFEST_VERSION,
-        }
+    # --- announcing ----------------------------------------------------------------------
 
-    @property
-    def urls(self) -> list:
-        """The ``_rekuest/hook`` endpoints, bound to this service. Mount them in ``urls.py``."""
-        from rekuest_service.views import urlpatterns_for
+    def signal(self, identifier: str, *, kinds: Iterable[str] = ("CREATED",), descriptors: Iterable[str] = (), description: str | None = None) -> Signal:
+        """Declare that this service emits ``kinds`` of ``identifier`` objects with these descriptor keys.
 
-        return urlpatterns_for(self)
+        The handle's ``emit`` sends one. For a hosted model whose every save and delete is to be
+        announced, :meth:`model_signal` declares the signal and sends it by itself.
+        """
+        kinds = tuple(kinds)
+        bad = [k for k in kinds if k not in KINDS]
+        if bad or not kinds:
+            raise ValueError(f"A signal kind is one of {KINDS}, not {bad or 'nothing'}")
+        declaration = SignalDeclaration(identifier, kinds, tuple(descriptors), description)
+        existing = self._signals.get(identifier)
+        if existing is not None:
+            if existing.declaration != declaration:
+                raise ValueError(f"The signal {identifier!r} is declared twice, differently")
+            return existing
+        handle = Signal(self, declaration)
+        self._signals[identifier] = handle
+        return handle
 
-    # --- configuration and sending -------------------------------------------------------
-
-    def config(self) -> dict[str, Any] | None:
-        """``settings.REKUEST_HOOK`` when it can reach rekuest — its URL set and an instance key
-        configured (``settings.INSTANCE``) — else None, and everything is then a no-op."""
-        config = getattr(settings, "REKUEST_HOOK", None)
-        if not config or not config.get("REKUEST_URL") or self.signing_key() is None:
-            return None
-        return config
-
-    def signing_key(self) -> Any:
-        """What this service signs with: its own ``key``, else this instance's key."""
-        from rekuest_service.trust import instance_key
-
-        return self.key if self.key is not None else instance_key()
-
-    def signing_identifier(self) -> str | None:
-        """What this service signs as: ``settings.REKUEST_HOOK["IDENTIFIER"]``, the declared
-        identifier, or — for a service declared without a name (the default service) —
-        ``live.arkitekt.<the configured service name>``."""
-        config = getattr(settings, "REKUEST_HOOK", None) or {}
-        if config.get("IDENTIFIER") or self.identifier:
-            return config.get("IDENTIFIER") or self.identifier
-        name = self.service_name()
-        return f"live.arkitekt.{name}" if name else None
-
-    @staticmethod
-    def rekuest_identifier() -> str:
-        """Whom rekuest's requests must come from (``settings.REKUEST_HOOK["REKUEST_IDENTIFIER"]``)."""
-        config = getattr(settings, "REKUEST_HOOK", None) or {}
-        return config.get("REKUEST_IDENTIFIER") or "live.arkitekt.rekuest"
-
-    def service_name(self) -> str | None:
-        config = getattr(settings, "REKUEST_HOOK", None) or {}
-        return config.get("SERVICE") or self.name
-
-    def structure(
+    def model_signal(
         self,
-        model: Any,
-        identifier: str,
+        structure: Structure | Any,
         *,
-        organization: Callable[[Any], str | None] | None = None,
-        descriptors: Iterable[Descriptor | str] = (),
-        describe: Callable[[Any], dict[str, Any]] | None = None,
-        label: str | None = None,
-        description: str | None = None,
+        organization: Callable[[Any], str | None],
         kinds: Iterable[str] = KINDS,
         when: Callable[[Any, str], bool] | None = None,
-        signal_descriptors: Iterable[str] = (),
-        signal_description: str | None = None,
-    ) -> Structure:
-        """Declare that this service hosts ``model`` as the structure ``identifier``.
+        descriptors: Iterable[str] = (),
+        description: str | None = None,
+    ) -> Signal:
+        """Declare that every save and delete of a hosted structure's model is signalled.
 
-        ``descriptors`` lists the descriptors its objects carry (a bare key is an untyped
-        :class:`Descriptor`); ``describe(obj)`` computes them, as a flat ``{key: value}``. Both
-        are said here once: the signals, the manifest and :meth:`describe` read this declaration.
+        ``structure`` is one this service hosts (what :meth:`structure` returned, or its model).
+        No ``emit`` in the mutations: a save that creates the row is CREATED, any other save
+        UPDATED (so ``update_or_create`` upserts are told apart for free), a delete DELETED;
+        kinds not listed are not sent. ``organization(obj)`` names the organization (its slug);
+        ``when(obj, kind)`` may veto (privacy, half-written rows).
 
-        Every save and delete of ``model`` is signalled — no ``emit`` in the mutations. A save
-        that creates the row is CREATED, any other save UPDATED (so ``update_or_create`` upserts
-        are told apart for free), a delete DELETED; kinds not listed are not sent, and
-        ``kinds=()`` hosts the structure without ever signalling it. ``organization(obj)`` names
-        the organization (its slug) and is needed to signal; ``when(obj, kind)`` may veto
-        (privacy, half-written rows). ``signal_descriptors`` are further keys only a hand-made
-        ``emit`` carries: facts about the event, not the object.
+        The signal carries the structure's descriptors, computed by its ``describe``.
+        ``descriptors`` names further keys only a hand-made ``emit`` carries: facts about the
+        event, not the object.
 
         For saves, ``organization`` and ``describe`` run after the transaction commits, so they
         see everything the request wrote after the row itself — provided it wrote them in one
         transaction: outside one, "after the commit" is right after that save. A mutation whose
         descriptors depend on rows written after the object belongs in ``transaction.atomic``.
-        For deletes they run at delete time, while the row still exists. The provenance token is always read at save time. A
-        raising callable costs one warning: saving never fails because of a signal. Bulk writes
-        (``bulk_create``, ``update()``) send nothing — Django sends no ``post_save`` for them.
+        For deletes they run at delete time, while the row still exists. The provenance token is
+        always read at save time. A raising callable costs one warning: saving never fails
+        because of a signal. Bulk writes (``bulk_create``, ``update()``) send nothing — Django
+        sends no ``post_save`` for them.
         """
         from django.db.models.signals import post_delete, post_save
 
-        check_identifier(identifier)
-        kinds = tuple(kinds)
-        declared_descriptors = tuple(d if isinstance(d, Descriptor) else Descriptor(d) for d in descriptors)
-        if len({d.key for d in declared_descriptors}) != len(declared_descriptors):
-            raise ValueError(f"The structure {identifier!r} declares a descriptor key twice")
-        if kinds and organization is None:
-            raise ValueError(f"The structure {identifier!r} is signalled ({kinds}); say which organization an object belongs to")
-        if label is None and hasattr(model, "_meta"):
-            label = str(model._meta.verbose_name).title()
-
-        handle = None
-        if kinds:
-            keys = (*(d.key for d in declared_descriptors), *signal_descriptors)
-            handle = self.signal(identifier, kinds=kinds, descriptors=keys, description=signal_description)
-        declared = Structure(identifier, model, label, description, declared_descriptors, describe, organization, kinds, handle)
-        existing = self._structures.get(identifier)
-        if existing is not None:
-            if existing.model is not model or existing.manifest() != declared.manifest() or existing.kinds != kinds:
-                raise ValueError(f"The structure {identifier!r} is declared twice, differently")
-            return existing
-        other = next((s for s in self._structures.values() if s.model is model), None)
-        if other is not None:
-            raise ValueError(f"{model.__name__} is already hosted as {other.identifier!r}; a model is one structure")
-        self._structures[identifier] = declared
-        if handle is None:
-            return declared
+        hosted = structure if isinstance(structure, Structure) else self.structure_for(structure)
+        if hosted is None or self._structures.get(hosted.identifier) is not hosted:
+            raise ValueError(f"{structure!r} is not a structure this service hosts; declare it with service.structure first")
+        identifier, model, describe = hosted.identifier, hosted.model, hosted.describer
+        handle = self.signal(identifier, kinds=kinds, descriptors=(*hosted.keys, *descriptors), description=description)
 
         uid = f"rekuest_service:{self.name}:{identifier}"
 
@@ -308,25 +264,61 @@ class Service:
 
         post_save.connect(on_save, sender=model, weak=False, dispatch_uid=f"{uid}:save")
         post_delete.connect(on_delete, sender=model, weak=False, dispatch_uid=f"{uid}:delete")
-        return declared
+        return handle
 
-    def model_signal(
-        self,
-        model: Any,
-        identifier: str,
-        *,
-        organization: Callable[[Any], str | None],
-        kinds: Iterable[str] = KINDS,
-        descriptors: Callable[[Any], dict[str, Any]] | None = None,
-        descriptor_keys: Iterable[str] = (),
-        when: Callable[[Any, str], bool] | None = None,
-        description: str | None = None,
-    ) -> Signal:
-        """:meth:`structure`, as it was spelled before structures were declared; returns the signal handle."""
-        declared = self.structure(
-            model, identifier, organization=organization, kinds=kinds, descriptors=descriptor_keys, describe=descriptors, when=when, signal_description=description
-        )
-        return declared.signal
+    @property
+    def signals(self) -> dict[str, Signal]:
+        return dict(self._signals)
+
+    # --- what rekuest reads --------------------------------------------------------------
+
+    def manifest(self) -> dict[str, Any]:
+        return {
+            "service": self.service_name(),
+            "identifier": self.signing_identifier(),
+            "description": self.description,
+            "structures": [s.manifest() for s in self._structures.values()],
+            "signals": [s.declaration.manifest() for s in self._signals.values()],
+            "manifest_version": MANIFEST_VERSION,
+        }
+
+    @property
+    def urls(self) -> list:
+        """The ``_rekuest/service`` endpoint (the manifest), bound to this service. Mount it in ``urls.py``."""
+        from rekuest_service.views import urlpatterns_for
+
+        return urlpatterns_for(self)
+
+    # --- configuration and sending -------------------------------------------------------
+
+    def config(self) -> dict[str, Any] | None:
+        """``settings.REKUEST_SERVICE`` when it can reach rekuest — its URL set and an instance key
+        configured (``settings.INSTANCE``) — else None, and everything is then a no-op."""
+        config = getattr(settings, "REKUEST_SERVICE", None)
+        if not config or not config.get("REKUEST_URL") or self.signing_key() is None:
+            return None
+        return config
+
+    def signing_key(self) -> Any:
+        """What this service signs with: its own ``key``, else this instance's key."""
+        from rekuest_service.trust import instance_key
+
+        return self.key if self.key is not None else instance_key()
+
+    def signing_identifier(self) -> str:
+        """What this service signs as: ``settings.REKUEST_SERVICE["IDENTIFIER"]``, else the declared identifier."""
+        config = getattr(settings, "REKUEST_SERVICE", None) or {}
+        return config.get("IDENTIFIER") or self.identifier
+
+    @staticmethod
+    def rekuest_identifier() -> str:
+        """Whom rekuest's requests must come from (``settings.REKUEST_SERVICE["REKUEST_IDENTIFIER"]``)."""
+        config = getattr(settings, "REKUEST_SERVICE", None) or {}
+        return config.get("REKUEST_IDENTIFIER") or "live.arkitekt.rekuest"
+
+    def service_name(self) -> str:
+        config = getattr(settings, "REKUEST_SERVICE", None) or {}
+        return config.get("SERVICE") or self.name
 
     def _emit_for(self, handle: Signal, instance: Any, kind: str, organization: Callable, descriptors: Callable | None, when: Callable | None, *, lazy: bool) -> None:
         if kind not in handle.declaration.kinds or instance.pk is None or self.config() is None:
@@ -354,12 +346,9 @@ class Service:
         from rekuest_service.signals import current_provenance_token, enqueue
 
         config = self.config()
-        service = self.service_name()
-        if config is None or not service:
+        if config is None:
             return
-        if identifier not in self._signals and (identifier, kind) not in self._warned_undeclared:
-            self._warned_undeclared.add((identifier, kind))
-            logger.warning("Emitting %s %s without declaring it (service.signal); triggers cannot be checked against it", kind, identifier)
+        service = self.service_name()
         base = {
             "id": uuid.uuid4().hex,
             "kind": kind,
@@ -370,6 +359,7 @@ class Service:
             "occurred_at": datetime.datetime.now(datetime.UTC).isoformat(),
         }
         issuer = self.signing_identifier()
+        audience = self.rekuest_identifier()
         key = self.signing_key()
 
         def dispatch() -> None:
@@ -382,15 +372,9 @@ class Service:
             if not org:
                 logger.debug("Signal %s %s %s has no organization; not sent", kind, identifier, object)
                 return
-            enqueue(config, service, issuer, {**base, "organization": org, "descriptors": values or {}}, key)
+            enqueue(config, service, issuer, audience, {**base, "organization": org, "descriptors": values or {}}, key)
 
         transaction.on_commit(dispatch)
 
     def __repr__(self) -> str:
         return f"Service({self.name!r}, structures={list(self._structures)}, signals={list(self._signals)})"
-
-
-#: The service the module-level helpers (``rekuest_service.declare_signal``, ``emit``,
-#: ``rekuest_service.views.urlpatterns``) register on. Kept so existing callers work; a service
-#: declares itself with its own ``Service(...)``.
-default_service = Service(None)
