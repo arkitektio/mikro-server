@@ -1,4 +1,5 @@
-"""The HookAgent endpoint: rekuest POSTs Assigns here; results go back to rekuest's intake.
+"""A service's endpoints towards rekuest: its manifest, and its HookAgent's inbox — rekuest
+POSTs Assigns there; results go back to rekuest's intake.
 
 Mount a service's endpoints (they honour the ``MY_SCRIPT_NAME`` prefix, like kante's
 ``dynamicpath``)::
@@ -33,7 +34,8 @@ from django.urls import path
 from django.views.decorators.csrf import csrf_exempt
 
 from rekuest_service import trust
-from rekuest_service.service import Action, Service, default_service
+from rekuest_service.agent import Action
+from rekuest_service.service import Service, default_service
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ def _verified(service: Service, request: HttpRequest, config: dict[str, Any]) ->
 
 
 def manifest(service: Service, request: HttpRequest) -> HttpResponse:
-    """The actions this service offers (with their default schedules) and the signals it emits. Signed like an Assign."""
+    """What this service hosts and emits, and the actions of its HookAgent (with their default schedules). Signed like an Assign."""
     config = service.config()
     if config is None:
         return JsonResponse({"error": "rekuest_hook is not configured"}, status=503)
@@ -94,14 +96,18 @@ def hook(service: Service, request: HttpRequest) -> HttpResponse:
         return JsonResponse({"ignored": message.get("type")})
 
     task = str(message.get("task", ""))
-    target = service.actions.get(message.get("interface", ""))
+    target = service.hook_agent.actions.get(message.get("interface", "")) if service.hook_agent is not None else None
     if target is None:
-        _report(service, config, agent_id, {"type": "CRITICAL", "task": task, "error": f"No action {message.get('interface')!r} on this service"})
+        _report(service, config, agent_id, {"type": "CRITICAL", "task": task, "error": f"No action {message.get('interface')!r} on this service's agent"})
         return JsonResponse({"error": "Unknown interface"}, status=404)
 
     # A thread, not an event-loop task: it outlives the request under any server (WSGI
     # runserver tears its loop down with the response), and the function may block.
-    threading.Thread(target=_run, args=(service, config, agent_id, task, target, message.get("args") or {}), name=f"rekuest-hook-{task}", daemon=True).start()
+    args = dict(message.get("args") or {})
+    if target.takes_organization:
+        # Whose run this is: the organization of the agent rekuest assigned (every organization has its own).
+        args["organization"] = message.get("org") or None
+    threading.Thread(target=_run, args=(service, config, agent_id, task, target, args), name=f"rekuest-hook-{task}", daemon=True).start()
     return JsonResponse({"accepted": task}, status=202)
 
 

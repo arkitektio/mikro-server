@@ -6,6 +6,7 @@ import strawberry
 from strawberry import auto
 
 import kante
+from strawberry.scalars import JSON
 from kante.types import Info
 
 from datalayer.types import SparseStore
@@ -14,7 +15,7 @@ from core import filters, models, order, scalars
 from core.logic import file_link as file_link_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import apply_link_filters, OrgScoped
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped
 from core.logic import graph as graph_logic
 
 if TYPE_CHECKING:
@@ -85,6 +86,8 @@ class SparseAxisReference:
 )
 class SparseDataset(OrgScoped):
     """A sparse matrix dataset."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     id: auto
     name: auto

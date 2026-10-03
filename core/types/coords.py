@@ -27,6 +27,7 @@ from django.db.models import Q
 from strawberry import auto
 
 import kante
+from strawberry.scalars import JSON
 from kante.types import Info
 
 from kanne_server import scalars as kanne_scalars
@@ -38,7 +39,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
 from core.types.auth import ProvenanceEntry, User
-from core.types._shared import apply_link_filters, OrgScoped, OrgScopedOrNested
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped, OrgScopedOrNested
 
 
 if TYPE_CHECKING:
@@ -782,6 +783,8 @@ class LineageGraph:
 )
 class MeshCollection(OrgScoped):
     """An immutable, versioned collection of meshes, backed by Parquet stores rather than rows."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this mesh collection is filed in. Organisational only: it says where a user keeps this collection, never where the meshes sit in space -- that is `coordinateSystem` and the edges out of it"

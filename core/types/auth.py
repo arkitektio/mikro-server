@@ -18,15 +18,6 @@ if TYPE_CHECKING:
     from core.types.folder import Folder
 
 
-@strawberry.type(description="A generic key-value descriptor attached to an object. Clients use descriptors to read arbitrary structured metadata without a dedicated field.")
-class Descriptor:
-    """A generic key-value descriptor attached to an object. Clients use descriptors to read arbitrary structured metadata without a dedicated field."""
-
-    key: str
-    value: scalars.Any
-    description: str | None = None
-
-
 @kante.django_type(amodels.Organization, description="An organization (tenant). Every object in mikro is scoped to exactly one organization, and queries only ever see the current organization's data.")
 class Organization:
     """An organization (tenant); every object is scoped to exactly one organization."""

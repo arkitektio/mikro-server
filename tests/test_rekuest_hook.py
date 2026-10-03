@@ -1,4 +1,4 @@
-"""This service's periodic work as seen by the hub's rekuest (vendored ``rekuest_service``).
+"""This service's HookAgent as seen by the hub's rekuest (vendored ``rekuest_service``).
 
 The manifest rekuest reads, the signed requests both sides exchange (instance keys vouched for
 by the hub's trust bundle, no shared secret), and the ``reembed_stale`` action itself against
@@ -13,7 +13,7 @@ from django.urls import reverse
 from joserfc.jwk import OKPKey
 
 from rekuest_service import trust
-from mikro_server.service import service
+from mikro_server.service import agent, service
 
 REKUEST_KEY = OKPKey.generate_key("Ed25519")
 SERVICE_KEY = OKPKey.generate_key("Ed25519")
@@ -65,5 +65,10 @@ def test_forged_and_unconfigured_requests_are_refused(hooked, settings):
 
 @pytest.mark.django_db
 def test_reembed_stale_runs_one_bounded_pass():
-    result = service.actions["reembed_stale"].function()
-    assert isinstance(result["reembedded"], int)
+    result = agent.actions["reembed_stale"].function(organization="nobody")
+    assert result == {"reembedded": 0}
+
+
+def test_the_service_itself_offers_no_actions():
+    assert not hasattr(service, "action")
+    assert service.manifest()["actions"] == agent.manifest()

@@ -1,7 +1,7 @@
 """Module-level helpers over :data:`rekuest_service.service.default_service` — kept for existing callers.
 
-A service declares itself with its own :class:`rekuest_service.Service` (``@service.action``,
-``service.signal``); these register on the process-default service instead, which is what
+A service declares itself with its own :class:`rekuest_service.Service` (``service.structure``,
+``service.signal``) and :class:`rekuest_service.HookAgent` (``@agent.action``); these register on the process-default service instead, which is what
 ``rekuest_service.views.urlpatterns`` serves.
 """
 
@@ -10,7 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from rekuest_service.service import Action, SignalDeclaration, default_service
+from rekuest_service.agent import Action, default_agent
+from rekuest_service.service import SignalDeclaration, default_service
 
 __all__ = ["Action", "SignalDeclaration", "action", "declare_signal", "declared_signals", "registered"]
 
@@ -18,12 +19,12 @@ __all__ = ["Action", "SignalDeclaration", "action", "declare_signal", "declared_
 def action(
     interface: str, *, name: str | None = None, description: str | None = None, default_interval: int | None = None, default_cron: str | None = None
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Register a function as the action ``interface`` on the default service (see ``Service.action``)."""
-    return default_service.action(interface=interface, name=name or interface, description=description, default_interval=default_interval, default_cron=default_cron)
+    """Register a function as the action ``interface`` on the default service's agent (see ``HookAgent.action``)."""
+    return default_agent.action(interface=interface, name=name or interface, description=description, default_interval=default_interval, default_cron=default_cron)
 
 
 def registered() -> dict[str, Action]:
-    return default_service.actions
+    return default_agent.actions
 
 
 def declare_signal(identifier: str, *, kinds=("CREATED",), descriptors=(), description: str | None = None) -> SignalDeclaration:

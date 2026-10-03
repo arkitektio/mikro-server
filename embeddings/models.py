@@ -52,6 +52,9 @@ class EmbeddedDescriptionMixin(models.Model):
     """
 
     embedding_source_fields: ClassVar[tuple[str, ...]] = ("name", "description")
+    #: The lookup from a row to its organization, for a sweep of one organization's rows
+    #: (``embeddings.healer``). Override where the organization sits behind a relation.
+    embedding_organization_path: ClassVar[str] = "organization"
 
     #: The source text this instance was loaded with (set by ``from_db``), ``_UNKNOWN`` otherwise.
     _embedding_source_seen: object = _UNKNOWN

@@ -6,6 +6,7 @@ import strawberry
 from strawberry import auto
 
 import kante
+from strawberry.scalars import JSON
 from kante.types import Info
 from kanne_server import scalars as kanne_scalars
 
@@ -16,7 +17,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import apply_link_filters, OrgScoped
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped
 from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
@@ -74,6 +75,8 @@ class Column:
 )
 class TableDataset(OrgScoped):
     """A parquet-backed table dataset."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:

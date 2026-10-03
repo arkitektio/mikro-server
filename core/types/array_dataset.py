@@ -27,8 +27,9 @@ from core.types.coords import (
     Transformation,
 )
 import kante
+from strawberry.scalars import JSON
 from datalayer.types import MediaStore, ZarrStore
-from core.types._shared import apply_link_filters, build_prescoped_queryset, OrgScoped
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.type_gen import create_stats_type
 
 from kanne_server import scalars as kanne_scalars
@@ -124,6 +125,8 @@ def _default_scene_snapshot(info: Info, dataset) -> "SceneSnapshot | None":
 )
 class ArrayDataset(OrgScoped):
     """A multi-dimensional array dataset with named dimensions, described by its intrinsic pixel-grid coordinate system."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:
@@ -486,6 +489,8 @@ class OmeMetadata:
 class Scene(OrgScoped):
     """A composition of layers over a shared world coordinate system."""
 
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
     id: auto
     name: auto
     layers: List["Layer"] = kante.django_field(
@@ -560,6 +565,8 @@ class Slice:
 )
 class Lens(OrgScoped):
     """A selection over a dataset. Its shape and axes are derived from the dataset and the slices."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     id: auto
     dataset: ArrayDataset
@@ -668,6 +675,8 @@ class AnimationWaypoint:
 class Animation:
     """A named camera tour of a scene: the poses a viewer pans through, in order."""
 
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
     id: auto
     scene: "Scene" = kante.django_field(description="The scene this tour flies through")
     name: str
@@ -697,6 +706,8 @@ class Animation:
 )
 class SceneSnapshot:
     """A pre-rendered picture of a composition: every layer of the scene, blended."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     id: auto
     scene: "Scene" = kante.django_field(description="The composition this is a picture of")
@@ -1269,6 +1280,8 @@ class BoundingBox:
 )
 class AnnotationCollection:
     """A named set of human-drawn annotations, owning the space they are drawn in."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this annotation collection is filed in. Organisational only: distinct from `scene`, which says which drawing surface minted it, and from `coordinateSystem`, which says where its shapes are drawn"

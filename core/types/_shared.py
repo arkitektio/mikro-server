@@ -1,5 +1,6 @@
 import strawberry
 import strawberry_django
+from strawberry.scalars import JSON
 
 from core.scoping import scope_queryset
 
@@ -69,3 +70,17 @@ def apply_link_filters(queryset, filters_input, info) -> list:  # noqa: ANN001 -
     if filters_input is not strawberry.UNSET and filters_input is not None:
         queryset = strawberry_django.filters.apply(filters_input, queryset, info)
     return list(queryset)
+
+
+DESCRIPTORS_DESCRIPTION = (
+    "This object's descriptors, a flat mapping of key to value: the facts about it that an action's port can `require` and a trigger can test "
+    "(e.g. `@mikro/n_channels`). The keys are the ones mikro declares for this structure, and the values are the ones a signal about the object carries. "
+    "Empty for a structure that declares none"
+)
+
+
+def resolve_descriptors(root) -> JSON:  # noqa: ANN001 - the model instance behind any hosted type
+    """The descriptors of a hosted object, from its structure's declaration (``mikro_server.service``)."""
+    from mikro_server.service import service  # the declaration imports core.models
+
+    return service.describe(root)

@@ -11,12 +11,13 @@ import logging
 from typing import TYPE_CHECKING, Annotated, List, Optional, cast
 
 import kante
+from strawberry.scalars import JSON
 import strawberry
 from kante.types import Info
 from strawberry import auto
 
 from core import enums, filters, models, order
-from core.types._shared import apply_link_filters, build_prescoped_queryset, OrgScoped
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.types.auth import Organization, ProvenanceEntry, Task, User
 from datalayer.types import BigFileStore
 from embeddings.strawberry import Embedding, embedding_of
@@ -40,6 +41,8 @@ logger = logging.getLogger(__name__)
     description="A file in its original format (e.g. a microscopy vendor file), stored in a BigFileStore. Files are the raw bytes that array datasets, table datasets and mesh collections are converted from.",
 )
 class File:
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
     id: auto
     name: auto
     store: BigFileStore
@@ -85,6 +88,8 @@ class File:
     description="A folder is a collection of the things mikro stores. It mimics a folder in a file system and is the top-level container for organising data.",
 )
 class Folder(OrgScoped):
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
     id: auto
     files: List["File"]
     # The four containers `FileLink` calls "a thing holding data". Being in a folder says

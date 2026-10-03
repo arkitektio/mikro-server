@@ -8,7 +8,6 @@ Every public name is re-exported here so ``from core import types`` /
 from core.types._shared import build_prescoped_queryset
 from core.types.auth import (
     Client,
-    Descriptor,
     HistoryKind,
     Membership,
     ModelChange,
@@ -121,7 +120,6 @@ __all__ = [
     "Folder",
     "build_prescoped_queryset",
     "Client",
-    "Descriptor",
     "HistoryKind",
     "Membership",
     "ModelChange",

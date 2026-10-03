@@ -267,22 +267,6 @@ class Query:
     def animation(self, info: Info, id: ID) -> types.Animation:
         return get_for_org(models.Animation, info, id=id)
 
-    @field(permission_classes=[], description="Get generic key-value descriptors for an object identified by identifier and ID")
-    def describe(self, info: Info, identifier: str, id: strawberry.ID) -> list[types.Descriptor]:
-        descriptors = []
-
-        if identifier == "@mikro/file":
-            file = get_for_org(models.File, info, id=id)
-
-            if file.name:
-                descriptors.append(types.Descriptor(key="name", value=file.name))
-            if file.store:
-                descriptors.append(types.Descriptor(key="bucket", value=file.store.bucket))
-        else:
-            raise NotImplementedError(f"Describe not implemented for identifier {identifier}")
-
-        return descriptors
-
     @field(permission_classes=[], description="Get a single file by ID")
     def file(self, info: Info, id: ID) -> types.File:
         return get_for_org(models.File, info, id=id)

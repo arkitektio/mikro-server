@@ -8,15 +8,11 @@ from kante.types import Info
 from core.scoping import get_for_org
 
 
-#: Structure identifiers clients pass in, mapped to the model they name. These are *values*,
-#: not schema names, so no schema diff warns anyone when one changes -- which is why the
-#: retired spellings stay here as aliases rather than being deleted outright.
+#: The structures whose object permissions can be listed and granted, by the identifier clients
+#: pass in. The identifiers are the ones mikro declares it hosts (``mikro_server.service``).
 identifier_model_map = {
     "@mikro/arraydataset": models.ArrayDataset,
     "@mikro/folder": models.Folder,
-    # Back-compat alias: `Dataset` was renamed to `Folder`, but this identifier is a value
-    # clients pass in rather than a schema name, so no schema diff would warn them.
-    "@mikro/dataset": models.Folder,
     "@mikro/file": models.File,
 }
 

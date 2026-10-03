@@ -25,7 +25,7 @@ EXPECTED = {
     "@mikro/tabledataset": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/meshcollection": ["CREATED", "DELETED"],
     "@mikro/file": ["CREATED", "DELETED"],
-    "@mikro/dataset": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/folder": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/annotationcollection": ["CREATED", "DELETED"],
     "@mikro/animation": ["CREATED", "DELETED"],
     "@mikro/sparsedataset": ["CREATED", "DELETED"],
@@ -50,6 +50,17 @@ def _of(intake, identifier: str, count: int = 1) -> list[dict]:  # noqa: F811
 def test_the_manifest_declares_every_model_signal():
     declared = {s["identifier"]: s["kinds"] for s in service.manifest()["signals"]}
     assert declared == EXPECTED
+
+
+def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
+    hosted = {s["identifier"]: s for s in service.manifest()["structures"]}
+    # Everything signalled is hosted; a lens is hosted without ever being signalled.
+    assert set(hosted) == {*EXPECTED, "@mikro/lens"}
+    assert hosted["@mikro/folder"]["label"] == "Folder"
+    array_keys = [d["key"] for d in hosted["@mikro/arraydataset"]["descriptors"]]
+    assert array_keys == [d["key"] for d in hosted["@mikro/lens"]["descriptors"]]
+    assert {"key": "@mikro/n_channels", "type": "INT", "description": "Its total extent along its CHANNEL axes"} in hosted["@mikro/arraydataset"]["descriptors"]
+    assert hosted["@mikro/tabledataset"]["descriptors"] == []
 
 
 @pytest.mark.django_db(transaction=True)
