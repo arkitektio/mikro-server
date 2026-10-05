@@ -12,7 +12,7 @@ from kante.context import HttpContext
 
 from core import models
 from mikro_server.service import service
-from rekuest_service import trust
+from arkitekt_service import trust
 from tests import seed
 from tests.test_rekuest_signals import intake  # noqa: F401  the fixture
 from tests.test_scene_snapshot import _snapshot

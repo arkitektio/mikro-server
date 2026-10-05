@@ -1,4 +1,4 @@
-"""mikro announces new array datasets to the hub's rekuest (vendored ``rekuest_service``).
+"""mikro announces new array datasets to the hub's rekuest (``arkitekt_service.service``).
 
 The signal goes to a real HTTP server on a local port, standing in for rekuest's intake; what it
 receives is checked the way rekuest checks it: the V1 signature over ``signal:mikro``, the body,
@@ -19,7 +19,7 @@ from core.descriptors import array_descriptors
 from mikro_server.schema import schema
 from joserfc.jwk import OKPKey
 
-from rekuest_service import trust
+from arkitekt_service import trust
 from tests.test_task_provenance import attach_provenance, clear_provenance, make_provenance
 
 MIKRO_KEY = OKPKey.generate_key("Ed25519")

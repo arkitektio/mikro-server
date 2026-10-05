@@ -1,4 +1,4 @@
-"""mikro as a service of the hub: what exists here (vendored ``rekuest_service``).
+"""mikro as a service of the hub: what exists here (``arkitekt_service.service``).
 
 Two separate declarations, read by rekuest from the service's manifest (``*service.urls`` in
 ``urls.py``) and catalogued hub-wide:
@@ -17,7 +17,7 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 
 from core import models
 from core.descriptors import ARRAY_DESCRIPTORS, dataset_descriptors, lens_descriptors
-from rekuest_service import Descriptor, Service, organization_of
+from arkitekt_service.service import Descriptor, Service, organization_of
 
 service = Service("mikro", description="Microscopy data: datasets, their coordinate graph and files.")
 

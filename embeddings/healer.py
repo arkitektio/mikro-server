@@ -9,7 +9,7 @@ broadcasts -- a re-embed is not an edit.
 
 Nothing here loops. rekuest runs :func:`reembed_stale` as an upkeep job; every other service
 offers :func:`reembed_all` as the ``reembed_stale`` action of its hook agent
-(``<service>_server/hook_agent.py``, vendored ``rekuest_hook``), which an organization may
+(``<service>_server/hook_agent.py``, ``arkitekt_service.hook``), which an organization may
 schedule in rekuest — each run sweeping that organization's rows. Either way each
 pass is one bounded call, and any number of them may run at once.
 """

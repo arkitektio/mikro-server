@@ -15,7 +15,7 @@ carried only by a producer's ``Provides``.
 from collections import Counter
 from collections.abc import Sequence
 
-from rekuest_service import Descriptor
+from arkitekt_service.service import Descriptor
 
 KEY_BY_AXIS_TYPE = {
     "SPACE": "@mikro/n_space_axes",

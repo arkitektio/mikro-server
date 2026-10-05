@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from hub_contract import cli
+from arkitekt_service.contract import cli
 
 FACTS = Path(__file__).parent / "fixtures" / "hub_facts.yaml"
 
@@ -21,7 +21,7 @@ FACTS = Path(__file__).parent / "fixtures" / "hub_facts.yaml"
 @pytest.fixture(autouse=True)
 def this_image(monkeypatch: pytest.MonkeyPatch) -> None:
     """The contract is this service's."""
-    monkeypatch.setenv("HUB_CONTRACT", "mikro_server.contract")
+    monkeypatch.setenv("ARKITEKT_SERVICE", "mikro_server.contract")
 
 
 def test_it_says_what_it_needs_before_it_has_any_config(capsys: pytest.CaptureFixture[str]) -> None:

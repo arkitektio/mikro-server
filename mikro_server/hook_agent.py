@@ -1,4 +1,4 @@
-"""mikro's hook agent: the work the hub's rekuest can ask of this process (vendored ``rekuest_hook``).
+"""mikro's hook agent: the work the hub's rekuest can ask of this process (``arkitekt_service.hook``).
 
 An agent of its own, not a part of the service declared in ``mikro_server.service``: the service
 says what exists, the agent says what can be done. Each has its own entry in the hub's
@@ -12,7 +12,7 @@ Nothing here loops or waits: each run is one pass rekuest started.
 
 from core import models
 from embeddings.healer import reembed_all
-from rekuest_hook import HookAgent
+from arkitekt_service.hook import HookAgent
 
 agent = HookAgent("mikro", description="mikro's housekeeping: work on its own data.")
 

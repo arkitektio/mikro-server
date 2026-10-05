@@ -148,7 +148,7 @@ REKUEST_HOOK = (
     if conf.rekuest_hook
     else None
 )
-# This instance's key and the hub trust bundle (``rekuest_service.trust``): requests to and from
+# This instance's key and the hub trust bundle (``arkitekt_service.trust``): requests to and from
 # rekuest are signed with instance keys the coord vouches for — no shared secrets.
 INSTANCE = (
     {"PRIVATE_KEY": conf.instance.private_key, "TRUST_JWKS_URI": conf.instance.trust.jwks_uri, "TRUST_JWKS": conf.instance.trust.jwks}

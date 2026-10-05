@@ -1,4 +1,4 @@
-"""This process's hook agent as seen by the hub's rekuest (vendored ``rekuest_hook``).
+"""This process's hook agent as seen by the hub's rekuest (``arkitekt_service.hook``).
 
 The manifest rekuest reads, the signed requests both sides exchange (instance keys vouched for
 by the hub's trust bundle, no shared secret), and the ``reembed_stale`` action itself against
@@ -12,7 +12,7 @@ from django.test import Client as HttpClient
 from django.urls import reverse
 from joserfc.jwk import OKPKey
 
-from rekuest_service import trust
+from arkitekt_service import trust
 from mikro_server.hook_agent import agent
 from mikro_server.service import service
 
