@@ -15,6 +15,7 @@ class CoreConfig(AppConfig):
         stops the service before it serves a wrong search.
         """
         import embeddings.checks  # noqa: F401
+        import mikro_server.checks  # noqa: F401
 
         # The receivers behind the subscriptions (files, annotations, layers, ...): a receiver is
         # only connected once the module that defines it has been imported.

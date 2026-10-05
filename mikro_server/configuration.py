@@ -7,10 +7,14 @@ then the YAML file (the mount's ``config.yaml`` by default; override with
 with a ``ValidationError`` if they are not supplied via config or environment.
 """
 
+import dataclasses
 import os
+import typing
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ByteSize, ConfigDict, Field
+import yaml
+from pydantic import AliasChoices, BaseModel, ByteSize, ConfigDict, Field
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -205,3 +209,84 @@ class Settings(BaseSettings):
             YamlConfigSettingsSource(settings_cls, yaml_file=path),
             file_secret_settings,
         )
+
+
+@dataclasses.dataclass(frozen=True)
+class Unread:
+    """What a config file says that this release does not read as written."""
+
+    unknown: list[str]
+    """Keys no setting claims, as dotted paths: a misspelling, or a key of another release."""
+    renamed: list[tuple[str, str]]
+    """Keys still read under a former name, with the name they have now."""
+
+    def __bool__(self) -> bool:
+        """Whether there is anything to say."""
+        return bool(self.unknown or self.renamed)
+
+
+def config_path() -> str:
+    """The YAML file the settings are read from."""
+    return os.environ.get("ARKITEKT_CONFIG_FILE", _DEFAULT_CONFIG)
+
+
+def _models_of(annotation: object) -> list[type[BaseModel]]:
+    """This module's settings models an annotation holds: itself, or inside ``Optional[...]`` / ``list[...]``.
+
+    Only this module's: a block another package defines (``authentikate``) is that package's to
+    judge, and its aliases are spellings, not former names.
+    """
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return [annotation] if annotation.__module__ == __name__ else []
+    return [model for inner in typing.get_args(annotation) for model in _models_of(inner)]
+
+
+def _names(model: type[BaseModel]) -> dict[str, str]:
+    """Every key ``model`` reads, to the field's own name: its fields and their former names."""
+    names: dict[str, str] = {}
+    for name, field in model.model_fields.items():
+        names[name] = name
+        alias = field.validation_alias
+        for former in alias.choices if isinstance(alias, AliasChoices) else [alias]:
+            if isinstance(former, str):
+                names[former] = name
+    return names
+
+
+def _unread(model: type[BaseModel], written: Mapping[str, object], path: str, into: Unread) -> None:
+    # A block that passes its extras on (a connection's driver options) and the top level,
+    # which every service of a hub shares the shape of, are open: nothing there is unknown.
+    closed = model.model_config.get("extra") != "allow" and not issubclass(model, BaseSettings)
+    names = _names(model)
+    for key, value in written.items():
+        where = f"{path}{key}"
+        name = names.get(key)
+        if name is None:
+            if closed:
+                into.unknown.append(where)
+            continue
+        if name != key:
+            into.renamed.append((where, f"{path}{name}"))
+        for inner in _models_of(model.model_fields[name].annotation):
+            for index, item in enumerate(value) if isinstance(value, list) else [(None, value)]:
+                if isinstance(item, dict):
+                    _unread(inner, item, f"{where}." if index is None else f"{where}[{index}].", into)
+
+
+def unread(written: Mapping[str, object] | None = None) -> Unread:
+    """What the config file (or ``written``) says that this release does not read as written.
+
+    A setting nobody reads is silent by nature: the service starts, with the default. This is
+    what makes it loud — a system check at boot, and ``validate_settings --strict``, which an
+    installer runs against a release before it moves a hub to it.
+    """
+    if written is None:
+        try:
+            with open(config_path(), encoding="utf-8") as file:
+                loaded: object = yaml.safe_load(file)
+        except OSError:
+            loaded = None
+        written = loaded if isinstance(loaded, dict) else {}
+    found = Unread(unknown=[], renamed=[])
+    _unread(Settings, written, "", found)
+    return found

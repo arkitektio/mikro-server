@@ -84,6 +84,21 @@ python manage.py validate_settings
 - Valid config → prints a green `Configuration valid` tree and exits `0`.
 - Invalid config → prints each offending field and its error, and exits `1`.
 
+A valid config can still say things this release does not read: a misspelt key, or a key of
+another release, is not an error to the loader — the service starts, with the default. Those are
+listed under the tree, and warned about at every boot (system checks `mikro.W001`, a key no
+setting claims, and `mikro.W002`, a key still read under a former name). To ask for a verdict:
+
+```bash
+python manage.py validate_settings --strict
+```
+
+It exits `78` when the config sets a key this release does not read. A key read under a former
+name is said, not failed, since a release may rename a key within its major; an invalid config
+exits `1`, as it does for every command. This is what an installer asks of a release before it moves a hub to it. It looks at the
+service's own blocks; a block that passes options on (`postgres`, `redis`, `datalayer`),
+`authentikate`, and top-level blocks other services read are left alone.
+
 It honors `ARKITEKT_CONFIG_FILE`, so you can validate an alternate file the same way.
 (Note: because Django loads settings on startup, a fundamentally invalid config also
 surfaces the same validation errors when running *any* `manage.py` command.)

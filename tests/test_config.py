@@ -3,7 +3,7 @@
 Standalone — needs no database; run with ``uv run pytest tests/test_config.py``.
 """
 
-from mikro_server.configuration import Settings
+from mikro_server.configuration import Settings, unread
 
 
 def test_config_yaml_validates():
@@ -32,3 +32,15 @@ def test_embeddings_block_defaults_and_override(monkeypatch):
     s = Settings()
     assert s.embeddings.distance_threshold == 0.42
     assert s.embeddings.model_path == "/opt/models/embeddings"
+
+
+def test_the_services_own_config_is_read_as_written():
+    """Nothing in the repo's config.yaml goes unread."""
+    assert not unread()
+
+
+def test_an_unknown_key_in_a_block_of_this_service_is_reported():
+    """A key no setting claims is said, where the block is this service's and closed."""
+    found = unread({"django": {"secret_key": "s", "debgu": True}, "postgres": {"sslmode": "require"}, "somebody_elses": {"x": 1}})
+    assert found.unknown == ["django.debgu"]
+    assert found.renamed == []

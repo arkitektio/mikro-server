@@ -6,20 +6,29 @@ configuration as a tree with secrets redacted. Exits non-zero with a
 field-by-field report when the configuration is invalid.
 
     python manage.py validate_settings
+    python manage.py validate_settings --strict
+
+``--strict`` is what an installer asks before it moves a hub to this release: it exits
+``78`` (``EX_CONFIG``) when the configuration sets a key this release does not read — the one
+mistake nothing else reports. A key still read under a former name is said and is no failure:
+a release may rename a key within its major. Any other non-zero exit is not that answer: an
+invalid configuration fails every command at start, this one included, with ``1``.
 
 Honors ``ARKITEKT_CONFIG_FILE`` to point at an alternate YAML file.
 """
 
 from __future__ import annotations
 
-import os
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from pydantic import ValidationError
 from rich.console import Console
 from rich.tree import Tree
 
-from mikro_server.configuration import Settings, _DEFAULT_CONFIG
+from mikro_server.configuration import Settings, config_path, unread
+
+# ``--strict``'s no: the configuration sets a key this release does not read (sysexits' EX_CONFIG).
+NOT_READ = 78
 
 # Leaf keys whose values are secrets and must never be printed in the clear.
 SECRET_HINTS = ("password", "secret_key", "secret", "private_key", "access_key")
@@ -68,9 +77,13 @@ class Command(BaseCommand):
     # independently of config); skip them so only configuration is exercised.
     requires_system_checks: list = []
 
-    def handle(self, *args, **options) -> None:
+    def add_arguments(self, parser: CommandParser) -> None:
+        """``--strict``: a key that is not read as written fails the command."""
+        parser.add_argument("--strict", action="store_true", help="Also fail on keys this release does not read as written.")
+
+    def handle(self, *args: object, **options: object) -> None:
         console = Console()
-        path = os.environ.get("ARKITEKT_CONFIG_FILE", _DEFAULT_CONFIG)
+        path = config_path()
         try:
             settings = Settings()
         except ValidationError as exc:
@@ -83,3 +96,12 @@ class Command(BaseCommand):
         tree = Tree(f"[bold green]Configuration valid[/bold green] (source: {path})")
         _add(tree, settings.model_dump())
         console.print(tree)
+
+        found = unread()
+        for key in found.unknown:
+            console.print(f"[yellow]not read[/yellow]: {key}")
+        for key, now in found.renamed:
+            console.print(f"[yellow]renamed[/yellow]: {key} is now {now}")
+        if found.unknown and options["strict"]:
+            console.print(f"[bold red]{path} sets keys this release does not read[/bold red]")
+            raise SystemExit(NOT_READ)
