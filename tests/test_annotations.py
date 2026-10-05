@@ -633,3 +633,121 @@ async def test_annotation_lists_are_org_scoped(db, authenticated_context: HttpCo
     assert not theirs.errors, theirs.errors
     assert theirs.data["annotations"] == []
     assert theirs.data["annotationCollections"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_every_change_is_announced_to_the_collections_room(db, authenticated_context: HttpContext, monkeypatch):
+    """Draw, edit, bulk-draw and delete each tell the collection's subscribers -- the bulk as one message."""
+    from core import channels
+
+    heard: list[tuple[dict, list[str]]] = []
+    monkeypatch.setattr(
+        channels.annotation_channel,
+        "broadcast",
+        lambda message, groups=None: heard.append((message.model_dump(exclude_none=True), list(groups or []))),
+    )
+
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "Canvas")
+
+    result = await schema.execute(
+        CREATE,
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.id), "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}},
+    )
+    assert not result.errors, result.errors
+    drawn = result.data["createAnnotation"]
+    collection_id = int(drawn["collection"]["id"])
+    room = [channels.collection_annotations_room(collection_id)]
+    assert heard == [({"create": drawn["id"]}, room)]
+
+    heard.clear()
+    update = "mutation U($input: UpdateAnnotationInput!) { updateAnnotation(input: $input) { id } }"
+    result = await schema.execute(update, context_value=ctx, variable_values={"input": {"id": drawn["id"], "name": "Renamed"}})
+    assert not result.errors, result.errors
+    assert heard == [({"update": drawn["id"]}, room)]
+
+    heard.clear()
+    bulk = "mutation B($input: CreateAnnotationsInput!) { createAnnotations(input: $input) { id } }"
+    specs = [{"kind": "POINT", "vectors": [[float(i), 0.0, 0.0]]} for i in range(3)]
+    result = await schema.execute(bulk, context_value=ctx, variable_values={"input": {"collection": str(collection_id), "annotations": specs}})
+    assert not result.errors, result.errors
+    assert heard == [({"create_many": [row["id"] for row in result.data["createAnnotations"]]}, room)], "bulk_create fires no post_save: one explicit message for the batch"
+
+    heard.clear()
+    delete = "mutation D($input: DeleteAnnotationInput!) { deleteAnnotation(input: $input) }"
+    result = await schema.execute(delete, context_value=ctx, variable_values={"input": {"id": drawn["id"]}})
+    assert not result.errors, result.errors
+    assert heard == [({"delete": drawn["id"]}, room)]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_collections_subscription_relays_its_changes_and_is_org_scoped(db, authenticated_context: HttpContext, other_org_context: HttpContext, monkeypatch):
+    """Each relayed id comes back as the event it stands for; another organization cannot listen in."""
+    from types import SimpleNamespace
+
+    from django.core.exceptions import PermissionDenied
+
+    from core import channels, subscriptions
+
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "Canvas")
+    result = await schema.execute(
+        CREATE,
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.id), "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}},
+    )
+    assert not result.errors, result.errors
+    drawn = result.data["createAnnotation"]
+    collection_id = drawn["collection"]["id"]
+
+    gone = "00000000-0000-0000-0000-000000000000"
+    relayed = [
+        channels.AnnotationSignal(create=drawn["id"]),
+        channels.AnnotationSignal(create=gone),  # drawn and deleted in one breath: skipped
+        channels.AnnotationSignal(create_many=[drawn["id"], gone]),
+        channels.AnnotationSignal(update=drawn["id"]),
+        channels.AnnotationSignal(delete=gone),
+    ]
+    listened: list[list[str]] = []
+
+    async def listen(info, rooms):
+        listened.append(list(rooms))
+        for signal in relayed:
+            yield signal
+
+    monkeypatch.setattr(channels.annotation_channel, "listen", listen)
+
+    events = [event async for event in subscriptions.annotations(None, SimpleNamespace(context=ctx), collection=collection_id)]
+    assert listened == [[channels.collection_annotations_room(collection_id)]]
+    assert [(str(e.create.id) if e.create else None, str(e.update.id) if e.update else None, e.delete) for e in events] == [
+        (drawn["id"], None, None),
+        (drawn["id"], None, None),
+        (None, drawn["id"], None),
+        (None, None, gone),
+    ]
+
+    with pytest.raises(PermissionDenied):
+        async for _ in subscriptions.annotations(None, SimpleNamespace(context=other_org_context), collection=collection_id):
+            pass
+
+    # Through the schema, with the client's own selection: the fields of a relayed row
+    # must resolve inside the subscription's async context, not only its id.
+    watch = """
+    subscription Watch($collection: ID!) {
+      annotations(collection: $collection) {
+        create { id name kind vectors strokeColor fillColor strokeWidth filled coordinates { name value } }
+        update { id name }
+        delete
+      }
+    }
+    """
+    stream = await schema.subscribe(watch, variable_values={"collection": collection_id}, context_value=ctx)
+    payloads = [payload async for payload in stream]
+    assert not any(payload.errors for payload in payloads), [payload.errors for payload in payloads]
+    first = payloads[0].data["annotations"]
+    assert first["create"]["id"] == drawn["id"] and first["create"]["vectors"] == [[1.0, 2.0, 3.0]]
+    assert first["create"]["strokeColor"] == [255, 255, 255, 255] and first["create"]["coordinates"] == []
+    assert payloads[-1].data["annotations"] == {"create": None, "update": None, "delete": gone}

@@ -16,7 +16,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from simple_history.utils import bulk_create_with_history
 
 import kante
-from core import enums, models, scalars, types
+from core import channels, enums, models, scalars, types
 from core.creation import CreationContext
 from core.input_unions import camel_field, prose_errors
 from core.inputs.coords import AxisInputModel, CoordinateInput, CoordinateInputModel
@@ -397,7 +397,14 @@ def create_annotations(
         )
 
     with transaction.atomic():
-        return bulk_create_with_history(rows, models.Annotation)
+        created = bulk_create_with_history(rows, models.Annotation)
+        # bulk_create fires no post_save, so the collection's subscribers are told here:
+        # one message for the whole batch (see AnnotationSignal.create_many).
+        channels.announce_annotations(
+            channels.AnnotationSignal(create_many=[str(annotation.pk) for annotation in created]),
+            collection.pk,
+        )
+        return created
 
 
 class DeleteAnnotationInputModel(BaseModel):

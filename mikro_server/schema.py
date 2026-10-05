@@ -753,6 +753,23 @@ class ChatRoomMessage:
 @strawberry.type
 class Subscription:
     files = subscription(resolver=subscriptions.files, description="Subscribe to real-time file updates")
+    annotations = subscription(
+        resolver=subscriptions.annotations,
+        description="Follow one annotation collection: an event for every annotation drawn into it, edited or deleted. Carries changes only -- read the collection's current annotations with the `annotations` query first",
+    )
+    layers = subscription(
+        resolver=subscriptions.layers,
+        description="Follow one scene: an event for every layer added to it, edited or removed. Carries changes only -- read the scene's current layers first",
+    )
+    array_datasets = subscription(
+        resolver=subscriptions.array_datasets,
+        description="Follow the array datasets of one folder, or of the whole organization when no folder is given: an event for every one created, edited or deleted",
+    )
+    table_datasets = subscription(
+        resolver=subscriptions.table_datasets,
+        description="Follow the table datasets of one folder, or of the whole organization when no folder is given: an event for every one created, edited or deleted",
+    )
+    scenes = subscription(resolver=subscriptions.scenes, description="Follow the organization's scenes: an event for every one created, edited or deleted")
 
 
 class Schema(QuietErrorsSchema, kante.Schema):
