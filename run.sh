@@ -1,18 +1,10 @@
 #!/bin/bash
-# Abort on the first failing step. Without this the boot ran `ensureadmin` -- a
-# management command that is not installed -- on every start, printed the error,
-# and carried on to serve traffic. A boot script that continues past a failed
-# migration is a boot script that cannot tell you the deploy is broken: the
-# embedding system checks, for one, refuse `migrate` when a vector column's width
-# is not EMBEDDINGS.DIMENSIONS, and that refusal must stop the boot.
+# Serve, and nothing else.
+#
+# The database is brought to this release before the service is started, by whoever starts
+# it: `python -m arkitekt_service migrate` waits for the database, applies the migrations
+# and runs the service's setup. Konstruktor runs it once per build — before a hub's first
+# start and before an update's — so a container that merely restarts does none of it.
+# `run-debug.sh` does both in one go, for development.
 set -euo pipefail
-echo "=> Waiting for DB to be online"
-python manage.py wait_for_database -s 2
-
-echo "=> Performing database migrations..."
-python manage.py migrate
-
-
-# Start the first process
-echo "=> Starting Server"
-daphne -b 0.0.0.0 -p 80 --websocket_timeout -1 mikro_server.asgi:application 
+exec daphne -b 0.0.0.0 -p 80 --websocket_timeout -1 mikro_server.asgi:application

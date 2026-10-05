@@ -36,7 +36,7 @@ dependencies = [
     "pint>=0.25.3",
     "pgvector>=0.5",
     "model2vec>=0.9",
-    "arkitekt-service>=1.0.0",
+    "arkitekt-service>=1.1.0",
 ]
 
 [dependency-groups]
