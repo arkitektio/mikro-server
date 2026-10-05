@@ -30,7 +30,8 @@ ENV PYTHONUNBUFFERED=1 \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH" \
     HF_HUB_OFFLINE=1 \
-    EMBEDDINGS__MODEL_PATH=/opt/models/embeddings
+    EMBEDDINGS__MODEL_PATH=/opt/models/embeddings \
+    HUB_CONTRACT=mikro_server.contract
 WORKDIR /workspace
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/models /opt/models

@@ -1,0 +1,171 @@
+facts: 1
+me:
+  name: mikro
+  path: mikro
+  url: http://mikro:80/mikro
+  identifier: live.arkitekt.mikro
+  secret_key: 4bod-pba%l=&u6i=j@^xy^f6c&=zt(6%sr45rb_n@m()w5mfws
+  debug: false
+  allowed_hosts:
+  - '*'
+  admin:
+    email: null
+    password: qbcqg2pv9ru77bt3nu8m7qvj5m8busr3stf1p3ha
+    username: admin
+hub:
+  origins:
+  - http://localhost
+  - https://localhost
+  auth:
+    audience: '*'
+    issuers:
+    - iss: ''
+      jwks_uri: https:///.well-known/jwks.json
+      kind: jwks_uri
+    static_tokens: {}
+    provenance:
+      audience: '*'
+      issuers:
+      - iss: rekuest
+        jwks:
+          keys:
+          - alg: Ed25519
+            crv: Ed25519
+            kid: _PHX5YzX6GkR-ZgzFRlJrA9IIoWsnxWvAWRIIpsu7uc
+            kty: OKP
+            service: live.arkitekt.rekuest
+            use: sig
+            x: VJ01BVCAvzSPwSE2DOPFImCG1N6-13Jq4r6Gk6KYunU
+        kind: jwks_dict
+database:
+  host: db
+  port: 5432
+  name: mikro
+  username: small-leaf
+  password: imb9eznystshdh3xstzlzb9oyimo8y9li0l5j1u5
+redis:
+  host: redis
+  port: 6379
+storage:
+  role_arn: arn:aws:iam::000000000000:role/datalayer
+  session_duration_seconds: 3600
+  access_key: 2vcb5kvrhctt617rv77x0jt6bw7x1d9dld1zekam
+  secret_key: piwuryams5635i2vm0rpmnjw2anrf91cj5csywru
+  host: rustfs
+  port: 9000
+  protocol: http
+  region: us-east-1
+  buckets:
+    media: mikromedia
+    zarr: mikrozarr
+    parquet: mikroparquet
+    bigfile: mikrobigfile
+    fabriks: mikrofabriks
+    konnektion: mikrokonnektion
+instance:
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEIBKorXGFgrqQYSxWV13Ka9bBze8lwYko3SB9DLI2p7lw
+    -----END PRIVATE KEY-----
+  trust:
+    jwks:
+      keys:
+      - alg: Ed25519
+        crv: Ed25519
+        kid: _PHX5YzX6GkR-ZgzFRlJrA9IIoWsnxWvAWRIIpsu7uc
+        kty: OKP
+        service: live.arkitekt.rekuest
+        use: sig
+        x: VJ01BVCAvzSPwSE2DOPFImCG1N6-13Jq4r6Gk6KYunU
+      - alg: Ed25519
+        crv: Ed25519
+        kid: hOv-FiqJvwIhMrHtVMdRAdl6zT91c1-FnqmrQzrxoDc
+        kty: OKP
+        service: live.arkitekt.kabinet
+        use: sig
+        x: 1UBA1iWeXjpETpzM5WJ9-qVAv4pHhEuN4jrwJVH0i_Y
+      - alg: Ed25519
+        crv: Ed25519
+        kid: SilC817YleZLQo3zCaNlqr9hEWV73dlRYWuyDrx7mgI
+        kty: OKP
+        service: live.arkitekt.mikro
+        use: sig
+        x: tfXw4SgXcxymSIprEebyFu0ZXLqQ_ls6DDjv1fch_e0
+      - alg: Ed25519
+        crv: Ed25519
+        kid: r0l-j10Lc05xSARrzomso4gdkxA9agHaDVNnk3x7OL8
+        kty: OKP
+        service: live.arkitekt.fluss
+        use: sig
+        x: GMg6wwou8h-OCjleNcqZYY5O36smv-4eq6E0LMPr1zk
+      - alg: Ed25519
+        crv: Ed25519
+        kid: 8RJtnOWQYzE8M7QMs3a4HsPxy8r-TI45fIaNBZz0U2k
+        kty: OKP
+        service: live.arkitekt.elektro
+        use: sig
+        x: Ic9Oxi_zEgP56HHggcBAs5ppc8SxPHVmlSfq8AE-W7Y
+      - alg: Ed25519
+        crv: Ed25519
+        kid: cgoRFLSDl09SccpQY3ZPlHoAJCgWrb2gTOHDnBCqiwQ
+        kty: OKP
+        service: live.arkitekt.alpaka
+        use: sig
+        x: E0nctN-QJwymF84zw2tHeaFEDaXnfYkIERVuReZIbiw
+      - alg: Ed25519
+        crv: Ed25519
+        kid: 9dvokNV2EWlgtMEslnblqGadI-zjFWJxPIQxOBvCS9g
+        kty: OKP
+        service: live.arkitekt.kraph
+        use: sig
+        x: T342vK7Ziq86_vcwNATUDdqmM9jAN_GxhXqh9mTfrIU
+      - alg: Ed25519
+        crv: Ed25519
+        kid: 6Wgco3ZoZF7UHBF-YW1fevyRFpK3lS9dosMVSQM3QIg
+        kty: OKP
+        service: live.arkitekt.lovekit
+        use: sig
+        x: vWK0XG153wJair3_kWQYUmy3KL1A6Q_cvd9vB_XC7K8
+peers:
+  rekuest:
+    identifier: live.arkitekt.rekuest
+    url: http://rekuest:80/rekuest
+    offers:
+      agent: http://rekuest-takt:8080/rekuest
+  kabinet:
+    identifier: live.arkitekt.kabinet
+    url: http://kabinet:80/kabinet
+    offers:
+      rekuest_hook: http://kabinet:80/kabinet/_rekuest/hook
+      rekuest_service: http://kabinet:80/kabinet/_rekuest/service
+  fluss:
+    identifier: live.arkitekt.fluss
+    url: http://fluss:80/fluss
+    offers:
+      rekuest_hook: http://fluss:80/fluss/_rekuest/hook
+      rekuest_service: http://fluss:80/fluss/_rekuest/service
+  elektro:
+    identifier: live.arkitekt.elektro
+    url: http://elektro:80/elektro
+    offers:
+      rekuest_hook: http://elektro:80/elektro/_rekuest/hook
+      rekuest_service: http://elektro:80/elektro/_rekuest/service
+  alpaka:
+    identifier: live.arkitekt.alpaka
+    url: http://alpaka:80/alpaka
+    offers:
+      rekuest_hook: http://alpaka:80/alpaka/_rekuest/hook
+      rekuest_service: http://alpaka:80/alpaka/_rekuest/service
+  kraph:
+    identifier: live.arkitekt.kraph
+    url: http://kraph:80/kraph
+    offers: {}
+  lovekit:
+    identifier: live.arkitekt.lovekit
+    url: http://lovekit:80/lovekit
+    offers: {}
+  livekit:
+    url: http://livekit:7880
+    settings:
+      api_key: APIog06ozbtwstu
+      api_secret: 16s02foyxkvf0xxcl4h9whhrii8fyldqqf8496bf9qfm0upm
