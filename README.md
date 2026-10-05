@@ -1,43 +1,110 @@
-# Mikro-Server (Next)
+# mikro-server
 
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/arkitektio/mikro-server-next/)
-![Maintainer](https://img.shields.io/badge/maintainer-jhnnsrs-blue)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+The microscopy service of an [Arkitekt](https://arkitekt.live) hub. It stores images,
+tables, sparse matrices and files, the metadata that describes them, and the graph that
+says where each one sits in space. The bytes live in an S3 object store and the rows that
+describe them in Postgres. It is registered as `live.arkitekt.mikro` and has a python
+client, [`mikro`](https://github.com/arkitektio/mikro).
 
+## What it stores
 
-Mikro is the Arkitekt go to solution for all things microscopy. It provides
-the datamodels and services for managing microscopy data, and connects a binary
-storage system built around S3 object store (in a standard deploylement powered [Minio](https://min.io/)), with a relational
-database [Postgres](https://postgressql.org) for metadata storage.
+| Concept | What it is |
+| --- | --- |
+| `ArrayDataset`, `DataArray`, `Lens` | An n-dimensional array in a zarr store (an image, a label mask), its pyramid levels, and an immutable selection over it. |
+| `TableDataset`, `SparseDataset` | Rows in a parquet store, and a sparse matrix. |
+| `CoordinateSystem`, `Transformation`, `CoordinateAnchor` | A space is a node and a map between two spaces is an edge: pixel size, stage position, a registration. Data lives in exactly one space, and an anchor pins outside facts onto it. |
+| `Scene`, `Layer`, `SceneSnapshot`, `Animation` | A view over a space. Each layer reads one piece of data as an image, labels, a volume, points, tracks, a mesh and so on. A scene names data by id and owns none of it. |
+| `AnnotationCollection`, `MeshCollection`, `NetworkCollection` | Hand-drawn marks, meshes and networks, each in a space of its own. |
+| `File`, `Folder` | Uploaded files and the folders data is put in. |
+| `LightPath`, `OmeMetadata`, `ChannelLabel` | How an image was acquired. |
 
-As an API first system, Mikro exposes a GraphQL API for all of its operations that
-can be used by any client. It also provides a web based admin UI for interacting with
-the system through a browser.
+Everything belongs to an organization, and every read is scoped to the caller's. Folders,
+array datasets and table datasets are embedded for semantic search.
 
-> [!NOTE]  
-> What you are currently looking at is the next version of Mikro. Mikro is currently under development and not ready for production. If you are looking for the current version of Mikro, you can find it [here](https://github.com/arkitektio/mikro-server).
+## API
 
+GraphQL is served at `/graphql` (HTTP and WebSocket), with the SDL at `/schema`.
 
-Check out the [documentation](https://arkitekt.live/docs/services/next/mikro) for more information.
+| Operations | What they do |
+| --- | --- |
+| `request…Upload`, `finish…Upload`, `request…Access` (media, bigfile, zarr, parquet, sparse, fabriks, konnektion) | Hand out credentials to write to or read from the object store. Uploads are limited by role and by quota. |
+| `createArrayDataset`, `createTableDataset`, `createSparseDataset`, `createLens`, `fromFileLike` | Register uploaded data. |
+| `createCoordinateSystem`, `createTransformation`, `createCoordinateAnchor` | Build the coordinate graph. |
+| `createScene`, `create{Rgb,Intensity,Label,Volume,Phasor,Vector,Point,Track,Mesh,Network,Annotation}Layer` | Lay data out for viewing. |
+| `createAnnotation`, `createMeshCollection`, `createNetworkCollection`, `linkFile` | Annotate and attach. |
+| `coordinateGraph`, `lineageGraph` | Read how spaces relate, and what a dataset was derived from. |
+| `arrayDatasets`, `tableDatasets`, `scenes`, `layers`, `annotations`, `files` (subscriptions) | Updates as they happen. |
 
-## Roadmap
+## Hub integration
 
-This is the current roadmap for the merging of the new version of Mikro into the main repository:
+Declared in [`mikro_server/contract.py`](mikro_server/contract.py):
 
-- [X] Build around the new Arkitekt Stack (Django, Strawberry GraphQL)
-- [X] Complete Audit Logging 
-- [X] Comlete History Management (return to older version of Image)
-- [X] Zarr.less (still handled zarr, but without the zarr dependency (direct metadta handling for better performance)
-- [X] Views as central Data Model (more flexible than attaching metadata directly to an Image)
-- [X] Accessors for Table Data (mapping metadata to tables (columns, row) similar to views)
-- [X] Ditch Social Features for central handling in Lok
+- **Scopes**: `mikro_read`, `mikro_write`, `read_image`, `read`, `write`.
+- **Roles**: `admin`, `user`, `viewer`, `uploader`.
+- **Needs**: rekuest 6 or newer, an instance key, tokens issued by lok, and the storage
+  kinds `media`, `zarr`, `parquet`, `bigfile`, `fabriks` and `konnektion`.
 
-- [ ] CI/CD Pipeline (testing against both old and new apps)
-- [ ] Documentation
-- [ ] Endpoints for on-the-fly OME NGFF conversion (generating metadata from db)
+Mikro is known to the hub's rekuest in two separate ways:
 
-## Discarded Features
+- as a **service** (`_rekuest/service`): it hosts structures such as `@mikro/arraydataset`,
+  `@mikro/lens`, `@mikro/scene`, `@mikro/tabledataset` and `@mikro/file`
+  ([`mikro_server/service.py`](mikro_server/service.py));
+- as a **hook agent** (`_rekuest/hook`): it offers one action, `reembed_stale`
+  ([`mikro_server/hook_agent.py`](mikro_server/hook_agent.py)).
 
-- [ ] Direct OME transpilation
+The action is only offered. Nothing in this service loops or schedules; whether and when it
+runs is the organization's own automation in rekuest.
 
+## Running
 
+The image is `jhnnsrs/mikro`. It has no default command, and starting it takes two steps:
+
+```sh
+python -m arkitekt_service migrate   # wait for the database, apply migrations
+bash run.sh                          # serve on :80 (daphne), and nothing else
+```
+
+`run-debug.sh` does both in one go with Django's autoreloading server, for development.
+
+It needs Postgres with pgvector ([`jhnnsrs/daten`](https://github.com/arkitektio/daten-server)),
+Redis and an S3 object store (RustFS in a standard deployment). The embedding model is baked
+into the image.
+
+## Configuration
+
+The service reads `config.yaml`, or the file named by `ARKITEKT_CONFIG_FILE`; any value can
+be overridden by an environment variable (`POSTGRES__HOST`). `python manage.py
+validate_settings` prints the configuration as the service reads it, with secrets redacted.
+
+See [CONFIG.md](CONFIG.md) for every value, including the upload roles and quotas.
+
+## Development
+
+```sh
+uv sync
+uv run pytest
+```
+
+The suite runs against a real Postgres and Redis, brought up by
+[dokker](https://github.com/jhnnsrs/dokker) from `tests/integration/docker-compose.yaml`
+(`jhnnsrs/daten:next`, override with `DATEN_IMAGE`), on ports Docker picks. It needs a
+running Docker daemon.
+
+## Further reading
+
+- [docs/](docs/): the RFCs the coordinate graph follows (residence, registration grafts,
+  the layer and transformation split, the placement gate), the API guides for derivation,
+  attribute plans and field transforms, and the sparse store format.
+- [kanne_server/DESIGN.md](kanne_server/DESIGN.md): how quantities with units are stored.
+
+`datalayer/`, `kanne_server/` and `embeddings/` are also carried, as copies, by elektro and
+other services.
+
+## Releases
+
+Releases are tags: a push to `main` cuts a stable version, a push to `next` a release
+candidate. Each one publishes `jhnnsrs/mikro` under its version (`X.Y.Z`, `X.Y`, `X`), plus
+`latest` from `main` and `next` from `next`. The `version` in `pyproject.toml` is a
+placeholder. Release notes are on
+[GitHub Releases](https://github.com/arkitektio/mikro-server/releases); `CHANGELOG.md` is
+frozen.
