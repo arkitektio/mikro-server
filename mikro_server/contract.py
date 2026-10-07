@@ -176,7 +176,9 @@ contract = Contract(
         identifier="live.arkitekt.mikro",
         summary="Images and their metadata.",
         needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "zarr", "parquet", "bigfile", "fabriks", "konnektion"], instance_key=True, peers=["rekuest"]),
-        offers=Offers(endpoints={"rekuest_service": "_rekuest/service", "rekuest_hook": "_rekuest/hook"}),
+        # No `rekuest_hook`: the hook agent (`mikro_server.hook_agent`) has no action in this
+        # release, and an agent with nothing to do is not offered to a hub.
+        offers=Offers(endpoints={"rekuest_service": "_rekuest/service"}),
         requires={"rekuest": ">=6"},
         hosts=HOSTS,
     ),

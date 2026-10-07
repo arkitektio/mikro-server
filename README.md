@@ -50,7 +50,8 @@ Mikro is known to the hub's rekuest in two separate ways:
   `@mikro/lens`, `@mikro/scene`, `@mikro/tabledataset` and `@mikro/file`
   ([`mikro_server/service.py`](mikro_server/service.py));
 - as a **hook agent** (`_rekuest/hook`): the place for actions rekuest may run here
-  ([`mikro_server/hook_agent.py`](mikro_server/hook_agent.py)). This release offers none.
+  ([`mikro_server/hook_agent.py`](mikro_server/hook_agent.py)). This release offers none, so
+  the image does not offer the agent to a hub either.
 
 Nothing in this service loops or schedules.
 
