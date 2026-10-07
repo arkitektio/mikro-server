@@ -26,8 +26,11 @@ constrains and stays silent about the rest, because a number written for z would
 dataset out of every view it is really in.
 """
 
+import math
+from collections.abc import Set
 from dataclasses import dataclass
 
+from authentikate.models import Organization
 from kante.types import Info
 
 from core import enums, models
@@ -359,6 +362,47 @@ class SpaceGraph:
                 in_view.append(anchor)
         return in_view
 
+    def extent_of(self, system: "models.CoordinateSystem", mins: list[float], maxs: list[float]) -> dict[str, list[float]] | None:
+        """A box given in one of this space's placeable systems, pushed into the space.
+
+        None wherever :meth:`placement` would refuse a number: no unconditional route, a route
+        walked against an edge, or a step with no closed form.
+        """
+        path = graph_logic._bfs_path(self.adjacency(self.universe.container_of(system.pk)), system.pk, self.space.pk)
+        if path is None or any(inverted for _, inverted in path):
+            return None
+        try:
+            forms = coords_logic.compose_forms([graph_logic._edge_step(edge) for edge, _ in path], [axis.name for axis in system.axes.all()])
+            return coords_logic.axed_bbox(mins, maxs, forms)
+        except coords_logic.NonAffineTransformError:
+            return None
+
+    def lens_extents(self, *, skip: Set[int] = frozenset()) -> dict[int, dict[str, list[float]] | None]:
+        """Every lens living in a space placeable here, with its own extent in this space.
+
+        Per *lens*, which :meth:`sources` deliberately is not: it folds a lens into its dataset
+        so a viewport is not handed the same pixels twice, and that fold is exactly the answer
+        a per-lens question cannot use.
+
+        No query beyond the ones the graph has made. The residents arrive with their system's
+        axes prefetched -- a sliced lens' system carries its dataset's axes, an unsliced one
+        *is* the dataset's -- and :meth:`shapes` holds every level-0 shape. `_resident_box`
+        reads ``Lens.shape_list`` instead, which is two queries a lens.
+        """
+        extents: dict[int, dict[str, list[float]] | None] = {}
+        for resident in self._residents:
+            if not isinstance(resident, models.Lens) or resident.pk in skip or resident.coordinate_system is None:
+                continue
+            names = [axis.name for axis in resident.coordinate_system.axes.all()]
+            dataset_shape = self.shapes().get(resident.dataset_id) or []
+            if not dataset_shape or len(names) != len(dataset_shape):
+                # No array, or axes that do not describe it: nothing to bound, as in `anchors_in`.
+                extents[resident.pk] = None
+                continue
+            shape = coords_logic.lens_shape(dataset_shape, names, resident.slices_list)
+            extents[resident.pk] = self.extent_of(resident.coordinate_system, [-0.5] * len(shape), [float(size) - 0.5 for size in shape])
+        return extents
+
     def in_view(self, region: dict[str, list[float]], *, with_anchors: bool, at: dict[str, int] | None = None) -> list[Hit]:
         """Every source whose extent meets the region, each with its in-view anchors.
 
@@ -394,6 +438,114 @@ def region_from_bounds(space: "models.CoordinateSystem", mins: list[float], maxs
         raise ValueError(f"A region of {len(mins)} axes was asked of '{space.name}', whose axes are {axis_names}. A region names a leading prefix of the system's axes; it cannot name more than it has.")
 
     return {name: [float(low), float(high)] for name, low, high in zip(axis_names, mins, maxs)}
+
+
+def _meeting_spaces(system: "models.CoordinateSystem", organization: Organization) -> list[tuple["models.CoordinateSystem", int]]:
+    """Every space a system composes forward into, nearest first, each with its hop count.
+
+    The spaces an annotation and a lens can be compared in: both sides push *with* the edges,
+    so they meet wherever both arrive. One query per hop, and the same three gates the
+    composing walks apply -- unscoped, traversable, closed-form.
+    """
+    spaces = [(system, 0)]
+    seen = {system.pk}
+    frontier = [system.pk]
+    depth = 0
+    while frontier:
+        depth += 1
+        edges = (
+            models.Transformation.objects.filter(parent__isnull=True, input_id__in=frontier, output__isnull=False, organization=organization)
+            .select_related("output")
+            .prefetch_related("children", "output__axes")
+        )
+        frontier = []
+        for edge in edges:
+            if edge.output_id in seen:
+                continue
+            if not graph_logic.selector_admits(edge, None) or not graph_logic.is_traversable(edge) or not graph_logic.is_condensable(edge):
+                continue
+            seen.add(edge.output_id)
+            spaces.append((edge.output, depth))
+            frontier.append(edge.output_id)
+    return spaces
+
+
+def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int]:
+    """The ids of the lenses whose extent meets this annotation's, wherever the two are co-registered.
+
+    A lens over the dataset the annotation was drawn on, and equally a lens over another
+    dataset registered into a world the annotation's collection reaches. Both extents are
+    composed per request and compared in a space both push forward into; nothing is stored,
+    so the stale ``Annotation.bbox_cube`` this module's header describes is not consulted --
+    the box is taken from the shape's own vectors.
+
+    **Each lens is decided once, in the nearest space it lives in.** An axis-aligned box only
+    grows under a rotation, so a world two registrations away would call an overlap that the
+    dataset's own grid, where the comparison is exact, has already refused.
+
+    A lens the server cannot bound here -- reached against an edge, across a warp, or only per
+    index -- is left out: a filter has to answer yes or no, and it has not been shown to overlap.
+
+    The cost is one :class:`SpaceGraph` per meeting space, flat in the number of lenses.
+    """
+    collection = annotation.collection
+    system = collection.coordinate_system_or_none
+    if system is None or not annotation.vectors:
+        return set()
+
+    names = [axis.name for axis in system.axes.all()]
+    pins = {name: float(value) for name, value in (annotation.coordinates or {}).items()}
+    low, high = coords_logic.vectors_bbox(annotation.vectors)
+    if len(low) > len(names):
+        return set()
+
+    # A shape may have fewer components than its drawing space has axes -- a rectangle on one
+    # plane of a volume -- and its pins are how it says which plane. So its vertices span the
+    # axes it does not pin, or the trailing ones where the pins do not account for the
+    # difference. An axis neither names is one the shape says nothing about, and it stays
+    # unbounded rather than being handed a zero that would put the shape on the first plane.
+    unpinned = [name for name in names if name not in pins]
+    spanned = unpinned if len(unpinned) == len(low) else names[len(names) - len(low) :]
+    mins: list[float] = []
+    maxs: list[float] = []
+    for name in names:
+        if name in spanned:
+            index = spanned.index(name)
+            mins.append(low[index])
+            maxs.append(high[index])
+        else:
+            # The voxel's centre rather than its half-open cell: the overlap test is
+            # inclusive, and a cell would touch both of its neighbours.
+            mins.append(pins.get(name, -math.inf))
+            maxs.append(pins.get(name, math.inf))
+
+    overlapping: set[int] = set()
+    decided: set[int] = set()
+    for space, depth in _meeting_spaces(system, info.context.request.organization):
+        # A drawing space nothing is registered into holds no lens, and that is nearly every
+        # one of them; asking first saves the whole graph.
+        if depth == 0 and not models.Transformation.objects.filter(parent__isnull=True, output=space).exists():
+            continue
+
+        graph = for_request(info, space)
+        box = graph.extent_of(system, mins, maxs)
+        if box is None:
+            continue
+
+        if depth <= 1:
+            # A pin may also name an axis the drawing space lacks altogether -- "on channel 0"
+            # of the image under a (y, x) tracing. That is an index of the frame the shape was
+            # drawn against, so it is read there and no further out.
+            space_axes = {axis.name for axis in space.axes.all()}
+            for name, value in pins.items():
+                if name in space_axes and name not in names:
+                    box[name] = [value, value]
+
+        for lens_id, extent in graph.lens_extents(skip=decided).items():
+            decided.add(lens_id)
+            if extent is not None and coords_logic.boxes_overlap(extent, box):
+                overlapping.add(lens_id)
+    return overlapping
 
 
 def for_request(info: "Info", space: "models.CoordinateSystem") -> SpaceGraph:

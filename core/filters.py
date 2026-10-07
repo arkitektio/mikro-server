@@ -5,6 +5,7 @@ from core.inputs.coords import BoundingBoxInput, CoordinateInput
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
+from core.logic import space_graph
 from core.scoping import for_org
 from koherent.models import Task as KoherentTask
 from strawberry import auto
@@ -731,6 +732,21 @@ class LensFilter(IdsFilterMixin):
         # Renderability is per *lens* -- a slice can crop x to a single column -- so the
         # answer stops being a dataset question and the filter keys on lens ids.
         return Q(**{f"{prefix}id__in": _renderable_lens_ids(dataset_ids, requires=_LENS_KIND_REQUIREMENTS.get(value.as_layer))})
+
+    @kante.filter_field(
+        description=(
+            "Filter to lenses whose extent overlaps this annotation, wherever the two are co-registered: lenses over the dataset it was drawn on, and lenses over any other dataset "
+            "registered into a space its collection reaches. Both extents are composed per request from the shapes and the edges and compared in the nearest space they share, so "
+            "this costs one coordinate-graph walk per such space rather than an index lookup. A lens the server cannot bound there -- placed only per index, or across a warp -- is "
+            "not returned"
+        )
+    )
+    def overlaps_annotation(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        """Match the lenses `space_graph.lenses_overlapping` finds; an annotation that is not here matches none."""
+        annotation = for_org(models.Annotation, info).filter(pk=value).select_related("collection__coordinate_system").prefetch_related("collection__coordinate_system__axes").first()
+        if annotation is None:
+            return Q(pk__in=[])
+        return Q(**{f"{prefix}id__in": space_graph.lenses_overlapping(info, annotation)})
 
 
 @kante.filter_type(models.Scene)
