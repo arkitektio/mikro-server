@@ -8,12 +8,10 @@ the keys the manifest declares.
 import json
 
 import pytest
-from asgiref.sync import sync_to_async
-from authentikate.models import Organization
 from kante.context import HttpContext
 
-from core import enums, models
-from embeddings.healer import stale_queryset
+from core import enums
+from mikro_server.vocabulary import PROVENANCE_DESCRIPTORS
 from mikro_server.schema import schema
 from mikro_server.service import service
 from tests import seed
@@ -59,8 +57,11 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
     assert result.data["folder"]["descriptors"] == {}
 
     declared = {s["identifier"]: [d["key"] for d in s["descriptors"]] for s in service.manifest()["structures"]}
-    assert set(result.data["arrayDataset"]["descriptors"]) == set(declared["@mikro/arraydataset"])
-    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/lens"])
+    # Every computed key is declared; what is declared beyond them is provenance, which no object carries.
+    provenance = {d.key for d in PROVENANCE_DESCRIPTORS}
+    assert set(result.data["arrayDataset"]["descriptors"]) == set(declared["@mikro/arraydataset"]) - provenance
+    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/lens"]) - provenance
+    assert provenance <= set(declared["@mikro/lens"])
 
 
 @pytest.mark.django_db(transaction=True)
@@ -72,22 +73,3 @@ async def test_the_field_answers_what_the_signal_carried(intake, authenticated_c
     result = await schema.execute("query Scene($id: ID!) { scene(id: $id) { descriptors } }", context_value=authenticated_context, variable_values={"id": str(scene.pk)})
     assert not result.errors, result.errors
     assert result.data["scene"]["descriptors"] == json.loads(received["body"])["descriptors"] != {}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_a_sweep_for_one_organization_claims_only_its_rows(authenticated_context: HttpContext):
-    """Every organization has the agent and its own schedule: a run must not do another's work."""
-    mine = await seed.create_folder(authenticated_context, "mine")
-    elsewhere = await Organization.objects.acreate(slug="elsewhere")
-    theirs = await models.Folder.objects.acreate(
-        name="theirs", creator=authenticated_context.request.user, organization=elsewhere, membership=authenticated_context.request.membership
-    )
-    await models.Folder.objects.filter(pk__in=[mine.pk, theirs.pk]).aupdate(embedding_model="another-model")
-
-    def stale(organization: str | None) -> set[int]:
-        return set(stale_queryset(models.Folder, organization).filter(pk__in=[mine.pk, theirs.pk]).values_list("pk", flat=True))
-
-    assert await sync_to_async(stale)("elsewhere") == {theirs.pk}
-    assert await sync_to_async(stale)(authenticated_context.request.organization.slug) == {mine.pk}
-    assert await sync_to_async(stale)(None) == {mine.pk, theirs.pk}

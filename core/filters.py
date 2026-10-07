@@ -21,6 +21,13 @@ import kante
 class FolderChildrenFilter:
     show_children: bool | None = None
     search: str | None = None
+    show_converted: bool | None = strawberry.field(
+        default=None,
+        description=(
+            "Also list the containers that were converted from a file (those with a SOURCE file link). Hidden unless this is true, because the file they were made from "
+            "is listed already. Any SOURCE link hides a container, wherever its file is kept; a RENDITION link (an export) never does"
+        ),
+    )
 
 
 @strawberry.input

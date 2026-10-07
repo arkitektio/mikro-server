@@ -1,17 +1,18 @@
-"""Folders and datasets embed their name + description on save; stale rows heal in-process.
+"""Folders and datasets embed their name + description on save, with the release's model.
 
-Real model (potion-base-8M), real Postgres with pgvector -- what the service runs. A re-embed
-is not an edit: the provenance history must not grow and must not know the columns.
+Real model (potion-base-8M), real Postgres with pgvector -- what the service runs. An
+embedding is not an edit: the provenance history must not know the column.
 """
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.core import checks
+from django.core.exceptions import ImproperlyConfigured
 from django.test import override_settings
 from kante.context import HttpContext
 
 from core.models import ArrayDataset, Folder, TableDataset
 from embeddings import engine
-from embeddings.healer import reembed_all, reembed_stale
 from mikro_server.schema import schema
 from tests.seed import _seed_parquet_store_sync, create_folder
 
@@ -30,7 +31,7 @@ async def create_table_dataset(ctx: HttpContext, name: str, description: str | N
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_create_embeds_all_three_models(db, authenticated_context: HttpContext) -> None:
-    """Each model gets a unit vector of the configured width, stamped with the model id."""
+    """Each model gets a unit vector of the release's width."""
     ctx = authenticated_context
     rows = [
         await create_folder(ctx, "Screen 12", description="Control and treated wells of the kinase screen"),
@@ -42,7 +43,6 @@ async def test_create_embeds_all_three_models(db, authenticated_context: HttpCon
         assert row.embedding is not None, type(row).__name__
         assert len(row.embedding) == engine.dimensions() == 256
         assert abs(sum(x * x for x in row.embedding) - 1.0) < 1e-4
-        assert row.embedding_model == engine.model_id()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -66,50 +66,70 @@ async def test_editing_the_description_reembeds(db, authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_blank_text_stores_null_and_is_complete(db, authenticated_context: HttpContext) -> None:
-    """No text, no vector -- and the row is stamped so the healer never re-claims it."""
+async def test_blank_text_stores_null(db, authenticated_context: HttpContext) -> None:
+    """No text, no vector (never a zero vector)."""
     dataset = await create_array_dataset(authenticated_context, "   ", None)
     await dataset.arefresh_from_db()
 
     assert dataset.embedding is None
-    assert dataset.embedding_model == engine.model_id()
-    assert await sync_to_async(reembed_stale)(ArrayDataset) == 0
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_healer_reembeds_without_writing_history(db, authenticated_context: HttpContext) -> None:
-    """Rows stamped by another model are re-embedded in place; no history row, no history column."""
-    ctx = authenticated_context
-    folder = await create_folder(ctx, "Blur", description="Gaussian blur of an image")
-    dataset = await create_array_dataset(ctx, "Raw", "Unprocessed acquisition")
-    table = await create_table_dataset(ctx, "Cells", "One row per segmented cell")
-    for model, row in ((Folder, folder), (ArrayDataset, dataset), (TableDataset, table)):
-        await model.objects.filter(pk=row.pk).aupdate(embedding=None, embedding_model="some/older-model")
-    history_before = await folder.provenance.acount()
+async def test_a_row_saved_without_the_model_has_no_vector_until_it_is_saved_again(db, authenticated_context: HttpContext, monkeypatch) -> None:
+    """The write must not fail because the model did; the row's next save embeds it."""
 
-    assert await sync_to_async(reembed_all)([Folder, ArrayDataset, TableDataset]) == 3
+    def unavailable() -> None:
+        raise engine.EmbeddingsUnavailable("no weights")
 
-    for model, row in ((Folder, folder), (ArrayDataset, dataset), (TableDataset, table)):
-        fresh = await model.objects.aget(pk=row.pk)
-        assert fresh.embedding is not None, model.__name__
-        assert fresh.embedding_model == engine.model_id()
-    assert await folder.provenance.acount() == history_before
-    historical = folder.provenance.model
-    assert not any(field.name in ("embedding", "embedding_model") for field in historical._meta.get_fields())
-    assert await sync_to_async(reembed_all)([Folder, ArrayDataset, TableDataset]) == 0
+    with monkeypatch.context() as patched:
+        patched.setattr(engine, "_model", unavailable)
+        folder = await create_folder(authenticated_context, "Blur", description="Gaussian blur of an image")
+    assert (await Folder.objects.aget(pk=folder.pk)).embedding is None
+
+    folder = await Folder.objects.aget(pk=folder.pk)
+    await folder.asave()
+    assert (await Folder.objects.aget(pk=folder.pk)).embedding is not None
+
+
+def test_history_does_not_know_the_column() -> None:
+    """The vector is storage, not an edit: no historical model carries it."""
+    for model in (Folder, ArrayDataset, TableDataset):
+        assert not any(field.name == "embedding" for field in model.provenance.model._meta.get_fields()), model.__name__
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_disabled_writes_no_vector(db, authenticated_context: HttpContext) -> None:
-    """With embeddings off, saving leaves both columns untouched and the healer is idle."""
+    """With embeddings off, saving leaves the column untouched."""
     with override_settings(EMBEDDINGS={**engine._settings(), "ENABLED": False}):
         folder = await create_folder(authenticated_context, "Off", description="Nothing embeds")
         await folder.arefresh_from_db()
         assert folder.embedding is None
-        assert folder.embedding_model == ""
-        assert await sync_to_async(reembed_stale)(Folder) == 0
+
+
+@pytest.mark.django_db
+def test_no_system_check_loads_the_model(monkeypatch) -> None:
+    """``manage.py migrate`` runs the checks: the model is the server's to load, not a command's."""
+
+    def loaded() -> None:
+        raise AssertionError("a system check loaded the embedding model")
+
+    monkeypatch.setattr(engine, "_model", loaded)
+    assert not [message for message in checks.run_checks(databases=["default"]) if message.id.startswith("embeddings.")]
+
+
+def test_weights_baked_for_another_model_are_refused(tmp_path, monkeypatch) -> None:
+    """The image's ``MODEL_ID`` stamp must name the release's model: anything else is a broken build."""
+    (tmp_path / engine.MODEL_ID_FILENAME).write_text("some/other-model")
+    monkeypatch.setattr(engine, "MODEL_PATH", str(tmp_path))
+    engine.reset()
+    try:
+        with pytest.raises(ImproperlyConfigured, match="some/other-model"):
+            engine.warm_up()
+    finally:
+        monkeypatch.undo()
+        engine.reset()
 
 
 EMBEDDING_QUERY = "query($id: ID!){ folder(id: $id){ name embedding } }"
@@ -138,9 +158,9 @@ async def test_the_stored_vector_is_published_with_its_model_id(authenticated_co
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unindexed_row_publishes_null(authenticated_context: HttpContext) -> None:
-    folder = await create_folder(authenticated_context, name="Unindexed")
-    await Folder.objects.filter(pk=folder.pk).aupdate(embedding=None, embedding_model="")
+async def test_a_row_without_a_vector_publishes_null(authenticated_context: HttpContext) -> None:
+    folder = await create_folder(authenticated_context, name="Unembedded")
+    await Folder.objects.filter(pk=folder.pk).aupdate(embedding=None)
 
     result = await schema.execute(EMBEDDING_QUERY, context_value=authenticated_context, variable_values={"id": str(folder.pk)})
     assert not result.errors, result.errors

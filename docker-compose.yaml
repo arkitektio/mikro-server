@@ -12,6 +12,9 @@ services:
       - "arkitekt.default.service=db"
   mikro:
     build: .
+    # The image's own command only says what it is. This is one image run on its own, so it
+    # prepares its database and then serves, in one go.
+    command: arkitekt-service standalone --debug
     ports:
     - 8888:80
     labels:

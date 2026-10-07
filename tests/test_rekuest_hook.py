@@ -1,8 +1,7 @@
 """This process's hook agent as seen by the hub's rekuest (``arkitekt_service.hook``).
 
-The manifest rekuest reads, the signed requests both sides exchange (instance keys vouched for
-by the hub's trust bundle, no shared secret), and the ``reembed_stale`` action itself against
-the real database.
+The manifest rekuest reads and the signed requests both sides exchange (instance keys vouched
+for by the hub's trust bundle, no shared secret).
 """
 
 import json
@@ -40,19 +39,19 @@ def _as_rekuest(method: str, url: str, body: bytes = b"", *, key=REKUEST_KEY, au
     return {"Authorization": authorization, "X-Rekuest-Agent": "11"}
 
 
-def test_the_manifest_is_signed_and_lists_reembed_stale(hooked):
+def test_the_manifest_is_signed_and_offers_no_action(hooked):
     client = HttpClient()
     url = reverse("rekuest_hook_manifest")
     assert client.get(url).status_code == 401
     response = client.get(url, headers=_as_rekuest("GET", url))
     assert response.status_code == 200
-    assert "reembed_stale" in [a["interface"] for a in response.json()["actions"]]
+    assert response.json()["actions"] == []
 
 
 def test_forged_and_unconfigured_requests_are_refused(hooked, settings):
     client = HttpClient()
     url = reverse("rekuest_hook")
-    body = json.dumps({"type": "ASSIGN", "task": "1", "interface": "reembed_stale", "args": {}}).encode()
+    body = json.dumps({"type": "ASSIGN", "task": "1", "interface": "anything", "args": {}}).encode()
 
     def post(headers):
         return client.post(url, data=body, content_type="application/json", headers=headers).status_code
@@ -62,12 +61,6 @@ def test_forged_and_unconfigured_requests_are_refused(hooked, settings):
     assert post(_as_rekuest("POST", url, body, key=OKPKey.generate_key("Ed25519"))) == 401  # a key nobody vouched for
     settings.INSTANCE = None
     assert post(_as_rekuest("POST", url, body)) == 503
-
-
-@pytest.mark.django_db
-def test_reembed_stale_runs_one_bounded_pass():
-    result = agent.actions["reembed_stale"].function(organization="nobody")
-    assert result == {"reembedded": 0}
 
 
 def test_the_service_and_the_agent_are_separate_declarations():

@@ -28,7 +28,7 @@ def test_it_says_what_it_needs_before_it_has_any_config(capsys: pytest.CaptureFi
     """``describe`` needs no config, and names the service."""
     assert cli.main(["describe"]) == 0
     said = json.loads(capsys.readouterr().out)
-    assert said["contract"] == 1 and said["name"] == "mikro"
+    assert said["contract"] == 2 and said["name"] == "mikro"
 
 
 def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

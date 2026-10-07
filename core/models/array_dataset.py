@@ -8,7 +8,7 @@ from authentikate.models import Organization
 from django.db.models import Q
 from datalayer.models import MediaStore, ZarrStore
 from django.contrib.postgres.indexes import GinIndex
-from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
+from embeddings.models import EmbeddedDescriptionMixin
 from core import base_models
 from core.logic import coords as coords_logic
 from core.models.coords import CoordinateSystem, Transformation, MeshCollection  # noqa: F401  (re-exported via core.models)
@@ -123,8 +123,8 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
         related_name="assigned_%(class)ss",
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
-    # The embedding columns are storage, not an edit: keep them out of the history rows.
-    provenance = ProvenanceField(excluded_fields=["embedding", "embedding_model"])
+    # The embedding column is storage, not an edit: keep it out of the history rows.
+    provenance = ProvenanceField(excluded_fields=["embedding"])
 
     stored_spec = models.JSONField(
         default=list,
@@ -140,8 +140,6 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
     class Meta:
         indexes = [
             GinIndex(fields=["stored_spec"], name="array_dataset_spec_gin"),
-            # The embedding healer's "any row not by the current model?" probe.
-            *embedding_indexes("array_dataset"),
         ]
 
     @property

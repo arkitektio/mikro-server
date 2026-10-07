@@ -24,7 +24,7 @@ from django.contrib.auth import get_user_model
 from authentikate.models import Organization
 from datalayer.models import ParquetStore
 from koherent.fields import ProvenanceField
-from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
+from embeddings.models import EmbeddedDescriptionMixin
 from django_choices_field import TextChoicesField
 
 from core import enums
@@ -104,15 +104,13 @@ class TableDataset(EmbeddedDescriptionMixin, models.Model):
         related_name="assigned_%(class)ss",
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
-    # The embedding columns are storage, not an edit: keep them out of the history rows.
-    provenance = ProvenanceField(excluded_fields=["embedding", "embedding_model"])
+    # The embedding column is storage, not an edit: keep it out of the history rows.
+    provenance = ProvenanceField(excluded_fields=["embedding"])
 
     class Meta:
         """Meta options for the table dataset."""
 
         ordering = ["-created_at"]
-        # The embedding healer's "any row not by the current model?" probe.
-        indexes = [*embedding_indexes("table_dataset")]
 
     def __str__(self) -> str:
         """The table dataset's name."""

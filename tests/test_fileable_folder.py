@@ -292,6 +292,51 @@ async def test_children_orders_and_searches_across_every_source(authenticated_co
     assert [c["__typename"] for c in searched.data["children"]] == ["TableDataset"], "search must reach the containers, and only match one here"
 
 
+LINK_FILE = "mutation L($input: LinkFileInput!) { linkFile(input: $input) { id direction } }"
+
+CHILD_NAMES = """
+query Children($parent: ID!, $filters: FolderChildrenFilter) {
+  children(parent: $parent, filters: $filters) {
+    ... on File { name }
+    ... on ArrayDataset { name }
+  }
+}
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_children_hides_what_was_converted_from_a_file_until_asked(authenticated_context: HttpContext):
+    """A dataset converted from a file is that file again, so the listing shows the file alone.
+
+    Only the ingest direction hides: an exported dataset was not made from its file, and
+    hiding it would lose the only row that stands for the data.
+    """
+    ctx = authenticated_context
+    folder = await seed.create_folder(ctx, "Ingested")
+    raw = await seed.create_file(ctx, "scan.lif", folder)
+    export = await seed.create_file(ctx, "figure.png", folder)
+    converted = await _create_array_dataset(ctx, "Converted", folder=folder)
+    exported = await _create_array_dataset(ctx, "Exported", folder=folder)
+    await _create_array_dataset(ctx, "Acquired", folder=folder)
+
+    source = await schema.execute(LINK_FILE, context_value=ctx, variable_values={"input": {"dataset": converted["id"], "sourceFiles": [{"file": str(raw.pk)}]}})
+    assert not source.errors, source.errors
+    rendition = await schema.execute(LINK_FILE, context_value=ctx, variable_values={"input": {"file": str(export.pk), "sourceOf": [{"kind": "DATASET", "dataset": exported["id"]}]}})
+    assert not rendition.errors, rendition.errors
+
+    async def names(filters: dict | None) -> set[str]:
+        result = await schema.execute(CHILD_NAMES, context_value=ctx, variable_values={"parent": str(folder.pk), "filters": filters})
+        assert not result.errors, result.errors
+        assert result.data
+        return {child["name"] for child in result.data["children"]}
+
+    everything = {"scan.lif", "figure.png", "Converted", "Exported", "Acquired"}
+    assert await names(None) == everything - {"Converted"}
+    assert await names({"showConverted": False}) == everything - {"Converted"}
+    assert await names({"showConverted": True}) == everything
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_containers_are_filterable_by_folder(authenticated_context: HttpContext):

@@ -92,6 +92,32 @@ async def test_drawing_on_a_scene_mints_its_collection(db, authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_a_long_scene_name_does_not_refuse_the_first_draw(db, authenticated_context: HttpContext):
+    """The minted names derive from the scene's, and must still fit their columns.
+
+    The registration's name carries the scene's twice, so a scene name well inside its own
+    255 used to derive one outside it -- and Postgres refused the draw with "value too long
+    for type character varying(255)".
+    """
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "s" * 200)
+
+    result = await schema.execute(
+        CREATE,
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.id), "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}},
+    )
+    assert not result.errors, result.errors
+    drawn = result.data["createAnnotation"]
+    assert len(drawn["name"]) <= 255
+    assert len(drawn["collection"]["name"]) <= 255
+
+    counts = await sync_to_async(_counts)(scene)
+    assert counts == {"collections": 1, "systems": 1, "layers": 1, "registrations": 1}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_the_chain_version_is_readable_so_staleness_is_detectable(db, authenticated_context: HttpContext):
     """`createdWithTransforms` finally has something to be compared with.
 

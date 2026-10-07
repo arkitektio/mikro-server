@@ -10,3 +10,5 @@ __pycache__/
 .mypy_cache/
 *.sqlite3
 .env
+# The suite is not part of the service: nothing in the image imports it.
+tests/

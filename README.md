@@ -49,26 +49,26 @@ Mikro is known to the hub's rekuest in two separate ways:
 - as a **service** (`_rekuest/service`): it hosts structures such as `@mikro/arraydataset`,
   `@mikro/lens`, `@mikro/scene`, `@mikro/tabledataset` and `@mikro/file`
   ([`mikro_server/service.py`](mikro_server/service.py));
-- as a **hook agent** (`_rekuest/hook`): it offers one action, `reembed_stale`
-  ([`mikro_server/hook_agent.py`](mikro_server/hook_agent.py)).
+- as a **hook agent** (`_rekuest/hook`): the place for actions rekuest may run here
+  ([`mikro_server/hook_agent.py`](mikro_server/hook_agent.py)). This release offers none.
 
-The action is only offered. Nothing in this service loops or schedules; whether and when it
-runs is the organization's own automation in rekuest.
+Nothing in this service loops or schedules.
 
 ## Running
 
 The image is `jhnnsrs/mikro`. It has no default command, and starting it takes two steps:
 
 ```sh
-python -m arkitekt_service migrate   # wait for the database, apply migrations
-bash run.sh                          # serve on :80 (daphne), and nothing else
+arkitekt-service run migrate   # wait for the database, apply migrations
+arkitekt-service serve                          # serve on :80 (daphne), and nothing else
 ```
 
-`run-debug.sh` does both in one go with Django's autoreloading server, for development.
+`arkitekt-service debug` serves with Django's autoreloading server instead, for development; it does
+not prepare the database either.
 
 It needs Postgres with pgvector ([`jhnnsrs/daten`](https://github.com/arkitektio/daten-server)),
-Redis and an S3 object store (RustFS in a standard deployment). The embedding model is baked
-into the image.
+Redis and an S3 object store (RustFS in a standard deployment). The embedding model is part of
+the release and baked into the image.
 
 ## Configuration
 

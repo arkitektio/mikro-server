@@ -8,14 +8,13 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self) -> None:
-        """Register the embedding system checks.
+        """Register the embedding system check.
 
-        They assert that the model's width, ``EMBEDDINGS.DIMENSIONS`` and the ``vector(N)``
-        columns agree; ``migrate`` runs the database-tagged one at every boot, so a mismatch
-        stops the service before it serves a wrong search.
+        It asserts that the ``vector(N)`` columns are the embedding model's width; it is
+        database-tagged, so ``migrate`` runs it and a mismatch fails the job that prepares the
+        database, before anything serves a wrong search.
         """
         import embeddings.checks  # noqa: F401
-        import mikro_server.checks  # noqa: F401
 
         # The receivers behind the subscriptions (files, annotations, layers, ...): a receiver is
         # only connected once the module that defines it has been imported.

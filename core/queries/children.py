@@ -1,4 +1,4 @@
-from core import models, types, filters as f, pagination as p
+from core import enums, models, types, filters as f, pagination as p
 from core.utils import paginate_querysets
 import strawberry
 from typing import Annotated, Union
@@ -49,13 +49,15 @@ FolderChild = Annotated[
 #: odd one out and the reason this is a table rather than a list of names: it has no `name`
 #: column (it is identified by `version`), so both the search vector and the ordering have
 #: to ask it a different question than the rest.
+#: The last column is whether the source is a container, i.e. whether a `FileLink` can point
+#: at it: sub-folders and files have no `file_links` to be hidden by.
 _CHILD_SOURCES = [
-    ("children", "name", "description"),
-    ("files", "name", None),
-    ("array_datasets", "name", "description"),
-    ("table_datasets", "name", "description"),
-    ("mesh_collections", "version", None),
-    ("annotation_collections", "name", "description"),
+    ("children", "name", "description", False),
+    ("files", "name", None, False),
+    ("array_datasets", "name", "description", True),
+    ("table_datasets", "name", "description", True),
+    ("mesh_collections", "version", None, True),
+    ("annotation_collections", "name", "description", True),
 ]
 
 
@@ -77,10 +79,16 @@ def children(
     search = filters.search.strip() if filters.search else ""
     search_query = SearchQuery(search) if search else None
 
-    for accessor, name_field, description_field in _CHILD_SOURCES:
+    for accessor, name_field, description_field, is_container in _CHILD_SOURCES:
         # Scoped again per accessor: the folder is ours, but a row filed into it from another
         # organization (possible before `createFolder` scoped its parent) must not ride along.
         queryset = scope_queryset(getattr(folder, accessor).all(), info)
+
+        # A container converted from a file is that file again in another form, and the file is
+        # already in the listing. Only a SOURCE link says so: a RENDITION is a file written
+        # *out of* the container, and a container is not hidden for having been exported.
+        if is_container and not filters.show_converted:
+            queryset = queryset.exclude(file_links__direction=enums.FileLinkDirectionChoices.SOURCE)
 
         if search_query is not None:
             fields = [name_field] + ([description_field] if description_field else [])

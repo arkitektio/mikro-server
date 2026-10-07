@@ -59,9 +59,9 @@ def _vec(e0: np.ndarray, distance: float) -> list[float]:
     return (math.cos(theta) * e0 + math.sin(theta) * _unit_orthogonal(e0)).astype(float).tolist()
 
 
-async def _pin(model, row, e0: np.ndarray, distance: float | None, embedding_model: str | None = None) -> None:
+async def _pin(model, row, e0: np.ndarray, distance: float | None) -> None:
     """Overwrite a seeded row's vector with one at ``distance`` from ``e0`` (``None``: no vector)."""
-    await model.objects.filter(pk=row.pk).aupdate(embedding=_vec(e0, distance) if distance is not None else None, embedding_model=embedding_model or engine.model_id())
+    await model.objects.filter(pk=row.pk).aupdate(embedding=_vec(e0, distance) if distance is not None else None)
 
 
 async def _names(ctx: HttpContext, field: str, filter_name: str, order_name: str, search: str, ordering: list | None = None) -> list[str]:
@@ -124,19 +124,6 @@ async def test_ranking_lexical_first_then_by_distance(db, authenticated_context:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
-async def test_stale_embedding_model_is_not_a_vector_hit(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
-    """A row embedded by another model is skipped by the vector leg, still found lexically."""
-    ctx = authenticated_context
-    e0 = np.asarray(engine.embed_query(QUERY))
-    await _pin(model, await seed(ctx, "Old model near", None), e0, 0.05, "some/older-model")
-    await _pin(model, await seed(ctx, "Old model detect cells", None), e0, 0.05, "some/older-model")
-
-    assert await _names(ctx, field, filter_name, order_name, QUERY) == ["Old model detect cells"]
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
 async def test_explicit_ordering_replaces_the_ranking(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
     """A client's ``ordering`` wins over the distance ranking."""
     ctx = authenticated_context
@@ -150,18 +137,20 @@ async def test_explicit_ordering_replaces_the_ranking(db, authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_unloadable_model_degrades_to_lexical(db, authenticated_context: HttpContext) -> None:
+async def test_unloadable_model_degrades_to_lexical(db, authenticated_context: HttpContext, tmp_path, monkeypatch) -> None:
     """When the weights cannot be loaded the query still answers, lexical-only."""
     ctx = authenticated_context
     e0 = np.asarray(engine.embed_query(QUERY))
     await _pin(Folder, await _folder(ctx, "Near"), e0, 0.05)
     await _folder(ctx, "Detect cells")
 
+    # A baked directory that holds no weights: what a broken image looks like to the loader.
+    monkeypatch.setattr(engine, "MODEL_PATH", str(tmp_path))
+    engine.reset()
     try:
-        with override_settings(EMBEDDINGS={**engine._settings(), "MODEL_PATH": "/nonexistent/embeddings"}):
-            engine.reset()
-            assert await _names(ctx, "folders", "FolderFilter", "FolderOrder", QUERY) == ["Detect cells"]
+        assert await _names(ctx, "folders", "FolderFilter", "FolderOrder", QUERY) == ["Detect cells"]
     finally:
+        monkeypatch.undo()
         engine.reset()
 
 

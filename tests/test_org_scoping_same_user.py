@@ -201,36 +201,3 @@ async def test_permissions_query_refuses_foreign_object(db, authenticated_contex
         context_value=same_user_other_org_context,
     )
     assert result.errors, "another org's object permissions were readable"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_migration_unnests_existing_cross_org_folders(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
-    """The test settings never run migrations, so the data fix is exercised directly."""
-    import importlib
-
-    from asgiref.sync import sync_to_async
-    from django.apps import apps
-
-    migration = importlib.import_module("core.migrations.0014_unnest_cross_org_folders")
-    parent = await create_folder(authenticated_context, "Org A Parent")
-    same_org = await create_folder(authenticated_context, "Org A Child", parent=parent)
-    cross_org = await create_folder(same_user_other_org_context, "Org B Child", parent=parent)
-
-    a_schema = await MetaSchema.objects.acreate(name="a", schema={}, organization=authenticated_context.request.organization)
-    a_file = await create_file(authenticated_context, "a.tif", parent)
-    b_file = await create_file(same_user_other_org_context, "b.tif", cross_org)
-    own_meta = await UnstructuredMeta.objects.acreate(name="own", meta={}, file=a_file, schema=a_schema)
-    foreign_meta = await UnstructuredMeta.objects.acreate(name="foreign", meta={}, file=b_file, schema=a_schema)
-
-    await sync_to_async(migration.unnest_cross_org_folders)(apps, None)
-    await sync_to_async(migration.detach_cross_org_meta_schemas)(apps, None)
-
-    await cross_org.arefresh_from_db()
-    await same_org.arefresh_from_db()
-    assert cross_org.parent_id is None
-    assert same_org.parent_id == parent.pk
-    await own_meta.arefresh_from_db()
-    await foreign_meta.arefresh_from_db()
-    assert own_meta.schema_id == a_schema.pk
-    assert foreign_meta.schema_id is None

@@ -5,7 +5,7 @@ from koherent.fields import ProvenanceField
 from authentikate.models import Organization, Membership
 from taggit.managers import TaggableManager
 from datalayer.models import BigFileStore, ParquetStore
-from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
+from embeddings.models import EmbeddedDescriptionMixin
 
 from core import enums
 from core.creation import CreationContext
@@ -79,8 +79,8 @@ class Folder(EmbeddedDescriptionMixin, models.Model):
         related_name="assigned_%(class)ss",
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
-    # The embedding columns are storage, not an edit: keep them out of the history rows.
-    provenance = ProvenanceField(excluded_fields=["embedding", "embedding_model"])
+    # The embedding column is storage, not an edit: keep it out of the history rows.
+    provenance = ProvenanceField(excluded_fields=["embedding"])
     tags = TaggableManager()
 
     objects = FolderManager()
@@ -100,8 +100,6 @@ class Folder(EmbeddedDescriptionMixin, models.Model):
                 name="only_one_folder_per_parent_and_name",
             ),
         ]
-        # The embedding healer's "any row not by the current model?" probe.
-        indexes = [*embedding_indexes("folder")]
 
 
 class File(models.Model):

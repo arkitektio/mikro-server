@@ -1,7 +1,7 @@
 """The descriptors of mikro's arrays — the server-side twin of the client's vocabulary.
 
-They are declared once, on the structures in ``mikro_server/service.py``, and read from there
-by everything that states them: a signal carries the object's descriptors so rekuest can match
+They are declared once, as data, in ``mikro_server.contract`` (their keys are in
+``mikro_server.vocabulary``), and read from there by everything that states them: a signal carries the object's descriptors so rekuest can match
 it against triggers and against the ``requires`` of the ports it would be fed to, and the
 GraphQL types answer them as ``descriptors``, so a client can ask which actions take the object
 in hand. Those ports were
@@ -15,23 +15,7 @@ carried only by a producer's ``Provides``.
 from collections import Counter
 from collections.abc import Sequence
 
-from arkitekt_service.service import Descriptor
-
-KEY_BY_AXIS_TYPE = {
-    "SPACE": "@mikro/n_space_axes",
-    "TIME": "@mikro/n_time_axes",
-    "CHANNEL": "@mikro/n_channel_axes",
-    "SPECTRUM": "@mikro/n_spectrum_axes",
-    "MICROTIME": "@mikro/n_microtime_axes",
-}
-EXTENT_KEYS = {"@mikro/n_channels": "CHANNEL", "@mikro/n_timepoints": "TIME"}
-#: Every descriptor :func:`array_descriptors` produces — what mikro declares an array dataset
-#: and a lens carry.
-ARRAY_DESCRIPTORS = (
-    *(Descriptor(key, "INT", f"How many of its axes are {axis_type} axes") for axis_type, key in KEY_BY_AXIS_TYPE.items()),
-    *(Descriptor(key, "INT", f"Its total extent along its {axis_type} axes") for key, axis_type in EXTENT_KEYS.items()),
-)
-ARRAY_DESCRIPTOR_KEYS = tuple(descriptor.key for descriptor in ARRAY_DESCRIPTORS)
+from mikro_server.vocabulary import EXTENT_KEYS, KEY_BY_AXIS_TYPE
 
 
 def array_descriptors(axis_types: Sequence[str], shape: Sequence[int]) -> dict[str, int]:

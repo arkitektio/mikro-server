@@ -154,7 +154,11 @@ async def test_nothing_is_sent_when_rekuest_is_not_configured(intake, settings, 
     assert intake.received == []
 
 
-def test_the_manifest_declares_exactly_the_keys_mikro_sends(settings):
+def test_the_manifest_declares_the_keys_mikro_sends_and_the_stated_ones(settings):
+    """A signal is declared with every key of its structure: the ones mikro computes and sends,
+    and the provenance keys nothing computes, which are declared so a port may constrain on them."""
+    from mikro_server.vocabulary import PROVENANCE_DESCRIPTORS
+
     from django.test import Client as HttpClient
     from django.urls import reverse
 
@@ -165,4 +169,7 @@ def test_the_manifest_declares_exactly_the_keys_mikro_sends(settings):
     response = HttpClient().get(url, headers={"Authorization": authorization})
     (declared,) = [s for s in response.json()["signals"] if s["identifier"] == "@mikro/arraydataset"]
     assert declared["kinds"] == ["CREATED", "UPDATED", "DELETED"]
-    assert sorted(declared["descriptors"]) == sorted(array_descriptors(["CHANNEL", "SPACE"], [2, 8]))
+    sent = set(array_descriptors(["CHANNEL", "SPACE"], [2, 8]))
+    stated = {descriptor.key for descriptor in PROVENANCE_DESCRIPTORS}
+    assert set(declared["descriptors"]) == sent | stated
+    assert not sent & stated, "a stated key is never computed"

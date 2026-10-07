@@ -37,12 +37,13 @@ hub:
             use: sig
             x: VJ01BVCAvzSPwSE2DOPFImCG1N6-13Jq4r6Gk6KYunU
         kind: jwks_dict
-database:
-  host: db
-  port: 5432
-  name: mikro
-  username: small-leaf
-  password: imb9eznystshdh3xstzlzb9oyimo8y9li0l5j1u5
+databases:
+  main:
+    host: db
+    port: 5432
+    name: mikro
+    username: small-leaf
+    password: imb9eznystshdh3xstzlzb9oyimo8y9li0l5j1u5
 redis:
   host: redis
   port: 6379

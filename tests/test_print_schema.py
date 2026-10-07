@@ -45,7 +45,7 @@ def test_only_the_embedded_types_publish_a_vector():
 
 
 def test_no_input_accepts_an_embedding():
-    """Read-only: a client may not write a vector, or the healer's contract is a fiction."""
+    """Read-only: a client may not write a vector, or "every vector is this release's model's" is a fiction."""
     assert _fields_named_embedding(str(schema))["input"] == set()
 
 

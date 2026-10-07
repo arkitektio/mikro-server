@@ -16,6 +16,10 @@ import os
 from .configuration import Settings
 from .logs import build_logging
 
+# Where this service's contract is: what the image's environment says, and the same here for a
+# checkout, so that `manage.py validate_settings` and the configuration check work in both.
+os.environ.setdefault("ARKITEKT_SERVICE", "mikro_server.contract")
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -62,6 +66,10 @@ INSTALLED_APPS = [
     "datalayer",
     "health_check",
     "health_check.db",
+    # What every service is as a Django server: `ensureadmin`, `validate_settings`, and the
+    # check that warns about config keys this release does not read. Last, so that a command
+    # of the service's own with the same name is the one that runs.
+    "arkitekt_service.server",
 ]
 
 
@@ -122,18 +130,12 @@ STRAWBERRY_DJANGO = {
 # Semantic search (the vendored ``embeddings`` package). Folders, array datasets and table
 # datasets embed their name + description into a pgvector column on save, with a model2vec
 # static model that runs in this process (no service, no GPU, ~1 ms per row). Their filters'
-# ``search`` OR "cosine distance below DISTANCE_THRESHOLD" onto the lexical match. DIMENSIONS
-# is also the width of the database columns: the ``embeddings`` system checks refuse to start
-# when the model, this setting and a column disagree. Rows filled by another model are re-embedded by
-# the ``reembed_stale`` action the hub's rekuest schedules (``mikro_server/service.py``).
+# ``search`` OR "cosine distance below DISTANCE_THRESHOLD" onto the lexical match. Which model,
+# and how wide its vectors are, is not a setting: it is fixed by the release, and the image
+# carries the weights (``embeddings.engine``).
 EMBEDDINGS = {
     "ENABLED": conf.embeddings.enabled,
-    "MODEL": conf.embeddings.model,
-    "MODEL_PATH": conf.embeddings.model_path,
-    "DIMENSIONS": conf.embeddings.dimensions,
     "DISTANCE_THRESHOLD": conf.embeddings.distance_threshold,
-    "SWEEP_INTERVAL": conf.embeddings.sweep_interval,
-    "SWEEP_BATCH_SIZE": conf.embeddings.sweep_batch_size,
 }
 # Two declarations reach the hub's rekuest from this process, each with its own setting: the
 # service (what exists here: ``rekuest_service``) and the hook agent (what can be done here:

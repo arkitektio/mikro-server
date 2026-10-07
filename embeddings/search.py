@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q) -> tuple[QuerySet[Any], Q]:
-    """``lexical`` OR (same embedding model AND cosine distance below the threshold), ranked.
+    """``lexical`` OR (embedded AND cosine distance below the threshold), ranked.
 
     Ranking is two-tier: rows the lexical predicate matches first, then by distance, then by
     pk. A substring hit is a hard signal, and ranking it by its own distance would order an
@@ -53,8 +53,8 @@ def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q) 
     queryset = queryset.order_by(rank, F(distance).asc(nulls_last=True), "pk")
 
     # NULL embeddings give a NULL distance, which is never below the threshold: unembedded rows
-    # and rows of another model are excluded from the vector leg and reachable lexically only.
-    semantic = Q(embedding_model=engine.model_id()) & Q(**{f"{distance}__lt": engine.distance_threshold()})
+    # are excluded from the vector leg and reachable lexically only.
+    semantic = Q(embedding__isnull=False) & Q(**{f"{distance}__lt": engine.distance_threshold()})
     return queryset, lexical | semantic
 
 
@@ -84,8 +84,7 @@ def neighbourhood(
     empty list for every row that happens to sit in a sparse corner of the space, which reads
     as "this action is unique" when it means "nothing is *very* close".
 
-    Rows embedded by a different model are excluded, as in :func:`hybrid_search`: their
-    vectors come from another space and their distances are not comparable.
+    Rows without a vector are excluded, as in :func:`hybrid_search`.
     """
     if vector is None or not engine.enabled():
         return queryset, Q(pk__in=[])
@@ -94,7 +93,7 @@ def neighbourhood(
         queryset = queryset.annotate(_neighbour_distance=CosineDistance("embedding", vector))
     queryset = queryset.order_by("_neighbour_distance", "pk")
 
-    predicate = Q(embedding_model=engine.model_id()) & Q(embedding__isnull=False)
+    predicate = Q(embedding__isnull=False)
     if exclude_pk is not None:
         predicate &= ~Q(pk=exclude_pk)
     if threshold is not None:

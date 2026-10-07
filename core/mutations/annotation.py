@@ -95,6 +95,21 @@ class CreateAnnotationInput:
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
 
 
+# Every name written here lands in a `CharField(max_length=255)`.
+_NAME_MAX = 255
+
+
+def _fit_name(name: str) -> str:
+    """A derived name, cut to what its column holds.
+
+    The names minted on a scene's first draw are built from the scene's name -- the
+    registration's carries it twice -- so a scene whose own name fits can still derive one
+    that does not, and Postgres refuses the whole draw. These are labels, not keys: nothing
+    looks a collection, a system or an edge up by them, so the tail is what gives.
+    """
+    return name if len(name) <= _NAME_MAX else name[: _NAME_MAX - 1] + "…"
+
+
 def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
     """The scene's default drawing surface: collection + system + registration + layer, atomically.
 
@@ -115,14 +130,14 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     world_axes = list(world.axes.all())
 
     collection = models.AnnotationCollection.objects.create(
-        name=f"{scene.name}/annotations",
+        name=_fit_name(f"{scene.name}/annotations"),
         scene=scene,
         creator=ctx.user,
         organization=ctx.organization,
         **ctx.provenance_kwargs(),
     )
     system = graph_logic.create_collection_system(
-        name=f"{collection.name}/drawing",
+        name=_fit_name(f"{collection.name}/drawing"),
         axes=[AxisInputModel(name=axis.name, type=enums.AxisType(axis.type), long_name=axis.long_name, description=axis.description) for axis in world_axes],
         owner=collection,
         ctx=ctx,
@@ -131,7 +146,7 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
         input_system=system,
         world=world,
         shared=[axis.name for axis in world_axes],
-        name=f"{collection.name} -> {scene.name} (drawn)",
+        name=_fit_name(f"{collection.name} -> {scene.name} (drawn)"),
         validity=enums.PlacementValidityChoices.VALIDATED.value,
         ctx=ctx,
     )
@@ -214,7 +229,7 @@ def create_annotation(
 
     annotation = models.Annotation.objects.create(
         collection=collection,
-        name=model.name or f"Annotation in {collection.name}",
+        name=model.name or _fit_name(f"Annotation in {collection.name}"),
         description=model.description,
         kind=model.kind.value,
         vectors=vectors,
@@ -379,7 +394,7 @@ def create_annotations(
         rows.append(
             models.Annotation(
                 collection=collection,
-                name=spec.name or f"Annotation in {collection.name}",
+                name=spec.name or _fit_name(f"Annotation in {collection.name}"),
                 description=spec.description,
                 kind=spec.kind.value,
                 vectors=vectors,
