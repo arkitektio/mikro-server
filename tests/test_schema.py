@@ -212,6 +212,10 @@ def test_attribute_plan_types_exist():
         "type HopVia",
         "enum HopCardinality",
         "keyHeld: String",
+        # The third lookup shape: a dense array read at the position a row id maps to.
+        "type KeyMap",
+        "keyMap: KeyMap",
+        "arrayDataset: ArrayDataset",
         # The two substrates a plan can be rooted in. Reachable only *through* the
         # interface, so an unregistered one vanishes from the SDL silently -- exactly the
         # failure this file exists for.

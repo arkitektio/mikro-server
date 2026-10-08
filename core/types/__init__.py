@@ -61,6 +61,7 @@ from core.types.attribute_plans import (
     AttributePlan,
     Hop,
     HopVia,
+    KeyMap,
     LookupStep,
     MeshSample,
     NetworkSample,

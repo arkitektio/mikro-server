@@ -99,6 +99,7 @@ def _lookup_step(lookup: "attribute_plans_logic.LookupSpec") -> types.LookupStep
         key_axis=lookup.key_axis,
         key_held=lookup.key_held,
         value_axes=lookup.value_axes,
+        key_map=None if lookup.key_map is None else types.KeyMap(scale=lookup.key_map.scale, offset=lookup.key_map.offset),
     )
 
 
@@ -111,6 +112,7 @@ def _hop(hop: "attribute_plans_logic.HopSpec") -> types.Hop:
         via=None if hop.parent is None else types.HopVia(column=hop.via_column, axis=hop.via_axis),
         table=hop.table,
         sparse_dataset=hop.sparse_dataset,
+        array_dataset=hop.array_dataset,
         lookup=_lookup_step(hop.lookup),
         join_path=[types.ColumnOptionJoinStep(table=table, column=column) for table, column in hop.join_path],
     )

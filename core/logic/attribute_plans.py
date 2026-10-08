@@ -20,10 +20,12 @@ probed system to its root (:func:`core.logic.graph.fact_paths`). The component's
 the semantic work -- registrations are never crossed and SHARED systems never stood on (the
 walk has no scene), UNMAPPABLE never walks, a rank-changing derivation refuses the backward
 hop -- so only grids that honestly correspond to the probed point are reached. FIELD edges
-themselves are payload, never connectivity: an affine edge can never land on an INDEX space
-(``assert_edge_rank`` refuses metric kinds there), and FIELD is not invertible, so tables
-are always leaves. Relations *between* tables are schema facts (``Column.references``),
-not edges -- FIELD is the single crossing from geometry into record-land.
+themselves are payload, never connectivity: FIELD is not invertible, so for the walk that
+*discovers* plans a table is always a leaf. Relations *between* tables are schema facts
+(``Column.references``), not edges -- FIELD is the single crossing from geometry into
+record-land. What a plan's chain can reach *from* its landing is :mod:`core.logic.join_walk`'s
+question, and that walk has one door back out of record-land: a dense array whose
+enumerating axis a derivation edge maps onto a table's row ids.
 
 A refusal anywhere in the component (a lens-owned field, a storeless array) fails the whole
 query, deliberately: the blast radius of a modelling error grows with discovery, and
@@ -83,7 +85,7 @@ class SampleSpec:
 class LookupSpec:
     """The second half of a plan: where the id lands, and how to read it there.
 
-    **Two shapes, flat with a discriminator**, for the reason the stored colouring is flat: a
+    **Three shapes, flat with a discriminator**, for the reason the stored colouring is flat: a
     GraphQL interface over these would carry almost nothing in common -- one has SQL and key
     columns over a parquet, the other two axes over a zarr group and no database anywhere near
     it -- and every client reading a plan would gain a fragment for the privilege.
@@ -94,6 +96,11 @@ class LookupSpec:
     * ``kind="SPARSE"``: two reads of a sparse store. The id selects a *slice* rather than a
       row, so what comes back is every position along the other axes with a value -- which is
       exactly what "what is in this object" means for a matrix, at any rank.
+    * ``kind="ARRAY"``: one read of a dense array. The id is a position along ``key_axis``
+      once ``key_map`` has been applied, and what comes back is the whole of the array at that
+      position, indexed by ``value_axes`` -- one object's trace, one object's spectrum. The
+      array and its levels are the hop's ``array_dataset``; there is no store here because a
+      dense array has one per level.
     """
 
     kind: str = "TABLE"
@@ -124,6 +131,20 @@ class LookupSpec:
     key_held: str | None = None
     value_axes: list[str] = field(default_factory=list)
 
+    # (ARRAY) Reuses `key_axis`, `key_held` and `value_axes` with the meanings above. `key_map`
+    # is what a matrix never needs: a matrix axis *is* the row ids, while a dense array's
+    # positions relate to them by whatever its derivation edge states. Already inverted, so the
+    # worker computes ``position = held * scale + offset`` and re-derives nothing from the edge.
+    key_map: "KeyMapSpec | None" = None
+
+
+@dataclass(frozen=True)
+class KeyMapSpec:
+    """A held id as a position along an array axis: ``position = held * scale + offset``."""
+
+    scale: float
+    offset: float
+
 
 @dataclass(frozen=True)
 class HopSpec:
@@ -132,7 +153,7 @@ class HopSpec:
     Hop 0 is the landing -- the FIELD edge's own target, bound from the sample. Every later hop
     crosses one schema fact (:mod:`core.logic.join_walk`): ``via_column`` names the column whose
     values are bound (a ``Column.references`` hop, or the INDEX column of a table hopping into a
-    matrix), ``via_axis`` the matrix axis crossed. Both null on the landing, whose crossing is
+    matrix or a dense array), ``via_axis`` the matrix or array axis crossed. Both null on the landing, whose crossing is
     the plan's ``edge``.
     """
 
@@ -142,10 +163,11 @@ class HopSpec:
     lookup: LookupSpec
     via_column: "models.Column | None" = None
     via_axis: str | None = None
-    # Where it lands. One or the other, never both -- `lookup.kind` says which, and a nullable
-    # pair rather than a union for the reason `LookupSpec` gives.
+    # Where it lands. Exactly one of the three -- `lookup.kind` says which, and nullable
+    # fields rather than a union for the reason `LookupSpec` gives.
     table: "models.TableDataset | None" = None
     sparse_dataset: "models.SparseDataset | None" = None
+    array_dataset: "models.ArrayDataset | None" = None
     # The picker's identity for a pure table->table chain from the landing table: the
     # `(table, column)` steps a stored `joinPath` names. Empty on the landing, and empty once a
     # matrix has been crossed, because no `joinPath` can name that.
@@ -188,10 +210,24 @@ def _sparse_lookup(sparse_array: "models.SparseArray", *, key_axis: str, key_hel
     return LookupSpec(kind="SPARSE", sparse_array=sparse_array, key_axis=key_axis, key_held=key_held, value_axes=value_axes)
 
 
+def _array_lookup(*, key_axis: str, key_held: str, key_map: KeyMapSpec, value_axes: list[str]) -> LookupSpec:
+    """The ARRAY half: the whole of a dense array at the position the id held under ``key_held`` maps to."""
+    return LookupSpec(kind="ARRAY", key_axis=key_axis, key_held=key_held, key_map=key_map, value_axes=value_axes)
+
+
 def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
     """A walk's hop as a plan hop: the same facts, with the lookup the worker will run built in."""
     if found.table is not None:
         lookup = _table_lookup(found.table, [PlanKeySpec(axis=found.held, column=found.key_column)])
+    elif found.array_dataset is not None:
+        # Held under the INDEX column's name, never the axis': the parent is a table row, and
+        # a row has no value called `cell`.
+        lookup = _array_lookup(
+            key_axis=str(found.key_axis),
+            key_held=found.via_column.name,
+            key_map=KeyMapSpec(scale=float(found.key_scale), offset=float(found.key_offset)),
+            value_axes=list(found.value_axes),
+        )
     else:
         lookup = _sparse_lookup(found.sparse_array, key_axis=str(found.key_axis), key_held=found.held, value_axes=list(found.value_axes))
     return HopSpec(
@@ -203,6 +239,7 @@ def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
         via_axis=found.via_axis,
         table=found.table,
         sparse_dataset=found.sparse_dataset,
+        array_dataset=found.array_dataset,
         join_path=found.join_path,
     )
 

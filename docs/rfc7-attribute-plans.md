@@ -265,6 +265,17 @@ What the type system forces is narrower than the draft said, and still load-bear
 - FIELD is absent from `_INVERTIBLE_KINDS`, so a table can never reach a sibling table
   through the graph. (Between tables, the fact is `TableColumn.references` — see below.)
 
+> **Amended.** "Leaves" is a statement about *discovery*: the walk that finds plans never
+> passes through a table. It was also read as "nothing follows a table", and that stopped
+> being true twice. A plan's chain hops on from its landing across declared references
+> (`core/logic/join_walk.py`), and since the ARRAY hop one of those doors leads back out of
+> record-land: a dense array *derived from* a table, by a BY_DIMENSION edge mapping one of its
+> INDEX or CHANNEL axes onto the table's INDEX column, is one row per table row, and the plan
+> says which (`lookup.kind: ARRAY`, `keyMap`). Note that this edge does arithmetic into an
+> index space: `assert_edge_rank` refuses the bare metric kinds there but not a BY_DIMENSION
+> carrying them, which is what lets `cell_id = cell + 1` be stated at all. The edge is a
+> derivation, never a registration, so the rule that a plan crosses no registration holds.
+
 The discovery walk is fenced by three refusals, each already an existing predicate:
 
 - **Registrations are never crossed, and a SHARED system is never even stood on** (either

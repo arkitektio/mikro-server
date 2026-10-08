@@ -2,12 +2,21 @@
 
 A FIELD edge is the single crossing from geometry into record-land, and the coordinate graph
 stops there -- *"tables are leaves"* (:mod:`core.logic.attribute_plans`). What relates one record
-container to another is never an edge but a **schema fact**, and there are exactly two:
+container to another is a **schema fact**, and there are two:
 
 * ``Column.references`` -- *this column's values identify rows of that table*;
 * ``SparseAxisReference`` -- *positions along this matrix axis identify rows of that table*, which
   read backwards is *that table's row ids are positions along this axis*, and so a table can hop
   **into** a matrix wherever a layout indexes that axis (:meth:`SparseDataset.array_indexing`).
+
+There is a third door, and it is not a schema fact but an edge, read in one narrow shape. A dense
+array **derived from** a table by a BY_DIMENSION edge that maps exactly one of its enumerating
+axes (INDEX or CHANNEL) onto the table's INDEX column says the same thing a matrix axis reference
+does: *positions along this axis are rows of that table*. So a table can hop into that array --
+one row of it per id -- and the edge's own numbers say which position an id is
+(:func:`_derived_arrays`). Any other edge into a table's space is not walked here: a FIELD is a
+plan's root, never a hop, and an UNMAPPABLE derivation states no correspondence to follow. An
+array is a leaf of the walk; nothing hops out of it.
 
 This module walks those facts breadth-first from a plan's landing and hands back one hop per
 reachable container, each saying which fact it crossed, what the worker holds by then (one value
@@ -30,6 +39,8 @@ from typing import TYPE_CHECKING, Iterable, Literal
 from django.db.models import Prefetch
 
 from core import enums, models
+from core.logic import coords as coords_logic
+from core.logic import graph as graph_logic
 
 if TYPE_CHECKING:
     from authentikate.models import Organization
@@ -42,10 +53,15 @@ MAX_JOIN_DEPTH = 4
 
 Cardinality = Literal["ONE", "MANY"]
 
-#: A node of the walk: which kind of container, and which row. Two kinds because a table and a
-#: matrix are hopped *from* differently (columns vs axes) and hopped *into* differently (a row vs
-#: a slice); the key is what the per-branch cycle cut compares.
+#: A node of the walk: which kind of container, and which row. ``T`` and ``S`` because a table
+#: and a matrix are hopped *from* differently (columns vs axes) and hopped *into* differently (a
+#: row vs a slice); ``A`` is a dense array, hopped into (one row of it) and never from. The key
+#: is what the per-branch cycle cut compares.
 NodeKey = tuple[str, int]
+
+#: The axis types whose positions enumerate things rather than measure them: the only axes of a
+#: dense array a row id can be a position along.
+_ENUMERATING_AXIS_TYPES = frozenset({enums.AxisTypeChoices.INDEX.value, enums.AxisTypeChoices.CHANNEL.value})
 
 
 @dataclass(frozen=True)
@@ -78,8 +94,8 @@ class JoinHop:
 
     ``parent`` is the hop index this binds from, ``0`` being the landing. ``via_column`` is set
     for a ``Column.references`` hop (the column whose values are bound) and for a table->matrix
-    hop (the table's INDEX column, whose values are the positions); ``via_axis`` is set for a
-    matrix axis crossed in either direction. The **held name** a lookup binds under is always
+    or table->array hop (the table's INDEX column, whose values are the positions); ``via_axis``
+    is set for a matrix axis crossed in either direction, and for the array axis a hop enters on. The **held name** a lookup binds under is always
     the via's name -- the column's for a column, the axis' for an axis -- so a worker reads the
     value off the parent's result by exactly the name the hop states.
     """
@@ -97,6 +113,11 @@ class JoinHop:
     sparse_array: "models.SparseArray | None" = None
     key_axis: str | None = None
     value_axes: tuple[str, ...] = ()
+    # (array targets) the dataset whose row is read, and the held id as a position along
+    # `key_axis`: ``position = held * key_scale + key_offset``. `value_axes` is every other axis.
+    array_dataset: "models.ArrayDataset | None" = None
+    key_scale: float | None = None
+    key_offset: float | None = None
     # (table targets) the INDEX column the held values bind, and what to select.
     key_column: "models.Column | None" = None
     attributes: tuple["models.Column", ...] = ()
@@ -174,6 +195,95 @@ def _reverse_references(table_ids: Iterable[int], organization: "Organization") 
     return by_table
 
 
+@dataclass(frozen=True)
+class _ArrayDoor:
+    """One dense array a table's row ids are positions in, and where along it an id sits."""
+
+    dataset: "models.ArrayDataset"
+    key_axis: str
+    key_scale: float
+    key_offset: float
+    value_axes: tuple[str, ...]
+
+
+def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Organization") -> dict[int, list[_ArrayDoor]]:
+    """The dense arrays each table's row ids are positions in -- the table->array door, one query.
+
+    An array qualifies when a BY_DIMENSION edge runs from its own grid into the table's space,
+    names the table's one INDEX column as its only output, and reads that column from exactly
+    one input axis, which enumerates (INDEX or CHANNEL). The kind filter is the fence: the mask
+    that *keys* the table reaches it by a FIELD, and a derivation that states no geometry is
+    UNMAPPABLE, and neither is an array to read a row of.
+
+    The edge says ``id = a * position + b``; what a worker needs is the other direction, so it
+    is inverted here, once, through the same composer every placement uses
+    (:func:`core.logic.coords.step_forms`) rather than by reading ``params``, which spells one
+    map three ways. An array without a stored level 0 gets no door: there is nothing to read.
+
+    Levels need no check of their own. An enumerating axis is never downsampled -- the write
+    path refuses a pyramid that does -- so a position along it is the same at every level.
+    """
+    index_columns = {table.coordinate_system_id: column for table in tables if table.coordinate_system_id is not None and (column := _index_column(table)) is not None}
+    if not index_columns:
+        return {}
+    tables_by_system = {table.coordinate_system_id: table.pk for table in tables}
+
+    edges = (
+        models.Transformation.objects.filter(
+            parent__isnull=True,
+            output_id__in=index_columns.keys(),
+            kind=enums.TransformKindChoices.BY_DIMENSION.value,
+            organization=organization,
+        )
+        .select_related("input", "output")
+        .prefetch_related("children", "input__axes", "output__axes", "input__datasets__data_arrays__store")
+        .order_by("pk")
+    )
+
+    doors: dict[int, list[_ArrayDoor]] = {}
+    # The first edge wins where two relate one array to one table: a second reading of the
+    # same row is not a second thing under the point.
+    seen: set[tuple[int, int]] = set()
+    for edge in edges:
+        if edge.input is None:
+            continue
+        column = index_columns[edge.output_id]
+        if list(edge.output_axes or []) != [column.name]:
+            continue
+        try:
+            form = coords_logic.step_forms(graph_logic._edge_step(edge)).get(column.name)
+        except coords_logic.NonAffineTransformError:
+            continue
+        if form is None:
+            continue
+        acting = [position for position, coefficient in enumerate(form.coefficients) if coefficient != 0]
+        if len(acting) != 1:
+            continue
+        axes = list(edge.input.axes.all())
+        key_axis = axes[acting[0]]
+        if key_axis.type not in _ENUMERATING_AXIS_TYPES:
+            continue
+        factor = form.coefficients[acting[0]]
+        for dataset in sorted(edge.input.datasets.all(), key=lambda dataset: dataset.pk):
+            if dataset.organization_id != organization.pk:
+                continue
+            if not any(array.level == 0 and array.store_id is not None for array in dataset.data_arrays.all()):
+                continue
+            if (edge.output_id, dataset.pk) in seen:
+                continue
+            seen.add((edge.output_id, dataset.pk))
+            doors.setdefault(tables_by_system[edge.output_id], []).append(
+                _ArrayDoor(
+                    dataset=dataset,
+                    key_axis=key_axis.name,
+                    key_scale=1.0 / factor,
+                    key_offset=-form.constant / factor,
+                    value_axes=tuple(axis.name for axis in axes if axis.name != key_axis.name),
+                )
+            )
+    return doors
+
+
 def _index_column(table: "models.TableDataset") -> "models.Column | None":
     """The one INDEX coordinate column a value is looked up in, or None if the table is not that shape.
 
@@ -207,7 +317,7 @@ def walk_joins(
     target -- so the list is the same on every call, which is what lets a client cache it.
 
     ``cross_matrices=False`` confines the walk to ``Column.references`` -- the picker's walk,
-    which cannot store a position along an axis.
+    which cannot store a position along an axis, of a matrix or of a dense array.
     """
     depth_limit = max(0, min(max_join_depth, MAX_JOIN_DEPTH))
     hops: dict[int, list[JoinHop]] = {position: [] for position in range(len(roots))}
@@ -230,6 +340,8 @@ def walk_joins(
             break
 
         reverse = _reverse_references((tip.key[1] for tip in frontier if tip.key[0] == "T"), organization) if cross_matrices else {}
+        derived = _derived_arrays([tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"], organization) if cross_matrices else {}
+        doors: dict[tuple[int, int], _ArrayDoor] = {}
 
         # First pass: what each tip could hop to, before any target is loaded, so the targets of
         # a whole level are fetched in two queries rather than one per hop.
@@ -247,6 +359,13 @@ def walk_joins(
                     if index_column is None:
                         continue
                     candidates.append((tip.order + (index_column.order, 1, reference.dataset_id), tip, index_column, reference.axis, ("S", reference.dataset_id)))
+                for door in derived.get(pk, []):
+                    index_column = _index_column(table)
+                    if index_column is None:
+                        continue
+                    # Per table, not per tip: every branch standing on this table gets the hop.
+                    doors[(pk, door.dataset.pk)] = door
+                    candidates.append((tip.order + (index_column.order, 2, door.dataset.pk), tip, index_column, door.key_axis, ("A", door.dataset.pk)))
             else:
                 matrix = matrices[pk]
                 names = matrix.axis_names
@@ -265,6 +384,18 @@ def walk_joins(
         next_frontier: list[_Frontier] = []
         for order, tip, via_column, via_axis, key in candidates:
             kind, pk = key
+            if kind == "A":
+                # A leaf: the hop is recorded and no frontier grows from it.
+                door = doors[(tip.key[1], pk)]
+                hops[tip.root].append(
+                    JoinHop(
+                        root=tip.root, index=counters[tip.root], parent=tip.parent, depth=depth, cardinality=tip.cardinality,
+                        via_column=via_column, via_axis=via_axis, array_dataset=door.dataset, key_axis=door.key_axis,
+                        key_scale=door.key_scale, key_offset=door.key_offset, value_axes=door.value_axes,
+                    )
+                )
+                counters[tip.root] += 1
+                continue
             if kind == "T":
                 target = tables.get(pk)
                 key_column = _index_column(target) if target is not None else None

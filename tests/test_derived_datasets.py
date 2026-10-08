@@ -454,6 +454,73 @@ async def test_a_projection_drops_an_axis_as_by_dimension(authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registration(authenticated_context: HttpContext):
+    """One mask for a whole movie needs no registration of its own: it sits where the movie sits.
+
+    The mask is `(y, x)`, the movie `(t, y, x)`, and the derivation keeps `y` and `x` and says
+    nothing about `t`. Only the movie is registered. The mask's layer is accepted and placed,
+    and its map carries the movie's pixel size -- on the two axes it has, and no others.
+    """
+    movie_axes = [seed.axis("t", enums.AxisType.TIME), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)]
+    movie = await seed.create_array_dataset(authenticated_context, "Movie", axes=movie_axes, shapes=[[10, 64, 64]])
+    movie_lens = await seed.create_lens(authenticated_context, movie, slices=[])
+
+    derived = await _derive(
+        authenticated_context,
+        "Cells",
+        lens=movie_lens,
+        axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        shape=[64, 64],
+        transform={"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]},
+        valueRelation="CATEGORIZED",
+    )
+    assert not derived.errors, derived.errors
+    mask = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    mask_lens = await seed.create_lens(authenticated_context, mask, slices=[])
+
+    scene = await seed.create_scene(authenticated_context, "Field")  # world (z, y, x)
+    movie_system = await sync_to_async(lambda: movie.intrinsic_coordinate_system)()
+    registered = await schema.execute(
+        REGISTER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "input": str(movie_system.pk),
+                "output": str(scene.world_id),
+                "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.25]},
+            }
+        },
+    )
+    assert not registered.errors, registered.errors
+
+    made = await schema.execute(
+        "mutation Make($input: CreateLabelLayerInput!) { createLabelLayer(input: $input) { id } }",
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.pk), "lens": str(mask_lens.pk)}},
+    )
+    assert not made.errors, made.errors
+
+    read = await schema.execute(
+        "query Q($id: ID!) { scene(id: $id) { layers { placement asAffine { matrix inputAxes outputAxes total } } } }",
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
+    assert not read.errors, read.errors
+    (layer,) = read.data["scene"]["layers"]
+    assert layer["placement"] == "PLACED"
+    affine = layer["asAffine"]
+    assert affine["inputAxes"] == ["y", "x"] and affine["outputAxes"] == ["y", "x"]
+    assert affine["matrix"] == [[0.5, 0.0, 0.0], [0.0, 0.25, 0.0]], "the movie's pixel size, inherited through the derivation"
+    assert affine["total"] is False, "the mask says nothing about the world's third axis, and the map does not pretend it does"
+
+    def edges_into_world() -> list[int]:
+        return list(models.Transformation.objects.filter(parent__isnull=True, output_id=scene.world_id).values_list("input_id", flat=True))
+
+    assert await sync_to_async(edges_into_world)() == [movie_system.pk], "the mask was never registered"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_identity_is_not_a_rank_claim_in_disguise(authenticated_context: HttpContext):
     """IDENTITY says the two grids ARE the same. Between different axes that is a lie.
 

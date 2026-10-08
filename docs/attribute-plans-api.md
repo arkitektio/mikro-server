@@ -54,12 +54,14 @@ query Plans($system: ID!) {          # $system = the mask's intrinsic system
       via { column { name } axis }
       table { id name }
       sparseDataset { id name }
+      arrayDataset { id name axisNames dataArrays { level shape store { id } } }
       lookup {
-        kind                         # TABLE or SPARSE -- the other shape's fields are null
+        kind                         # TABLE, SPARSE or ARRAY -- the other shapes' fields are null
         store { id }                 # ask it for an accessGrant to read the parquet
         keyColumns { axis column { name dtype } }
         attributes { name dtype references { id } }
         sparseArray { path store { id } } keyAxis keyHeld valueAxes
+        keyMap { scale offset }      # ARRAY only: held id -> position along keyAxis
       }
     }
   }
@@ -176,6 +178,7 @@ the whole chain, up to `maxJoinDepth` (default 1, at most 4, `0` for the landing
 | a `Column.references` | `column` = the parent row's reference column | that column's value | inherited | a table, keyed by its INDEX column |
 | a matrix axis a table identifies, **leaving** the matrix | `axis` = the slice's value axis | every position the slice returned | `MANY` | that table |
 | the same axis, **entering** the matrix from its table | `column` = the table's INDEX column, `axis` = the matrix axis | the row's key | inherited | the matrix, sliced at that position (`keyHeld` says the name) |
+| a derivation of a dense array from a table, **entering** the array | `column` = the table's INDEX column, `axis` = the array's key axis | the row's key | inherited | the array, at the position `keyMap` gives (`keyHeld` says the name) |
 
 The name a hop binds under is always the via's own name: `keyColumns[].axis` (or `keyHeld`
 for a matrix) is the parent row's column name, or the parent slice's axis name. Execute in
@@ -191,19 +194,22 @@ for (const hop of plan.hops.slice(1)) {
 ```
 
 `run` for a `TABLE` hop is the statement above; for a `SPARSE` hop it is the two reads in
-the next section, at the position held under `keyHeld`. A worked chain — mask → expression
+the next section, at the position held under `keyHeld`; for an `ARRAY` hop it is the one
+read in the section after that. A worked chain — mask → expression
 matrix → genes table → pathway-membership matrix → pathways table — is
 `tests/test_plan_hops.py::test_a_plan_walks_mask_to_matrix_to_table_to_matrix_to_table`.
 
 A table→table hop also carries `joinPath`: the `(table, column)` steps a layer's
 `colorBys[].joinPath` stores, so a stored colouring finds the hop that resolves it — and the
 key column of its target, which is what a renderer needs to join and used to have to guess.
-It is empty once a chain has crossed a matrix; no picker entry can name that.
+It is empty once a chain has crossed a matrix, and on a hop into an array; no picker entry
+can name either.
 
 Not every reference becomes a hop. A table enters a matrix only along an axis one of its
 layouts indexes (from the other layout the same read is a scan of every byte); a hop never
-revisits a container its own branch already stands in, the landing included; and a
-product-space table (one keyed by a pair of ids) is not a hop target. `maxJoinDepth` bounds
+revisits a container its own branch already stands in, the landing included; a
+product-space table (one keyed by a pair of ids) is not a hop target; and an array is
+entered only under the conditions its own section lists. Nothing hops out of an array. `maxJoinDepth` bounds
 the rest.
 
 ## Probing through the graph: hovering the source image
@@ -402,3 +408,63 @@ indexed one: a plan is never published over the layout that would make this a sc
 What you get back is every position along `valueAxes` that carries a value -- one object's
 whole profile. A position is a row of the table that axis references, and the plan's next
 hop (`via.axis`, `cardinality: MANY`) is exactly that lookup, over all of them at once.
+
+## An ARRAY lookup: one row, no SQL
+
+When `lookup.kind` is `ARRAY` the hop lands in a dense array: one trace per cell, one
+spectrum per object. The array says it holds one entry per row of a table by being *derived
+from* that table, with a BY_DIMENSION edge that maps one of its axes onto the table's INDEX
+column:
+
+```python
+traces = create_array_dataset(
+    data=xr.DataArray(dff, dims=("cell", "t")),
+    axes=[AxisInput(name="cell", type=AxisType.INDEX), "t"],
+    derived_from=[TableDatasetDerivedFromInput(
+        table_dataset=cells.id,
+        transform=ByDimensionTransformInput(input_axes=("cell",), output_axes=("cell_id",), affine=((1.0, 1.0),)),
+    )],
+)
+```
+
+A hop is published when all of this holds, and silently not otherwise:
+
+- the edge is a BY_DIMENSION from the array's own grid into the table's space. An omitted
+  transform is UNMAPPABLE and states no correspondence;
+- the table has exactly one coordinate column, of type INDEX, and it is the edge's only
+  output axis;
+- the edge reads that column from exactly one array axis, of type INDEX or CHANNEL;
+- the array has a stored level 0.
+
+What the hop carries:
+
+```
+hop.arrayDataset          the array; its dataArrays are the levels, each with its own store
+lookup.keyAxis            the array axis the id is a position along
+lookup.keyHeld            the name you hold the id under: the parent row's INDEX column
+lookup.keyMap             position = held * scale + offset  (the edge, already inverted)
+lookup.valueAxes          every other axis of the array, in its order: read all of each
+```
+
+One read, with the id held under `keyHeld`:
+
+```js
+const exact = held * lookup.keyMap.scale + lookup.keyMap.offset;
+const position = Math.round(exact);                    // the map is floating point: 1/3 is not exact
+const axisNames = hop.arrayDataset.axisNames;
+const length = level.shape[axisNames.indexOf(lookup.keyAxis)];
+if (Math.abs(exact - position) > 1e-6 || position < 0 || position >= length) return null;  // no row for this object
+const row = await readSlice(level.store, axisNames.map((name) => (name === lookup.keyAxis ? [position, position + 1] : null)));
+```
+
+A plan already fetched does not learn of an array uploaded afterwards: no edge the plan's
+cache key names changes when one is derived from its table. Refetch when such data arrives.
+
+Any level will do for the key: an INDEX or CHANNEL axis is never downsampled, so a position
+along it is the same at every level, and a coarser level only thins the value axes.
+
+The plan does not say where a value axis sits in the space you probed. A mask's grid has no
+`t`, and relating the trace's `t` to a scene's clock runs through registrations, which a plan
+never crosses. That is a question about a world, and the placement queries answer it: where
+the trace and the scene's world are both placed in one space (a shared clock, say), their
+two placements there are the maps to compare.
