@@ -105,7 +105,7 @@ wheels = [
 
 [[package]]
 name = "arkitekt-service"
-version = "2.0.2"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -115,9 +115,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/8e/4fed44d4e3f5dc2f0ea535eb519d163cd21c781379dcbb4c550ac3662824/arkitekt_service-2.0.2.tar.gz", hash = "sha256:48dba6d13eab812111f8bb8135200a188e3fc1773cd1c4df01d342cfa085aa1c", size = 50296, upload-time = "2026-10-08T13:50:31.079Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/5c/26a8ba3db9ac85d142f3529b548932db4b52a4daaf4b0ec64150289ef29e/arkitekt_service-3.0.0.tar.gz", hash = "sha256:7eefaad66f783dc97685f818b9d9967e3a23189c30109bd2d045c85106c13226", size = 48556, upload-time = "2026-10-08T14:09:41.054Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/c9/8a2ea538665dca4b7ce59c77d93b28e4d6e750f84fd9e4647de96d22c8e3/arkitekt_service-2.0.2-py3-none-any.whl", hash = "sha256:dadf8b4d40125ef229146f88ddfc04ead6aa7958bcfa2b69b8676ae369fe87d7", size = 64378, upload-time = "2026-10-08T13:50:29.923Z" },
+    { url = "https://files.pythonhosted.org/packages/09/93/17f275a91aed436948985401df78b070affd46fe6f46a83a8f733b60b2fa/arkitekt_service-3.0.0-py3-none-any.whl", hash = "sha256:2c31ac151d7955b175d15de90721991f20c7f76dbc7b9c28ac9313f528841b26", size = 61633, upload-time = "2026-10-08T14:09:40.111Z" },
 ]
 
 [[package]]
@@ -1239,7 +1239,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
-    { name = "arkitekt-service", specifier = ">=2.0.2" },
+    { name = "arkitekt-service", specifier = ">=3.0.0" },
     { name = "authentikate", specifier = ">=4.2.0" },
     { name = "boto3", specifier = ">=1.38.9" },
     { name = "channels-redis", specifier = ">=4.1.0,<5" },
