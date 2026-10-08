@@ -39,7 +39,6 @@ from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
 from core.logic import identification as identification_logic
-from core.logic import pickers
 from core.mutations._generic import make_delete, self_owner
 from core.mutations.array_dataset import CoordinateAnchorInput, CoordinateAnchorInputModel, _get_or_create_anchor, _write_anchor_spokes, assert_anchors_name_axes
 from core.scoping import get_for_org
@@ -347,4 +346,4 @@ class DeleteSparseDatasetInput:
 #: PROTECT, for the reason a table dataset is protected: a colouring names its source by id
 #: inside a JSON column, so there is no foreign key to cascade and a deleted matrix leaves an
 #: entry nothing can execute. See :func:`core.logic.pickers.assert_sparse_dataset_not_in_a_picker`.
-delete_sparse_dataset = make_delete(models.SparseDataset, DeleteSparseDatasetInput, owner=self_owner, guard=pickers.assert_sparse_dataset_not_in_a_picker)
+delete_sparse_dataset = make_delete(models.SparseDataset, DeleteSparseDatasetInput, owner=self_owner)

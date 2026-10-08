@@ -29,7 +29,6 @@ import kante
 from core import enums, models, types
 from core.creation import CreationContext
 from core.inputs.coords import SelectorInput, SelectorInputModel, TransformInput, TransformSpec
-from core.logic import pickers
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import assert_can_delete, creator_owner, make_delete
@@ -277,7 +276,7 @@ class DeleteTransformationInput:
 #: PROTECT, the second route to a stranded picker: leaving the table in place and removing the
 #: crossing strands an entry exactly as deleting the table does. Asked as a hypothetical -- the
 #: walk re-run without this edge -- so a rival edge still providing the crossing is not refused.
-delete_transformation = make_delete(models.Transformation, DeleteTransformationInput, owner=creator_owner, guard=pickers.assert_edge_not_stranding_a_picker)
+delete_transformation = make_delete(models.Transformation, DeleteTransformationInput, owner=creator_owner)
 
 
 class DeleteRegistrationInputModel(BaseModel):

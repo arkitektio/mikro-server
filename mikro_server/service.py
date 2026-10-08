@@ -14,6 +14,8 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 """
 
 
+from chart import models as chart_models
+from chart.logic import chart as chart_logic
 from core import models
 from core.descriptors import dataset_descriptors, lens_descriptors
 from arkitekt_service.service import Service, organization_of
@@ -33,6 +35,15 @@ scene = service.structure(
     "@mikro/scene",
     describe=lambda scene: {"@mikro/blending": str(scene.blending), "@mikro/preferred_view": str(scene.preferred_view)},
 )
+
+
+def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
+    """A chart's descriptors: what its one axis measures, and in what unit."""
+    axis = chart_logic.chart_axis(chart.world)
+    return {"@mikro/axis_type": str(axis.type), "@mikro/axis_unit": str(axis.unit)}
+
+
+chart = service.structure(chart_models.Chart, "@mikro/chart", describe=_chart_descriptors)
 scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
 tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset")
 meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection")
@@ -49,6 +60,7 @@ org = organization_of()
 
 service.model_signal(arraydataset, organization=org)
 service.model_signal(scene, organization=org)
+service.model_signal(chart, organization=org)
 service.model_signal(scenesnapshot, organization=org)
 service.model_signal(tabledataset, organization=org)
 service.model_signal(meshcollection, organization=org)

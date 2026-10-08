@@ -34,6 +34,7 @@ from core.inputs.coords import (
     RegistrationPathInput,
     RegistrationPathInputModel,
 )
+from core.logic import compositions as compositions_logic
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import assert_can_delete, creator_owner, user_is_org_admin
@@ -182,11 +183,8 @@ def delete_coordinate_system(info: Info, input: DeleteCoordinateSystemInput) -> 
     system = get_for_org(models.CoordinateSystem, info, id=model.id)
     _assert_shared(system, "deleted")
 
-    # Scene.world is RESTRICT, so the database would refuse this anyway -- but it would
-    # refuse with an IntegrityError naming a constraint, and this names the scenes.
-    scenes = list(system.scenes.all()[:5])
-    if scenes:
-        raise ValueError(f"Coordinate system {system.pk} is the world of {len(scenes)} scene(s) ({', '.join(str(scene.pk) for scene in scenes)}) and cannot be deleted. A shared space outlives the scenes that adopt it; delete them first.")
+    # Every composition laid out over the space -- a scene, a chart -- refuses here, by name.
+    compositions_logic.assert_no_composition_over(system)
 
     # Both directions: an edge *into* the space is a registration of some data-tree, and one
     # *out of* it registers the space itself into a wider one. Transformation.input and
@@ -258,8 +256,10 @@ def delete_orphaned_coordinate_systems(info: Info) -> list[strawberry.ID]:
         for_org(models.CoordinateSystem, info)
         # Derived from `CONTAINERS` rather than listed, for the reason `graph._UNINHABITED`
         # is: a hand-written copy of the resident relations is a copy that gets forgotten,
-        # and a forgotten one here *deletes a space that something still lives in*.
-        .filter(**graph_logic._UNINHABITED, scenes__isnull=True)
+        # and a forgotten one here *deletes a space that something still lives in*. The
+        # compositions are read from their registry for the same reason, one step further:
+        # an app this one does not know about may have laid something out over the space.
+        .filter(**graph_logic._UNINHABITED, **compositions_logic.no_composition_over())
         .exclude(Exists(touched))
     )
     if not user_is_org_admin(info):

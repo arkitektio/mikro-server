@@ -58,6 +58,15 @@ HOSTS = Hosts(
             ],
         ),
         Structure(
+            identifier="@mikro/chart",
+            label="Chart",
+            description="A composition of data laid out along one metric axis, with values read off it.",
+            descriptors=[
+                Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE, TIME, MICROTIME or SPECTRUM"),
+                Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its axis"),
+            ],
+        ),
+        Structure(
             identifier="@mikro/scenesnapshot",
             label="Scene Snapshot",
             description="A pre-rendered picture of a scene.",
@@ -113,6 +122,12 @@ HOSTS = Hosts(
             kinds=["CREATED", "UPDATED", "DELETED"],
             descriptors=["@mikro/blending", "@mikro/preferred_view"],
             description="A scene (a renderable composition of layers) was created, changed or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/chart",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=["@mikro/axis_type", "@mikro/axis_unit"],
+            description="A chart (data laid out along one metric axis) was created, changed or deleted.",
         ),
         Signal(
             identifier="@mikro/scenesnapshot",

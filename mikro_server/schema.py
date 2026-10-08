@@ -8,6 +8,9 @@ from core import types, models, filters, order
 from core import mutations
 from core import queries
 from core import subscriptions
+from chart import filters as chart_filters
+from chart import mutations as chart_mutations
+from chart import types as chart_types
 import strawberry_django
 from strawberry_django.fields.field import StrawberryDjangoField
 from koherent.strawberry.extension import KoherentExtension
@@ -109,6 +112,12 @@ class Query:
 
     layers: list[types.Layer] = field(filters=filters.LayerFilter, ordering=order.LayerOrder, pagination=True, description="List layers placed in scenes (a heterogeneous list of layer kinds)")
     layer: types.Layer = field(description="Get a single layer by ID")
+
+    charts: list[chart_types.Chart] = field(description="List charts (compositions of data laid out along one metric axis)")
+    chart: chart_types.Chart = field(description="Get a single chart by ID")
+
+    chart_layers: list[chart_types.ChartLayer] = field(filters=chart_filters.ChartLayerFilter, ordering=chart_filters.ChartLayerOrder, pagination=True, description="List layers drawn in charts (a heterogeneous list of layer kinds)")
+    chart_layer: chart_types.ChartLayer = field(description="Get a single chart layer by ID")
 
     lenses: list[types.Lens] = field(description="List lenses (parameterized ways of looking at an array dataset)")
     lens: types.Lens = field(description="Get a single lens by ID")
@@ -524,6 +533,31 @@ class Mutation:
     )
     delete_scene = mutation(resolver=mutations.delete_scene, description="Delete an existing scene")
 
+    create_chart = mutation(
+        resolver=chart_mutations.create_chart,
+        description="Create a chart: a composition of data laid out along one metric axis. Over an existing coordinate system with exactly one metric, unit-carrying axis, or over one created from a single axis",
+    )
+    create_chart_from_coordinate_system = mutation(
+        resolver=chart_mutations.create_chart_from_coordinate_system,
+        description="Bootstrap a chart over an existing coordinate system, drawing every array, table and annotation collection already laid along its axis. Authors no edges",
+    )
+    update_chart = mutation(resolver=chart_mutations.update_chart, description="Rename or re-describe a chart. Its world is fixed")
+    delete_chart = mutation(resolver=chart_mutations.delete_chart, description="Delete a chart and its layers. The data they drew and the chart's world are untouched")
+    create_trace_chart_layer = mutation(
+        resolver=chart_mutations.create_trace_chart_layer,
+        description="Draw an array as a trace in a chart: a lens with one metric axis free, laid along the chart's axis by the graph, and optionally one CHANNEL or INDEX axis free as one line per position",
+    )
+    create_series_chart_layer = mutation(
+        resolver=chart_mutations.create_series_chart_layer,
+        description="Draw a table as a series in a chart: one numeric column as the value, against the coordinate column the graph lays along the chart's axis",
+    )
+    create_annotation_chart_layer = mutation(
+        resolver=chart_mutations.create_annotation_chart_layer,
+        description="Draw an annotation collection's marks in a chart, or make a new drawing surface for the chart when no collection is named",
+    )
+    update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer. View state only")
+    delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")
+
     # The coordinate graph. Registration used to be a 4x4 matrix on the layer, where
     # two layers over one dataset carried two copies of one fact; it is now an edge.
     create_transformation = mutation(
@@ -793,7 +827,7 @@ schema = Schema(
         KoherentExtension,
         DuckExtension,
     ],
-    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
+    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *chart_types.chart_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
     # The union member inputs above are referenced by no field: they are published for
     # codegen, and the directive on each says which flat union input it belongs to.
     schema_directives=[unionElementOf],

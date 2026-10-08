@@ -99,7 +99,17 @@ RESIDENT_RELATIONS: tuple[str, ...] = tuple(container.related_name for container
 COLLECTION_CONTAINERS: tuple[Container, ...] = tuple(container for container in CONTAINERS if container.is_collection)
 
 
-def create_pixel_axes(system: "models.CoordinateSystem", axes: list) -> list["models.Axis"]:
+def _assert_no_value_axis(system: "models.CoordinateSystem", specs: list) -> None:
+    """Refuse a VALUE axis anywhere but a drawing space."""
+    value_axes = [spec.name for spec in specs if spec.type == enums.AxisTypeChoices.VALUE.value]
+    if value_axes:
+        raise ValueError(
+            f"Coordinate system '{system.name}' declares a VALUE axis ({', '.join(value_axes)}). A VALUE axis is the direction values are drawn along and exists only in "
+            "an annotation collection's space; data and unit-carrying spaces have none."
+        )
+
+
+def create_pixel_axes(system: "models.CoordinateSystem", axes: list, *, drawing: bool = False) -> list["models.Axis"]:
     """Write a pixel-space system's axes, enumerating them so `order` is the array index.
 
     ``Axis.order`` being the array-dimension index is load-bearing: it is what ties
@@ -111,8 +121,14 @@ def create_pixel_axes(system: "models.CoordinateSystem", axes: list) -> list["mo
     -- a z axis is spatial whether it holds indices or micrometres, and the render
     axes are derived from the types -- but they never carry a unit. Units belong
     to unit-carrying systems -- physical spaces and worlds -- only.
+
+    ``drawing`` is what admits a VALUE axis, and only an annotation collection's space is
+    one: a VALUE axis is where a mark's height is drawn, and nothing that *holds* data has
+    such a direction -- an array's values are its contents, not one of its dimensions.
     """
     axis_specs = [coords_logic.AxisSpec(name=axis.name, type=axis.type.value if hasattr(axis.type, "value") else axis.type) for axis in axes]
+    if not drawing:
+        _assert_no_value_axis(system, axis_specs)
     coords_logic.assert_axis_names_unique(axis_specs)
     coords_logic.assert_at_most_one_time_axis(axis_specs)
 
@@ -177,6 +193,7 @@ def create_physical_axes(system: "models.CoordinateSystem", axes: list) -> list[
     specs = [coords_logic.AxisSpec(name=axis.name, type=axis.type.value if hasattr(axis.type, "value") else axis.type) for axis in axes]
     coords_logic.assert_axis_names_unique(specs)
     coords_logic.assert_at_most_one_time_axis(specs)
+    _assert_no_value_axis(system, specs)
 
     rows = []
     for index, axis in enumerate(axes):
@@ -1368,6 +1385,7 @@ def create_collection_system(
     name: str,
     axes: list,
     owner: "models.MeshCollection | models.NetworkCollection | models.TableDataset | models.AnnotationCollection | None" = None,
+    drawing: bool = False,
     ctx: CreationContext,
 ) -> "models.CoordinateSystem":
     """The coordinate system a collection owns, with its axes.
@@ -1390,7 +1408,7 @@ def create_collection_system(
         creator=ctx.user,
         organization=ctx.organization,
     )
-    create_pixel_axes(system, axes)
+    create_pixel_axes(system, axes, drawing=drawing)
     if owner is not None:
         # The collection moves *into* the space. Two writes here rather than one only
         # because the caller already saved the collection to name the space after it.

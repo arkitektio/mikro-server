@@ -23,3 +23,14 @@ class CoreConfig(AppConfig):
         # The hub's rekuest: actions and model signals, connected in every process (web,
         # shell, management commands) — not only once the URLconf has loaded.
         import mikro_server.service  # noqa: F401
+
+        # What the data layer must be told about scenes: that a space may be a scene's world,
+        # and which rows a scene layer's pickers name by id. Registered rather than written
+        # into the guards, through the same calls any other composition's app makes.
+        from core import models
+        from core.logic import compositions, pickers
+
+        compositions.register_composition(models.Scene, world_relation="scenes", noun="scene")
+        compositions.register_delete_guard(models.TableDataset, pickers.assert_table_not_in_a_picker)
+        compositions.register_delete_guard(models.SparseDataset, pickers.assert_sparse_dataset_not_in_a_picker)
+        compositions.register_delete_guard(models.Transformation, pickers.assert_edge_not_stranding_a_picker)

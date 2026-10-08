@@ -92,6 +92,8 @@ def create_annotation_collection(info: Info, input: CreateAnnotationCollectionIn
             name=f"{collection.name}/drawing",
             axes=model.axes,
             owner=collection,
+            # The one space a VALUE axis may be declared in: what is drawn here are marks.
+            drawing=True,
             ctx=ctx,
         )
 

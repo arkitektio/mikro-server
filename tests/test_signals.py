@@ -21,6 +21,7 @@ from tests.test_task_provenance import attach_provenance, clear_provenance, make
 EXPECTED = {
     "@mikro/arraydataset": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/scene": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/chart": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/scenesnapshot": ["CREATED", "DELETED"],
     "@mikro/tabledataset": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/meshcollection": ["CREATED", "DELETED"],

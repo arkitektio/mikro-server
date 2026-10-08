@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     "kanne_server",
     "core",
     "datalayer",
+    "chart",
     "health_check",
     "health_check.db",
     # What every service is as a Django server: `ensureadmin`, `validate_settings`, and the

@@ -126,6 +126,7 @@ class AxisTypeChoices(TextChoices):
     MICROTIME = "MICROTIME", "Microtime (FLIM arrival-time bin)"
     SPECTRUM = "SPECTRUM", "Spectrum (wavelength bin)"
     INDEX = "INDEX", "Index (an enumeration with no metric: an object id, a row number)"
+    VALUE = "VALUE", "Value (the direction values are drawn along, in a drawing space only)"
 
 
 class ColorMapChoices(TextChoices):
@@ -767,6 +768,7 @@ class AxisType(str, Enum):
     MICROTIME = "MICROTIME"
     SPECTRUM = "SPECTRUM"
     INDEX = "INDEX"
+    VALUE = "VALUE"
 
 
 _describe(
@@ -778,6 +780,7 @@ _describe(
     COORDINATE="The value axis of a coordinate-valued array: its positions enumerate the components of an absolute output position. This is what makes the array readable as the `field` of a FIELD edge. A scalar-valued field (a label mask, whose one value is an object id) carries no value axis at all -- absent means scalar, and scalar means COORDINATE.",
     DISPLACEMENT="The value axis of a displacement-valued array: its positions enumerate the components of a per-point OFFSET, where COORDINATE enumerates absolute positions. Stating it here rather than on the edge is deliberate: it is a property of the array, and an array that says it twice can disagree with itself.",
     MICROTIME="A FLIM arrival-time bin. Continuous, so a pyramid may re-bin it, and a phasor may be taken over it.",
+    VALUE="The direction values are drawn along. It exists only in a drawing space -- an annotation collection's -- so that a mark can sit at a height as well as a position: no dataset's grid, no table and no unit-carrying space has one, because what data *holds* is its values, not an axis of them. Always unitless: what a height measures is whatever the thing drawn beside it measures.",
     SPECTRUM="A wavelength bin of a spectrally resolved acquisition. Continuous -- unlike a CHANNEL axis, whose coordinates index acquisitions rather than positions -- so a pyramid may re-bin it, and a phasor may be taken over it.",
 )
 

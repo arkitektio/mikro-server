@@ -22,7 +22,6 @@ from kanne_server import scalars as kanne_scalars
 
 from core import enums, models, scalars, types
 from core.creation import CreationContext
-from core.logic import pickers
 from core.inputs.file_link import SourceFileInput, SourceFileInputModel
 from core.inputs.coords import AxisInputModel, DerivedFromInput, DerivedFromSpec
 from core.inputs.identification import IdentificationInput, IdentificationSpec
@@ -572,4 +571,4 @@ class DeleteTableDatasetInput:
 #: PROTECT: a layer's colour or filter picker names its table by id, inside JSON, so there is no
 #: foreign key to cascade and a deleted table leaves a join nothing can execute. See
 #: :func:`core.logic.pickers.assert_table_not_in_a_picker` for why refusing beats orphaning.
-delete_table_dataset = make_delete(models.TableDataset, DeleteTableDatasetInput, owner=self_owner, guard=pickers.assert_table_not_in_a_picker)
+delete_table_dataset = make_delete(models.TableDataset, DeleteTableDatasetInput, owner=self_owner)
