@@ -130,8 +130,9 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
         default=list,
         help_text=(
             "What this dataset structurally is: the raw ArrayDatasetSpec values (one spatial member plus a "
-            "modifier per acquisition axis) that its intrinsic axes satisfy, materialized at creation by "
-            "the axis writer from core.logic.coords.specs_for_axes. Immutable because the axes are, so it "
+            "modifier per acquisition axis) that its intrinsic axes satisfy at its level-0 shape -- an axis "
+            "counts only when it has more than one position -- materialized at creation by the axis writer "
+            "from core.logic.coords.specs_for_axes. Immutable because the axes and the shape are, so it "
             "cannot disagree with them. Read it back as enum members through the `spec` property. Empty "
             "while the intrinsic system does not exist yet."
         ),

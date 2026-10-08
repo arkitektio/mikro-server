@@ -1,8 +1,12 @@
 """Filter tests for the multi-dimensional data system queries
 (ArrayDataset, Scene, Layer, Lens, Annotation)."""
 
+from unittest.mock import patch
+
 import pytest
 from asgiref.sync import sync_to_async
+from datalayer.models import ZarrStore
+from django.core.management import call_command
 
 from core import enums
 from core.models import ArrayDataset, Annotation, AnnotationCollection, CoordinateSystem, Layer, Lens, Scene, Transformation
@@ -91,7 +95,7 @@ async def test_array_dataset_filters(db, authenticated_context: HttpContext):
 
 async def _seed_spec_datasets(ctx):
     """One dataset per shape of interest, named for what it is."""
-    await seed.create_array_dataset(ctx, "Stack", shapes=[[1, 1, 4, 100, 100]], axes=_TCZYX)
+    await seed.create_array_dataset(ctx, "Stack", shapes=[[5, 3, 4, 100, 100]], axes=_TCZYX)
     await seed.create_array_dataset(ctx, "Plane", shapes=[[3, 64, 64]], axes=seed.SIMPLE_AXES)
     await seed.create_array_dataset(ctx, "Bare", shapes=[[64, 64]], axes=seed.YX_AXES)
     await seed.create_array_dataset(ctx, "Lambda", shapes=[[8, 4, 64, 64]], axes=_LZYX)
@@ -192,11 +196,104 @@ async def test_array_dataset_spec_is_materialized_at_creation(db, authenticated_
     does not lean on the in-memory instance the writer happened to touch.
     """
     ctx = authenticated_context
-    dataset = await seed.create_array_dataset(ctx, "Stack", shapes=[[1, 1, 4, 100, 100]], axes=_TCZYX)
+    dataset = await seed.create_array_dataset(ctx, "Stack", shapes=[[5, 3, 4, 100, 100]], axes=_TCZYX)
 
     fresh = await ArrayDataset.objects.aget(pk=dataset.pk)
     assert fresh.stored_spec == ["VOLUME", "TIMESERIES", "MULTICHANNEL"]
     assert fresh.spec == [enums.ArrayDatasetSpec.VOLUME, enums.ArrayDatasetSpec.TIMESERIES, enums.ArrayDatasetSpec.MULTICHANNEL]
+
+
+_FLIM = [
+    seed.axis("tau", enums.AxisType.MICROTIME),
+    seed.axis("y", enums.AxisType.SPACE),
+    seed.axis("x", enums.AxisType.SPACE),
+]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_axis_of_one_position_does_not_count_towards_the_spec(db, authenticated_context: HttpContext):
+    """A spec says what the data is: a stack of one plane is an image, and one frame is no timelapse.
+
+    Each dataset below declares an axis its shape gives a single position along. The axis
+    is still there -- `hasAxisTypes` finds it -- but it is not what the dataset *is*.
+    """
+    ctx = authenticated_context
+    zyx = [seed.axis("z", enums.AxisType.SPACE), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)]
+    await seed.create_array_dataset(ctx, "OnePlane", shapes=[[1, 13, 23]], axes=zyx)
+    await seed.create_array_dataset(ctx, "OneLine", shapes=[[1, 1, 23]], axes=zyx)
+    await seed.create_array_dataset(ctx, "OneVoxel", shapes=[[1, 1, 1]], axes=zyx)
+    await seed.create_array_dataset(ctx, "OneFrame", shapes=[[1, 1, 1, 100, 100]], axes=_TCZYX)
+    await seed.create_array_dataset(ctx, "OneBin", shapes=[[1, 4, 64, 64]], axes=_LZYX)
+    await seed.create_array_dataset(ctx, "OneGate", shapes=[[1, 64, 64]], axes=_FLIM)
+    await seed.create_array_dataset(ctx, "Lifetime", shapes=[[256, 64, 64]], axes=_FLIM)
+    await seed.create_array_dataset(ctx, "Timelapse", shapes=[[5, 3, 4, 100, 100]], axes=_TCZYX)
+
+    data = await execute(ctx, _SPEC_QUERY, {})
+    specs = {d["name"]: d["spec"] for d in data["arrayDatasets"]}
+    assert specs == {
+        "OnePlane": ["IMAGE"],
+        "OneLine": ["PROFILE"],
+        "OneVoxel": ["SCALAR"],
+        "OneFrame": ["IMAGE"],
+        "OneBin": ["VOLUME"],
+        "OneGate": ["IMAGE"],
+        "Lifetime": ["IMAGE", "FLIM"],
+        "Timelapse": ["VOLUME", "TIMESERIES", "MULTICHANNEL"],
+    }
+
+    async def names(filters):
+        return {d["name"] for d in (await execute(ctx, _SPEC_QUERY, filters))["arrayDatasets"]}
+
+    # The filter follows the field: a one-plane stack is found as an image, never as a volume.
+    assert await names({"spec": ["VOLUME"]}) == {"OneBin", "Timelapse"}
+    assert await names({"spec": ["IMAGE"]}) == {"OnePlane", "OneFrame", "OneGate", "Lifetime"}
+    assert await names({"spec": ["TIMESERIES"]}) == {"Timelapse"}
+    assert await names({"spec": ["MULTICHANNEL"]}) == {"Timelapse"}
+    assert await names({"spec": ["SPECTRAL"]}) == set()
+    assert await names({"spec": ["FLIM"]}) == {"Lifetime"}
+
+    # Whether the axis is *declared* is still askable, and is a different question.
+    assert await names({"hasAxisTypes": ["TIME"]}) == {"OneFrame", "Timelapse"}
+    assert await names({"hasAxisTypes": ["SPECTRUM"]}) == {"OneBin"}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_spec_of_a_created_dataset_is_read_off_its_stores_shape(db, authenticated_context: HttpContext):
+    """Through the real mutation: the extents come from the store, not from anything the caller says."""
+    ctx = authenticated_context
+    store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key="one-plane", bucket="zarr", shape=[1, 13, 23], chunks=[1, 13, 23], version="3", dtype="uint8", populated=True)
+
+    # fill_info() reads zarr metadata from S3; stub it so the pre-set shape stays intact.
+    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+        result = await schema.execute(
+            "mutation M($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id spec } }",
+            context_value=ctx,
+            variable_values={"input": {"name": "OnePlane", "data": str(store.id), "scales": [], "axes": [{"name": "z", "type": "SPACE"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]}},
+        )
+    assert not result.errors, result.errors
+    assert result.data["createArrayDataset"]["spec"] == ["IMAGE"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_datasets_stored_under_the_old_rule_are_corrected_by_the_job(db, authenticated_context: HttpContext):
+    """A row that says VOLUME for a single plane is rewritten; one with nothing to read extents from is left."""
+    ctx = authenticated_context
+    zyx = [seed.axis("z", enums.AxisType.SPACE), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)]
+    stale = await seed.create_array_dataset(ctx, "OnePlane", shapes=[[1, 13, 23]], axes=zyx)
+    right = await seed.create_array_dataset(ctx, "Stack", shapes=[[4, 13, 23]], axes=zyx)
+    await ArrayDataset.objects.filter(pk=stale.pk).aupdate(stored_spec=["VOLUME"])
+    headless = await ArrayDataset.objects.acreate(name="Headless", organization=ctx.request.organization, stored_spec=["VOLUME"])
+
+    await sync_to_async(call_command)("respec_datasets")
+    # Any job is safe to run again.
+    await sync_to_async(call_command)("respec_datasets")
+
+    assert (await ArrayDataset.objects.aget(pk=stale.pk)).stored_spec == ["IMAGE"]
+    assert (await ArrayDataset.objects.aget(pk=right.pk)).stored_spec == ["VOLUME"]
+    assert (await ArrayDataset.objects.aget(pk=headless.pk)).stored_spec == ["VOLUME"], "no shape to read, so nothing is claimed about it"
 
 
 @pytest.mark.django_db(transaction=True)

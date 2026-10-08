@@ -232,7 +232,7 @@ class ArrayDataset(OrgScoped):
         return all(method in enums.LABEL_COMPLIANT_SCALE_METHODS for method in methods)
 
     @kante.django_field(
-        description="What this dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation: the one spatial spec its SPACE axis count denotes, then a modifier per acquisition axis present. A 3D timelapse is [VOLUME, TIMESERIES, MULTICHANNEL]. Presence, not size: a stack with a single plane is still a VOLUME. Empty while the intrinsic system does not exist yet"
+        description="What this dataset structurally is, materialized at creation from the axes of its intrinsic coordinate system and its level-0 shape: the one spatial spec its SPACE axes denote, then a modifier per acquisition axis. An axis counts only when it has more than one position. A 3D timelapse is [VOLUME, TIMESERIES, MULTICHANNEL]. A stack stored with a single plane is an IMAGE, and a single frame is not a TIMESERIES; `hasAxisTypes` is the filter for whether an axis is declared at all. Empty while the intrinsic system does not exist yet"
     )
     def spec(self, info: Info) -> List[enums.ArrayDatasetSpec]:
         """Every spec the dataset's axes satisfy."""

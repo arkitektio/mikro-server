@@ -629,11 +629,10 @@ class ArrayDatasetSpec(str, Enum):
     value computed from immutable inputs cannot disagree with its source. The
     single source of truth for the derivation stays `core.logic.coords.specs_for_axes`.
 
-    Presence, never size: a dataset with a z axis is a VOLUME whether or not z has
-    depth, and TIMESERIES means it has a time axis, not that it has more than one
-    frame. This is deliberately *not* the rule `core.logic.scene._infer_kind` uses
-    -- that one asks what to render and a flat z is worth collapsing there; this
-    one asks what the data is, and a one-plane stack is still a stack.
+    Extent, not presence: an axis counts only when it has more than one position. A
+    z axis of a single plane does not make a VOLUME, and TIMESERIES means more than one
+    sample, not that a time axis is declared. Whether an axis is declared at all is the
+    `hasAxisTypes` filter's question.
     """
 
     SCALAR = "SCALAR"
@@ -649,15 +648,15 @@ class ArrayDatasetSpec(str, Enum):
 
 _describe(
     ArrayDatasetSpec,
-    SCALAR="No spatial extent: the array carries no SPACE axis at all.",
-    PROFILE="One spatial axis -- a line profile, a depth trace.",
-    IMAGE="Two spatial axes: a plane. The ordinary micrograph.",
-    VOLUME="Three spatial axes: a stack. Holds whenever a z axis is present, even if it carries a single plane.",
-    HYPERVOLUME="Four or more spatial axes.",
-    TIMESERIES="Carries a TIME axis -- a timelapse. Presence only: a single-frame time axis still counts.",
-    MULTICHANNEL="Carries a CHANNEL axis. Presence only: a one-channel axis still counts.",
-    SPECTRAL="Carries a SPECTRUM axis: a spectrally resolved acquisition, a lambda stack.",
-    FLIM="Carries a MICROTIME axis: fluorescence-lifetime arrival-time bins.",
+    SCALAR="No spatial extent: no SPACE axis with more than one position.",
+    PROFILE="One spatial axis with more than one position -- a line profile, a depth trace.",
+    IMAGE="Two spatial axes with more than one position each: a plane. The ordinary micrograph.",
+    VOLUME="Three spatial axes with more than one position each: a stack. A z axis of a single plane does not make one -- that dataset is an IMAGE.",
+    HYPERVOLUME="Four or more spatial axes with more than one position each.",
+    TIMESERIES="Carries a TIME axis of more than one frame -- a timelapse. A single-frame time axis does not count.",
+    MULTICHANNEL="Carries a CHANNEL axis of more than one channel. A one-channel axis does not count.",
+    SPECTRAL="Carries a SPECTRUM axis of more than one bin: a spectrally resolved acquisition, a lambda stack.",
+    FLIM="Carries a MICROTIME axis of more than one bin: fluorescence-lifetime arrival-time bins.",
 )
 
 

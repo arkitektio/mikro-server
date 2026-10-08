@@ -396,7 +396,10 @@ def create_array_dataset(
         organization=ctx.organization,
         **ctx.provenance_kwargs(),
     )
-    graph_logic.create_pixel_axes(intrinsic, model.axes)
+    graph_logic.create_pixel_axes(intrinsic, model.axes, shape=base_shape)
+    # The axis writer materialized the spec onto the row, not onto this instance: read it
+    # back, or the mutation answers `spec: []` for the dataset it has just described.
+    dataset.refresh_from_db(fields=["stored_spec"])
 
     levels = [(0, data_store)] + [(scale.level, get_for_org(models.ZarrStore, info, id=scale.array)) for scale in model.scales]
     scale_methods = {scale.level: scale.scale_method.value for scale in model.scales if scale.scale_method is not None}

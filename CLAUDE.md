@@ -26,7 +26,7 @@ anything is recreated — and runs everything else as a job the image offers by 
 What this service declares:
 
 - Setup, in order: `ensureadmin`.
-- Other jobs: `purge_orphaned_stores`, `backfill_default_scenes`, `backfill_parquet_schemas`. The two backfills are
+- Other jobs: `purge_orphaned_stores`, `respec_datasets`, `backfill_default_scenes`, `backfill_parquet_schemas`. The two backfills are
   from before upgrades existed: each is safe beside a serving release and reports what is
   still owed. A new one-off rewrite is an upgrade, not another backfill command.
 - Upgrades: none declared, so the image offers no `upgrade` job.

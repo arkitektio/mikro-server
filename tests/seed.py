@@ -122,7 +122,7 @@ def _seed_array_dataset_sync(ctx: HttpContext, name: str, axes: list, shapes: li
     # The space, then the data that lives in it.
     intrinsic = CoordinateSystem.objects.create(name=f"{name}/intrinsic", creator=creation.user, organization=creation.organization)
     dataset = ArrayDataset.objects.create(name=name, coordinate_system=intrinsic, creator=creation.user, organization=creation.organization)
-    graph_logic.create_pixel_axes(intrinsic, axes)
+    graph_logic.create_pixel_axes(intrinsic, axes, shape=shapes[0])
 
     for level, shape in enumerate(shapes):
         # Level 0 lives in the dataset's own grid: it IS that grid.

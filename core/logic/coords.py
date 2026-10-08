@@ -241,7 +241,8 @@ _SPATIAL_SPEC_BY_COUNT: dict[int, enums.ArrayDatasetSpec] = {
     3: enums.ArrayDatasetSpec.VOLUME,
 }
 
-#: The spec each acquisition axis type denotes, by its presence alone. The types
+#: The spec each acquisition axis type denotes, when the axis has more than one position
+#: (see :func:`specs_for_axes`). The types
 #: absent here (COORDINATE, DISPLACEMENT, INDEX) are deliberately unnamed: they
 #: describe what an array's *values* are, not what was acquired, and asking for
 #: them is what the `hasAxisTypes` filter is for.
@@ -253,20 +254,32 @@ _SPEC_BY_AXIS_TYPE: dict[str, enums.ArrayDatasetSpec] = {
 }
 
 
-def specs_for_axes(axes: Sequence[AxisSpec]) -> list[enums.ArrayDatasetSpec]:
-    """Every spec these axes satisfy: the one spatial member, then a modifier per acquisition axis present.
+def specs_for_axes(axes: Sequence[AxisSpec], shape: Sequence[int]) -> list[enums.ArrayDatasetSpec]:
+    """Every spec these axes satisfy at this shape: the one spatial member, then a modifier per acquisition axis.
+
+    **An axis counts only when it has more than one position.** A z axis of a single plane
+    does not make a stack, and a time axis of a single frame does not make a timelapse: a
+    23 x 13 image stored as ``(z=1, y=13, x=23)`` is an IMAGE, not a VOLUME. The spec says
+    what the data *is*; that an axis is declared at all is what the ``hasAxisTypes`` filter
+    answers.
+
+    ``shape`` is the dataset's level-0 shape, one extent per axis in the same order.
 
     The spatial member comes first and the modifiers follow in a fixed order, so
     the list is deterministic and a client may compare it by equality.
 
     This is the single source of truth for a dataset's spec: ``stored_spec`` is
     materialized *from* it at creation (by :func:`core.logic.graph.create_pixel_axes`)
-    and the migration backfill reads it too, so the derivation lives here once and
+    and the `respec_datasets` job reads it too, so the derivation lives here once and
     the stored column can never disagree with it.
     """
-    count = len(spatial_axes(axes))
+    if len(shape) != len(axes):
+        raise ValueError(f"{len(axes)} axes for a {len(shape)}-dimensional shape: a dataset's spec is read off its axes and their extents together.")
+
+    extended = [axis for axis, extent in zip(axes, shape) if extent > 1]
+    count = len(spatial_axes(extended))
     specs = [_SPATIAL_SPEC_BY_COUNT.get(count, enums.ArrayDatasetSpec.HYPERVOLUME)]
-    present = {axis.type for axis in axes}
+    present = {axis.type for axis in extended}
     specs.extend(spec for axis_type, spec in _SPEC_BY_AXIS_TYPE.items() if axis_type in present)
     return specs
 
