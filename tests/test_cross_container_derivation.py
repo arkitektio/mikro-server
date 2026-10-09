@@ -119,7 +119,7 @@ async def test_a_measurement_table_says_which_image_it_was_measured_from(authent
     edge = table["derivedFrom"][0]
     assert edge["kind"] == "UNMAPPABLE", "an omitted transform records the lineage and claims no geometry"
     assert edge["valueRelation"] == "TRANSFORMED"
-    assert [r["__typename"] for r in edge["output"]["residents"]] == ["ArrayDataset", "DataArray"], "the far end is the image the rows were measured from"
+    assert [r["__typename"] for r in edge["output"]["residents"]] == ["ArrayDataset", "DataArray", "Lens"], "the far end is the image the rows were measured from"
 
 
 @pytest.mark.django_db(transaction=True)

@@ -56,6 +56,7 @@ import uuid
 from asgiref.sync import sync_to_async  # noqa: E402
 
 from core import enums  # noqa: E402
+from core.base_models import SliceInputModel  # noqa: E402
 from core.creation import CreationContext  # noqa: E402
 from core.logic import coords as coords_logic  # noqa: E402
 from core.logic import graph as graph_logic  # noqa: E402
@@ -142,6 +143,8 @@ def _seed_array_dataset_sync(ctx: HttpContext, name: str, axes: list, shapes: li
             ctx=creation,
         )
 
+    # As `createArrayDataset` does: the whole lens exists from creation.
+    coordinate_system_logic.whole_lens(dataset)
     return dataset
 
 
@@ -195,28 +198,13 @@ async def create_physical_space(
 
 
 def _seed_lens_sync(ctx: HttpContext, dataset: ArrayDataset, slices: list | None) -> Lens:
-    creation = _creation(ctx)
-    # An unsliced lens lives in the dataset's own grid: its space IS that space.
-    sliced = bool(slices)
-    lens_system = dataset.coordinate_system
-    if sliced:
-        lens_system = CoordinateSystem.objects.create(name=f"{dataset.name}/lens", creator=creation.user, organization=creation.organization)
-    lens = Lens.objects.create(dataset=dataset, coordinate_system=lens_system, slices=slices or [])
-    if not lens.slices_list:
-        return lens
-    graph_logic.create_pixel_axes(lens_system, dataset.axes)
-    graph_logic.create_lens_edge(
-        lens_system=lens_system,
-        parent_system=dataset.coordinate_system,
-        dataset_axis_names=dataset.axis_names,
-        slices=lens.slices_list,
-        ctx=creation,
-    )
-    return lens
+    # The path `createLens` runs: get-or-create on (dataset, normalized slices). With no slices
+    # this is the dataset's whole lens, which `create_array_dataset` already made.
+    return coordinate_system_logic.create_lens(dataset, [SliceInputModel(**entry) for entry in slices or []], _creation(ctx))
 
 
 async def create_lens(ctx: HttpContext, dataset: ArrayDataset, slices: list | None = None) -> Lens:
-    """A lens over an array dataset, with its coordinate system and its edge back to the dataset."""
+    """The lens making this selection over a dataset: the existing row, or a new one with its system and edge."""
     return await sync_to_async(_seed_lens_sync)(ctx, dataset, slices)
 
 

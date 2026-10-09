@@ -695,7 +695,10 @@ async def test_a_chart_is_bootstrapped_from_what_is_laid_along_a_space(authentic
 
     assert [(layer["__typename"], layer["name"]) for layer in chart["layers"]] == [("TraceChartLayer", "Profile"), ("SeriesChartLayer", "measurements")]
     assert await sync_to_async(models.Transformation.objects.count)() == edges, "a bootstrap authors no edges"
-    assert not await sync_to_async(models.Lens.objects.filter(dataset=image).exists)(), "the image was tried as a trace and left exactly as it was"
+    # The image was tried as a trace through its whole lens -- the one row it has had since
+    # creation -- and left exactly as it was: no second lens, no chart layer.
+    assert await sync_to_async(models.Lens.objects.filter(dataset=image).count)() == 1
+    assert not await sync_to_async(chart_models.ChartLayer.objects.filter(lens__dataset=image).exists)()
 
 
 # --- end to end ------------------------------------------------------------------

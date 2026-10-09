@@ -453,6 +453,10 @@ def create_array_dataset(
             ctx=ctx,
         )
 
+    # The lens selecting all of it, from the start: it is the handle an action is handed for
+    # the dataset, and every scene and chart over the dataset draws through this one row.
+    coordinate_system_logic.whole_lens(dataset)
+
     if model.derived_from:
         coordinate_system_logic.write_derivation_edges(info, name=dataset.name, own_system=intrinsic, derived_from=model.derived_from, ctx=ctx)
 

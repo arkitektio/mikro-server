@@ -9,6 +9,7 @@ from datalayer.models import ZarrStore
 from django.core.management import call_command
 
 from core import enums
+from core.creation import CreationContext
 from core.models import ArrayDataset, Annotation, AnnotationCollection, CoordinateSystem, Layer, Lens, Scene, Transformation
 from kante.context import HttpContext
 from mikro_server.schema import schema
@@ -57,8 +58,13 @@ async def create_array_dataset(ctx, name, **kwargs):
     return dataset
 
 
-async def create_lens(dataset):
-    return await Lens.objects.acreate(dataset=dataset, slices=[])
+async def create_lens(dataset, slices: list | None = None):
+    """The whole lens the dataset has from creation, or the lens making `slices`."""
+    from core.logic import coordinate_system as coordinate_system_logic
+    from core.base_models import SliceInputModel
+
+    ctx = CreationContext(user=dataset.creator, organization=dataset.organization, membership=None, task=None)
+    return await sync_to_async(coordinate_system_logic.create_lens)(dataset, [SliceInputModel(**entry) for entry in slices or []], ctx)
 
 
 async def create_scene(ctx, name, **kwargs):
@@ -448,8 +454,8 @@ async def test_array_dataset_scene_filter_does_not_duplicate_on_several_layers(d
     ctx = authenticated_context
     staged = await create_array_dataset(ctx, "Staged")
     scene = await create_scene(ctx, "Composition")
-    for _ in range(2):
-        lens = await create_lens(staged)
+    for slices in ([], [{"axis": "y", "start": 8, "stop": 40}]):
+        lens = await create_lens(staged, slices=slices)
         await Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=lens, blending=enums.BlendingChoices.NORMAL.value)
 
     query = """
@@ -482,8 +488,8 @@ async def test_array_dataset_filters_combine_over_multiplying_joins(db, authenti
     await seed.create_physical_space(ctx, rich, axes=calibrated_axes, scale=[1.0, 0.5, 0.5], name="stage")
     await seed.create_physical_space(ctx, rich, axes=calibrated_axes, scale=[1.0, 0.2, 0.2], name="specimen")
     scene = await create_scene(ctx, "Composition")
-    for _ in range(2):
-        lens = await create_lens(rich)
+    for slices in ([], [{"axis": "y", "start": 8, "stop": 40}]):
+        lens = await create_lens(rich, slices=slices)
         await Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=lens, blending=enums.BlendingChoices.NORMAL.value)
     await seed.create_array_dataset(ctx, "Plain", shapes=[[3, 64, 64]], axes=seed.SIMPLE_AXES)
 
@@ -530,7 +536,7 @@ async def test_layer_filters(db, authenticated_context: HttpContext):
     ctx = authenticated_context
     array_dataset = await create_array_dataset(ctx, "ADS")
     lens_a = await create_lens(array_dataset)
-    lens_b = await create_lens(array_dataset)
+    lens_b = await create_lens(array_dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
     scene_a = await create_scene(ctx, "SceneA")
     scene_b = await create_scene(ctx, "SceneB")
 

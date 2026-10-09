@@ -207,11 +207,11 @@ def _bootstrap_image_layers(
     labels = _channel_labels(dataset, render.intensity) if render.intensity is not None else {}
 
     resolved_kind = kind or _infer_kind(dataset, render, size, labels)
-    # One lens for the whole dataset, whatever it becomes: a lens is a selection over an array,
-    # and every channel layer selects the same thing. Minting one per channel would write a row
-    # per layer saying exactly what its siblings say -- and a *sliced* one would mint a
-    # coordinate system and an edge, which this module does not do.
-    lens = coordinate_system_logic.create_lens(dataset, [], ctx)
+    # *The* whole lens of the dataset, not a fresh one: a lens is a selection over an array,
+    # every channel layer here selects the same thing, and every scene over this dataset
+    # selects it too. One row per selection is what lets two scenes, and an action handed
+    # either, agree about which data they hold.
+    lens = coordinate_system_logic.whole_lens(dataset)
     blending = _LAYER_BLENDING[resolved_kind]
 
     if resolved_kind == enums.BootstrapLayerKind.LABEL:

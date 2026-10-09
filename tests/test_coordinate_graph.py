@@ -96,7 +96,7 @@ async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(authenticat
     # both just reference frames, which is exactly what RFC-9 collapsed PHYSICAL and SHARED
     # into.
     inhabitants = sorted(sorted(r["__typename"] for r in system["residents"]) for system in graph["systems"])
-    assert inhabitants == [[], [], ["ArrayDataset", "DataArray"], ["DataArray"], ["Lens"]], inhabitants
+    assert inhabitants == [[], [], ["ArrayDataset", "DataArray", "Lens"], ["DataArray"], ["Lens"]], inhabitants
 
     # Every edge is inside the component: no endpoint dangles.
     ids = {system["id"] for system in graph["systems"]}
@@ -127,7 +127,7 @@ async def test_an_edge_pointing_into_the_root_still_relates_to_it(authenticated_
 
     inhabitants = sorted(sorted(r["__typename"] for r in system["residents"]) for system in graph["systems"])
     # A single-level dataset has one pixel grid, shared by the dataset and its level 0.
-    assert inhabitants == [[], ["ArrayDataset", "DataArray"]], inhabitants
+    assert inhabitants == [[], ["ArrayDataset", "DataArray", "Lens"]], inhabitants
 
     calibration_edge = next(edge for edge in graph["transformations"] if edge["output"]["id"] == str(calibration.pk))
     # Reached backwards, but reported forwards: the client still knows which way it composes.

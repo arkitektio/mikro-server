@@ -133,19 +133,20 @@ async def test_an_annotation_drawn_onto_a_scene_overlaps_the_lenses_placed_in_it
     scene = await seed.create_scene(ctx, "Canvas")
     dataset = await seed.create_array_dataset(ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
     await seed.register_into_scene(ctx, scene, dataset)
+    whole = await seed.create_lens(ctx, dataset)
     near = await seed.create_lens(ctx, dataset, slices=NEAR)
     far = await seed.create_lens(ctx, dataset, slices=FAR)
     off_plane = await seed.create_lens(ctx, dataset, slices=[{"axis": "z", "start": 5, "stop": 8}])
 
     annotation = await _draw(ctx, SQUARE_ZYX, scene=str(scene.id))
 
-    assert await _overlapping(ctx, annotation) == {str(near.pk)}, (far.pk, off_plane.pk)
+    assert await _overlapping(ctx, annotation) == {str(whole.pk), str(near.pk)}, (far.pk, off_plane.pk)
 
     # A flat shape in a volume says which plane with a pin, and with none it is on all of them.
     low_plane = await _draw(ctx, SQUARE, scene=str(scene.id), coordinates=[{"name": "z", "value": 2}])
     every_plane = await _draw(ctx, SQUARE, scene=str(scene.id))
-    assert await _overlapping(ctx, low_plane) == {str(near.pk)}
-    assert await _overlapping(ctx, every_plane) == {str(near.pk), str(off_plane.pk)}
+    assert await _overlapping(ctx, low_plane) == {str(whole.pk), str(near.pk)}
+    assert await _overlapping(ctx, every_plane) == {str(whole.pk), str(near.pk), str(off_plane.pk)}
 
 
 @pytest.mark.django_db(transaction=True)
@@ -154,6 +155,7 @@ async def test_a_pinned_coordinate_keeps_the_annotation_off_the_other_channels(a
     """A (y, x) shape says nothing about c; its `coordinates` do, and the neighbouring channel must not match."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels")
+    whole = await seed.create_lens(ctx, dataset)
     first = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}])
     second = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 1, "stop": 2}])
     collection = await _collection_over(ctx, dataset)
@@ -161,8 +163,9 @@ async def test_a_pinned_coordinate_keeps_the_annotation_off_the_other_channels(a
     pinned = await _draw(ctx, SQUARE, collection=collection, coordinates=[{"name": "c", "value": 0}])
     unpinned = await _draw(ctx, SQUARE, collection=collection)
 
-    assert await _overlapping(ctx, pinned) == {str(first.pk)}
-    assert await _overlapping(ctx, unpinned) == {str(first.pk), str(second.pk)}, "a coordinate the annotation does not pin is one it spans"
+    # The whole lens spans every channel, so it meets a pinned shape and an unpinned one alike.
+    assert await _overlapping(ctx, pinned) == {str(whole.pk), str(first.pk)}
+    assert await _overlapping(ctx, unpinned) == {str(whole.pk), str(first.pk), str(second.pk)}, "a coordinate the annotation does not pin is one it spans"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -208,13 +211,16 @@ async def test_the_filter_stays_inside_the_organization(authenticated_context: H
 
 
 async def _world_with(ctx: HttpContext, name: str, *, datasets: int, lenses: int) -> str:
-    """A scene of `datasets` volumes, `lenses` sliced lenses each, and one annotation drawn onto it."""
+    """A scene of `datasets` volumes, each with its whole lens and `lenses` distinct sliced lenses, and one annotation drawn onto it.
+
+    Distinct, because one selection is one lens: `lenses` copies of NEAR would be one row.
+    """
     scene = await seed.create_scene(ctx, name)
     for index in range(datasets):
         dataset = await seed.create_array_dataset(ctx, f"{name}-{index}", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
         await seed.register_into_scene(ctx, scene, dataset)
-        for _ in range(lenses):
-            await seed.create_lens(ctx, dataset, slices=NEAR)
+        for offset in range(lenses):
+            await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 8 + offset, "stop": 40}])
     return await _draw(ctx, SQUARE_ZYX, scene=str(scene.id))
 
 
@@ -233,7 +239,8 @@ async def test_the_cost_does_not_grow_with_the_datasets_or_their_lenses(authenti
 
     (small_found, small_cost), (wide_found, wide_cost), (deep_found, deep_cost) = [await _cost(ctx, annotation) for annotation in (small, wide, deep)]
 
-    assert (len(small_found), len(wide_found), len(deep_found)) == (2, 6, 8)
+    # Each dataset answers with its whole lens and its sliced ones.
+    assert (len(small_found), len(wide_found), len(deep_found)) == (4, 12, 10)
     assert wide_cost == small_cost, f"the cost grew with the datasets: {small_cost} for 2, {wide_cost} for 6"
     assert deep_cost == small_cost, f"the cost grew with the lenses: {small_cost} for 1 each, {deep_cost} for 4 each"
 
@@ -244,6 +251,7 @@ async def test_the_cost_is_one_graph_per_space_the_annotation_reaches(authentica
     """What it does grow with, stated: every further space the drawn-on dataset sits in is another walk."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    whole = await seed.create_lens(ctx, dataset)
     lens = await seed.create_lens(ctx, dataset, slices=NEAR)
     annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
 
@@ -252,7 +260,7 @@ async def test_the_cost_is_one_graph_per_space_the_annotation_reaches(authentica
         if name != "alone":
             await seed.register_into_scene(ctx, await seed.create_scene(ctx, name), dataset)
         found, cost = await _cost(ctx, annotation)
-        assert found == {str(lens.pk)}
+        assert found == {str(whole.pk), str(lens.pk)}
         costs.append(cost)
 
     alone, one_world, two_worlds = costs

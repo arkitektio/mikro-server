@@ -500,19 +500,26 @@ class PhasorCalibration(models.Model):
 class Lens(models.Model):
     """A selection over a dataset. Nothing else.
 
+    **One row per selection.** A lens is a deterministic function of what it selects:
+    its slices are stored in the one normalized spelling
+    (:func:`core.logic.coords.normalize_slices`), and
+    :func:`core.logic.coordinate_system.create_lens` hands back the existing row for a
+    (dataset, slices) pair before it makes one. Every dataset has its *whole* lens -- the
+    one with no slices -- from creation; it is the handle an action is given for the
+    dataset itself, and it cannot be deleted on its own.
+
     Its shape and dimensions are derived from the dataset and the slices -- they
     were columns, and two people computing them from the same slices are
     guaranteed to agree, so there was no reason for a second copy that could
     drift.
 
-    A *sliced* lens has its own coordinate system, and the edge back to the dataset
-    is a stored :class:`~core.models.Transformation`. Before that, slicing shifted
-    voxel coordinates and nothing recorded the shift: an ROI drawn on a cropped
-    lens had no defined path back to its dataset. An **unsliced** lens selects
-    everything, so its space is the dataset's intrinsic space by definition -- it
-    owns no system and no edge (see :attr:`space`), because a second node for the
-    same space joined by an identity edge would record nothing. Lenses are
-    immutable, so the decision is made once, at creation.
+    Every lens has a ``coordinate_system``. A *sliced* lens owns one, and the edge back
+    to the dataset is a stored :class:`~core.models.Transformation`: slicing shifts voxel
+    coordinates, and without the edge an ROI drawn on a cropped lens had no defined path
+    back to its dataset. An **unsliced** lens selects everything, so its space is the
+    dataset's intrinsic space by definition, and it *points at that node* rather than
+    owning a second one joined by an identity edge, which would record nothing (see
+    :attr:`space`). Lenses are immutable, so the decision is made once, at creation.
 
     The lens-to-parent edge is **derived from the slices, never authored** --
     recreating a lens from its slices reproduces its geometry exactly. In

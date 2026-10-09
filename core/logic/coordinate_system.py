@@ -22,6 +22,7 @@ from django.db import transaction
 from core import enums, models
 from core.creation import CreationContext
 from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
+from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.scoping import get_for_org
 
@@ -468,62 +469,120 @@ DEFAULT_WORLD_AXES = [
 #: shared space two datasets are registered into.
 NAVIGABLE_TYPES = (enums.AxisTypeChoices.TIME.value, enums.AxisTypeChoices.SPACE.value)
 
+def _assert_lens_placeable(dataset: "models.ArrayDataset") -> "models.CoordinateSystem":
+    """The intrinsic system a lens over this dataset is measured against, or a refusal in prose."""
+    intrinsic = dataset.intrinsic_coordinate_system
+    if intrinsic is None:
+        raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system")
+    if dataset.data_arrays.order_by("level").first() is None:
+        raise ValueError(f"Dataset {dataset.pk} has no level-0 data array to place the lens against")
+    return intrinsic
+
+
+def whole_lens(dataset: "models.ArrayDataset") -> "models.Lens":
+    """The lens selecting all of a dataset: the one row that exists for it, made if it does not.
+
+    Every array dataset has this lens from creation (``createArrayDataset`` ends with it), so
+    on a dataset written by this release the lookup always finds one. The create branch is for
+    the datasets written before that rule and not yet visited by ``merge_duplicate_lenses``.
+
+    It takes no creation context because nothing is minted beside the row: an unsliced lens
+    selects everything, so its space *is* the dataset's intrinsic space, and it points at
+    that node rather than owning a second one joined by an identity edge.
+    """
+    intrinsic = _assert_lens_placeable(dataset)
+    with transaction.atomic():
+        # Serialized per dataset: two requests minting the whole lens at once must not both
+        # miss the lookup. The row lock stands in for the unique constraint a later major adds.
+        models.ArrayDataset.objects.select_for_update().get(pk=dataset.pk)
+        existing = models.Lens.objects.filter(dataset=dataset, slices=[]).order_by("pk").first()
+        if existing is not None:
+            # The row the caller asked about, carrying the instance it asked with: a reader that
+            # goes on to `lens.dataset` must not pay a query the create branch would not.
+            existing.dataset = dataset
+            return existing
+        return models.Lens.objects.create(dataset=dataset, coordinate_system=intrinsic, slices=[])
+
+
 def create_lens(
     dataset: "models.ArrayDataset",
     slices: list,
     ctx: CreationContext,
 ) -> "models.Lens":
-    """Create a lens -- and, only if it slices, its coordinate system and the edge recording the shift.
+    """The lens making this selection over this dataset: the one that exists, or a new one.
 
-    The lens' shape and axes are not written: they follow from the dataset and the
-    slices, and a second copy could only drift from the first. The same rule decides
-    whether it gets a coordinate system at all: an unsliced lens selects everything,
-    so its space is the dataset's intrinsic space *by definition* -- materializing a
-    second node for it, joined by an identity edge, would store nothing. Lenses are
-    immutable, so the decision is final at creation.
+    A lens is a deterministic function of what it selects -- one row per (dataset, normalized
+    slices) -- so asking twice for the same voxels hands back the same id, and two scenes, two
+    charts or two action calls over one selection agree about its identity. The slices are
+    resolved by :func:`core.logic.coords.normalize_slices` first, so every spelling of a
+    selection (negative bounds, open bounds, a stop past the end) is the same row; a selection
+    that keeps the whole array is :func:`whole_lens`.
+
+    The lens' shape and axes are not written: they follow from the dataset and the slices,
+    and a second copy could only drift from the first. A *sliced* lens shifts voxel
+    coordinates, which is a real fact, so it owns a coordinate system and the derived edge
+    recording the shift (:func:`core.logic.graph.create_lens_edge`), both made here with the
+    row. Lenses are immutable, so the decision is final at creation.
     """
-    intrinsic = dataset.intrinsic_coordinate_system
-    if intrinsic is None:
-        raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system")
+    intrinsic = _assert_lens_placeable(dataset)
+    normalized = coords_logic.normalize_slices(dataset.shape_list, dataset.axis_names, slices)
+    if not normalized:
+        return whole_lens(dataset)
 
-    if dataset.data_arrays.order_by("level").first() is None:
-        raise ValueError(f"Dataset {dataset.pk} has no level-0 data array to place the lens against")
+    with transaction.atomic():
+        # The same per-dataset lock `whole_lens` takes, for the same reason.
+        models.ArrayDataset.objects.select_for_update().get(pk=dataset.pk)
+        existing = models.Lens.objects.filter(dataset=dataset, slices=normalized).order_by("pk").first()
+        if existing is not None:
+            existing.dataset = dataset
+            return existing
 
-    slice_models = [slice.model_dump() for slice in slices]
-    sliced = any(slice_models)
-
-    # An unsliced lens lives in the dataset's own grid -- it selects everything, so its space
-    # *is* that space -- and points at the same node. Only a sliced one needs a space of its
-    # own, and gets it before the lens so there is one write each.
-    lens_system = intrinsic
-    if sliced:
+        # The space before the lens, so there is one write each.
         lens_system = models.CoordinateSystem.objects.create(
             name=f"{dataset.name}/lens",
             creator=ctx.user,
             organization=ctx.organization,
         )
+        lens = models.Lens.objects.create(
+            dataset=dataset,
+            coordinate_system=lens_system,
+            slices=normalized,
+        )
 
-    lens = models.Lens.objects.create(
-        dataset=dataset,
-        coordinate_system=lens_system,
-        slices=slice_models,
-    )
+        # A lens sees the same axes as the array it slices; only the extent changes.
+        graph_logic.create_pixel_axes(lens_system, dataset.axes)
 
-    if not lens.slices_list:
-        return lens
-
-    # A lens sees the same axes as the array it slices; only the extent changes.
-    graph_logic.create_pixel_axes(lens_system, dataset.axes)
-
-    # Without this edge, slicing shifts voxel coordinates and nothing records the
-    # shift: an ROI drawn on a cropped lens has no defined path back to its dataset.
-    # The parent is the intrinsic system: it IS the level-0 voxel space.
-    graph_logic.create_lens_edge(
-        lens_system=lens_system,
-        parent_system=intrinsic,
-        dataset_axis_names=dataset.axis_names,
-        slices=lens.slices_list,
-        ctx=ctx,
-    )
+        # Without this edge, slicing shifts voxel coordinates and nothing records the
+        # shift: an ROI drawn on a cropped lens has no defined path back to its dataset.
+        # The parent is the intrinsic system: it IS the level-0 voxel space.
+        graph_logic.create_lens_edge(
+            lens_system=lens_system,
+            parent_system=intrinsic,
+            dataset_axis_names=dataset.axis_names,
+            slices=lens.slices_list,
+            ctx=ctx,
+        )
 
     return lens
+
+
+def assert_lens_deletable(lens: "models.Lens") -> None:
+    """Refuse to delete a lens something still looks through, and a dataset's whole lens.
+
+    The PROTECT half of ``deleteLens``. ``Layer.lens`` and ``ChartLayer.lens`` cascade, and a
+    lens is shared -- every scene over one selection holds the same row -- so deleting one
+    would take layers out of scenes the caller never named. The whole lens is the handle an
+    action is handed for the dataset itself; it goes when the dataset goes, not before.
+    """
+    if not lens.slices_list:
+        raise ValueError(f"Lens {lens.pk} selects the whole of dataset '{lens.dataset.name}' ({lens.dataset_id}) and cannot be deleted on its own: it is the dataset's handle, and goes with the dataset.")
+
+    layers = list(lens.layers.select_related("scene").order_by("pk")[:5])
+    chart_layers = list(lens.chart_layers.select_related("chart").order_by("pk")[:5])
+    if not layers and not chart_layers:
+        return
+
+    total = lens.layers.count() + lens.chart_layers.count()
+    described = [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers] + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
+    more = f" (and {total - len(described)} more)" if total > len(described) else ""
+    raise ValueError(f"Lens {lens.pk} cannot be deleted: {total} layer(s) draw through it -- {', '.join(described)}{more}. Delete those layers first, or leave the lens; it is shared by every composition over this selection.")

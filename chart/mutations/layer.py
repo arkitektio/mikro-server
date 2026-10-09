@@ -15,6 +15,7 @@ from chart.logic import chart as chart_logic
 from core import models as core_models
 from core.creation import CreationContext
 from core.input_unions import prose_errors
+from core.logic import coordinate_system as coordinate_system_logic
 from core.inputs.validators import Alpha, assert_rgba
 from core.mutations._generic import make_delete
 from core.scoping import get_for_org
@@ -101,14 +102,13 @@ class CreateTraceChartLayerInput:
 def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> types.TraceChartLayer:
     """Draw a lens as a trace along a chart's axis."""
     model = input.to_pydantic()
-    ctx = CreationContext.from_info(info)
     chart = get_for_org(models.Chart, info, id=model.chart)
 
     with transaction.atomic():
         if model.lens is not None:
             lens = get_for_org(core_models.Lens, info, id=model.lens)
         else:
-            lens = chart_logic.whole_lens(get_for_org(core_models.ArrayDataset, info, id=model.dataset), ctx)
+            lens = coordinate_system_logic.whole_lens(get_for_org(core_models.ArrayDataset, info, id=model.dataset))
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.TRACE.value, source=lens, **_settings(model))
 
 

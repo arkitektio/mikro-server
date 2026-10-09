@@ -305,12 +305,6 @@ def create_layer(
     return models.ChartLayer.objects.create(chart=chart, kind=kind, order=order, **{enums.SOURCE_FIELD[kind]: source}, **values, **settings)
 
 
-def whole_lens(dataset: "core_models.ArrayDataset", ctx: CreationContext) -> "core_models.Lens":
-    """The lens selecting all of a dataset: the one that exists, or a new one."""
-    existing = dataset.lenses.filter(slices=[]).order_by("pk").first()
-    return existing or coordinate_system_logic.create_lens(dataset, [], ctx)
-
-
 def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: CreationContext) -> "core_models.AnnotationCollection":
     """A new drawing surface for a chart: a collection, its space, and the edge that places it.
 
@@ -399,10 +393,10 @@ def bootstrap_chart_from_system(system: "core_models.CoordinateSystem", *, name:
                 break
             try:
                 # A savepoint per candidate: a refusal part-way through one layer must not
-                # poison the transaction the others are written in -- and it takes back the
-                # whole lens made for an array that turned out not to be a trace.
+                # poison the transaction the others are written in. The whole lens an array
+                # is drawn through is the dataset's own, shared row -- nothing to take back.
                 with transaction.atomic():
-                    source = whole_lens(container, ctx) if kind == enums.ChartLayerKindChoices.TRACE.value else container
+                    source = coordinate_system_logic.whole_lens(container) if kind == enums.ChartLayerKindChoices.TRACE.value else container
                     create_layer(chart, kind=kind, source=source, name=container.name)
             except ValueError:
                 continue

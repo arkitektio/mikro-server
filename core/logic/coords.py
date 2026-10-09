@@ -30,7 +30,7 @@ The conventions this module encodes:
 """
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Iterable, Protocol, Sequence
 
 from kanne_server import scalars as kanne_scalars
 
@@ -140,6 +140,15 @@ class RenderAxes:
     intensity: str | None
     phasor: str | None
     vector: str | None
+
+
+class SliceLike(Protocol):
+    """What this module reads off a slice: a pydantic ``SliceModel``, a GraphQL input, a test stub."""
+
+    axis: str
+    start: int | None
+    stop: int | None
+    step: int | None
 
 
 def assert_axis_names_unique(axes: Sequence[AxisSpec]) -> None:
@@ -467,6 +476,56 @@ def lens_shape(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], 
         shape.append(len(range(start, stop, step)))
 
     return shape
+
+
+def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
+    """The one spelling of a selection: a lens' slices resolved against its dataset.
+
+    A lens is a deterministic function of what it selects, so two callers asking for the
+    same voxels must produce the same row -- and ``[-56:]``, ``[8:]``, ``[8:64]`` and
+    ``[8:400]`` over a 64-pixel axis are one selection spelled four ways. This resolves
+    every spelling to the one form that is stored and looked up:
+
+    * bounds resolved against the dataset's level-0 shape with Python's own slice
+      semantics (:meth:`slice.indices`), so negatives, omitted bounds and out-of-range
+      stops land where they would on the array itself. The shape is written once, at
+      creation, and never after, which is what makes resolving an open bound safe;
+    * ``stop`` is the first index past the last *selected* position, so a stepped slice
+      with a ragged stop (``0:10:3`` and ``0:12:3`` both pick 0, 3, 6, 9) spells the same;
+    * a slice that keeps a whole axis at step 1 is dropped: it selects nothing narrower
+      than the array, and a lens that carries one would be a second whole lens;
+    * dataset axis order, explicit ints, all four keys, ``step`` always present.
+
+    Refused, in prose: an axis the dataset does not have, an axis sliced twice, a step of
+    zero or less (a lens narrows an axis, it never reverses one -- and the stop of a reversed
+    slice has no non-negative spelling), and a selection that is empty along an axis.
+    """
+    by_axis: dict[str, SliceLike] = {}
+    for selection in slices:
+        if selection.axis not in dataset_axis_names:
+            raise ValueError(f"Slice names axis '{selection.axis}', which the dataset does not have (its axes are {list(dataset_axis_names)})")
+        if selection.axis in by_axis:
+            raise ValueError(f"Axis '{selection.axis}' is sliced twice; one slice per axis")
+        by_axis[selection.axis] = selection
+
+    normalized: list[dict[str, int | str]] = []
+    for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
+        selection = by_axis.get(axis)
+        if selection is None:
+            continue
+        step = selection.step if selection.step is not None else 1
+        if step <= 0:
+            raise ValueError(f"Slice over axis '{axis}' has step {step}; a lens narrows an axis, it does not reverse it, so the step must be positive")
+        start, stop, step = slice(selection.start, selection.stop, step).indices(size)
+        count = len(range(start, stop, step))
+        if count == 0:
+            raise ValueError(f"Slice over axis '{axis}' ({selection.start}:{selection.stop}:{selection.step}) selects nothing of its {size} positions")
+        stop = start + (count - 1) * step + 1
+        if start == 0 and stop == size and step == 1:
+            continue
+        normalized.append({"axis": axis, "start": start, "stop": stop, "step": step})
+
+    return normalized
 
 
 def lens_to_parent(dataset_axis_names: Sequence[str], slices: Iterable) -> tuple[str, dict]:

@@ -446,13 +446,15 @@ async def test_the_renderability_pass_does_not_grow_with_the_number_of_lenses(au
     datasets = [await seed.create_array_dataset(ctx, f"Placed{index}") for index in range(2)]
     for dataset in datasets:
         await seed.register_into_scene(ctx, scene, dataset)
-        for _ in range(3):
-            await seed.create_lens(ctx, dataset, slices=[])
+        # Three distinct crops beside the whole lens: one selection is one lens, so three
+        # identical ones would be one row.
+        for offset in range(3):
+            await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 1 + offset, "stop": 64}])
 
     def measure() -> int:
         dataset_ids = {dataset.pk for dataset in datasets}
         with CaptureQueriesContext(connection) as captured:
-            assert len(filters._renderable_lens_ids(dataset_ids)) == 6
+            assert len(filters._renderable_lens_ids(dataset_ids)) == 8
         return len(captured)
 
     assert await sync_to_async(measure)() == 3, "one fetch of the lenses, one of the axes, one of the arrays"

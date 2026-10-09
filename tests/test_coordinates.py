@@ -2093,3 +2093,77 @@ def test_an_arbitrary_unit_declines_the_claim_rather_than_conflicting_with_it():
     assert factor("a.u.", "micrometer").coefficients == approx((1.0,))
     assert factor("micrometer", "a.u.").coefficients == approx((1.0,))
     assert factor("dimensionless", "micrometer") is None, "a real unit with no conversion stays absent"
+
+
+# --- 5. the one spelling of a selection ----------------------------------------
+
+
+class _Slice:
+    def __init__(self, axis, start=None, stop=None, step=None):
+        self.axis, self.start, self.stop, self.step = axis, start, stop, step
+
+
+_DIMS = ["c", "y", "x"]
+_SHAPE = [3, 64, 64]
+
+
+def _normalized(*slices):
+    return coords.normalize_slices(_SHAPE, _DIMS, slices)
+
+
+def test_every_spelling_of_a_crop_resolves_to_explicit_ints():
+    """Negative and open bounds, and a stop past the end, are the one stored slice."""
+    expected = [{"axis": "y", "start": 8, "stop": 64, "step": 1}]
+    assert _normalized(_Slice("y", start=8)) == expected
+    assert _normalized(_Slice("y", start=8, stop=64)) == expected
+    assert _normalized(_Slice("y", start=8, stop=400)) == expected
+    assert _normalized(_Slice("y", start=-56)) == expected
+    assert _normalized(_Slice("y", start=-56, stop=-0 or None)) == expected
+    assert _normalized(_Slice("y", start=0, stop=-8)) == [{"axis": "y", "start": 0, "stop": 56, "step": 1}]
+
+
+def test_a_slice_that_keeps_the_whole_axis_is_dropped():
+    """It selects nothing narrower than the array, so it is not part of the selection."""
+    assert _normalized(_Slice("y")) == []
+    assert _normalized(_Slice("y", start=0, stop=64, step=1)) == []
+    assert _normalized(_Slice("c", start=-3), _Slice("x", stop=1000)) == []
+
+
+def test_a_stepped_slice_keeps_its_step_and_is_spelled_by_what_it_selects():
+    """The stop is the first index past the last selected position, so a ragged stop is canonical."""
+    assert _normalized(_Slice("x", step=2)) == [{"axis": "x", "start": 0, "stop": 63, "step": 2}], "a whole axis at step 2 is a selection"
+    assert _normalized(_Slice("x", start=0, stop=12, step=3)) == _normalized(_Slice("x", start=0, stop=10, step=3)) == [{"axis": "x", "start": 0, "stop": 10, "step": 3}]
+
+
+def test_slices_come_out_in_dataset_axis_order():
+    """The order a caller lists them in is not part of the selection."""
+    xy = _normalized(_Slice("x", start=4, stop=20), _Slice("y", start=8, stop=40))
+    yx = _normalized(_Slice("y", start=8, stop=40), _Slice("x", start=4, stop=20))
+    assert xy == yx
+    assert [entry["axis"] for entry in xy] == ["y", "x"]
+
+
+@pytest.mark.parametrize(
+    ("slices", "message"),
+    [
+        ([_Slice("t", start=0, stop=1)], "does not have"),
+        ([_Slice("y", start=0, stop=8), _Slice("y", start=8, stop=16)], "sliced twice"),
+        ([_Slice("y", start=40, stop=8, step=-1)], "positive"),
+        ([_Slice("y", step=0)], "positive"),
+        ([_Slice("y", start=40, stop=8)], "selects nothing"),
+        ([_Slice("y", start=64)], "selects nothing"),
+        ([_Slice("y", start=-1000, stop=-999)], "selects nothing"),
+    ],
+)
+def test_a_selection_that_cannot_be_made_is_refused_in_prose(slices, message):
+    with pytest.raises(ValueError, match=message):
+        _normalized(*slices)
+
+
+def test_the_normalized_slices_resolve_to_the_same_shape_and_edge_as_the_spelling():
+    """What is stored is what was meant: the shape and the edge agree with Python's own slicing."""
+    spelled = [_Slice("y", start=-56, stop=400, step=2), _Slice("x", start=4)]
+    stored = [_Slice(**entry) for entry in _normalized(*spelled)]
+    assert coords.lens_shape(_SHAPE, _DIMS, stored) == coords.lens_shape(_SHAPE, _DIMS, spelled) == [3, 28, 60]
+    # The spelling's negative start wrote a negative translation; the stored one is where the crop is.
+    assert coords.lens_to_parent(_DIMS, stored)[1]["translation"] == [0.0, 8.0, 4.0]
