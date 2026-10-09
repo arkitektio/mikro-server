@@ -339,14 +339,14 @@ def _lens_channels(by_channel: dict, lens: "models.ArrayLens", axis: str | None)
 
 
 def bootstrap_scene_from_lens(
-    lens: "models.ArrayLens",
+    lens: "models.Lens",
     ctx: CreationContext,
     *,
     name: str | None = None,
     kind: "enums.BootstrapLayerKind | None" = None,
     world: "models.CoordinateSystem | None" = None,
 ) -> "models.Scene":
-    """Materialize a renderable scene showing one lens: its selection, and nothing else of its dataset.
+    """Materialize a renderable scene showing one lens of any kind: its selection, and nothing else of its container.
 
     The lens-first twin of :func:`bootstrap_scene_from_system`, and it exists because that one
     cannot be asked for this. Staging a system draws whatever *lives* there, and what lives
@@ -362,19 +362,44 @@ def bootstrap_scene_from_lens(
     must reach it affinely, or the build refuses naming the edge.
 
     No edge is authored. The lens' own edge into the intrinsic grid already places it.
-    """
-    dataset = lens.dataset
-    target = world or dataset.intrinsic_coordinate_system
-    if target is None:
-        raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system, so there is no space to build a scene of lens {lens.pk} over. Pass `world`.")
 
+    A lens over any other container -- a window over a table, a mesh, a network, an
+    annotation collection -- is staged the way ``createSceneFromCoordinateSystem`` stages the
+    container, with the layer reading this lens: a point or track layer over a table, a mesh,
+    network or annotation layer over its collection, in the container's own space unless
+    ``world`` names another. ``kind`` is a render recipe for pixels and says nothing to them. A
+    table with fewer than two SPACE coordinate columns has no place in a scene, and a sparse
+    dataset no layer kind; both are refused in prose.
+    """
+    container = lens.container
+    if isinstance(lens, models.ArrayLens):
+        dataset = lens.dataset
+        target = world or dataset.intrinsic_coordinate_system
+        if target is None:
+            raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system, so there is no space to build a scene of lens {lens.pk} over. Pass `world`.")
+        with transaction.atomic():
+            # Named for the selection when it has a name: two crops of one dataset staged side by
+            # side would otherwise be two scenes called the same thing.
+            default_name = f"{dataset.name} · {lens.name}" if lens.name else dataset.name
+            scene = create_scene(name=name or default_name, world=target, ctx=ctx)
+            graph_logic.assert_placeable_in(scene.world, lens.space, destination=f"the world of scene '{scene.name}'")
+            _bootstrap_image_layers(dataset, scene, ctx, kind=kind, lens=lens)
+        return scene
+
+    if isinstance(container, models.SparseDataset):
+        raise ValueError(f"Lens {lens.pk} over SparseDataset {container.pk} cannot be staged: a sparse dataset has no layer kind, nothing draws a matrix.")
+    label = getattr(container, "name", None) or getattr(container, "version", None) or f"{type(container).__name__} {container.pk}"
     with transaction.atomic():
-        # Named for the selection when it has a name: two crops of one dataset staged side by
-        # side would otherwise be two scenes called the same thing.
-        default_name = f"{dataset.name} · {lens.name}" if lens.name else dataset.name
-        scene = create_scene(name=name or default_name, world=target, ctx=ctx)
+        default_name = f"{label} · {lens.name}" if lens.name else label
+        scene = create_scene(name=name or default_name, world=world or lens.space, ctx=ctx)
         graph_logic.assert_placeable_in(scene.world, lens.space, destination=f"the world of scene '{scene.name}'")
-        _bootstrap_image_layers(dataset, scene, ctx, kind=kind, lens=lens)
+        layers = _materialize_layers(lens.space, scene, ctx, ScenePolicyInputModel(transform_tables=True), lens=lens)
+        if not layers:
+            if isinstance(container, models.TableDataset):
+                why = "a table needs at least two SPACE coordinate columns to have a place in a scene"
+            else:
+                why = f"nothing draws a {type(container).__name__} here"
+            raise ValueError(f"Lens {lens.pk} over {type(container).__name__} {container.pk} cannot be staged: {why}.")
     return scene
 
 
@@ -470,6 +495,7 @@ def _materialize_layers(
     policy: "ScenePolicyInputModel",
     *,
     order: int = 0,
+    lens: "models.Lens | None" = None,
 ) -> "list[models.Layer]":
     """Turn one registered source into the layers its kind implies, or an empty list to skip it.
 
@@ -484,13 +510,15 @@ def _materialize_layers(
     A list rather than one layer because only the array branch can produce several, and a
     caller that had to know which branch it hit to know how many layers came back would be
     the same conditional written twice. ``order`` is where this source's layers start in the
-    scene's stack; the caller advances it by however many come back.
+    scene's stack; the caller advances it by however many come back. ``lens`` is which lens
+    the layers read when the caller has one in mind -- staging a window -- and the
+    container's whole lens otherwise.
     """
     table = next(iter(source.table_datasets.all()[:1]), None)
     if table is not None:
         if not policy.transform_tables:
             return []
-        layer = _materialize_table_layer(table, scene, policy, order=order)
+        layer = _materialize_table_layer(table, scene, policy, order=order, lens=lens)
         return [layer] if layer is not None else []
 
     mesh = next(iter(source.mesh_collections.all()[:1]), None)
@@ -503,7 +531,7 @@ def _materialize_layers(
             models.Layer.objects.create(
                 kind=enums.LayerKind.MESH,
                 scene=scene,
-                lens=coordinate_system_logic.whole_lens(mesh),
+                lens=lens or coordinate_system_logic.whole_lens(mesh),
                 material_color=[255, 255, 255, 255],
                 wireframe=False,
                 blending=enums.Blending.NORMAL,
@@ -523,7 +551,7 @@ def _materialize_layers(
             models.Layer.objects.create(
                 kind=enums.LayerKind.NETWORK,
                 scene=scene,
-                lens=coordinate_system_logic.whole_lens(network),
+                lens=lens or coordinate_system_logic.whole_lens(network),
                 material_color=[255, 255, 255, 255],
                 directed=False,
                 show_nodes=False,
@@ -574,7 +602,7 @@ def _materialize_layers(
             models.Layer.objects.create(
                 kind=enums.LayerKind.ANNOTATION,
                 scene=scene,
-                lens=coordinate_system_logic.whole_lens(annotations),
+                lens=lens or coordinate_system_logic.whole_lens(annotations),
                 blending=enums.Blending.NORMAL,
                 opacity=1.0,
                 visible=True,
@@ -585,7 +613,7 @@ def _materialize_layers(
     return []
 
 
-def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "models.Scene", policy: "ScenePolicyInputModel", *, order: int = 0) -> "models.Layer | None":
+def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "models.Scene", policy: "ScenePolicyInputModel", *, order: int = 0, lens: "models.Lens | None" = None) -> "models.Layer | None":
     """A registered table dataset as a track layer when it declares tracks, else a point layer.
 
     Only a table with at least two SPACE coordinate columns has a place in a scene; one
@@ -604,7 +632,7 @@ def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "model
     return models.Layer.objects.create(
         kind=enums.LayerKind.TRACK if is_track else enums.LayerKind.POINT,
         scene=scene,
-        lens=coordinate_system_logic.whole_lens(table_dataset),
+        lens=lens or coordinate_system_logic.whole_lens(table_dataset),
         point_size=None if is_track else 3.0,
         line_width=1.0 if is_track else None,
         colormap=enums.ColorMap.VIRIDIS,

@@ -166,24 +166,24 @@ class CreateSceneFromLensInputModel(BaseModel):
 class CreateSceneFromLensInput:
     """Input for bootstrapping a scene over one lens."""
 
-    lens: strawberry.ID = strawberry.field(description="The lens to show. Its layers read this lens, sliced or not")
-    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the dataset's name")
+    lens: strawberry.ID = strawberry.field(description="The lens to show, of any kind. Its layer(s) read this lens: a crop or the whole array as image layers per channel, a window over a table as a point or track layer, over a mesh, network or annotation collection as that layer")
+    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the container's name (a collection's version), with the lens' name when it has one")
     kind: enums.BootstrapLayerKind | None = strawberry.field(
         default=None,
-        description="The render recipe for the layers, overriding what would be inferred from the lens' axes and from what ingest recorded -- the same choice as `ScenePolicyInput.kind`",
+        description="(array lenses) The render recipe for the layers, overriding what would be inferred from the lens' axes and from what ingest recorded -- the same choice as `ScenePolicyInput.kind`",
     )
     world: strawberry.ID | None = strawberry.field(
         default=None,
         description=(
-            "The coordinate system to compose in. Defaults to the dataset's intrinsic pixel grid, so a crop sits where it was cut from and agrees with every other scene of the dataset. "
-            "Pass a physical or shared space the dataset is registered into to render at that scale; the lens must reach it affinely"
+            "The coordinate system to compose in. Defaults to the dataset's intrinsic pixel grid for an array lens, so a crop sits where it was cut from and agrees with every other scene of the "
+            "dataset, and to the container's own space for every other kind. Pass a physical or shared space the container is registered into to render there; the lens must reach it affinely"
         ),
     )
     nominate: bool = strawberry.field(
         default=True,
         description=(
-            "Whether the new scene becomes the one to open for this lens when nothing is nominated yet: the lens' own `defaultScene` when it is sliced, its dataset's when it is not. "
-            "Never replaces an existing nomination, and is skipped silently when the caller may not write one"
+            "Whether the new scene becomes the one to open for this lens when nothing is nominated yet: the lens' own `defaultScene` when it selects something, its dataset's when it is a "
+            "whole array lens (no other container nominates a scene). Never replaces an existing nomination, and is skipped silently when the caller may not write one"
         ),
     )
 
@@ -198,15 +198,21 @@ def create_scene_from_lens(info: Info, input: CreateSceneFromLensInput) -> types
     """
     model = input.to_pydantic()
 
-    lens = get_for_org(models.ArrayLens, info, id=model.lens)
+    lens = get_for_org(models.Lens, info, id=model.lens)
     world = get_for_org(models.CoordinateSystem, info, id=model.world) if model.world else None
     ctx = CreationContext.from_info(info)
 
     with transaction.atomic():
         scene = scene_logic.bootstrap_scene_from_lens(lens, ctx, name=model.name, kind=model.kind, world=world)
         # Asked of the column that would be written, not of `nominated_scene_id`: a crop that
-        # is only *borrowing* its dataset's picture has nominated nothing yet.
-        nominated = lens.default_scene_id if not lens.is_whole else lens.dataset.default_scene_id
+        # is only *borrowing* its dataset's picture has nominated nothing yet. A whole lens
+        # writes its container's nomination, and only an array dataset has one to write.
+        if not lens.is_whole:
+            nominated = lens.default_scene_id
+        elif isinstance(lens, models.ArrayLens):
+            nominated = lens.dataset.default_scene_id
+        else:
+            nominated = scene.pk
         if model.nominate and nominated is None:
             try:
                 lens_mutations.nominate_lens_default_scene(info, lens, scene)
