@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from authentikate.models import Organization
 from kante.types import Info
 
+from django.db.models import Q
+
 from core import enums, models
 from core.logic import coords as coords_logic
 from core.logic import edge_universe
@@ -152,7 +154,7 @@ class SpaceGraph:
         )
 
         self._shapes: dict[int, list[int]] | None = None
-        self._anchors: dict[int, list[models.CoordinateAnchor]] | None = None
+        self._anchors: dict[tuple[str, int], list[models.CoordinateAnchor]] | None = None
         self._sources: list[Source] | None = None
 
     def adjacency(self, container_key: tuple | None, *, at: dict[str, int] | None = None, admit_scoped: bool = False) -> dict:
@@ -170,18 +172,31 @@ class SpaceGraph:
             self._shapes = {dataset_id: shape for dataset_id, shape in rows}
         return self._shapes
 
-    def _anchors_of(self, dataset_id: int) -> list["models.CoordinateAnchor"]:
-        """Every reachable dataset's anchors, in one query, and only once anyone asks.
+    def _anchors_of(self, kind: str, container_id: int) -> list["models.CoordinateAnchor"]:
+        """One container's anchors, from the anchors of every reachable dataset and every table and sparse dataset living here, loaded once and only once anyone asks.
 
         Lazy on purpose: a 1000-timepoint four-channel dataset has thousands of anchor rows,
-        and a client asking only for extents should not pay for them.
+        and a client asking only for extents should not pay for them. Keyed by the container
+        kind as well as its id, because an anchor pins into exactly one of three container
+        tables whose ids collide.
         """
         if self._anchors is None:
             self._anchors = {}
-            if self.universe.dataset_ids:
-                for anchor in models.CoordinateAnchor.objects.filter(dataset_id__in=self.universe.dataset_ids):
-                    self._anchors.setdefault(anchor.dataset_id, []).append(anchor)
-        return self._anchors.get(dataset_id, [])
+            table_ids = {resident.pk for resident in self._residents if isinstance(resident, models.TableDataset)}
+            sparse_ids = {resident.pk for resident in self._residents if isinstance(resident, models.SparseDataset)}
+            query = Q(dataset_id__in=self.universe.dataset_ids) if self.universe.dataset_ids else Q(pk__in=[])
+            if table_ids:
+                query |= Q(table_id__in=table_ids)
+            if sparse_ids:
+                query |= Q(sparse_id__in=sparse_ids)
+            for anchor in models.CoordinateAnchor.objects.filter(query):
+                if anchor.dataset_id is not None:
+                    self._anchors.setdefault(("ArrayDataset", anchor.dataset_id), []).append(anchor)
+                elif anchor.table_id is not None:
+                    self._anchors.setdefault(("TableDataset", anchor.table_id), []).append(anchor)
+                elif anchor.sparse_id is not None:
+                    self._anchors.setdefault(("SparseDataset", anchor.sparse_id), []).append(anchor)
+        return self._anchors.get((kind, container_id), [])
 
     def sources(self) -> list[Source]:
         """Every container registered into the space, anchored at the system that carries its claim.
@@ -319,10 +334,17 @@ class SpaceGraph:
         the dataset's intrinsic system -- not from the source's anchor system, which may be a
         lens or a level whose indices are its own. The two frames look alike, which is exactly
         how a half-voxel goes missing.
+
+        A table's or a sparse dataset's anchors pin *values* of its coordinate columns rather
+        than voxels: a pinned axis is the one position (no half-voxel to pad), an omitted one
+        is unbounded, since the server holds no extent for a table. Pushed from the container's
+        own system, which is the frame the values are in.
         """
+        if isinstance(source.container, (models.TableDataset, models.SparseDataset)):
+            return self._value_anchors_in(source, region, at=at)
         if source.dataset_id is None:
             return []
-        anchors = self._anchors_of(source.dataset_id)
+        anchors = self._anchors_of("ArrayDataset", source.dataset_id)
         if not anchors:
             return []
 
@@ -376,6 +398,28 @@ class SpaceGraph:
                     mins.append(-0.5)
                     maxs.append(float(shape[index]) - 0.5)
             if coords_logic.boxes_overlap(coords_logic.axed_bbox(mins, maxs, forms), region):
+                in_view.append(anchor)
+        return in_view
+
+    def _value_anchors_in(self, source: Source, region: dict[str, list[float]], *, at: dict[str, int] | None = None) -> list["models.CoordinateAnchor"]:
+        """A table's or sparse dataset's anchors whose pinned values, pushed into the space, fall in the region."""
+        anchors = self._anchors_of(type(source.container).__name__, source.container.pk)
+        if not anchors:
+            return []
+        path = graph_logic._bfs_path(self.adjacency(source.container_key, at=at), source.system.pk, self.space.pk)
+        if path is None or any(inverted for _, inverted in path):
+            return []
+        axis_names = [axis.name for axis in source.system.axes.all()]
+        try:
+            forms = coords_logic.compose_forms([graph_logic._edge_step(edge) for edge, _ in path], axis_names)
+        except coords_logic.NonAffineTransformError:
+            return []
+        in_view: list[models.CoordinateAnchor] = []
+        for anchor in anchors:
+            coordinates = anchor.coordinates or {}
+            mins = [float(coordinates[name]) if name in coordinates else -math.inf for name in axis_names]
+            maxs = [float(coordinates[name]) if name in coordinates else math.inf for name in axis_names]
+            if coords_logic.boxes_overlap(coords_logic.bounded_axes(coords_logic.axed_bbox(mins, maxs, forms)), region):
                 in_view.append(anchor)
         return in_view
 

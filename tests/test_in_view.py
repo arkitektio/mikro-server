@@ -27,6 +27,7 @@ from core import enums, models
 from core.logic import coords as coords_logic
 from mikro_server.schema import schema
 from tests import seed
+from tests.test_layer_kinds import _seed_table_dataset
 from tests.test_mesh_placement import _mesh_collection
 from tests.test_placement_queries import QueryCounter, _fresh_request
 
@@ -434,3 +435,25 @@ def test_boxes_overlap_ignores_the_axes_only_one_side_names():
     assert coords_logic.boxes_overlap(slab, {"z": [900.0, 910.0], "y": [1.0, 2.0], "x": [1.0, 2.0]})
     assert not coords_logic.boxes_overlap(slab, {"y": [90.0, 95.0], "x": [1.0, 2.0]})
     assert coords_logic.boxes_overlap(slab, {"y": [10.0, 10.0], "x": [0.0, 0.0]}), "closed bounds, so a plane probe on the edge still meets it"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_tables_anchors_are_placed_by_the_values_they_pin(authenticated_context: HttpContext):
+    """A table anchor pins a coordinate column's value: pushed into the world, it is in view where that value is, and nowhere else."""
+    ctx = authenticated_context
+    table, system = await _seed_table_dataset(ctx, "spots")
+    scene = await seed.create_scene(ctx, "Spots")
+    await seed.register_into_scene(ctx, scene, system=system)
+    for value in (10.0, 50.0):
+        await models.CoordinateAnchor.objects.acreate(table=table, organization=ctx.request.organization, coordinates={"x": value})
+    world_id = await sync_to_async(lambda: scene.world.pk)()
+
+    def of_table(hits: list[dict]) -> dict:
+        return next(hit for hit in hits if hit["system"]["id"] == str(system.pk))
+
+    narrow = of_table(await _in_view(ctx, world_id, [-100.0, -100.0, 0.0], [100.0, 100.0, 20.0]))
+    assert [anchor["coordinates"] for anchor in narrow["anchors"]] == [{"x": 10.0}], "the value at x=50 is outside a region ending at x=20"
+    assert narrow["extentState"] == "UNREADABLE", "the table itself is still unbounded: the server holds no extent for its rows"
+    wide = of_table(await _in_view(ctx, world_id, [-100.0] * 3, [100.0] * 3))
+    assert len(wide["anchors"]) == 2

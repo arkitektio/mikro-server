@@ -753,8 +753,9 @@ class SourcePlacement:
     )
     anchors: List[Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]] = strawberry.field(
         description=(
-            "The source's coordinate anchors whose slab overlaps the region. An anchor pins some axes and is global along every axis it omits, so its slab is one voxel wide "
-            "where it pins and the container's full extent where it does not. Only an array dataset's anchors are placed here: a table's anchors pin column values rather than a slab, and are read through `TableDataset.anchors`; every other source kind reports none, which is not a gap"
+            "The source's coordinate anchors whose slab overlaps the region. An anchor pins some axes and is global along every axis it omits. For an array dataset the slab is one voxel "
+            "wide where it pins and the container's full extent where it does not; for a table or a sparse dataset a pin is one position of a coordinate column, and an omitted axis is "
+            "unbounded, since the server holds no extent for a table. A mesh, network or annotation collection carries no anchors and reports none"
         )
     )
 
