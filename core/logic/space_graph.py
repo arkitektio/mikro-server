@@ -77,8 +77,14 @@ def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[
     which it would not if the origin were the voxel corner.
 
     None where the server holds no geometry: a mesh collection's vertices and a table's rows
-    are in Parquet it never opens.
+    are in Parquet it never opens. A windowed lens is bounded exactly where its windows bound
+    it -- the box has infinities elsewhere, which :func:`coords.bounded_axes` retires once the
+    box is in the space -- so a window over a table the server cannot bound still has an
+    extent on the axes the window names.
     """
+    if isinstance(resident, models.Lens) and not isinstance(resident, models.ArrayLens):
+        names = [axis.name for axis in resident.coordinate_system.axes.all()]
+        return coords_logic.window_box(names, resident.windows_list)
     if isinstance(resident, models.ArrayLens):
         # In the lens' own space, with the voxels a step skips left out of the box. The lens'
         # system carries its dataset's axes (prefetched with the residents) and `shapes` the
@@ -289,7 +295,7 @@ class SpaceGraph:
             return Hit(source=source, extent=None, extent_state=enums.ExtentState.INVERTED.value, path=path, anchors=[])
 
         try:
-            extent = coords_logic.axed_bbox(box[0], box[1], forms)
+            extent = coords_logic.bounded_axes(coords_logic.axed_bbox(box[0], box[1], forms))
         except coords_logic.NonAffineTransformError:
             return Hit(source=source, extent=None, extent_state=enums.ExtentState.NON_AFFINE.value, path=path, anchors=[])
 
@@ -384,7 +390,7 @@ class SpaceGraph:
             return None
         try:
             forms = coords_logic.compose_forms([graph_logic._edge_step(edge) for edge, _ in path], [axis.name for axis in system.axes.all()])
-            return coords_logic.axed_bbox(mins, maxs, forms)
+            return coords_logic.bounded_axes(coords_logic.axed_bbox(mins, maxs, forms))
         except coords_logic.NonAffineTransformError:
             return None
 
@@ -402,16 +408,22 @@ class SpaceGraph:
         """
         extents: dict[int, dict[str, list[float]] | None] = {}
         for resident in self._residents:
-            if not isinstance(resident, models.ArrayLens) or resident.pk in skip:
+            if not isinstance(resident, models.Lens) or resident.pk in skip:
                 continue
             names = [axis.name for axis in resident.coordinate_system.axes.all()]
-            dataset_shape = self.shapes().get(resident.dataset_id) or []
-            if not dataset_shape or len(names) != len(dataset_shape):
-                # No array, or axes that do not describe it: nothing to bound, as in `anchors_in`.
-                extents[resident.pk] = None
-                continue
-            mins, maxs = coords_logic.lens_voxel_box(dataset_shape, names, resident.slices_list)
-            extents[resident.pk] = self.extent_of(resident.coordinate_system, mins, maxs)
+            if isinstance(resident, models.ArrayLens):
+                dataset_shape = self.shapes().get(resident.dataset_id) or []
+                if not dataset_shape or len(names) != len(dataset_shape):
+                    # No array, or axes that do not describe it: nothing to bound, as in `anchors_in`.
+                    extents[resident.pk] = None
+                    continue
+                mins, maxs = coords_logic.lens_voxel_box(dataset_shape, names, resident.slices_list)
+            else:
+                # A windowed lens is bounded on the axes it windows and on no other; a whole
+                # one on none, which reads as "nothing bounded", like an array lens with no shape.
+                mins, maxs = coords_logic.window_box(names, resident.windows_list)
+            extent = self.extent_of(resident.coordinate_system, mins, maxs)
+            extents[resident.pk] = extent or None
         return extents
 
     def in_view(self, region: dict[str, list[float]], *, with_anchors: bool, at: dict[str, int] | None = None) -> list[Hit]:
@@ -506,36 +518,22 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
 
     names = [axis.name for axis in system.axes.all()]
     pins = {name: float(value) for name, value in (annotation.coordinates or {}).items()}
-    low, high = coords_logic.vectors_bbox(annotation.vectors)
-    if len(low) > len(names):
+    # The shape's box in its drawing space: its vertices half a voxel padded on the axes they
+    # span, its pins as centres (the overlap test is inclusive, and a cell would touch both of
+    # its neighbours), and an axis it says nothing about left open.
+    drawn = coords_logic.annotation_box(names, annotation.vectors, pins, padded=True)
+    if drawn is None:
         return set()
-
-    # A shape may have fewer components than its drawing space has axes -- a rectangle on one
-    # plane of a volume -- and its pins are how it says which plane. So its vertices span the
-    # axes it does not pin, or the trailing ones where the pins do not account for the
-    # difference. An axis neither names is one the shape says nothing about, and it stays
-    # unbounded rather than being handed a zero that would put the shape on the first plane.
-    unpinned = [name for name in names if name not in pins]
-    spanned = unpinned if len(unpinned) == len(low) else names[len(names) - len(low) :]
-    mins: list[float] = []
-    maxs: list[float] = []
-    for name in names:
-        if name in spanned:
-            index = spanned.index(name)
-            mins.append(low[index])
-            maxs.append(high[index])
-        else:
-            # The voxel's centre rather than its half-open cell: the overlap test is
-            # inclusive, and a cell would touch both of its neighbours.
-            mins.append(pins.get(name, -math.inf))
-            maxs.append(pins.get(name, math.inf))
+    mins = [drawn[name][0] if name in drawn else -math.inf for name in names]
+    maxs = [drawn[name][1] if name in drawn else math.inf for name in names]
 
     overlapping: set[int] = set()
     decided: set[int] = set()
     for space, depth in _meeting_spaces(system, info.context.request.organization):
-        # A drawing space nothing is registered into holds no lens, and that is nearly every
-        # one of them; asking first saves the whole graph.
-        if depth == 0 and not models.Transformation.objects.filter(parent__isnull=True, output=space).exists():
+        # A drawing space nothing is registered into holds no lens but the collection's own,
+        # and that is nearly every one of them; asking first saves the whole graph. A window
+        # over the collection itself lives there, and is the one lens that makes it worth it.
+        if depth == 0 and not models.Transformation.objects.filter(parent__isnull=True, output=space).exists() and not models.AnnotationLens.objects.filter(coordinate_system=space).exclude(windows=[]).exists():
             continue
 
         graph = for_request(info, space)
@@ -555,8 +553,10 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
         for lens_id, extent in graph.lens_extents(skip=decided).items():
             decided.add(lens_id)
             # Half-open: both boxes are voxel-aligned (faces at halves), so a crop that begins
-            # on the row after the shape ends shares a face with it and no voxel.
-            if extent is not None and coords_logic.boxes_overlap(extent, box, closed=False):
+            # on the row after the shape ends shares a face with it and no voxel. And only
+            # on an axis both bound: a lens windowed on `t` alone says nothing about where
+            # a rectangle lies in (y, x), and a vacuous conjunction is not an overlap shown.
+            if extent is not None and coords_logic.shares_a_bounded_axis(extent, box) and coords_logic.boxes_overlap(extent, box, closed=False):
                 overlapping.add(lens_id)
     return overlapping
 

@@ -21,6 +21,7 @@ from core.logic import coords, space_graph
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_condensed_placement import AS_AFFINE, _apply, _fresh_request
+from tests.test_layer_kinds import _seed_table_dataset
 from tests.test_merge_duplicate_lenses import _legacy_sliced_lens
 
 EDGE = """
@@ -404,6 +405,44 @@ async def test_a_stepped_lens_keeps_only_the_anchors_on_the_indices_it_selects(a
 
     pinned = sorted(anchor["coordinates"].get("y", -1) for anchor in result.data["lens"]["activeAnchors"])
     assert pinned == [-1, *range(*slice(0, 6, 2).indices(6))], "the global anchor and the rows the step lands on; the odd rows are in range and not in the lens"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_windowed_table_lens_overlaps_the_shapes_in_its_window(authenticated_context: HttpContext):
+    """A table the server cannot bound still has an extent where a window bounds it: x 10..20 meets a shape at x 10..20 and not one at 30..40. The whole lens, bounded nowhere, has not been shown to overlap either."""
+    ctx = authenticated_context
+    table, table_system = await _seed_table_dataset(ctx, "spots")
+    scene = await seed.create_scene(ctx, "Composition")
+    await seed.register_into_scene(ctx, scene, system=table_system)
+    whole = await seed.create_windowed_lens(ctx, table)
+    window = await seed.create_windowed_lens(ctx, table, [{"axis": "x", "min": 10.0, "max": 20.0}])
+    # Drawn on the table's own (y, x) space, which the scene's world then also reaches.
+    collection = await _collection_on(ctx, axes=["y", "x"], derived_from={"kind": "TABLE_DATASET", "tableDataset": str(table.pk), "transform": {"kind": "IDENTITY"}})
+
+    inside = await _draw(ctx, collection["id"], "RECTANGLE", [[0.0, 10.0], [0.0, 20.0], [5.0, 20.0], [5.0, 10.0]])
+    outside = await _draw(ctx, collection["id"], "RECTANGLE", [[0.0, 30.0], [0.0, 40.0], [5.0, 40.0], [5.0, 30.0]])
+
+    assert str(window.pk) in await _overlapping(ctx, inside["id"])
+    assert str(window.pk) not in await _overlapping(ctx, outside["id"])
+    assert str(whole.pk) not in await _overlapping(ctx, inside["id"]), "bounded on no axis, the whole table lens has not been shown to overlap anything"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_annotation_lens_overlaps_the_shapes_in_its_window_on_its_own_collection(authenticated_context: HttpContext):
+    """A window over a collection lives in the collection's own drawing space, which nothing is registered into; it is still found there."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Drawn on", axes=seed.YX_AXES, shapes=[[64, 64]])
+    collection = await _collection_on(ctx, axes=["y", "x"], derived_from={"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}})
+    row = await models.AnnotationCollection.objects.aget(pk=collection["id"])
+    window = await seed.create_windowed_lens(ctx, row, [{"axis": "y", "min": 0.0, "max": 5.0}])
+
+    inside = await _draw(ctx, collection["id"], "POINT", [[2.0, 3.0]])
+    outside = await _draw(ctx, collection["id"], "POINT", [[10.0, 3.0]])
+
+    assert str(window.pk) in await _overlapping(ctx, inside["id"])
+    assert str(window.pk) not in await _overlapping(ctx, outside["id"])
 
 
 # --- 7. levels ----------------------------------------------------------------------------------
