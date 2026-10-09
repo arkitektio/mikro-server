@@ -138,14 +138,73 @@ async def test_delete_data_array(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_delete_lens(db, authenticated_context: HttpContext):
+    """A sliced lens nothing draws through can go."""
     array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)
-    lens = await models.Lens.objects.acreate(dataset=array_dataset, slices=[])
+    lens = await seed.create_lens(authenticated_context, array_dataset, slices=[{"axis": "y", "start": 4, "stop": 20}])
 
     mutation = "mutation($id: ID!) { deleteLens(input: {id: $id}) }"
     result = await schema.execute(mutation, variable_values={"id": str(lens.pk)}, context_value=authenticated_context)
 
     assert not result.errors, result.errors
     assert not await models.Lens.objects.filter(id=lens.pk).aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_datasets_whole_lens_cannot_be_deleted(db, authenticated_context: HttpContext):
+    """The whole lens is the dataset's handle: it goes with the dataset, never on its own."""
+    array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)
+    whole = await seed.create_lens(authenticated_context, array_dataset)
+
+    mutation = "mutation($id: ID!) { deleteLens(input: {id: $id}) }"
+    refused = await schema.execute(mutation, variable_values={"id": str(whole.pk)}, context_value=authenticated_context)
+
+    assert refused.errors and "whole" in refused.errors[0].message, refused.errors
+    assert await models.Lens.objects.filter(id=whole.pk).aexists()
+
+    # With the dataset it goes.
+    result = await schema.execute("mutation($id: ID!) { deleteArrayDataset(input: {id: $id}) }", variable_values={"id": str(array_dataset.pk)}, context_value=authenticated_context)
+    assert not result.errors, result.errors
+    assert not await models.Lens.objects.filter(id=whole.pk).aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_a_layer_draws_through_cannot_be_deleted(db, authenticated_context: HttpContext):
+    """`Layer.lens` cascades and the lens is shared, so deleting it would empty scenes the caller never named."""
+    array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)
+    lens = await seed.create_lens(authenticated_context, array_dataset, slices=[{"axis": "y", "start": 4, "stop": 20}])
+    scene = await seed.create_scene(authenticated_context, "Composition")
+    layer = await models.Layer.objects.acreate(scene=scene, kind="image", lens=lens)
+
+    mutation = "mutation($id: ID!) { deleteLens(input: {id: $id}) }"
+    refused = await schema.execute(mutation, variable_values={"id": str(lens.pk)}, context_value=authenticated_context)
+
+    assert refused.errors and "Composition" in refused.errors[0].message, refused.errors
+    assert await models.Lens.objects.filter(id=lens.pk).aexists()
+
+    await layer.adelete()
+    allowed = await schema.execute(mutation, variable_values={"id": str(lens.pk)}, context_value=authenticated_context)
+    assert not allowed.errors, allowed.errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_a_chart_draws_through_cannot_be_deleted(db, authenticated_context: HttpContext):
+    """The same guard, for the other composition that reads a lens."""
+    from chart import models as chart_models
+
+    array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)
+    lens = await seed.create_lens(authenticated_context, array_dataset, slices=[{"axis": "y", "start": 4, "stop": 20}])
+    world = await models.CoordinateSystem.objects.acreate(name="Profile/world", organization=authenticated_context.request.organization)
+    chart = await chart_models.Chart.objects.acreate(name="Profile", world=world, organization=authenticated_context.request.organization)
+    await chart_models.ChartLayer.objects.acreate(chart=chart, kind="trace", lens=lens)
+
+    mutation = "mutation($id: ID!) { deleteLens(input: {id: $id}) }"
+    refused = await schema.execute(mutation, variable_values={"id": str(lens.pk)}, context_value=authenticated_context)
+
+    assert refused.errors and "chart 'Profile'" in refused.errors[0].message, refused.errors
+    assert await models.Lens.objects.filter(id=lens.pk).aexists()
 
 
 @pytest.mark.django_db(transaction=True)

@@ -29,8 +29,11 @@ class CoreConfig(AppConfig):
         # into the guards, through the same calls any other composition's app makes.
         from core import models
         from core.logic import compositions, pickers
+        from core.logic import coordinate_system as coordinate_system_logic
 
         compositions.register_composition(models.Scene, world_relation="scenes", noun="scene")
+        # A lens is shared by every composition over its selection, and `Layer.lens` cascades.
+        compositions.register_delete_guard(models.Lens, coordinate_system_logic.assert_lens_deletable)
         compositions.register_delete_guard(models.TableDataset, pickers.assert_table_not_in_a_picker)
         compositions.register_delete_guard(models.SparseDataset, pickers.assert_sparse_dataset_not_in_a_picker)
         compositions.register_delete_guard(models.Transformation, pickers.assert_edge_not_stranding_a_picker)
