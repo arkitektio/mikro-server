@@ -11,6 +11,7 @@ from core import subscriptions
 from chart import filters as chart_filters
 from chart import mutations as chart_mutations
 from chart import types as chart_types
+from visualization import mutations as visualization_mutations
 import strawberry_django
 from strawberry_django.fields.field import StrawberryDjangoField
 from koherent.strawberry.extension import KoherentExtension
@@ -518,6 +519,11 @@ class Mutation:
     create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
     create_network_lens = mutation(resolver=mutations.create_network_lens, description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one")
     create_annotation_lens = mutation(resolver=mutations.create_annotation_lens, description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one")
+    update_lens = mutation(resolver=mutations.update_lens, description="Rename a lens, or clear its name. What it selects cannot change: a different selection is a different lens")
+    set_lens_default_scene = mutation(
+        resolver=mutations.set_lens_default_scene,
+        description="Nominate the scene to open for a lens, and take its thumbnail from. Null clears it. On an unsliced lens this writes its dataset's nomination: the lens is the dataset, looked at whole",
+    )
     delete_lens = mutation(resolver=mutations.delete_lens, description="Delete a lens of any kind. Refused while a layer draws through it, and for a container's whole lens")
 
     create_scene = mutation(
@@ -532,6 +538,10 @@ class Mutation:
     create_scene_from_coordinate_system = mutation(
         resolver=mutations.create_scene_from_coordinate_system,
         description="Bootstrap a renderable scene over an existing coordinate system: a shared space (its registered sources become layers, up to the policy's nchildren) or an owned system such as a dataset's intrinsic grid or a physical space (the container's own data becomes the layer). The scene adopts the system as its world; no edges are authored. This is how a dataset is staged -- pass `intrinsicSystem` to render in pixels, or a physical space it is registered into to render at physical scale",
+    )
+    create_scene_from_lens = mutation(
+        resolver=mutations.create_scene_from_lens,
+        description="Bootstrap a renderable scene showing one lens -- a crop, a sub-volume, or the whole array -- with one layer per channel over that lens. Composes in the dataset's intrinsic grid unless `world` names another space the lens reaches",
     )
     update_scene = mutation(resolver=mutations.update_scene, description="Set a scene's viewer preferences: how a client should open it")
     clear_scene = mutation(
@@ -564,6 +574,11 @@ class Mutation:
     )
     update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer. View state only")
     delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")
+
+    auto_visualize = mutation(
+        resolver=visualization_mutations.auto_visualize,
+        description="Show a coordinate system as whichever composition fits it: a chart over a space with exactly one metric, unit-carrying axis, a scene over any other space with a time or space axis. Bootstrapped from what already resides in the space; authors no edges",
+    )
 
     # The coordinate graph. Registration used to be a 4x4 matrix on the layer, where
     # two layers over one dataset carried two copies of one fact; it is now an edge.

@@ -23,31 +23,16 @@ from core import models as core_models
 from core.creation import CreationContext
 from core.inputs.coords import AxisInputModel
 from core.logic import coordinate_system as coordinate_system_logic
+from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.logic import placement
 
-#: The axis types that measure: a position along one is a quantity, and the distance between
-#: two positions means something. A chart's axis is one of these, and so is the axis a trace
-#: is read along. ``core`` has no single predicate for this -- it has several lists, each
-#: answering a narrower question -- so the set is stated here, where it is the rule.
-METRIC_AXIS_TYPES: frozenset[str] = frozenset(
-    {
-        core_enums.AxisTypeChoices.SPACE.value,
-        core_enums.AxisTypeChoices.TIME.value,
-        core_enums.AxisTypeChoices.MICROTIME.value,
-        core_enums.AxisTypeChoices.SPECTRUM.value,
-    }
-)
-
-#: The axis types that enumerate: their positions are members, not measurements. The one
-#: axis a trace may leave free beside the one it is read along -- a line per channel, a line
-#: per object.
-ENUMERATING_AXIS_TYPES: frozenset[str] = frozenset(
-    {
-        core_enums.AxisTypeChoices.CHANNEL.value,
-        core_enums.AxisTypeChoices.INDEX.value,
-    }
-)
+#: The axis types that measure, and the ones that enumerate. A chart's axis is metric, and
+#: so is the axis a trace is read along; an enumerating axis is the one a trace may leave
+#: free beside it. Stated in ``core``, where a dataset's TRACE spec reads the same two sets:
+#: what the spec calls a trace and what a chart draws whole cannot come apart.
+METRIC_AXIS_TYPES = coords_logic.METRIC_AXIS_TYPES
+ENUMERATING_AXIS_TYPES = coords_logic.ENUMERATING_AXIS_TYPES
 
 #: The name of the value axis in a chart-minted drawing space.
 VALUE_AXIS_NAME = "value"

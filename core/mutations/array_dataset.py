@@ -466,6 +466,11 @@ def create_array_dataset(
         coordinate_anchor = _get_or_create_anchor(dataset, anchor.axis_anchors)
         _write_anchor_spokes(coordinate_anchor, anchor, axis_specs=axis_specs)
 
+    # The dataset arrives with the lens that selects all of it. A lens is what a viewer opens
+    # and what a processing step is handed, so "the whole array" has to be something that can
+    # be named from the first moment -- not a row that appears as a side effect of staging the
+    # first scene. It costs one row and no system: an unsliced lens lives in the grid above.
+
     # The hub's rekuest hears of this dataset through its model signal (mikro_server/service.py),
     # after the commit — when the axes and levels written above exist too.
     return dataset

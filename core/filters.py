@@ -475,20 +475,20 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
 
     # What a dataset is, is materialized onto `stored_spec` at creation (see ArrayDataset.spec and
     # core.logic.graph.create_pixel_axes), so this reads the column rather than re-deriving the
-    # spec in SQL. A stored list holds exactly one spatial member plus a modifier per acquisition
-    # axis, so JSONB containment gives the all-of semantics directly: two spatial members can
+    # spec in SQL. A stored list holds exactly one spatial member plus a modifier per non-spatial
+    # axis type, so JSONB containment gives the all-of semantics directly: two spatial members can
     # never co-occur in a stored list, so `[IMAGE, VOLUME]` matches nothing, and a headless
     # dataset (empty list) is excluded by any non-empty request without a special guard.
 
     @kante.filter_field(
-        description="Filter to datasets satisfying every one of these specs, e.g. [VOLUME, TIMESERIES] for 3D timelapses. Materialized at creation from the axes of the intrinsic coordinate system and the level-0 shape; an axis counts only when it has more than one position, so a stack of one plane is an IMAGE and a single frame is not a TIMESERIES (use `hasAxisTypes` to ask whether an axis is declared at all). A dataset carries one spatial spec (by how many such SPACE axes it has) plus a modifier per such acquisition axis, so two spatial specs together match nothing"
+        description="Filter to datasets satisfying every one of these specs, e.g. [VOLUME, TIMESERIES] for 3D timelapses. Materialized at creation from the axes of the intrinsic coordinate system and the level-0 shape; an axis counts only when it has more than one position, so a stack of one plane is an IMAGE and a single frame is not a TIMESERIES (use `hasAxisTypes` to ask whether an axis is declared at all). A dataset carries one spatial spec (by how many such SPACE axes it has) plus a modifier per non-spatial axis type it has more than one position along (TIMESERIES, MULTICHANNEL, SPECTRAL, FLIM, DISPLACEMENT_FIELD, COORDINATE_FIELD, INDEXED), and TRACE when it is a curve along one measured axis -- `[TRACE]` finds what a chart can draw whole. Two spatial specs together match nothing"
     )
     def spec(self, info: Info, queryset: QuerySet, value: list[enums.ArrayDatasetSpec], prefix: str) -> tuple[QuerySet, Q]:
         if not value:
             return queryset, Q()
         return queryset, Q(**{f"{prefix}stored_spec__contains": [spec.value for spec in value]})
 
-    @kante.filter_field(description="Filter to datasets whose intrinsic coordinate system carries every one of these axis types, e.g. [TIME, CHANNEL]. The raw form of `spec`, for the types no spec names: COORDINATE, DISPLACEMENT, INDEX")
+    @kante.filter_field(description="Filter to datasets whose intrinsic coordinate system carries every one of these axis types, e.g. [TIME, CHANNEL]. The raw form of `spec`: it asks whether an axis is declared at all, where a spec counts it only when it has more than one position")
     def has_axis_types(self, info: Info, queryset: QuerySet, value: list[enums.AxisType], prefix: str) -> tuple[QuerySet, Q]:
         types = {axis_type.value for axis_type in value}
         if not types:
@@ -728,6 +728,30 @@ class LensFilter(IdsFilterMixin):
     @kante.filter_field(description="Filter to the lenses over this annotation collection")
     def annotation_collection(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}annotationlens__annotation_collection_id": value})
+
+    @kante.filter_field(
+        description=(
+            "Filter by whether the lens cuts anything out of its container. True keeps the crops, sub-volumes and windows; false the whole lenses, one per container -- a list meant for "
+            "people usually wants true"
+        )
+    )
+    def sliced(self, info: Info, value: bool, prefix: str) -> Q:
+        whole = Q()
+        for kind in models.Lens.KIND_BY_CONTAINER.values():
+            column = "slices" if kind is models.ArrayLens else "windows"
+            whole |= Q(**{f"{prefix}{kind.__name__.lower()}__{column}": []})
+        return ~whole if value else whole
+
+    @kante.filter_field(
+        description="Search by the lens' own name or, since most lenses have none and are known by their container's, by the name of the dataset, table or annotation collection it selects from (case-insensitive substring)"
+    )
+    def search(self, info: Info, value: str, prefix: str) -> Q:
+        return (
+            Q(**{f"{prefix}name__icontains": value})
+            | Q(**{f"{prefix}arraylens__dataset__name__icontains": value})
+            | Q(**{f"{prefix}tablelens__table_dataset__name__icontains": value})
+            | Q(**{f"{prefix}annotationlens__annotation_collection__name__icontains": value})
+        )
 
     @kante.filter_field(
         description=(

@@ -151,8 +151,20 @@ def _bootstrap_image_layers(
     *,
     kind: "enums.BootstrapLayerKind | None" = None,
     order: int = 0,
+    lens: "models.ArrayLens | None" = None,
 ) -> "list[models.Layer]":
     """Create the default array layers for a dataset in a scene: a lens, and one layer per channel.
+
+    ``lens`` is the selection to draw. Left out, it is the dataset's unsliced lens -- the one
+    that already exists if any does, so staging a dataset five times leaves one whole-array
+    lens rather than five indistinguishable ones. Given, the layers read *that* lens, and
+    everything below that used to be asked of the dataset is asked of the selection instead:
+    its shape decides renderability and the recipe, and its channel axis decides how many
+    layers there are. ``Layer.intensity_index`` indexes the lens (``assert_intensity_index``
+    reads the lens' size), while labels and histograms are recorded against the dataset's
+    channels, so for a lens that cuts the channel axis the two are re-keyed onto each other
+    (:func:`_lens_channels`) -- otherwise ``c[2:4]`` would draw channel 2 with channel 0's
+    name, hue and contrast limits.
 
     The array half of :func:`bootstrap_scene_from_system`. It writes no placement edge -- the
     caller must already have made the dataset placeable in the scene -- so it is pure layer
@@ -193,25 +205,30 @@ def _bootstrap_image_layers(
     edit is an ordinary update.
     """
     render = coords_logic.resolve_render_axes(dataset.axis_specs)
-    axis_names, shape = dataset.axis_names, dataset.shape_list
+    # One lens for the whole dataset, whatever it becomes: a lens is a selection over an array,
+    # and every channel layer selects the same thing. Minting one per channel would write a row
+    # per layer saying exactly what its siblings say -- and a *sliced* one would mint a
+    # coordinate system and an edge, which this module does not do. A caller that wants a
+    # sliced one drawn made it already and passes it in.
+    if lens is None:
+        lens = coordinate_system_logic.whole_lens(dataset)
+    # A selection never drops or reorders an axis, so the names are the dataset's either way
+    # and only the extents differ.
+    axis_names, shape = dataset.axis_names, lens.shape_list
 
     def size(axis: str | None) -> int:
         return shape[axis_names.index(axis)] if axis is not None and axis in axis_names else 0
 
     if size(render.x) <= 1 or size(render.y) <= 1:
-        raise ValueError(f"Dataset {dataset.pk} is not renderable: its x axis '{render.x}' ({size(render.x)} px) and y axis '{render.y}' ({size(render.y)} px) must both have more than one pixel")
+        subject = f"Lens {lens.pk} over dataset {dataset.pk}" if not lens.is_whole else f"Dataset {dataset.pk}"
+        raise ValueError(f"{subject} is not renderable: its x axis '{render.x}' ({size(render.x)} px) and y axis '{render.y}' ({size(render.y)} px) must both have more than one pixel")
 
     # Read once, used three times: to pick the recipe, to name and colour the channel layers,
     # and to say which channel is red. Each of those used to ask the database itself, or not
     # ask at all.
-    labels = _channel_labels(dataset, render.intensity) if render.intensity is not None else {}
+    labels = _lens_channels(_channel_labels(dataset, render.intensity), lens, render.intensity) if render.intensity is not None else {}
 
     resolved_kind = kind or _infer_kind(dataset, render, size, labels)
-    # *The* whole lens of the dataset, not a fresh one: a lens is a selection over an array,
-    # every channel layer here selects the same thing, and every scene over this dataset
-    # selects it too. One row per selection is what lets two scenes, and an action handed
-    # either, agree about which data they hold.
-    lens = coordinate_system_logic.whole_lens(dataset)
     blending = _LAYER_BLENDING[resolved_kind]
 
     if resolved_kind == enums.BootstrapLayerKind.LABEL:
@@ -254,7 +271,7 @@ def _bootstrap_image_layers(
         # Positional 0, 1, 2 is the fallback, not the rule: a converter that labelled its
         # components tells us which is which, and several of them write (blue, green, red).
         components = channels_logic.rgb_components(labels, size(render.intensity)) or {"red": 0, "green": 1, "blue": 2}
-        windows = _value_windows(dataset, render.intensity)
+        windows = _lens_channels(_value_windows(dataset, render.intensity), lens, render.intensity)
         clim_min, clim_max = _combined_window(windows, sorted(components.values()))
         return [
             models.Layer.objects.create(
@@ -289,8 +306,76 @@ def _bootstrap_image_layers(
             gamma=1.0,
             projection_mode=projection_mode,
         )
-        for offset, channel in enumerate(_channel_sources(dataset, render, size, labels))
+        for offset, channel in enumerate(_channel_sources(dataset, render, size, labels, lens=lens))
     ]
+
+
+def _lens_channels(by_channel: dict, lens: "models.ArrayLens", axis: str | None) -> dict:
+    """Re-key a per-channel mapping from the dataset's channel indices to a lens' own.
+
+    Ingest records labels and histograms against the dataset -- channel 2 is channel 2 -- but a
+    layer's ``intensity_index`` counts along the *lens*, and a lens that cuts the channel axis
+    starts counting somewhere else: over ``c[2:4]``, index 0 is the dataset's channel 2. This
+    is the translation, done with Python's own slice arithmetic so a step or an open bound
+    resolves exactly as :func:`core.logic.coords.lens_shape` resolved it. A lens that leaves
+    the axis alone gets the mapping back untouched, which is every lens there was before a
+    sliced one could be bootstrapped.
+
+    The ``None`` key -- a histogram taken over the whole array -- is carried across as it is:
+    it names no channel, so there is nothing to translate.
+    """
+    if axis is None:
+        return by_channel
+    selection = next((slice_ for slice_ in lens.slices_list if slice_.axis == axis), None)
+    if selection is None:
+        return by_channel
+    dataset = lens.dataset
+    extent = dataset.shape_list[dataset.axis_names.index(axis)]
+    picked = range(*slice(selection.start, selection.stop, selection.step).indices(extent))
+    local = {index: by_channel[channel] for index, channel in enumerate(picked) if channel in by_channel}
+    if None in by_channel:
+        local[None] = by_channel[None]
+    return local
+
+
+def bootstrap_scene_from_lens(
+    lens: "models.ArrayLens",
+    ctx: CreationContext,
+    *,
+    name: str | None = None,
+    kind: "enums.BootstrapLayerKind | None" = None,
+    world: "models.CoordinateSystem | None" = None,
+) -> "models.Scene":
+    """Materialize a renderable scene showing one lens: its selection, and nothing else of its dataset.
+
+    The lens-first twin of :func:`bootstrap_scene_from_system`, and it exists because that one
+    cannot be asked for this. Staging a system draws whatever *lives* there, and what lives
+    behind a sliced lens' space is its dataset -- so staging a crop's space draws the whole
+    array again, over a full lens, in the crop's frame. Which lens the layers read is not a
+    fact of the space; it has to be said, and this is where it is said.
+
+    The world defaults to the dataset's intrinsic grid rather than the lens' own space. A crop
+    then sits where it was cut from: annotations drawn on it land where a scene of the whole
+    dataset would put them, and two crops of one dataset staged apart still agree about where
+    they are. ``world`` names another space to compose in -- a physical space the dataset is
+    registered into, a shared space -- and is held to the same line every layer is: the lens
+    must reach it affinely, or the build refuses naming the edge.
+
+    No edge is authored. The lens' own edge into the intrinsic grid already places it.
+    """
+    dataset = lens.dataset
+    target = world or dataset.intrinsic_coordinate_system
+    if target is None:
+        raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system, so there is no space to build a scene of lens {lens.pk} over. Pass `world`.")
+
+    with transaction.atomic():
+        # Named for the selection when it has a name: two crops of one dataset staged side by
+        # side would otherwise be two scenes called the same thing.
+        default_name = f"{dataset.name} · {lens.name}" if lens.name else dataset.name
+        scene = create_scene(name=name or default_name, world=target, ctx=ctx)
+        graph_logic.assert_placeable_in(scene.world, lens.space, destination=f"the world of scene '{scene.name}'")
+        _bootstrap_image_layers(dataset, scene, ctx, kind=kind, lens=lens)
+    return scene
 
 
 def bootstrap_scene_from_system(
@@ -696,7 +781,14 @@ class _BootstrapChannel:
     transmitted: bool = False
 
 
-def _channel_sources(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes, size: Callable[[str | None], int], labels: dict[int, str]) -> "list[_BootstrapChannel]":
+def _channel_sources(
+    dataset: "models.ArrayDataset",
+    render: coords_logic.RenderAxes,
+    size: Callable[[str | None], int],
+    labels: dict[int, str],
+    *,
+    lens: "models.ArrayLens | None" = None,
+) -> "list[_BootstrapChannel]":
     """One channel per layer, drawn the way its recorded name says -- and the index cycle where it says nothing.
 
     Each of these becomes an INTENSITY layer of its own (:func:`_bootstrap_image_layers`), so
@@ -725,7 +817,11 @@ def _channel_sources(dataset: "models.ArrayDataset", render: coords_logic.Render
     """
     axis = render.intensity
     channels = size(axis) if axis is not None else 0
+    # `size` and `labels` already speak the lens' indices; the windows are read off the
+    # dataset here, so they are translated here.
     windows = _value_windows(dataset, axis)
+    if lens is not None:
+        windows = _lens_channels(windows, lens, axis)
 
     def window(index: int | None) -> tuple[float | None, float | None]:
         return windows.get(index) or windows.get(None) or (None, None)

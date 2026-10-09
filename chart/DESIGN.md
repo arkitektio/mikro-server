@@ -55,11 +55,12 @@ direction no chart layer draws along, and every placement question ("is the map 
 "which source axis is laid along it?") would need a rule for it. A space with more axes is a
 place; make a scene over it, or a one-axis space with an edge to it.
 
-**Metric means SPACE, TIME, MICROTIME or SPECTRUM.** `core` has no single "metric"
-predicate. It has several lists, each answering a narrower question (may a pyramid
-downsample this, may a selector name it, what dimension must its unit have). The set is
-stated in `chart/logic/chart.py` as `METRIC_AXIS_TYPES`, where it is the rule. CHANNEL and
-INDEX enumerate; COORDINATE, DISPLACEMENT and VALUE are not axes data is laid along.
+**Metric means SPACE, TIME, MICROTIME or SPECTRUM.** The set is stated in
+`core/logic/coords.py` as `METRIC_AXIS_TYPES`, beside `ENUMERATING_AXIS_TYPES` (CHANNEL and
+INDEX), and this app reads both from there. `core` owns them because a dataset's `TRACE` spec
+is the same rule asked of a whole dataset: `arrayDatasets(filters: {spec: [TRACE]})` finds
+what `createTraceChartLayer` draws whole, and one definition keeps the two from disagreeing.
+COORDINATE, DISPLACEMENT and VALUE are not axes data is laid along.
 
 **The axis must carry a unit.** A unitless axis is a pixel grid's, and a position along it is
 an index. A chart over a dataset's own grid is refused; calibrate it into a physical space
@@ -209,6 +210,9 @@ is now `PlacementGraph` plus the scene's layer list and pyramid levels; `ChartGr
 - `chart` reads datasets, lenses, tables, annotation collections, spaces and edges. It does
   not name `Scene`, `Layer`, `core.logic.scene`, `core.logic.scene_graph`, the layer
   mutations or `core.render`.
+- `visualization` is the one package that names both compositions: `autoVisualize` chooses
+  between the two bootstraps there. `Chart` implements `core`'s `Visualization` interface,
+  which names no implementer.
 - Importing `core.models` or `core.types` *loads* the scene models and types, because they
   share modules with the data models. That cannot be avoided without moving them.
 

@@ -1,9 +1,16 @@
-"""Rewrite the stored spec of the datasets created before an axis of one position stopped counting.
+"""Rewrite the stored spec of the datasets created under an older rule for it.
 
-A dataset's spec used to be read off its axes alone, so a stack stored with a single plane was
-a VOLUME and a single frame a TIMESERIES. It is now read off the axes and the level-0 shape
-together (:func:`core.logic.coords.specs_for_axes`), and every dataset created from then on is
-written that way. The rows written before keep the old answer until this is run.
+A dataset's spec is materialized once, at creation, from :func:`core.logic.coords.specs_for_axes`,
+so a row keeps the answer of the build that wrote it until this is run. Two changes to the rule
+have left such rows behind:
+
+- The spec used to be read off the axes alone, so a stack stored with a single plane was a
+  VOLUME and a single frame a TIMESERIES. It is now read off the axes and the level-0 shape
+  together.
+- DISPLACEMENT, COORDINATE and INDEX axes named no spec. They now denote DISPLACEMENT_FIELD,
+  COORDINATE_FIELD and INDEXED, which the datasets created before do not carry.
+- A dataset that is a curve along one measured axis is a TRACE, which no dataset created
+  before says of itself.
 
 **A command and not a data migration**: it rewrites existing data once, which a migration is
 not for -- `migrate` runs for every build and must leave a schema the previous release still

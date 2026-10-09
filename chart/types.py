@@ -30,7 +30,7 @@ from kanne_server import scalars as kanne_scalars
         "axis. It names data by id and owns none of it, and it carries no unit of its own -- the unit is its world axis's"
     ),
 )
-class Chart(OrgScoped):
+class Chart(OrgScoped, core_types.Visualization):
     """A composition of layers along one metric axis."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)

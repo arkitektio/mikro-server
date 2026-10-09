@@ -35,11 +35,12 @@ from datalayer.types import FabriksStore, KonnektionStore, ParquetStore
 
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map
+from core.logic import compositions
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
 from core.types.auth import ProvenanceEntry, User
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped, OrgScopedOrNested
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped, OrgScopedOrNested
 
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
     from core.types.folder import Folder
     from core.types.table_dataset import TableDataset
     from core.types.sparse_dataset import SparseDataset
+    from core.types.visualization import Visualization
 
 
 @kante.django_type(
@@ -152,6 +154,22 @@ class CoordinateSystem(OrgScoped):
         pagination=True,
         description="The scenes that compose over this system as their world. A SHARED space lists every scene sharing it and outlives each of them: a scene adopts a space, never owns it, and deleting a scene never deletes the space. The inverse of `Scene.worldCoordinateSystem`",
     )
+    @kante.django_field(
+        description=(
+            "Everything laid out over this system as its world, of every kind: its scenes, then its charts. The inverse of `Visualization.worldCoordinateSystem`. "
+            "Unpaginated -- for a filtered or paged list of one kind, ask `scenes` here or the top-level `charts`"
+        )
+    )
+    def visualizations(self, info: Info) -> List[Annotated["Visualization", strawberry.lazy("core.types.visualization")]]:
+        """The compositions over this space, kind by kind in registration order, oldest first within a kind."""
+        # Read off the registry, so a composition from another app is listed without this
+        # module naming it -- the way the delete refusal and the orphan sweep learn of it.
+        return [
+            row
+            for composition in compositions.compositions()
+            for row in build_prescoped_queryset(info, getattr(self, composition.world_relation).all()).order_by("pk")
+        ]
+
     provenance_entries: List[ProvenanceEntry] = kante.django_field(description="Provenance entries for this coordinate system: who created it, and every subsequent change")
     created_at: datetime.datetime
     # Nullable: the creator FK is SET_NULL, so a system outlives the user who made it.

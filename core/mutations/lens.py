@@ -17,18 +17,21 @@ from core import base_models, inputs
 from core.creation import CreationContext
 from core.logic import coordinate_system as coordinate_system_logic
 from core.scoping import get_for_org
-from core.mutations._generic import make_delete
+from core.mutations import array_dataset as array_dataset_mutations
+from core.mutations._generic import assert_can_delete, make_delete
 
 
 class CreateLensInputModel(BaseModel):
     dataset: str
     slices: list[base_models.SliceInputModel] | None = None
+    name: str | None = None
 
 
 @kante.pydantic_input(CreateLensInputModel, description="Input for the lens making a selection over an array dataset, by slices")
 class CreateLensInput:
     dataset: strawberry.ID = strawberry.field(description="The array dataset to select over")
     slices: list[inputs.SliceInput] = strawberry.field(default=None, description="Optional slices selecting a window of the dataset, one per axis to restrict. Omit (or pass an empty list) for the lens that selects everything -- the dataset's whole lens, which exists from creation. The same selection, however spelled, is the same lens")
+    name: str | None = strawberry.field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name -- finding a selection is not a request to rename it, `updateLens` is")
 
 
 def create_lens(
@@ -41,7 +44,12 @@ def create_lens(
     dataset = get_for_org(models.ArrayDataset, info, id=model.dataset)
     ctx = CreationContext.from_info(info)
 
-    return coordinate_system_logic.create_lens(dataset, model.slices or [], ctx)
+    lens = coordinate_system_logic.create_lens(dataset, model.slices or [], ctx)
+    name = (model.name or "").strip() or None
+    if name and lens.name is None:
+        lens.name = name
+        lens.save(update_fields=["name"])
+    return lens
 
 
 _WINDOWS = "Optional windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for the lens that selects everything -- the container's whole lens, which exists from creation. A window keeps and re-indexes nothing, so the lens lives in the container's own coordinate system"
@@ -155,3 +163,82 @@ def lens_owner(item: "models.Lens") -> tuple:
 
 
 delete_lens = make_delete(models.Lens, DeleteLensInput, owner=lens_owner)
+
+
+class UpdateLensInputModel(BaseModel):
+    id: str = Field(description="The ID of the lens to update")
+    name: str | None = Field(default=None, description="The new name, or null (or blank) to clear it")
+
+
+@kante.pydantic_input(UpdateLensInputModel, description="Input for renaming a lens -- the whole of what is editable about one")
+class UpdateLensInput:
+    """Input for renaming a lens."""
+
+    id: strawberry.ID = strawberry.field(description="The ID of the lens to update")
+    name: str | None = strawberry.field(default=None, description="What to call this selection. Null or blank clears the name, and the lens reads as its selection again")
+
+
+def update_lens(info: Info, input: UpdateLensInput) -> types.Lens:
+    """Rename a lens, or clear its name.
+
+    The name is the only thing a lens has that is not derived from its container and its
+    selection, so it is the only thing that can change: a different selection is a different
+    lens. Guarded on the container, as the nomination is -- a lens has no creator of its own.
+    """
+    model = input.to_pydantic()
+    lens = get_for_org(models.Lens, info, id=model.id)
+    assert_can_delete(info, lens, lens_owner)
+    lens.name = (model.name or "").strip() or None
+    lens.save(update_fields=["name"])
+    return lens
+
+
+class SetLensDefaultSceneInputModel(BaseModel):
+    """A lens and the scene it nominates, or null to clear."""
+
+    lens: str = Field(description="The lens to nominate a scene for")
+    scene: str | None = Field(default=None, description="The scene to nominate, or null to clear the nomination")
+
+
+@kante.pydantic_input(SetLensDefaultSceneInputModel, description="Nominate the scene to open for a lens, and take its thumbnail from")
+class SetLensDefaultSceneInput:
+    """Input for nominating a lens' default scene."""
+
+    lens: strawberry.ID = strawberry.field(description="The lens to nominate a scene for")
+    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to nominate. Null clears the nomination, and a lens that selects something then falls back to its container's")
+
+
+def nominate_lens_default_scene(info: Info, lens: "models.Lens", scene: "models.Scene | None") -> "models.Lens":
+    """Write the nomination a lens answers `defaultScene` with, having checked the caller may.
+
+    **A whole lens writes its container's nomination.** It selects everything, so the scene to
+    open for it is the scene to open for the container; a column on the lens would be a second
+    copy of one answer, free to disagree with the first. Only an array dataset nominates a
+    scene today, so a whole lens over anything else is refused in prose.
+
+    Guarded on the container either way, for the reason `nominate_default_scene` gives: a lens
+    has no creator of its own, and it is the container's cards this changes.
+    """
+    if lens.is_whole:
+        container = lens.container
+        if not isinstance(container, models.ArrayDataset):
+            raise ValueError(f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk}, which nominates no scene; a selection over it may.")
+        array_dataset_mutations.nominate_default_scene(info, container, scene)
+        return lens
+    assert_can_delete(info, lens, lens_owner)
+    lens.default_scene = scene
+    lens.save(update_fields=["default_scene"])
+    return lens
+
+
+def set_lens_default_scene(info: Info, input: SetLensDefaultSceneInput) -> types.Lens:
+    """Nominate the scene to open for a lens, or clear the nomination.
+
+    No check that the scene shows the lens, for the reason `set_default_scene` gives: the
+    nomination is bookkeeping, and validating it against `scenes` would make it a claim about
+    placement.
+    """
+    model = input.to_pydantic()
+    lens = get_for_org(models.Lens, info, id=model.lens)
+    scene = get_for_org(models.Scene, info, id=model.scene) if model.scene is not None else None
+    return nominate_lens_default_scene(info, lens, scene)

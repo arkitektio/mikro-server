@@ -134,7 +134,7 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
         default=list,
         help_text=(
             "What this dataset structurally is: the raw ArrayDatasetSpec values (one spatial member plus a "
-            "modifier per acquisition axis) that its intrinsic axes satisfy at its level-0 shape -- an axis "
+            "modifier per non-spatial axis type, and TRACE for a curve) that its intrinsic axes satisfy at its level-0 shape -- an axis "
             "counts only when it has more than one position -- materialized at creation by the axis writer "
             "from core.logic.coords.specs_for_axes. Immutable because the axes and the shape are, so it "
             "cannot disagree with them. Read it back as enum members through the `spec` property. Empty "
@@ -191,8 +191,12 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
         a dataset whose axes are unknown has no spatial extent to report, and
         claiming SCALAR would say it has none. A genuine no-SPACE-axis dataset
         stores ``['SCALAR', ...]``, so the two stay distinguishable.
+
+        A stored value this build has no member for is left out rather than raised on:
+        the enum grows, and a rolled-back release is started on rows a newer one wrote.
         """
-        return [enums.ArrayDatasetSpec(value) for value in self.stored_spec]
+        known = {member.value for member in enums.ArrayDatasetSpec}
+        return [enums.ArrayDatasetSpec(value) for value in self.stored_spec if value in known]
 
     @property
     def shape_list(self) -> list:
@@ -600,6 +604,36 @@ class Lens(PolymorphicModel):
     # Denormalized from the container, so a list across every kind scopes in one hop.
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="lenses", help_text="The organization of the container this lens selects over")
 
+    # A label, and the one thing here that is not derived and not immutable. It is not a fact
+    # of the selection: two people would compute the same shape from the same slices, but only
+    # one of them knows the cut is "nucleus 3". So it takes no part in deciding whether a lens
+    # already exists (identity is the container and the selection alone) and renaming a lens
+    # changes nothing about what it selects. Null for a lens nobody named, which reads as its
+    # selection -- or as the whole container when it has none.
+    name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="What someone called this selection, e.g. 'nucleus 3'. Optional, editable, and no part of the lens' identity: a lens is its container and its selection",
+    )
+
+    # A nomination, exactly as `ArrayDataset.default_scene` is, and bookkeeping for the same
+    # reason: it says which composition to open for this selection and where its thumbnail
+    # comes from, and nothing about where the data sits. Written for a lens that selects
+    # *something* only. A whole lens selects everything, so the scene to open for it is its
+    # container's -- a second column for the same answer could only disagree with the first.
+    default_scene = models.ForeignKey(
+        "Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_lenses",
+        help_text=(
+            "The scene to open for this lens, and the one its thumbnail is taken from. Set for a lens that selects something only: a whole lens answers with its container's nomination. "
+            "Bookkeeping, not placement -- which scenes *show* this lens is `scenes`. Cleared, not cascaded, when the scene is deleted"
+        ),
+    )
+
     # Always set by every writer. An array lens' own crop space, or the container's system.
     coordinate_system = models.ForeignKey(
         CoordinateSystem,
@@ -667,6 +701,18 @@ class Lens(PolymorphicModel):
     def active_anchors(self):
         """The coordinate anchors this selection keeps. Empty for a container kind that carries none."""
         return CoordinateAnchor.objects.none()
+
+    @property
+    def nominated_scene_id(self) -> int | None:
+        """The scene to open for this lens: its own nomination when it selects something, else its container's.
+
+        The fallback is what keeps a crop nobody has staged from going blank -- until it has a
+        composition of its own, the picture of its container is the best one there is. Only an
+        array dataset nominates a scene today; every other container answers None.
+        """
+        if not self.is_whole and self.default_scene_id is not None:
+            return self.default_scene_id
+        return getattr(self.container, "default_scene_id", None)
 
 
 class WindowedLens(models.Model):

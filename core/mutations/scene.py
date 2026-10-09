@@ -23,6 +23,7 @@ from core.logic import scene as scene_logic
 from core.mutations._generic import make_delete
 from core.scoping import get_for_org
 from core.mutations import array_dataset as array_dataset_mutations
+from core.mutations import lens as lens_mutations
 
 
 class CreateSceneInputModel(BaseModel):
@@ -144,6 +145,73 @@ def create_scene_from_coordinate_system(info: Info, input: CreateSceneFromCoordi
 
     scene = scene_logic.bootstrap_scene_from_system(system, model.policy, ctx, name=model.name)
     _nominate_all(info, scene, model.default_for)
+    return scene
+
+
+class CreateSceneFromLensInputModel(BaseModel):
+    lens: str
+    name: str | None = None
+    kind: enums.BootstrapLayerKind | None = None
+    world: str | None = None
+    nominate: bool = True
+
+
+@kante.pydantic_input(
+    CreateSceneFromLensInputModel,
+    description=(
+        "Bootstrap a renderable scene showing one lens: its selection and nothing else of its dataset, one layer per channel exactly as createSceneFromCoordinateSystem draws a whole "
+        "dataset. This is how a crop is staged -- staging a sliced lens' *space* draws its whole dataset again, because which lens the layers read is not a fact of the space"
+    ),
+)
+class CreateSceneFromLensInput:
+    """Input for bootstrapping a scene over one lens."""
+
+    lens: strawberry.ID = strawberry.field(description="The lens to show. Its layers read this lens, sliced or not")
+    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the dataset's name")
+    kind: enums.BootstrapLayerKind | None = strawberry.field(
+        default=None,
+        description="The render recipe for the layers, overriding what would be inferred from the lens' axes and from what ingest recorded -- the same choice as `ScenePolicyInput.kind`",
+    )
+    world: strawberry.ID | None = strawberry.field(
+        default=None,
+        description=(
+            "The coordinate system to compose in. Defaults to the dataset's intrinsic pixel grid, so a crop sits where it was cut from and agrees with every other scene of the dataset. "
+            "Pass a physical or shared space the dataset is registered into to render at that scale; the lens must reach it affinely"
+        ),
+    )
+    nominate: bool = strawberry.field(
+        default=True,
+        description=(
+            "Whether the new scene becomes the one to open for this lens when nothing is nominated yet: the lens' own `defaultScene` when it is sliced, its dataset's when it is not. "
+            "Never replaces an existing nomination, and is skipped silently when the caller may not write one"
+        ),
+    )
+
+
+def create_scene_from_lens(info: Info, input: CreateSceneFromLensInput) -> types.Scene:
+    """Bootstrap a scene whose layers read one given lens.
+
+    Org-scoped only, as every scene-creating mutation is: staging data you can see is not an
+    edit of it. The *nomination* is an edit -- it changes what a dataset's or a lens' card
+    shows to everyone -- so that half is guarded on the dataset, and a caller who may not
+    write it still gets their scene.
+    """
+    model = input.to_pydantic()
+
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
+    world = get_for_org(models.CoordinateSystem, info, id=model.world) if model.world else None
+    ctx = CreationContext.from_info(info)
+
+    with transaction.atomic():
+        scene = scene_logic.bootstrap_scene_from_lens(lens, ctx, name=model.name, kind=model.kind, world=world)
+        # Asked of the column that would be written, not of `nominated_scene_id`: a crop that
+        # is only *borrowing* its dataset's picture has nominated nothing yet.
+        nominated = lens.default_scene_id if not lens.is_whole else lens.dataset.default_scene_id
+        if model.nominate and nominated is None:
+            try:
+                lens_mutations.nominate_lens_default_scene(info, lens, scene)
+            except PermissionError:
+                pass
     return scene
 
 

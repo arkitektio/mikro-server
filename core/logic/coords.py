@@ -250,21 +250,62 @@ _SPATIAL_SPEC_BY_COUNT: dict[int, enums.ArrayDatasetSpec] = {
     3: enums.ArrayDatasetSpec.VOLUME,
 }
 
-#: The spec each acquisition axis type denotes, when the axis has more than one position
-#: (see :func:`specs_for_axes`). The types
-#: absent here (COORDINATE, DISPLACEMENT, INDEX) are deliberately unnamed: they
-#: describe what an array's *values* are, not what was acquired, and asking for
-#: them is what the `hasAxisTypes` filter is for.
+#: The spec each non-spatial axis type denotes, when the axis has more than one position
+#: (see :func:`specs_for_axes`). The acquisition axes come first, then the ones that say
+#: what an array's *values* or positions are (DISPLACEMENT, COORDINATE, INDEX). New
+#: members go at the end: the order here is the order of a stored spec, which a client
+#: may compare by equality. VALUE is absent because no dataset's grid has one.
 _SPEC_BY_AXIS_TYPE: dict[str, enums.ArrayDatasetSpec] = {
     enums.AxisTypeChoices.TIME.value: enums.ArrayDatasetSpec.TIMESERIES,
     enums.AxisTypeChoices.CHANNEL.value: enums.ArrayDatasetSpec.MULTICHANNEL,
     enums.AxisTypeChoices.SPECTRUM.value: enums.ArrayDatasetSpec.SPECTRAL,
     enums.AxisTypeChoices.MICROTIME.value: enums.ArrayDatasetSpec.FLIM,
+    enums.AxisTypeChoices.DISPLACEMENT.value: enums.ArrayDatasetSpec.DISPLACEMENT_FIELD,
+    enums.AxisTypeChoices.COORDINATE.value: enums.ArrayDatasetSpec.COORDINATE_FIELD,
+    enums.AxisTypeChoices.INDEX.value: enums.ArrayDatasetSpec.INDEXED,
 }
+
+#: The axis types positions are measured along: the ones where the distance between two
+#: positions means something. What a curve is read along, and what a chart is laid out along.
+#: The same members as `_DOWNSAMPLABLE_TYPES` today, and a different question: a type a
+#: pyramid stops striding would still be measured.
+METRIC_AXIS_TYPES: frozenset[str] = frozenset(
+    {
+        enums.AxisTypeChoices.SPACE.value,
+        enums.AxisTypeChoices.TIME.value,
+        enums.AxisTypeChoices.MICROTIME.value,
+        enums.AxisTypeChoices.SPECTRUM.value,
+    }
+)
+
+#: The axis types whose positions are members rather than measurements. A curve may run
+#: one line per position of one of these: a line per channel, a line per object.
+ENUMERATING_AXIS_TYPES: frozenset[str] = frozenset(
+    {
+        enums.AxisTypeChoices.CHANNEL.value,
+        enums.AxisTypeChoices.INDEX.value,
+    }
+)
+
+
+def _is_trace(extended: Sequence[AxisSpec]) -> bool:
+    """Whether the axes a dataset has extent along make it a curve: values read along one measured axis.
+
+    Exactly one metric axis -- the one the values are read along -- and beside it at most
+    one enumerating axis, one line per position. A second metric axis is a surface, and a
+    value axis (COORDINATE, DISPLACEMENT) makes each sample a vector rather than a height.
+
+    This is the shape a chart draws as a TRACE when it is handed the whole dataset, and the
+    chart's own gate reads the same two sets. Whether a particular chart can draw it is a
+    question of placement, which no spec answers.
+    """
+    measured = [axis for axis in extended if axis.type in METRIC_AXIS_TYPES]
+    beside = [axis for axis in extended if axis.type not in METRIC_AXIS_TYPES]
+    return len(measured) == 1 and len(beside) <= 1 and all(axis.type in ENUMERATING_AXIS_TYPES for axis in beside)
 
 
 def specs_for_axes(axes: Sequence[AxisSpec], shape: Sequence[int]) -> list[enums.ArrayDatasetSpec]:
-    """Every spec these axes satisfy at this shape: the one spatial member, then a modifier per acquisition axis.
+    """Every spec these axes satisfy at this shape: the one spatial member, then a modifier per non-spatial axis type, then what the whole amounts to.
 
     **An axis counts only when it has more than one position.** A z axis of a single plane
     does not make a stack, and a time axis of a single frame does not make a timelapse: a
@@ -290,6 +331,8 @@ def specs_for_axes(axes: Sequence[AxisSpec], shape: Sequence[int]) -> list[enums
     specs = [_SPATIAL_SPEC_BY_COUNT.get(count, enums.ArrayDatasetSpec.HYPERVOLUME)]
     present = {axis.type for axis in extended}
     specs.extend(spec for axis_type, spec in _SPEC_BY_AXIS_TYPE.items() if axis_type in present)
+    if _is_trace(extended):
+        specs.append(enums.ArrayDatasetSpec.TRACE)
     return specs
 
 

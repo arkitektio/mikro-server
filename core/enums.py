@@ -633,7 +633,7 @@ class LensKind(str, Enum):
     ANNOTATION = "ANNOTATION"
 
 
-@strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds.")
+@strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds; the others are modifiers: one per non-spatial axis type the dataset has more than one position along, and TRACE for a dataset that is a curve along one measured axis.")
 class ArrayDatasetSpec(str, Enum):
     """What a dataset structurally is, materialized from its axes at creation.
 
@@ -661,6 +661,10 @@ class ArrayDatasetSpec(str, Enum):
     MULTICHANNEL = "MULTICHANNEL"
     SPECTRAL = "SPECTRAL"
     FLIM = "FLIM"
+    DISPLACEMENT_FIELD = "DISPLACEMENT_FIELD"
+    COORDINATE_FIELD = "COORDINATE_FIELD"
+    INDEXED = "INDEXED"
+    TRACE = "TRACE"
 
 
 _describe(
@@ -674,6 +678,10 @@ _describe(
     MULTICHANNEL="Carries a CHANNEL axis of more than one channel. A one-channel axis does not count.",
     SPECTRAL="Carries a SPECTRUM axis of more than one bin: a spectrally resolved acquisition, a lambda stack.",
     FLIM="Carries a MICROTIME axis of more than one bin: fluorescence-lifetime arrival-time bins.",
+    DISPLACEMENT_FIELD="Carries a DISPLACEMENT axis of more than one component: the values are per-point offsets -- a flow field, a drift map, a deformation.",
+    COORDINATE_FIELD="Carries a COORDINATE axis of more than one component: the values are absolute positions -- a lookup map, the field of a FIELD edge. A scalar-valued array declares no such axis and is not one.",
+    INDEXED="Carries an INDEX axis of more than one position: an axis that enumerates -- objects, rows -- rather than measures. A stack of per-object crops, a per-object measurement.",
+    TRACE="A curve: exactly one measured axis (SPACE, TIME, MICROTIME or SPECTRUM) with more than one position, and beside it at most one enumerating axis (CHANNEL or INDEX), one line per position. A line profile, a time trace, a decay, a spectrum -- what a chart draws whole as a TRACE layer. An image is not one, though a row of it is: that is a lens, and a spec describes the whole dataset. Says nothing about placement: whether a given chart can draw it depends on what is registered.",
 )
 
 

@@ -37,8 +37,8 @@ _LZYX = [
 # A line profile: one spatial axis.
 _X = [seed.axis("x", enums.AxisType.SPACE)]
 
-# No spatial extent and no acquisition modifier: a single INDEX axis. Its spec is exactly
-# [SCALAR] -- distinct from a headless dataset, whose spec is the empty list.
+# No spatial extent: a single INDEX axis. Its spec is [SCALAR, INDEXED] -- distinct from
+# a headless dataset, whose spec is the empty list.
 _INDEX = [seed.axis("i", enums.AxisType.INDEX)]
 
 
@@ -130,8 +130,8 @@ async def test_array_dataset_spec_field(db, authenticated_context: HttpContext):
     assert specs["Plane"] == ["IMAGE", "MULTICHANNEL"]
     assert specs["Bare"] == ["IMAGE"]
     assert specs["Lambda"] == ["VOLUME", "SPECTRAL"]
-    assert specs["Profile"] == ["PROFILE"]
-    assert specs["Point"] == ["SCALAR"]
+    assert specs["Profile"] == ["PROFILE", "TRACE"]
+    assert specs["Point"] == ["SCALAR", "INDEXED"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -177,7 +177,7 @@ async def test_array_dataset_spec_filter_ignores_datasets_without_an_intrinsic_s
     Its `stored_spec` is the empty list (nothing materialized it), so the `spec` field
     reports nothing and `@>` containment of any non-empty request excludes it. This is
     what keeps it distinct from a genuine SCALAR dataset (a no-SPACE-axis one, like
-    Point), whose `stored_spec` is `["SCALAR"]`.
+    Point), whose `stored_spec` is `["SCALAR", "INDEXED"]`.
     """
     ctx = authenticated_context
     await _seed_spec_datasets(ctx)
@@ -215,6 +215,25 @@ _FLIM = [
     seed.axis("x", enums.AxisType.SPACE),
 ]
 
+# A field over a plane: the value axis enumerates the components of each pixel's vector.
+_FLOW = [
+    seed.axis("y", enums.AxisType.SPACE),
+    seed.axis("x", enums.AxisType.SPACE),
+    seed.axis("d", enums.AxisType.DISPLACEMENT),
+]
+_LOOKUP = [
+    seed.axis("y", enums.AxisType.SPACE),
+    seed.axis("x", enums.AxisType.SPACE),
+    seed.axis("p", enums.AxisType.COORDINATE),
+]
+
+# One crop per object: the leading axis enumerates them.
+_CROPS = [
+    seed.axis("i", enums.AxisType.INDEX),
+    seed.axis("y", enums.AxisType.SPACE),
+    seed.axis("x", enums.AxisType.SPACE),
+]
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
@@ -239,7 +258,7 @@ async def test_an_axis_of_one_position_does_not_count_towards_the_spec(db, authe
     specs = {d["name"]: d["spec"] for d in data["arrayDatasets"]}
     assert specs == {
         "OnePlane": ["IMAGE"],
-        "OneLine": ["PROFILE"],
+        "OneLine": ["PROFILE", "TRACE"],
         "OneVoxel": ["SCALAR"],
         "OneFrame": ["IMAGE"],
         "OneBin": ["VOLUME"],
@@ -262,6 +281,101 @@ async def test_an_axis_of_one_position_does_not_count_towards_the_spec(db, authe
     # Whether the axis is *declared* is still askable, and is a different question.
     assert await names({"hasAxisTypes": ["TIME"]}) == {"OneFrame", "Timelapse"}
     assert await names({"hasAxisTypes": ["SPECTRUM"]}) == {"OneBin"}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_axes_that_are_not_acquired_denote_a_spec_too(db, authenticated_context: HttpContext):
+    """A field and a per-object stack are found by what they are, under the same extent rule."""
+    ctx = authenticated_context
+    await seed.create_array_dataset(ctx, "Flow", shapes=[[64, 64, 2]], axes=_FLOW)
+    await seed.create_array_dataset(ctx, "Lookup", shapes=[[64, 64, 2]], axes=_LOOKUP)
+    await seed.create_array_dataset(ctx, "Crops", shapes=[[10, 32, 32]], axes=_CROPS)
+    await seed.create_array_dataset(ctx, "OneComponent", shapes=[[64, 64, 1]], axes=_FLOW)
+    await seed.create_array_dataset(ctx, "OneObject", shapes=[[1, 32, 32]], axes=_CROPS)
+    await seed.create_array_dataset(ctx, "Plain", shapes=[[64, 64]], axes=seed.YX_AXES)
+
+    data = await execute(ctx, _SPEC_QUERY, {})
+    assert {d["name"]: d["spec"] for d in data["arrayDatasets"]} == {
+        "Flow": ["IMAGE", "DISPLACEMENT_FIELD"],
+        "Lookup": ["IMAGE", "COORDINATE_FIELD"],
+        "Crops": ["IMAGE", "INDEXED"],
+        "OneComponent": ["IMAGE"],
+        "OneObject": ["IMAGE"],
+        "Plain": ["IMAGE"],
+    }
+
+    async def names(filters):
+        return {d["name"] for d in (await execute(ctx, _SPEC_QUERY, filters))["arrayDatasets"]}
+
+    assert await names({"spec": ["DISPLACEMENT_FIELD"]}) == {"Flow"}
+    assert await names({"spec": ["COORDINATE_FIELD"]}) == {"Lookup"}
+    assert await names({"spec": ["INDEXED"]}) == {"Crops"}
+    assert await names({"spec": ["IMAGE", "INDEXED"]}) == {"Crops"}
+    assert await names({"spec": ["DISPLACEMENT_FIELD", "COORDINATE_FIELD"]}) == set()
+
+    # Declared is the other question, as for a single plane.
+    assert await names({"hasAxisTypes": ["DISPLACEMENT"]}) == {"Flow", "OneComponent"}
+    assert await names({"hasAxisTypes": ["INDEX"]}) == {"Crops", "OneObject"}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_dataset_that_is_a_curve_along_one_measured_axis_is_a_trace(db, authenticated_context: HttpContext):
+    """One measured axis with extent, at most one enumerating axis beside it: whatever is measured."""
+    ctx = authenticated_context
+    space, time, channel, index = enums.AxisType.SPACE, enums.AxisType.TIME, enums.AxisType.CHANNEL, enums.AxisType.INDEX
+
+    async def make(name, axes, shape):
+        await seed.create_array_dataset(ctx, name, shapes=[shape], axes=[seed.axis(axis_name, axis_type) for axis_name, axis_type in axes])
+
+    await make("Decay", [("tau", enums.AxisType.MICROTIME)], [256])
+    await make("Spectrum", [("l", enums.AxisType.SPECTRUM)], [128])
+    await make("Recording", [("t", time)], [1000])
+    await make("ChannelTraces", [("c", channel), ("t", time)], [3, 1000])
+    await make("ObjectTraces", [("i", index), ("t", time)], [10, 1000])
+    # An image stored around a curve is still the curve: the single positions do not count.
+    await make("PointScan", [("t", time), ("y", space), ("x", space)], [1000, 1, 1])
+    # Two measured axes are a surface, and two enumerating ones are more than a line each.
+    await make("Kymograph", [("t", time), ("x", space)], [100, 64])
+    await make("Grid", [("i", index), ("c", channel), ("t", time)], [10, 3, 1000])
+    # A vector per sample is not a height per sample.
+    await make("Track", [("t", time), ("p", enums.AxisType.COORDINATE)], [1000, 2])
+    # Nothing measured to read along.
+    await make("PerObject", [("i", index)], [10])
+
+    data = await execute(ctx, _SPEC_QUERY, {})
+    assert {d["name"]: d["spec"] for d in data["arrayDatasets"]} == {
+        "Decay": ["SCALAR", "FLIM", "TRACE"],
+        "Spectrum": ["SCALAR", "SPECTRAL", "TRACE"],
+        "Recording": ["SCALAR", "TIMESERIES", "TRACE"],
+        "ChannelTraces": ["SCALAR", "TIMESERIES", "MULTICHANNEL", "TRACE"],
+        "ObjectTraces": ["SCALAR", "TIMESERIES", "INDEXED", "TRACE"],
+        "PointScan": ["SCALAR", "TIMESERIES", "TRACE"],
+        "Kymograph": ["PROFILE", "TIMESERIES"],
+        "Grid": ["SCALAR", "TIMESERIES", "MULTICHANNEL", "INDEXED"],
+        "Track": ["SCALAR", "TIMESERIES", "COORDINATE_FIELD"],
+        "PerObject": ["SCALAR", "INDEXED"],
+    }
+
+    async def names(filters):
+        return {d["name"] for d in (await execute(ctx, _SPEC_QUERY, filters))["arrayDatasets"]}
+
+    assert await names({"spec": ["TRACE"]}) == {"Decay", "Spectrum", "Recording", "ChannelTraces", "ObjectTraces", "PointScan"}
+    assert await names({"spec": ["TRACE", "TIMESERIES"]}) == {"Recording", "ChannelTraces", "ObjectTraces", "PointScan"}
+    assert await names({"spec": ["TRACE", "FLIM"]}) == {"Decay"}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_stored_spec_this_build_does_not_know_is_left_out(db, authenticated_context: HttpContext):
+    """A rolled-back release reads rows a newer one wrote: an unknown member is not an error."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Newer", shapes=[[64, 64]], axes=seed.YX_AXES)
+    await ArrayDataset.objects.filter(pk=dataset.pk).aupdate(stored_spec=["IMAGE", "NOT_YET_NAMED"])
+
+    data = await execute(ctx, _SPEC_QUERY, {})
+    assert data["arrayDatasets"] == [{"name": "Newer", "spec": ["IMAGE"]}]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -292,6 +406,9 @@ async def test_datasets_stored_under_the_old_rule_are_corrected_by_the_job(db, a
     right = await seed.create_array_dataset(ctx, "Stack", shapes=[[4, 13, 23]], axes=zyx)
     await ArrayDataset.objects.filter(pk=stale.pk).aupdate(stored_spec=["VOLUME"])
     headless = await ArrayDataset.objects.acreate(name="Headless", organization=ctx.request.organization, stored_spec=["VOLUME"])
+    # Written before an INDEX axis named a spec.
+    crops = await seed.create_array_dataset(ctx, "Crops", shapes=[[10, 32, 32]], axes=_CROPS)
+    await ArrayDataset.objects.filter(pk=crops.pk).aupdate(stored_spec=["IMAGE"])
 
     await sync_to_async(call_command)("respec_datasets")
     # Any job is safe to run again.
@@ -299,6 +416,7 @@ async def test_datasets_stored_under_the_old_rule_are_corrected_by_the_job(db, a
 
     assert (await ArrayDataset.objects.aget(pk=stale.pk)).stored_spec == ["IMAGE"]
     assert (await ArrayDataset.objects.aget(pk=right.pk)).stored_spec == ["VOLUME"]
+    assert (await ArrayDataset.objects.aget(pk=crops.pk)).stored_spec == ["IMAGE", "INDEXED"]
     assert (await ArrayDataset.objects.aget(pk=headless.pk)).stored_spec == ["VOLUME"], "no shape to read, so nothing is claimed about it"
 
 

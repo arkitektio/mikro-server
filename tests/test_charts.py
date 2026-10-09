@@ -278,6 +278,10 @@ async def test_a_one_dimensional_dataset_is_drawn_as_a_trace(authenticated_conte
     profile = await _dataset(ctx, "Profile", [("d", enums.AxisType.SPACE)], [64])
     await _lay_along(ctx, profile, chart, "d", scale=0.25)
 
+    # The axis writer put the spec on the row, not on this instance.
+    await profile.arefresh_from_db(fields=["stored_spec"])
+    assert enums.ArrayDatasetSpec.TRACE in profile.spec, "what a chart draws whole is what the spec calls a trace"
+
     made = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk)}))["createTraceChartLayer"]
     assert made["kind"] == "TRACE"
     assert made["mark"] == "LINE"
@@ -300,6 +304,10 @@ async def test_a_free_channel_axis_is_the_series_axis(authenticated_context: Htt
     spectra = await _dataset(ctx, "Profiles", [("c", enums.AxisType.CHANNEL), ("d", enums.AxisType.SPACE)], [3, 64])
     await _lay_along(ctx, spectra, chart, "d")
 
+    # The axis writer put the spec on the row, not on this instance.
+    await spectra.arefresh_from_db(fields=["stored_spec"])
+    assert enums.ArrayDatasetSpec.TRACE in spectra.spec
+
     made = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(spectra.pk)}))["createTraceChartLayer"]
     assert made["alongAxis"] == "d"
     assert made["seriesAxis"] == "c"
@@ -313,6 +321,10 @@ async def test_a_second_free_metric_axis_is_a_surface_not_a_trace(authenticated_
     chart = await _chart(ctx)
     image = await _dataset(ctx, "Image", [("y", enums.AxisType.SPACE), ("x", enums.AxisType.SPACE)], [32, 64])
     await _lay_along(ctx, image, chart, "x")
+
+    # The axis writer put the spec on the row, not on this instance.
+    await image.arefresh_from_db(fields=["stored_spec"])
+    assert enums.ArrayDatasetSpec.TRACE not in image.spec
 
     whole = await _run(ctx, TRACE, {"chart": chart["id"], "dataset": str(image.pk)})
     assert whole.errors, "y is free and metric: that is a surface"

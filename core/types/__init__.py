@@ -42,6 +42,7 @@ from core.types.coords import (
     FieldTransformation,
     transformation_types,
 )
+from core.types.visualization import Visualization
 from core.types.sparse_dataset import (
     SparseDataset,
     SparseArray,

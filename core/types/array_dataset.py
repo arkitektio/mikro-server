@@ -1,5 +1,7 @@
 import datetime
 
+from django.db.models import Prefetch
+
 import strawberry
 from strawberry import auto
 from typing import TYPE_CHECKING, Annotated, List, Optional
@@ -17,6 +19,7 @@ from core.render.layer.models import LayerRenderGraphModel, PhasorRenderModel
 from core.render.camera.types import CameraState
 from core.render.camera.models import CameraStateModel
 from core.inputs.coords import CoordinateInput, at_map
+from core.types.visualization import Visualization
 from core.types.coords import (
     AffinePlacement,
     CoordinateSystem,
@@ -55,6 +58,12 @@ if TYPE_CHECKING:
 
 #: Key for the per-request latest-snapshot-per-scene map on the context's loader store.
 _LATEST_SNAPSHOT_KEY = "latest_snapshot_by_scene"
+
+
+# Where `ArrayDataset.fullLens` finds its prefetched answer: the dataset's unsliced lenses,
+# oldest first. Its own attribute rather than the `lenses` relation, so the prefetch cannot
+# narrow what `ArrayDataset.lenses` reads on the same row.
+_FULL_LENSES_ATTR = "_prefetched_full_lenses"
 
 
 def _latest_snapshot_map(info: Info) -> "dict[int, models.SceneSnapshot] | None":
@@ -108,12 +117,22 @@ def _default_scene_snapshot(info: Info, dataset) -> "SceneSnapshot | None":
     else. A nominated scene may blend several. That is the trade, and the field description
     says so.
     """
-    if dataset.default_scene_id is None:
+    return _scene_snapshot(info, dataset.default_scene_id)
+
+
+def _scene_snapshot(info: Info, scene_id: "int | None") -> "SceneSnapshot | None":
+    """The newest picture of one scene, read from the per-request map when there is one.
+
+    The lookup half of :func:`_default_scene_snapshot`, split out because a lens answers the
+    same question with a scene id of its own -- its nomination when it is sliced -- and must
+    read the same map rather than run a query per card.
+    """
+    if scene_id is None:
         return None
     by_scene = _latest_snapshot_map(info)
     if by_scene is None:
-        return models.SceneSnapshot.objects.filter(scene_id=dataset.default_scene_id).order_by("-created_at", "-pk").first()
-    return by_scene.get(dataset.default_scene_id)
+        return models.SceneSnapshot.objects.filter(scene_id=scene_id).order_by("-created_at", "-pk").first()
+    return by_scene.get(scene_id)
 
 
 @kante.django_type(
@@ -232,7 +251,7 @@ class ArrayDataset(OrgScoped):
         return all(method in enums.LABEL_COMPLIANT_SCALE_METHODS for method in methods)
 
     @kante.django_field(
-        description="What this dataset structurally is, materialized at creation from the axes of its intrinsic coordinate system and its level-0 shape: the one spatial spec its SPACE axes denote, then a modifier per acquisition axis. An axis counts only when it has more than one position. A 3D timelapse is [VOLUME, TIMESERIES, MULTICHANNEL]. A stack stored with a single plane is an IMAGE, and a single frame is not a TIMESERIES; `hasAxisTypes` is the filter for whether an axis is declared at all. Empty while the intrinsic system does not exist yet"
+        description="What this dataset structurally is, materialized at creation from the axes of its intrinsic coordinate system and its level-0 shape: the one spatial spec its SPACE axes denote, then a modifier per non-spatial axis type: the acquisition ones (TIMESERIES, MULTICHANNEL, SPECTRAL, FLIM), then the ones that say what the values or positions are (DISPLACEMENT_FIELD, COORDINATE_FIELD, INDEXED). An axis counts only when it has more than one position. A 3D timelapse is [VOLUME, TIMESERIES, MULTICHANNEL]; a 2D flow field is [IMAGE, DISPLACEMENT_FIELD]. Last comes TRACE, for a dataset that is a curve along one measured axis: a decay is [SCALAR, FLIM, TRACE], a line profile per channel [PROFILE, MULTICHANNEL, TRACE]. A stack stored with a single plane is an IMAGE, and a single frame is not a TIMESERIES; `hasAxisTypes` is the filter for whether an axis is declared at all. Empty while the intrinsic system does not exist yet"
     )
     def spec(self, info: Info) -> List[enums.ArrayDatasetSpec]:
         """Every spec the dataset's axes satisfy."""
@@ -249,6 +268,34 @@ class ArrayDataset(OrgScoped):
     def scenes(self, info: Info) -> List["Scene"]:
         """The scenes this dataset is rendered in, through its lenses' layers."""
         return list(models.Scene.objects.filter(layers__lens__arraylens__dataset=self).distinct())
+
+    @kante.django_field(
+        description=(
+            "The array lenses over this dataset, oldest first. `sliced: true` keeps the ones that cut something out -- the crops and sub-volumes people work on; `sliced: false` the one that "
+            "selects everything, which is `fullLens`. A list for people wants `sliced: true` and `fullLens` beside it"
+        )
+    )
+    def lenses(self, info: Info, sliced: Optional[bool] = None) -> List["ArrayLens"]:
+        """The dataset's lenses, optionally only the sliced or only the unsliced ones."""
+        lenses = self.lenses.order_by("pk")
+        if sliced is None:
+            return list(lenses)
+        return list(lenses.exclude(slices=[]) if sliced else lenses.filter(slices=[]))
+
+    @kante.django_field(
+        # One query for a page of datasets rather than one a row: every tile links to this.
+        prefetch_related=[lambda info: Prefetch("lenses", queryset=models.ArrayLens.objects.filter(slices=[]).order_by("pk"), to_attr=_FULL_LENSES_ATTR)],
+        description=(
+            "The lens that selects this whole dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and the whole array is meant. Every dataset is "
+            "created with one, and there is one; null only for a dataset with no pixel grid to select from -- reading never mints one"
+        ),
+    )
+    def full_lens(self, info: Info) -> Optional["ArrayLens"]:
+        """The whole lens over this dataset, if any."""
+        prefetched = getattr(self, _FULL_LENSES_ATTR, None)
+        if prefetched is not None:
+            return prefetched[0] if prefetched else None
+        return self.lenses.filter(slices=[]).order_by("pk").first()
 
     @kante.django_field(
         select_related=["default_scene"],
@@ -486,7 +533,7 @@ class OmeMetadata:
     ordering=order.SceneOrder,
     description="A composition of layers over a shared world coordinate system. The scene carries no units of its own -- they are per-axis, on the axes of its world system",
 )
-class Scene(OrgScoped):
+class Scene(OrgScoped, Visualization):
     """A composition of layers over a shared world coordinate system."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
@@ -599,6 +646,22 @@ class Lens:
         """The system the lens' selection is expressed in: its own, or its container's."""
         return self.space
 
+    name: str | None = kante.django_field(
+        description="What someone called this selection, or null when nobody has. A label only: it is no part of what the lens selects, and a client shows the selection -- or 'the whole container' -- in its place"
+    )
+
+    @kante.django_field(
+        description=(
+            "The scene to open for this lens. A lens that selects something answers its own nomination (`setLensDefaultScene`, or `createSceneFromLens`), falling back to its container's while it has "
+            "none; a whole lens always answers with its container's, because it *is* the container looked at whole and a second nomination could only disagree. Only an array dataset nominates "
+            "a scene today. A nomination, not a derivation"
+        ),
+    )
+    def default_scene(self, info: Info) -> Optional["Scene"]:
+        """The scene this lens nominates: its own when it selects something and has one, otherwise its container's."""
+        scene_id = self.nominated_scene_id
+        return models.Scene.objects.filter(pk=scene_id).first() if scene_id is not None else None
+
     @kante.django_field(description="The coordinate anchors inside this selection: an anchor global along an axis, or pinned inside the lens' range on it. Empty for a container kind that carries no anchors (meshes, networks, annotation collections)")
     def active_anchors(self, info: Info) -> List[CoordinateAnchor]:
         """The anchors the selection keeps."""
@@ -619,12 +682,25 @@ class ArrayLens(Lens, OrgScoped):
     dataset: ArrayDataset
 
     @kante.django_field(
-        select_related=["dataset__default_scene"],
-        description="The most recent picture of this lens' dataset's `defaultScene` -- the tile to put on this lens. The same picture the dataset itself reports: the nomination is a fact about the dataset, so every lens over one dataset answers alike. Null when the dataset nominates no scene",
+        select_related=["dataset"],
+        description=(
+            "The most recent picture of this lens' `defaultScene` -- the tile to put on this lens. A sliced lens that nominates a scene shows that one; one that nominates nothing, and every "
+            "unsliced lens, shows the dataset's, so a crop nobody has staged yet still has a picture. Null when neither nominates a scene"
+        ),
     )
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
-        """The newest picture of the scene this lens' dataset nominates."""
-        return _default_scene_snapshot(info, self.dataset)
+        """The newest picture of the scene this lens nominates, falling back to its dataset's."""
+        return _scene_snapshot(info, self.nominated_scene_id)
+
+    @kante.django_field(
+        description=(
+            "The scenes this lens is rendered in: those with a layer over it. Derived, never stored, exactly as `ArrayDataset.scenes` is. One row per selection, so the whole lens "
+            "answers for the whole array and a crop for itself; scenes that show another selection of the dataset are the dataset's `scenes` to report"
+        )
+    )
+    def scenes(self, info: Info) -> List["Scene"]:
+        """The scenes with a layer over this lens. One row per selection, so there are no siblings to answer for."""
+        return list(models.Scene.objects.filter(layers__lens=self).distinct())
 
     @kante.django_field(description="The lens' axis names, in array order. A selection never drops or reorders an axis")
     def axis_names(self, info: Info) -> List[str]:
