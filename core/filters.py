@@ -12,6 +12,7 @@ from strawberry import auto
 from typing import Callable, Optional, Sequence
 from strawberry_django.filters import FilterLookup
 from kante.types import Info
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Exists, F, OuterRef, Q, QuerySet
 from django.db.models.functions import Coalesce
 from embeddings.search import hybrid_search
@@ -702,8 +703,10 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
 
     @kante.filter_field(description="Filter by the kind of container the lens selects over")
     def kind(self, info: Info, value: enums.LensKind, prefix: str) -> Q:
+        # By the row's content type -- the column every polymorphic row carries, indexed with
+        # its FK -- rather than by a join into the kind's table.
         model = next(model for model in models.Lens.KIND_BY_CONTAINER.values() if model.KIND == value.value)
-        return Q(**{f"{prefix}{model.__name__.lower()}__isnull": False})
+        return Q(**{f"{prefix}polymorphic_ctype": ContentType.objects.get_for_model(model)})
 
     @kante.filter_field(description="Filter to the array lenses over this dataset")
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
@@ -743,13 +746,19 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
         return ~whole if value else whole
 
     @kante.filter_field(
-        description="Search by the lens' own name or, since most lenses have none and are known by their container's, by the name of the dataset, table or annotation collection it selects from (case-insensitive substring)"
+        description=(
+            "Search by the lens' own name or, since most lenses have none and are known by their container's, by its container's label: the name of a dataset, table, sparse dataset or "
+            "annotation collection, the version of a mesh or network collection (case-insensitive substring)"
+        )
     )
     def search(self, info: Info, value: str, prefix: str) -> Q:
         return (
             Q(**{f"{prefix}name__icontains": value})
             | Q(**{f"{prefix}arraylens__dataset__name__icontains": value})
             | Q(**{f"{prefix}tablelens__table_dataset__name__icontains": value})
+            | Q(**{f"{prefix}sparselens__sparse_dataset__name__icontains": value})
+            | Q(**{f"{prefix}meshlens__mesh_collection__version__icontains": value})
+            | Q(**{f"{prefix}networklens__network_collection__version__icontains": value})
             | Q(**{f"{prefix}annotationlens__annotation_collection__name__icontains": value})
         )
 

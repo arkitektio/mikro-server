@@ -204,3 +204,24 @@ async def test_a_windowed_lens_is_a_resident_of_its_containers_space_that_the_co
     allowed = await schema.execute(mutation_text, variable_values={"id": window["id"]}, context_value=ctx)
     assert not allowed.errors, allowed.errors
     assert not await models.Lens.objects.filter(pk=window["id"]).aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_is_found_by_its_containers_label_whatever_the_container(authenticated_context: HttpContext):
+    """A sparse dataset by its name; a mesh and a network collection by their version, which is the label they have."""
+    ctx = authenticated_context
+    sparse_id, _, _ = await _a_sparse(ctx)
+    mesh_id, _, _ = await _a_mesh(ctx)
+    network_id, _, _ = await _a_network(ctx)
+
+    async def found(search: str) -> set[tuple[str, str]]:
+        result = await schema.execute("query S($search: String!) { lenses(filters: { search: $search }) { kind id } }", context_value=ctx, variable_values={"search": search})
+        assert not result.errors, result.errors
+        return {(lens["kind"], lens["id"]) for lens in result.data["lenses"]}
+
+    sparse_whole = await models.SparseLens.objects.aget(sparse_dataset_id=sparse_id)
+    assert await found("expressi") == {("SPARSE", str(sparse_whole.pk))}
+    mesh_whole = await models.MeshLens.objects.aget(mesh_collection_id=mesh_id)
+    network_whole = await models.NetworkLens.objects.aget(network_collection_id=network_id)
+    assert await found("v1") == {("MESH", str(mesh_whole.pk)), ("NETWORK", str(network_whole.pk))}
