@@ -103,3 +103,96 @@ async def test_a_window_is_stamped_with_whoever_asked_for_it(authenticated_conte
     whole = await model.objects.aget(**{model.CONTAINER_FIELD + "_id": container_id}, windows=[])
     container = await sync_to_async(lambda: whole.container)()
     assert whole.creator_id == container.creator_id == authenticated_context.request.user.id
+
+
+PROVENANCE = """
+query Provenance($id: ID!) {
+  lens(id: $id) { id createdAt creator { sub } createdThrough { id taskId } createdThroughBy { sub } }
+}
+"""
+UPDATE_LENS = "mutation U($input: UpdateLensInput!) { updateLens(input: $input) { id name } }"
+SET_DEFAULT = "mutation S($input: SetLensDefaultSceneInput!) { setLensDefaultScene(input: $input) { id } }"
+DELETE_LENS = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_reports_its_provenance(authenticated_context: HttpContext):
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Tissue", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    attach_provenance(ctx, make_provenance(task_id="crop-task", sub="1"))
+    try:
+        made = await schema.execute(CREATE_LENS, context_value=ctx, variable_values={"input": {"dataset": str(dataset.pk), "slices": CROP}})
+    finally:
+        clear_provenance(ctx)
+    assert not made.errors, made.errors
+
+    read = await schema.execute(PROVENANCE, context_value=ctx, variable_values={"id": made.data["createLens"]["id"]})
+    assert not read.errors, read.errors
+    lens = read.data["lens"]
+    assert lens["creator"]["sub"] == "1" and lens["createdAt"] is not None
+    assert lens["createdThrough"]["taskId"] == "crop-task" and lens["createdThroughBy"]["sub"] == "1"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_maker_of_a_crop_over_someone_elses_dataset_may_rename_nominate_and_delete_it(authenticated_context: HttpContext, bot_context: HttpContext):
+    """A crop is its maker's, whoever owns the pixels under it."""
+    dataset = await seed.create_array_dataset(authenticated_context, "Theirs", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    made = await schema.execute(CREATE_LENS, context_value=bot_context, variable_values={"input": {"dataset": str(dataset.pk), "slices": CROP}})
+    assert not made.errors, made.errors
+    crop_id = made.data["createLens"]["id"]
+    scene = await seed.create_scene(bot_context, "Mine")
+
+    renamed = await schema.execute(UPDATE_LENS, context_value=bot_context, variable_values={"input": {"id": crop_id, "name": "my nucleus"}})
+    assert not renamed.errors, renamed.errors
+    nominated = await schema.execute(SET_DEFAULT, context_value=bot_context, variable_values={"input": {"lens": crop_id, "scene": str(scene.pk)}})
+    assert not nominated.errors, nominated.errors
+    deleted = await schema.execute(DELETE_LENS, context_value=bot_context, variable_values={"input": {"id": crop_id}})
+    assert not deleted.errors, deleted.errors
+    assert not await models.Lens.objects.filter(pk=crop_id).aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_containers_owner_may_rename_a_crop_someone_else_made(authenticated_context: HttpContext, bot_context: HttpContext):
+    """It is the dataset's cards a lens changes, so the dataset's owner -- not an admin here -- may edit any lens over it."""
+    dataset = await seed.create_array_dataset(bot_context, "Bots", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    crop = await seed.create_lens(authenticated_context, dataset, CROP)
+    assert crop.creator_id == authenticated_context.request.user.id
+
+    renamed = await schema.execute(UPDATE_LENS, context_value=bot_context, variable_values={"input": {"id": str(crop.pk), "name": "on my data"}})
+    assert not renamed.errors, renamed.errors
+    assert renamed.data["updateLens"]["name"] == "on my data"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_lenses_are_found_by_owner_and_by_task_and_ordered_by_age(authenticated_context: HttpContext, bot_context: HttpContext):
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Tissue", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    attach_provenance(ctx, make_provenance(task_id="find-me", sub="1"))
+    try:
+        under_task = await schema.execute(CREATE_LENS, context_value=ctx, variable_values={"input": {"dataset": str(dataset.pk), "slices": CROP}})
+    finally:
+        clear_provenance(ctx)
+    assert not under_task.errors, under_task.errors
+    task_crop = under_task.data["createLens"]["id"]
+    bots = await schema.execute(CREATE_LENS, context_value=bot_context, variable_values={"input": {"dataset": str(dataset.pk), "slices": [{"axis": "y", "start": 0, "stop": 8}]}})
+    assert not bots.errors, bots.errors
+    bot_crop = bots.data["createLens"]["id"]
+    task_id = (await schema.execute(PROVENANCE, context_value=ctx, variable_values={"id": task_crop})).data["lens"]["createdThrough"]["id"]
+
+    async def ids(filters: dict | None = None, ordering: list | None = None) -> list[str]:
+        result = await schema.execute(
+            "query L($filters: LensFilter, $ordering: [LensOrder!]! = []) { lenses(filters: $filters, ordering: $ordering) { id } }",
+            context_value=ctx,
+            variable_values={"filters": filters or {"dataset": str(dataset.pk)}, **({"ordering": ordering} if ordering is not None else {})},
+        )
+        assert not result.errors, result.errors
+        return [lens["id"] for lens in result.data["lenses"]]
+
+    assert await ids({"dataset": str(dataset.pk), "owner": "2"}) == [bot_crop], "the bot's crop, not the whole lens or the task's crop"
+    assert await ids({"dataset": str(dataset.pk), "createdThrough": task_id}) == [task_crop]
+    newest_first = await ids(ordering=[{"createdAt": "DESC"}])
+    assert newest_first[0] == bot_crop and newest_first[-1] != bot_crop, "the bot's crop was asked for last"

@@ -157,9 +157,15 @@ class DeleteLensInput:
 
 
 def lens_owner(item: "models.Lens") -> tuple:
-    """Owner ids inherited from the container the lens selects over."""
+    """Whoever made the selection, or whoever owns what it selects over; an org admin either way.
+
+    A crop someone cut over another person's dataset is theirs to rename, nominate for and
+    delete; the dataset's owner may do the same to any lens over their data, because it is
+    their data's cards a lens changes. A whole lens carries its container's provenance, so
+    both halves name the same people.
+    """
     container = item.container
-    return (getattr(container, "creator_id", None), getattr(container, "created_through_by_id", None))
+    return (item.creator_id, item.created_through_by_id, getattr(container, "creator_id", None), getattr(container, "created_through_by_id", None))
 
 
 delete_lens = make_delete(models.Lens, DeleteLensInput, owner=lens_owner)
@@ -183,7 +189,7 @@ def update_lens(info: Info, input: UpdateLensInput) -> types.Lens:
 
     The name is the only thing a lens has that is not derived from its container and its
     selection, so it is the only thing that can change: a different selection is a different
-    lens. Guarded on the container, as the nomination is -- a lens has no creator of its own.
+    lens. Guarded as the nomination is: the lens' maker or the container's owner.
     """
     model = input.to_pydantic()
     lens = get_for_org(models.Lens, info, id=model.id)
@@ -216,8 +222,9 @@ def nominate_lens_default_scene(info: Info, lens: "models.Lens", scene: "models.
     copy of one answer, free to disagree with the first. Only an array dataset nominates a
     scene today, so a whole lens over anything else is refused in prose.
 
-    Guarded on the container either way, for the reason `nominate_default_scene` gives: a lens
-    has no creator of its own, and it is the container's cards this changes.
+    Guarded by `lens_owner` either way -- the lens' maker or the container's owner -- and for a
+    whole lens by `nominate_default_scene`'s own guard, since it is the container's cards this
+    changes.
     """
     if lens.is_whole:
         container = lens.container

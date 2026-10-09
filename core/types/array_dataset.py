@@ -649,6 +649,12 @@ class Lens:
     name: str | None = kante.django_field(
         description="What someone called this selection, or null when nobody has. A label only: it is no part of what the lens selects, and a client shows the selection -- or 'the whole container' -- in its place"
     )
+    created_at: datetime.datetime = kante.django_field(description="When this selection was first asked for; a whole lens, when its container was made")
+    creator: User | None = kante.django_field(
+        description="Who made this selection: the first to ask for it. The container's creator for a whole lens, which exists from the container's creation. Asking for a selection that exists hands back the row and changes nothing"
+    )
+    created_through: Task | None = kante.django_field(description="The task this selection was made under, if any")
+    created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
 
     @kante.django_field(
         description=(

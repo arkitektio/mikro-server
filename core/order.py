@@ -71,6 +71,8 @@ class AnnotationCollectionOrder:
 
 @strawberry_django.order_type(models.Lens)
 class LensOrder:
+    created_at: auto
+    name: auto
     id: auto
 
 

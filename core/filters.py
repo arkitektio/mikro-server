@@ -697,7 +697,7 @@ class AnnotationFilter(IdsFilterMixin):
 
 
 @kante.filter_type(models.Lens)
-class LensFilter(IdsFilterMixin):
+class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     id: auto
 
     @kante.filter_field(description="Filter by the kind of container the lens selects over")
