@@ -1262,7 +1262,7 @@ def axed_bbox(mins: Sequence[float], maxs: Sequence[float], forms: dict[str, Axe
     return {axis: form_interval(form, mins, maxs) for axis, form in forms.items()}
 
 
-def boxes_overlap(a: dict[str, list[float]], b: dict[str, list[float]]) -> bool:
+def boxes_overlap(a: dict[str, list[float]], b: dict[str, list[float]], *, closed: bool = True) -> bool:
     """Whether two axis-keyed boxes overlap: a conjunction over the axes they BOTH constrain.
 
     An axis only one side constrains cannot exclude anything. A source registered on (y, x)
@@ -1270,13 +1270,24 @@ def boxes_overlap(a: dict[str, list[float]], b: dict[str, list[float]]) -> bool:
     axes really does say nothing about the rest -- so in both directions, silence is not a
     zero to be tested against.
 
-    Bounds are inclusive on purpose. A degenerate box -- ``min == max``, the plane probe a
-    client sends to ask what is under this slice -- must still meet the sources containing
-    it, and a strict comparison answers no to every one of them.
+    Bounds are inclusive by default, on purpose. A degenerate box -- ``min == max``, the plane
+    probe a client sends to ask what is under this slice -- must still meet the sources
+    containing it, and a strict comparison answers no to every one of them.
+
+    ``closed=False`` is for two boxes that are both made of voxels: a crop's extent and the
+    box around a drawn shape are each ``[first - 0.5, last + 0.5]``, so a crop starting at row
+    21 and a shape ending on row 20 share the face at 20.5 and no voxel. Sharing a face is not
+    overlapping, and the inclusive test would say it is -- an off-by-one at every crop
+    boundary. A degenerate probe at an integer position still meets the voxel box around it
+    under this form, since a voxel's faces sit at halves and never on the probe.
     """
     for axis, (low, high) in a.items():
         other = b.get(axis)
         if other is None:
+            continue
+        if not closed:
+            if not (low < other[1] and other[0] < high):
+                return False
             continue
         if high < other[0] or other[1] < low:
             return False

@@ -2167,3 +2167,20 @@ def test_the_normalized_slices_resolve_to_the_same_shape_and_edge_as_the_spellin
     assert coords.lens_shape(_SHAPE, _DIMS, stored) == coords.lens_shape(_SHAPE, _DIMS, spelled) == [3, 28, 60]
     # The spelling's negative start wrote a negative translation; the stored one is where the crop is.
     assert coords.lens_to_parent(_DIMS, stored)[1]["translation"] == [0.0, 8.0, 4.0]
+
+
+# --- 6. touching is not overlapping, where both boxes are voxels ----------------------------------
+
+
+def test_closed_boxes_meet_at_a_shared_face_and_half_open_ones_do_not():
+    """The inclusive form is for a plane probe; the half-open form for two voxel-aligned boxes."""
+    crop = {"y": [20.5, 40.5]}
+    shape_ending_before = {"y": [9.5, 20.5]}
+    shape_inside = {"y": [19.5, 21.5]}
+    probe_on_a_voxel = {"y": [21.0, 21.0]}
+
+    assert coords.boxes_overlap(crop, shape_ending_before)
+    assert not coords.boxes_overlap(crop, shape_ending_before, closed=False)
+    assert coords.boxes_overlap(crop, shape_inside, closed=False)
+    assert coords.boxes_overlap(crop, probe_on_a_voxel) and coords.boxes_overlap(crop, probe_on_a_voxel, closed=False), "a probe at an integer never sits on a voxel face"
+    assert coords.boxes_overlap(crop, {"x": [0.0, 1.0]}, closed=False), "an axis only one side constrains excludes nothing"

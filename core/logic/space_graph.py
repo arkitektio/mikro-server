@@ -543,7 +543,9 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
 
         for lens_id, extent in graph.lens_extents(skip=decided).items():
             decided.add(lens_id)
-            if extent is not None and coords_logic.boxes_overlap(extent, box):
+            # Half-open: both boxes are voxel-aligned (faces at halves), so a crop that begins
+            # on the row after the shape ends shares a face with it and no voxel.
+            if extent is not None and coords_logic.boxes_overlap(extent, box, closed=False):
                 overlapping.add(lens_id)
     return overlapping
 
