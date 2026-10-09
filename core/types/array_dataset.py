@@ -664,9 +664,9 @@ class Lens:
 
     @kante.django_field(
         description=(
-            "The scene to open for this lens. A lens that selects something answers its own nomination (`setLensDefaultScene`, or `createSceneFromLens`), falling back to its container's while it has "
-            "none; a whole lens always answers with its container's, because it *is* the container looked at whole and a second nomination could only disagree. Only an array dataset nominates "
-            "a scene today. A nomination, not a derivation"
+            "The scene to open for this lens: its own nomination (`setLensDefaultScene`, or `createSceneFromLens`), falling back to its container's while it has none. A whole array lens "
+            "answers with its dataset's, because it *is* the dataset looked at whole and a second nomination could only disagree; no other container nominates a scene, so a whole lens "
+            "over one holds the nomination itself. A nomination, not a derivation"
         ),
     )
     def default_scene(self, info: Info) -> Optional["Scene"]:
@@ -678,6 +678,16 @@ class Lens:
     def active_anchors(self, info: Info) -> List[CoordinateAnchor]:
         """The anchors the selection keeps."""
         return list(self.active_anchors)
+
+    @kante.django_field(
+        description=(
+            "The scenes this lens is rendered in: those with a layer drawing through it, of any kind. Derived, never stored, exactly as `ArrayDataset.scenes` is. One row per selection, "
+            "so a whole lens answers for the whole container and a window or a crop for itself; scenes that show another selection are that selection's to report"
+        )
+    )
+    def scenes(self, info: Info) -> List["Scene"]:
+        """The scenes with a layer over this lens, whatever its kind."""
+        return list(models.Scene.objects.filter(layers__lens=self).distinct())
 
 
 @kante.django_type(
@@ -704,15 +714,16 @@ class ArrayLens(Lens, OrgScoped):
         """The newest picture of the scene this lens nominates, falling back to its dataset's."""
         return _scene_snapshot(info, self.nominated_scene_id)
 
+
     @kante.django_field(
         description=(
-            "The scenes this lens is rendered in: those with a layer over it. Derived, never stored, exactly as `ArrayDataset.scenes` is. One row per selection, so the whole lens "
-            "answers for the whole array and a crop for itself; scenes that show another selection of the dataset are the dataset's `scenes` to report"
+            "What a layer over this lens would answer for `renderAxes`, before any layer exists: which of the lens' axes face screen x, y, z, time and intensity under the default convention. "
+            "A preview for opening a viewer on a bare lens; once a layer exists, its own `renderAxes` is the one to follow -- the mapping is the view's, not the selection's"
         )
     )
-    def scenes(self, info: Info) -> List["Scene"]:
-        """The scenes with a layer over this lens. One row per selection, so there are no siblings to answer for."""
-        return list(models.Scene.objects.filter(layers__lens=self).distinct())
+    def suggested_render_axes(self, info: Info) -> "RenderAxes":
+        """The default axis mapping a layer over this lens would carry."""
+        return coords_logic.resolve_render_axes(self.axis_specs)
 
     @kante.django_field(description="The lens' axis names, in array order. A selection never drops or reorders an axis")
     def axis_names(self, info: Info) -> List[str]:
@@ -1562,6 +1573,19 @@ class AnnotationCollection:
     """A named set of human-drawn annotations, owning the space they are drawn in."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
+    @kante.django_field(description="The lenses over this annotation collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List["AnnotationLens"]:
+        """The container's lenses, optionally only the windowed or only the whole one."""
+        lenses = self.lenses.order_by("pk")
+        if windowed is None:
+            return list(lenses)
+        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(description="The lens that selects this whole annotation collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every annotation collection is created with one")
+    def full_lens(self, info: Info) -> Optional["AnnotationLens"]:
+        """The whole lens over this container."""
+        return self.lenses.filter(windows=[]).order_by("pk").first()
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this annotation collection is filed in. Organisational only: distinct from `scene`, which says which drawing surface minted it, and from `coordinateSystem`, which says where its shapes are drawn"

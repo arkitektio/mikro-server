@@ -826,6 +826,10 @@ class SceneFilter(IdsFilterMixin):
     def search(self, info: Info, value: str, prefix: str) -> Q:
         return Q(**{f"{prefix}name__icontains": value})
 
+    @kante.filter_field(description="Filter to the scenes with a layer drawing through this lens, of any kind: the same set the lens' own `scenes` answers")
+    def lens(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}pk__in": models.Layer.objects.filter(lens_id=value).values("scene_id")})
+
     # Named `defaultForDataset`, not `defaultFor`, because the *field* `Scene.defaultFor` is
     # already the list of datasets nominating this scene. One name meaning a list on the type
     # and a single id on its filter is the sort of thing that reads fine while being written

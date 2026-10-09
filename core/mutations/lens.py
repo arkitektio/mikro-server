@@ -26,12 +26,14 @@ from core.mutations._sources import resolve_source_lens
 
 
 class CreateLensInputModel(BaseModel):
-    dataset: str | None = None
-    lens: str | None = None
-    slices: list[base_models.SliceInputModel] | None = None
-    box: base_models.LensBoxInputModel | None = None
-    annotation: str | None = None
-    name: str | None = None
+    dataset: str | None = Field(default=None, description="The array dataset to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="An array lens to cut from, in place of `dataset`: a crop of a crop. The slices are stated in this lens' own index space and composed through it; the result is the dataset's lens for the voxels that keeps")
+    slices: list[base_models.SliceInputModel] | None = Field(
+        default=None, description="Slices selecting a window of the dataset (or of the lens), one per axis to restrict. Omit, or pass an empty list, for everything: the dataset's whole lens, or the lens cut from. The same selection, however spelled, is the same lens"
+    )
+    box: base_models.LensBoxInputModel | None = Field(default=None, description="In place of `slices`: a box in any coordinate system the dataset reaches, cut to the voxels whose cells it meets. With `dataset` only: a box names its own frame, it is not relative to a crop")
+    annotation: str | None = Field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box (crop to the ROI). With `dataset` only")
+    name: str | None = Field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name: finding a selection is not a request to rename it, `updateLens` is")
 
 
 _OVER = "Exactly one of `dataset` and `lens`: the array dataset to select over, or an array lens to select *within* -- the slices are then stated in that lens' own index space and composed through it, and the result is the dataset's lens for the voxels that keeps"
@@ -41,7 +43,9 @@ _OVER = "Exactly one of `dataset` and `lens`: the array dataset to select over, 
 class CreateLensInput:
     dataset: strawberry.ID | None = strawberry.field(default=None, description=_OVER)
     lens: strawberry.ID | None = strawberry.field(default=None, description="An array lens to cut from, in place of `dataset`: a crop of a crop. The slices are stated in this lens' index space")
-    slices: list[inputs.SliceInput] = strawberry.field(default=None, description="Optional slices selecting a window of the dataset (or of the lens), one per axis to restrict. Omit (or pass an empty list) for everything -- the dataset's whole lens, or the lens cut from. The same selection, however spelled, is the same lens")
+    slices: list[inputs.SliceInput] | None = strawberry.field(
+        default=None, description="Optional slices selecting a window of the dataset (or of the lens), one per axis to restrict. Omit (or pass an empty list) for everything -- the dataset's whole lens, or the lens cut from. The same selection, however spelled, is the same lens"
+    )
     box: inputs.LensBoxInput | None = strawberry.field(default=None, description="In place of `slices`: a box in any coordinate system the dataset reaches, cut to the voxels whose cells it meets. With `dataset` only -- a box names its own frame, it is not relative to a crop")
     annotation: strawberry.ID | None = strawberry.field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box -- crop to the ROI. With `dataset` only")
     name: str | None = strawberry.field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name -- finding a selection is not a request to rename it, `updateLens` is")
@@ -89,16 +93,16 @@ def _windowed(info: Info, *, kind: type, container_model: type, container: str |
 
 
 class CreateTableLensInputModel(BaseModel):
-    table_dataset: str | None = None
-    lens: str | None = None
-    windows: list[base_models.WindowInputModel] | None = None
+    table_dataset: str | None = Field(default=None, description="The table dataset to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="A lens over the table dataset to select within, in place of the container: the windows then intersect with its own, and the result is the table dataset's lens for what that keeps")
+    windows: list[base_models.WindowInputModel] | None = Field(default=None, description="Windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for everything: the table dataset's whole lens, or the lens cut from")
 
 
 @kante.pydantic_input(CreateTableLensInputModel, description="Input for the lens making a selection over a table dataset, by windows on its coordinate columns")
 class CreateTableLensInput:
     table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset to select over. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
-    windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
+    windows: list[inputs.WindowInput] | None = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_table_lens(info: Info, input: CreateTableLensInput) -> types.TableLens:
@@ -108,16 +112,16 @@ def create_table_lens(info: Info, input: CreateTableLensInput) -> types.TableLen
 
 
 class CreateSparseLensInputModel(BaseModel):
-    sparse_dataset: str | None = None
-    lens: str | None = None
-    windows: list[base_models.WindowInputModel] | None = None
+    sparse_dataset: str | None = Field(default=None, description="The sparse dataset to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="A lens over the sparse dataset to select within, in place of the container: the windows then intersect with its own, and the result is the sparse dataset's lens for what that keeps")
+    windows: list[base_models.WindowInputModel] | None = Field(default=None, description="Windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for everything: the sparse dataset's whole lens, or the lens cut from")
 
 
 @kante.pydantic_input(CreateSparseLensInputModel, description="Input for the lens making a selection over a sparse dataset, by windows on its axes")
 class CreateSparseLensInput:
     sparse_dataset: strawberry.ID | None = strawberry.field(default=None, description="The sparse dataset to select over. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
-    windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
+    windows: list[inputs.WindowInput] | None = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_sparse_lens(info: Info, input: CreateSparseLensInput) -> types.SparseLens:
@@ -127,16 +131,18 @@ def create_sparse_lens(info: Info, input: CreateSparseLensInput) -> types.Sparse
 
 
 class CreateMeshLensInputModel(BaseModel):
-    mesh_collection: str | None = None
-    lens: str | None = None
-    windows: list[base_models.WindowInputModel] | None = None
+    mesh_collection: str | None = Field(default=None, description="The mesh collection to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="A lens over the mesh collection to select within, in place of the container: the windows then intersect with its own, and the result is the mesh collection's lens for what that keeps")
+    windows: list[base_models.WindowInputModel] | None = Field(
+        default=None, description="Windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for everything: the mesh collection's whole lens, or the lens cut from"
+    )
 
 
 @kante.pydantic_input(CreateMeshLensInputModel, description="Input for the lens making a selection over a mesh collection, by windows in its own space")
 class CreateMeshLensInput:
     mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="The mesh collection to select over. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
-    windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
+    windows: list[inputs.WindowInput] | None = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_mesh_lens(info: Info, input: CreateMeshLensInput) -> types.MeshLens:
@@ -146,16 +152,18 @@ def create_mesh_lens(info: Info, input: CreateMeshLensInput) -> types.MeshLens:
 
 
 class CreateNetworkLensInputModel(BaseModel):
-    network_collection: str | None = None
-    lens: str | None = None
-    windows: list[base_models.WindowInputModel] | None = None
+    network_collection: str | None = Field(default=None, description="The network collection to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="A lens over the network collection to select within, in place of the container: the windows then intersect with its own, and the result is the network collection's lens for what that keeps")
+    windows: list[base_models.WindowInputModel] | None = Field(
+        default=None, description="Windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for everything: the network collection's whole lens, or the lens cut from"
+    )
 
 
 @kante.pydantic_input(CreateNetworkLensInputModel, description="Input for the lens making a selection over a network collection, by windows in its own space")
 class CreateNetworkLensInput:
     network_collection: strawberry.ID | None = strawberry.field(default=None, description="The network collection to select over. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
-    windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
+    windows: list[inputs.WindowInput] | None = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_network_lens(info: Info, input: CreateNetworkLensInput) -> types.NetworkLens:
@@ -165,16 +173,18 @@ def create_network_lens(info: Info, input: CreateNetworkLensInput) -> types.Netw
 
 
 class CreateAnnotationLensInputModel(BaseModel):
-    annotation_collection: str | None = None
-    lens: str | None = None
-    windows: list[base_models.WindowInputModel] | None = None
+    annotation_collection: str | None = Field(default=None, description="The annotation collection to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="A lens over the annotation collection to select within, in place of the container: the windows then intersect with its own, and the result is the annotation collection's lens for what that keeps")
+    windows: list[base_models.WindowInputModel] | None = Field(
+        default=None, description="Windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for everything: the annotation collection's whole lens, or the lens cut from"
+    )
 
 
 @kante.pydantic_input(CreateAnnotationLensInputModel, description="Input for the lens making a selection over an annotation collection, by windows in its drawing space")
 class CreateAnnotationLensInput:
     annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="The annotation collection to select over. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
-    windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
+    windows: list[inputs.WindowInput] | None = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_annotation_lens(info: Info, input: CreateAnnotationLensInput) -> types.AnnotationLens:
@@ -250,26 +260,24 @@ class SetLensDefaultSceneInput:
     """Input for nominating a lens' default scene."""
 
     lens: strawberry.ID = strawberry.field(description="The lens to nominate a scene for")
-    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to nominate. Null clears the nomination, and a lens that selects something then falls back to its container's")
+    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to nominate. Null clears the nomination, and a crop then falls back to its dataset's. A whole array lens nominates for its dataset; every other lens for itself")
 
 
 def nominate_lens_default_scene(info: Info, lens: "models.Lens", scene: "models.Scene | None") -> "models.Lens":
     """Write the nomination a lens answers `defaultScene` with, having checked the caller may.
 
-    **A whole lens writes its container's nomination.** It selects everything, so the scene to
-    open for it is the scene to open for the container; a column on the lens would be a second
-    copy of one answer, free to disagree with the first. Only an array dataset nominates a
-    scene today, so a whole lens over anything else is refused in prose.
+    **A whole array lens writes its dataset's nomination.** It selects everything, so the scene
+    to open for it is the scene to open for the dataset; a column on the lens would be a second
+    copy of one answer, free to disagree with the first. No other container nominates a scene
+    of its own, so a whole lens over a table, a mesh, a network, an annotation collection or a
+    sparse dataset holds the nomination itself.
 
     Guarded by `lens_owner` either way -- the lens' maker or the container's owner -- and for a
     whole lens by `nominate_default_scene`'s own guard, since it is the container's cards this
     changes.
     """
-    if lens.is_whole:
-        container = lens.container
-        if not isinstance(container, models.ArrayDataset):
-            raise ValueError(f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk}, which nominates no scene; a selection over it may.")
-        array_dataset_mutations.nominate_default_scene(info, container, scene)
+    if lens.is_whole and lens.container_nominates:
+        array_dataset_mutations.nominate_default_scene(info, lens.container, scene)
         return lens
     assert_can_delete(info, lens, lens_owner)
     lens.default_scene = scene

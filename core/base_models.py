@@ -37,5 +37,5 @@ class WindowInputModel(BaseModel):
 class LensBoxInputModel(BaseModel):
     """A box stated in a coordinate system the dataset reaches: the voxels under it are the crop."""
 
-    coordinate_system: str
-    windows: list[WindowInputModel]
+    coordinate_system: str = Field(description="The coordinate system the windows are stated in. The dataset's pixel grid must reach it affinely, walking the transformation edges either way")
+    windows: list[WindowInputModel] = Field(description="The box, one window per axis it bounds. A side left open runs to the array's edge, an axis of the grid the box says nothing about is kept whole, and a window may be a plane (min equal to max)")

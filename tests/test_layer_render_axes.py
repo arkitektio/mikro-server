@@ -5,8 +5,6 @@ at, so it is a field of the layer. A lens is a selection and chooses nothing abo
 is looked at, so it carries no such field.
 """
 
-import re
-
 import pytest
 from kante.context import HttpContext
 
@@ -77,10 +75,20 @@ async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(au
         assert layer["renderAxes"] == expected_by_kind[kind], layer["__typename"]
 
 
-def test_the_lens_has_no_render_axes() -> None:
-    """A selection does not choose how it is looked at: the field is the layer's alone."""
-    printed = schema.as_str()
-    lens_type = re.search(r"\n(?:type|interface) Lens\b[^{]*\{(.*?)\n\}", printed, re.S)
-    assert lens_type, "no `Lens` type in the SDL"
-    assert "renderAxes" not in lens_type.group(1)
-    assert "renderAxes" in printed, "the layers still answer it"
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_bare_lens_suggests_the_render_axes_a_layer_over_it_would_carry(authenticated_context: HttpContext):
+    """Before any layer exists a viewer still needs a convention to open with: the lens suggests what a layer would answer, and once the layer exists the two agree."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Bare", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    lens = await seed.create_lens(ctx, dataset)
+    suggested = await schema.execute("query S($id: ID!) { lens(id: $id) { ... on ArrayLens { suggestedRenderAxes { x y z t intensity phasor vector } } } }", context_value=ctx, variable_values={"id": str(lens.pk)})
+    assert not suggested.errors, suggested.errors
+    assert suggested.data["lens"]["suggestedRenderAxes"] == {"x": "x", "y": "y", "z": None, "t": None, "intensity": "c", "phasor": None, "vector": None}
+
+    scene = await seed.create_scene(ctx, "Opened")
+    await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=lens, order=0)
+    result = await schema.execute(QUERY, context_value=ctx, variable_values={"id": str(scene.pk)})
+    assert not result.errors, result.errors
+    (layer,) = result.data["scene"]["layers"]
+    assert layer["renderAxes"] == suggested.data["lens"]["suggestedRenderAxes"]

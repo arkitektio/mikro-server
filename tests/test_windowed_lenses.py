@@ -15,6 +15,7 @@ from mikro_server.schema import schema
 from tests import seed
 from tests.test_column_options import _collection as _mesh_collection
 from tests.test_column_options import _table
+from tests.test_layer_kinds import _seed_table_dataset
 from tests.test_lens_geometry import _collection_on
 from tests.test_network_layers import _collection as _network_collection
 from tests.test_sparse_datasets import CREATE as CREATE_SPARSE
@@ -243,3 +244,50 @@ async def test_a_window_of_a_window_is_the_tables_lens_for_the_tighter_bounds(au
     assert isinstance(refused, list) and "keeps nothing" in refused[0].message
     both = await schema.execute(f"mutation M($input: {mutation}Input!) {{ {mutation[0].lower() + mutation[1:]}(input: $input) {{ id }} }}", context_value=ctx, variable_values={"input": {field: table_id, "lens": outer["id"], "windows": []}})
     assert both.errors and "exactly one" in both.errors[0].message.lower()
+
+
+_CONTAINER_FIELD = {"TABLE": "tableDataset", "SPARSE": "sparseDataset", "MESH": "meshCollection", "NETWORK": "networkCollection", "ANNOTATION": "annotationCollection"}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", list(_CONTAINERS))
+async def test_a_container_of_any_kind_lists_its_lenses_and_names_its_whole_one(authenticated_context: HttpContext, kind: str):
+    ctx = authenticated_context
+    make, model, axis = _CONTAINERS[kind]
+    container_id, mutation, field = await make(ctx)
+    window = await _create(ctx, mutation, field, container_id, [{"axis": axis, "min": 0, "max": 5}])
+    whole = await model.objects.aget(**{model.CONTAINER_FIELD + "_id": container_id}, windows=[])
+
+    query = f"query C($id: ID!) {{ {_CONTAINER_FIELD[kind]}(id: $id) {{ fullLens {{ id kind }} lenses {{ id }} windowed: lenses(windowed: true) {{ id }} }} }}"
+    result = await schema.execute(query, context_value=ctx, variable_values={"id": container_id})
+    assert not result.errors, result.errors
+    container = result.data[_CONTAINER_FIELD[kind]]
+    assert container["fullLens"] == {"id": str(whole.pk), "kind": kind}
+    assert [lens["id"] for lens in container["lenses"]] == [str(whole.pk), window["id"]], "oldest first: the whole lens it was born with, then the window"
+    assert [lens["id"] for lens in container["windowed"]] == [window["id"]]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_whole_lens_over_a_table_nominates_a_scene_of_its_own_and_lists_the_scenes_that_show_it(authenticated_context: HttpContext):
+    """A table nominates no scene, so its whole lens holds the nomination itself; `scenes` and `scenes(filters: {lens})` answer alike for any kind."""
+    ctx = authenticated_context
+    table, _ = await _seed_table_dataset(ctx, "spots")
+    whole = await seed.create_windowed_lens(ctx, table)
+    staged = await schema.execute("mutation F($input: CreateSceneFromLensInput!) { createSceneFromLens(input: $input) { id } }", context_value=ctx, variable_values={"input": {"lens": str(whole.pk)}})
+    assert not staged.errors, staged.errors
+    scene_id = staged.data["createSceneFromLens"]["id"]
+
+    read = await schema.execute(
+        "query L($id: ID!) { lens(id: $id) { defaultScene { id } scenes { id } } scenes(filters: { lens: $id }) { id } }",
+        context_value=ctx,
+        variable_values={"id": str(whole.pk)},
+    )
+    assert not read.errors, read.errors
+    assert read.data["lens"]["defaultScene"] == {"id": scene_id}, "staging nominated the new scene on the lens itself"
+    assert read.data["lens"]["scenes"] == read.data["scenes"] == [{"id": scene_id}]
+
+    cleared = await schema.execute("mutation S($input: SetLensDefaultSceneInput!) { setLensDefaultScene(input: $input) { defaultScene { id } } }", context_value=ctx, variable_values={"input": {"lens": str(whole.pk), "scene": None}})
+    assert not cleared.errors, cleared.errors
+    assert cleared.data["setLensDefaultScene"]["defaultScene"] is None, "nothing to fall back on: a table nominates no scene"

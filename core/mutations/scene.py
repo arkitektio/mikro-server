@@ -182,8 +182,8 @@ class CreateSceneFromLensInput:
     nominate: bool = strawberry.field(
         default=True,
         description=(
-            "Whether the new scene becomes the one to open for this lens when nothing is nominated yet: the lens' own `defaultScene` when it selects something, its dataset's when it is a "
-            "whole array lens (no other container nominates a scene). Never replaces an existing nomination, and is skipped silently when the caller may not write one"
+            "Whether the new scene becomes the one to open for this lens when nothing is nominated yet: its dataset's for a whole array lens, the lens' own `defaultScene` for every other. "
+            "Never replaces an existing nomination, and is skipped silently when the caller may not write one"
         ),
     )
 
@@ -207,12 +207,7 @@ def create_scene_from_lens(info: Info, input: CreateSceneFromLensInput) -> types
         # Asked of the column that would be written, not of `nominated_scene_id`: a crop that
         # is only *borrowing* its dataset's picture has nominated nothing yet. A whole lens
         # writes its container's nomination, and only an array dataset has one to write.
-        if not lens.is_whole:
-            nominated = lens.default_scene_id
-        elif isinstance(lens, models.ArrayLens):
-            nominated = lens.dataset.default_scene_id
-        else:
-            nominated = scene.pk
+        nominated = lens.container.default_scene_id if lens.is_whole and lens.container_nominates else lens.default_scene_id
         if model.nominate and nominated is None:
             try:
                 lens_mutations.nominate_lens_default_scene(info, lens, scene)

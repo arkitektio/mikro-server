@@ -78,6 +78,19 @@ class TableDataset(OrgScoped):
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
+    @kante.django_field(description="The lenses over this table dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The container's lenses, optionally only the windowed or only the whole one."""
+        lenses = self.lenses.order_by("pk")
+        if windowed is None:
+            return list(lenses)
+        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(description="The lens that selects this whole table dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every table dataset is created with one")
+    def full_lens(self, info: Info) -> Optional[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The whole lens over this container."""
+        return self.lenses.filter(windows=[]).order_by("pk").first()
+
     @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:
         return embedding_of(self)

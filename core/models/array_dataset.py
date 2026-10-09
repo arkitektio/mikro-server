@@ -658,9 +658,11 @@ class Lens(PolymorphicModel):
 
     # A nomination, exactly as `ArrayDataset.default_scene` is, and bookkeeping for the same
     # reason: it says which composition to open for this selection and where its thumbnail
-    # comes from, and nothing about where the data sits. Written for a lens that selects
-    # *something* only. A whole lens selects everything, so the scene to open for it is its
-    # container's -- a second column for the same answer could only disagree with the first.
+    # comes from, and nothing about where the data sits. A whole lens over a container that
+    # nominates a scene of its own (an array dataset) answers with the container's -- a second
+    # column for the same answer could only disagree with the first -- and writes it there.
+    # Every other lens, a whole one over a table, a mesh, a network, an annotation collection
+    # or a sparse dataset included, holds its nomination here: nothing else holds it.
     default_scene = models.ForeignKey(
         "Scene",
         on_delete=models.SET_NULL,
@@ -668,7 +670,7 @@ class Lens(PolymorphicModel):
         blank=True,
         related_name="default_for_lenses",
         help_text=(
-            "The scene to open for this lens, and the one its thumbnail is taken from. Set for a lens that selects something only: a whole lens answers with its container's nomination. "
+            "The scene to open for this lens, and the one its thumbnail is taken from. A whole array lens answers with its dataset's nomination and holds none here; every other lens holds its own. "
             "Bookkeeping, not placement -- which scenes *show* this lens is `scenes`. Cleared, not cascaded, when the scene is deleted"
         ),
     )
@@ -739,14 +741,19 @@ class Lens(PolymorphicModel):
         return CoordinateAnchor.objects.none()
 
     @property
-    def nominated_scene_id(self) -> int | None:
-        """The scene to open for this lens: its own nomination when it selects something, else its container's.
+    def container_nominates(self) -> bool:
+        """Whether the container has a nomination of its own for a whole lens to answer with. Only an array dataset does."""
+        return isinstance(self.container, ArrayDataset)
 
-        The fallback is what keeps a crop nobody has staged from going blank -- until it has a
-        composition of its own, the picture of its container is the best one there is. Only an
-        array dataset nominates a scene today; every other container answers None.
+    @property
+    def nominated_scene_id(self) -> int | None:
+        """The scene to open for this lens: its own nomination, else its container's.
+
+        A whole array lens answers with its dataset's and holds none of its own. The fallback
+        is what keeps a crop nobody has staged from going blank -- until it has a composition
+        of its own, the picture of its container is the best one there is.
         """
-        if not self.is_whole and self.default_scene_id is not None:
+        if self.default_scene_id is not None and not (self.is_whole and self.container_nominates):
             return self.default_scene_id
         return getattr(self.container, "default_scene_id", None)
 

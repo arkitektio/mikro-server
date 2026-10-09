@@ -89,6 +89,19 @@ class SparseDataset(OrgScoped):
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
+    @kante.django_field(description="The lenses over this sparse dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The container's lenses, optionally only the windowed or only the whole one."""
+        lenses = self.lenses.order_by("pk")
+        if windowed is None:
+            return list(lenses)
+        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(description="The lens that selects this whole sparse dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every sparse dataset is created with one")
+    def full_lens(self, info: Info) -> Optional[Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The whole lens over this container."""
+        return self.lenses.filter(windows=[]).order_by("pk").first()
+
     id: auto
     name: auto
     description: str | None

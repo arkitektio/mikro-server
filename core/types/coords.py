@@ -810,6 +810,19 @@ class MeshCollection(OrgScoped):
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
+    @kante.django_field(description="The lenses over this mesh collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The container's lenses, optionally only the windowed or only the whole one."""
+        lenses = self.lenses.order_by("pk")
+        if windowed is None:
+            return list(lenses)
+        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(description="The lens that selects this whole mesh collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every mesh collection is created with one")
+    def full_lens(self, info: Info) -> Optional[Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The whole lens over this container."""
+        return self.lenses.filter(windows=[]).order_by("pk").first()
+
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this mesh collection is filed in. Organisational only: it says where a user keeps this collection, never where the meshes sit in space -- that is `coordinateSystem` and the edges out of it"
     )
@@ -894,6 +907,19 @@ class NetworkCollection(OrgScoped):
     """An immutable, versioned collection of node/edge networks, backed by Parquet stores rather than rows."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
+    @kante.django_field(description="The lenses over this network collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The container's lenses, optionally only the windowed or only the whole one."""
+        lenses = self.lenses.order_by("pk")
+        if windowed is None:
+            return list(lenses)
+        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(description="The lens that selects this whole network collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every network collection is created with one")
+    def full_lens(self, info: Info) -> Optional[Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The whole lens over this container."""
+        return self.lenses.filter(windows=[]).order_by("pk").first()
 
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this network collection is filed in. Organisational only: it says where a user keeps this collection, never where the networks sit in space -- that is `coordinateSystem` and the edges out of it"
