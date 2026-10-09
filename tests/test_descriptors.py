@@ -11,7 +11,6 @@ import pytest
 from kante.context import HttpContext
 
 from core import enums
-from mikro_server.vocabulary import PROVENANCE_DESCRIPTORS
 from mikro_server.schema import schema
 from mikro_server.service import service
 from tests import seed
@@ -48,20 +47,20 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
         "@mikro/n_microtime_axes": 0,
         "@mikro/n_channels": 3,
         "@mikro/n_timepoints": 5,
+        "@mikro/value_kind": "intensity",
+        "@mikro/is_whole": True,
     }
     assert result.data["arrayDataset"]["descriptors"] == whole
     assert {"id": str(dataset.pk), "descriptors": whole} in result.data["arrayDatasets"]
-    # The lens keeps every axis of its dataset and narrows the channel axis to one.
-    assert result.data["lens"]["descriptors"] == {**whole, "@mikro/n_channels": 1}
+    # The lens keeps every axis of its dataset and narrows the channel axis to one; it is a crop.
+    assert result.data["lens"]["descriptors"] == {**whole, "@mikro/n_channels": 1, "@mikro/is_whole": False}
     # A structure that declares no descriptors has none.
     assert result.data["folder"]["descriptors"] == {}
 
     declared = {s["identifier"]: [d["key"] for d in s["descriptors"]] for s in service.manifest()["structures"]}
-    # Every computed key is declared; what is declared beyond them is provenance, which no object carries.
-    provenance = {d.key for d in PROVENANCE_DESCRIPTORS}
-    assert set(result.data["arrayDataset"]["descriptors"]) == set(declared["@mikro/arraydataset"]) - provenance
-    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/lens"]) - provenance
-    assert provenance <= set(declared["@mikro/lens"])
+    # Every computed key is declared and every declared key is computed: nothing is merely stated.
+    assert set(result.data["arrayDataset"]["descriptors"]) == set(declared["@mikro/arraydataset"])
+    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/lens"])
 
 
 @pytest.mark.django_db(transaction=True)

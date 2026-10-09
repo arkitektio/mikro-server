@@ -17,7 +17,7 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
 from core import models
-from core.descriptors import dataset_descriptors, lens_descriptors
+from core.descriptors import annotation_descriptors, dataset_descriptors, lens_descriptors, mesh_descriptors, network_descriptors, sparse_descriptors, table_descriptors
 from arkitekt_service.service import Service, organization_of
 
 from mikro_server.contract import contract
@@ -28,14 +28,14 @@ service = Service("mikro", hosts=contract.description.hosts, description="Micros
 # --- Structures: what mikro hosts -----------------------------------------------------
 
 arraydataset = service.structure(models.ArrayDataset, "@mikro/arraydataset", describe=dataset_descriptors)
-# Hosted, never announced: a lens is a way of looking at a container, and it is the container
-# whose arrival is news. One structure per kind, so a port typed on pixels is never handed rows.
+# One structure per lens kind, so a port typed on pixels is never handed rows. Each kind
+# describes itself in its container's vocabulary, over what it selects.
 lens = service.structure(models.ArrayLens, "@mikro/lens", describe=lens_descriptors)
-tablelens = service.structure(models.TableLens, "@mikro/tablelens")
-sparselens = service.structure(models.SparseLens, "@mikro/sparselens")
-meshlens = service.structure(models.MeshLens, "@mikro/meshlens")
-networklens = service.structure(models.NetworkLens, "@mikro/networklens")
-annotationlens = service.structure(models.AnnotationLens, "@mikro/annotationlens")
+tablelens = service.structure(models.TableLens, "@mikro/tablelens", describe=lens_descriptors)
+sparselens = service.structure(models.SparseLens, "@mikro/sparselens", describe=lens_descriptors)
+meshlens = service.structure(models.MeshLens, "@mikro/meshlens", describe=lens_descriptors)
+networklens = service.structure(models.NetworkLens, "@mikro/networklens", describe=lens_descriptors)
+annotationlens = service.structure(models.AnnotationLens, "@mikro/annotationlens", describe=lens_descriptors)
 scene = service.structure(
     models.Scene,
     "@mikro/scene",
@@ -51,14 +51,14 @@ def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
 
 chart = service.structure(chart_models.Chart, "@mikro/chart", describe=_chart_descriptors)
 scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
-tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset")
-meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection")
-networkcollection = service.structure(models.NetworkCollection, "@mikro/networkcollection")
+tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset", describe=table_descriptors)
+meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection", describe=mesh_descriptors)
+networkcollection = service.structure(models.NetworkCollection, "@mikro/networkcollection", describe=network_descriptors)
 file = service.structure(models.File, "@mikro/file", describe=lambda file: {"@mikro/content_type": file.content_type or ""})
 folder = service.structure(models.Folder, "@mikro/folder")
-annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection")
+annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection", describe=annotation_descriptors)
 animation = service.structure(models.Animation, "@mikro/animation")
-sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset")
+sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", describe=sparse_descriptors)
 
 
 # --- Signals: what mikro announces -----------------------------------------------------

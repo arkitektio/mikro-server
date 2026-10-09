@@ -10,7 +10,7 @@ from __future__ import annotations
 from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Scope, Signal, Start, Structure, blocks
 
 from mikro_server.configuration import Settings
-from mikro_server.vocabulary import ARRAY_DESCRIPTORS, PROVENANCE_DESCRIPTORS
+from mikro_server.vocabulary import ANNOTATION_DESCRIPTORS, ARRAY_DESCRIPTORS, MESH_DESCRIPTORS, NETWORK_DESCRIPTORS, SPARSE_DESCRIPTORS, TABLE_DESCRIPTORS
 
 #: What a token may be allowed to do here: defined at the coordination server when the hub enrols.
 SCOPES = [
@@ -29,8 +29,10 @@ ROLES = [
     Scope(key="uploader", description="Can upload new images"),
 ]
 
-#: What an array dataset and a lens carry: what is computed from their axes, and what is only stated.
-ARRAY_STRUCTURE_DESCRIPTORS = [*ARRAY_DESCRIPTORS, *PROVENANCE_DESCRIPTORS]
+
+def _keys(descriptors: list[Descriptor]) -> list[str]:
+    return [descriptor.key for descriptor in descriptors]
+
 
 #: What exists on a hub because this service is there: said here, as data, so the hub knows it from
 #: the image. ``service.py`` binds each of these to its model and refuses anything not said here.
@@ -40,38 +42,43 @@ HOSTS = Hosts(
             identifier="@mikro/arraydataset",
             label="Array Dataset",
             description="A multi-dimensional array dataset: its pyramid of arrays and the pixel grid they live in.",
-            descriptors=ARRAY_STRUCTURE_DESCRIPTORS,
+            descriptors=ARRAY_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/lens",
             label="Array Lens",
             description="A selection over an array dataset, by index slices: what an action that works on pixels is handed.",
-            descriptors=ARRAY_STRUCTURE_DESCRIPTORS,
+            descriptors=ARRAY_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/tablelens",
             label="Table Lens",
             description="A selection over a table dataset, by value windows on its coordinate columns: what an action that works on rows is handed.",
+            descriptors=TABLE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/sparselens",
             label="Sparse Lens",
             description="A selection over a sparse dataset, by windows on its axes.",
+            descriptors=SPARSE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/meshlens",
             label="Mesh Lens",
             description="A selection over a mesh collection, by windows in its own space.",
+            descriptors=MESH_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/networklens",
             label="Network Lens",
             description="A selection over a network collection, by windows in its own space.",
+            descriptors=NETWORK_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/annotationlens",
             label="Annotation Lens",
             description="A selection over an annotation collection, by windows in its drawing space.",
+            descriptors=ANNOTATION_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/scene",
@@ -100,16 +107,19 @@ HOSTS = Hosts(
             identifier="@mikro/tabledataset",
             label="Table Dataset",
             description="A parquet-backed table of scientific records.",
+            descriptors=TABLE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/meshcollection",
             label="Mesh Collection",
             description="An immutable collection of meshes.",
+            descriptors=MESH_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/networkcollection",
             label="Network Collection",
             description="An immutable collection of nodes and edges with positions.",
+            descriptors=NETWORK_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/file",
@@ -128,6 +138,7 @@ HOSTS = Hosts(
             identifier="@mikro/annotationcollection",
             label="Annotation Collection",
             description="A named set of human-drawn annotations.",
+            descriptors=ANNOTATION_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/animation",
@@ -138,14 +149,15 @@ HOSTS = Hosts(
             identifier="@mikro/sparsedataset",
             label="Sparse Dataset",
             description="A sparse dataset.",
+            descriptors=SPARSE_DESCRIPTORS,
         ),
     ],
     signals=[
         Signal(
             identifier="@mikro/arraydataset",
             kinds=["CREATED", "UPDATED", "DELETED"],
-            descriptors=[descriptor.key for descriptor in ARRAY_STRUCTURE_DESCRIPTORS],
-            description="An array dataset was created, changed or deleted, with its axis counts and channel/timepoint extents.",
+            descriptors=_keys(ARRAY_DESCRIPTORS),
+            description="An array dataset was created, changed or deleted, with its axis counts, channel/timepoint extents, value kind and that it is whole.",
         ),
         Signal(
             identifier="@mikro/scene",
@@ -168,16 +180,19 @@ HOSTS = Hosts(
             identifier="@mikro/tabledataset",
             kinds=["CREATED", "UPDATED", "DELETED"],
             description="A table dataset was created, changed or deleted.",
+            descriptors=_keys(TABLE_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/meshcollection",
             kinds=["CREATED", "DELETED"],
             description="A mesh collection was created or deleted.",
+            descriptors=_keys(MESH_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/networkcollection",
             kinds=["CREATED", "DELETED"],
             description="A network collection was created or deleted.",
+            descriptors=_keys(NETWORK_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/file",
@@ -194,6 +209,7 @@ HOSTS = Hosts(
             identifier="@mikro/annotationcollection",
             kinds=["CREATED", "DELETED"],
             description="An annotation collection was created or deleted.",
+            descriptors=_keys(ANNOTATION_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/animation",
@@ -204,6 +220,7 @@ HOSTS = Hosts(
             identifier="@mikro/sparsedataset",
             kinds=["CREATED", "DELETED"],
             description="A sparse dataset was created or deleted.",
+            descriptors=_keys(SPARSE_DESCRIPTORS),
         ),
     ],
 )

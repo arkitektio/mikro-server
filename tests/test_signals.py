@@ -62,7 +62,9 @@ def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
     array_keys = [d["key"] for d in hosted["@mikro/arraydataset"]["descriptors"]]
     assert array_keys == [d["key"] for d in hosted["@mikro/lens"]["descriptors"]]
     assert {"key": "@mikro/n_channels", "type": "INT", "description": "Its total extent along its CHANNEL axes"} in hosted["@mikro/arraydataset"]["descriptors"]
-    assert hosted["@mikro/tabledataset"]["descriptors"] == []
+    # A container and the lens kind over it read one vocabulary.
+    assert [d["key"] for d in hosted["@mikro/tabledataset"]["descriptors"]] == [d["key"] for d in hosted["@mikro/tablelens"]["descriptors"]] != []
+    assert hosted["@mikro/folder"]["descriptors"] == []
 
 
 @pytest.mark.django_db(transaction=True)

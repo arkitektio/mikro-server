@@ -29,8 +29,9 @@ The conventions this module encodes:
   never through the pyramid.
 """
 
+import math
 from dataclasses import dataclass
-from typing import Iterable, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
 
 from kanne_server import scalars as kanne_scalars
 
@@ -1370,6 +1371,47 @@ def form_interval(form: AxedForm, mins: Sequence[float], maxs: Sequence[float]) 
 def axed_bbox(mins: Sequence[float], maxs: Sequence[float], forms: dict[str, AxedForm]) -> dict[str, list[float]]:
     """The axis-keyed extent of a box under an already-composed path."""
     return {axis: form_interval(form, mins, maxs) for axis, form in forms.items()}
+
+
+def annotation_box(axis_names: Sequence[str], vectors: Sequence[Sequence[float]], pins: Mapping[str, float], *, padded: bool = True) -> dict[str, list[float]] | None:
+    """An annotation's axis-keyed box in its drawing space: its vertices on the axes they span, its pins on the axes they name.
+
+    A shape may have fewer components than its drawing space has axes -- a rectangle on one
+    plane of a volume -- and its pins are how it says which plane. So its vertices span the
+    axes it does not pin, or the trailing ones where the pins do not account for the
+    difference. An axis neither names is one the shape says nothing about, and it is left out
+    of the box rather than handed a zero that would put the shape on the first plane.
+
+    ``padded`` grows the spanned box by half a voxel either side (:func:`vectors_bbox`), the
+    form the overlap filter compares voxel-aligned extents against; unpadded (:func:`aabb`) is
+    the shape's own reach, the form a value window is tested against. A pin is a centre
+    either way. None for a shape with no vertices, or more components than there are axes.
+    """
+    if not vectors:
+        return None
+    low, high = vectors_bbox(vectors) if padded else aabb(vectors)
+    if len(low) > len(axis_names):
+        return None
+    unpinned = [name for name in axis_names if name not in pins]
+    spanned = unpinned if len(unpinned) == len(low) else list(axis_names[len(axis_names) - len(low) :])
+    box: dict[str, list[float]] = {}
+    for name in axis_names:
+        if name in spanned:
+            index = spanned.index(name)
+            box[name] = [low[index], high[index]]
+        elif name in pins:
+            box[name] = [float(pins[name]), float(pins[name])]
+    return box
+
+
+def window_bounds(windows: Iterable["WindowLike"]) -> dict[str, list[float]]:
+    """A lens' windows as an axis-keyed box: an open side is unbounded, an un-windowed axis absent.
+
+    Absence, not infinity, is how an axis says nothing in a box: :func:`boxes_overlap` is a
+    conjunction over the axes both sides name. The infinities here stay inside the comparison;
+    nothing serializes them.
+    """
+    return {window.axis: [-math.inf if window.min is None else float(window.min), math.inf if window.max is None else float(window.max)] for window in windows}
 
 
 def boxes_overlap(a: dict[str, list[float]], b: dict[str, list[float]], *, closed: bool = True) -> bool:

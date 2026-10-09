@@ -521,6 +521,12 @@ def _source_relations(kind: "type[Lens]") -> tuple[list[str], list[str]]:
     prefetch = [f"{field}__coordinate_system__axes", "coordinate_system__axes"]
     if field == "dataset":
         prefetch.append("dataset__data_arrays")
+    elif field == "table_dataset":
+        prefetch.append("table_dataset__columns")
+    elif field == "sparse_dataset":
+        prefetch.append("sparse_dataset__arrays")
+    elif field == "network_collection":
+        select.append("network_collection__store")
     return select, prefetch
 
 

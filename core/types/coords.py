@@ -892,6 +892,8 @@ class MeshCollection(OrgScoped):
 class NetworkCollection(OrgScoped):
     """An immutable, versioned collection of node/edge networks, backed by Parquet stores rather than rows."""
 
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
         description="The folder this network collection is filed in. Organisational only: it says where a user keeps this collection, never where the networks sit in space -- that is `coordinateSystem` and the edges out of it"
     )
