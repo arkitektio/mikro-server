@@ -29,6 +29,8 @@ from core.logic import graph as graph_logic
 from core.mutations import layer as layer_mutations
 from mikro_server.schema import schema
 from tests import seed
+from tests.test_layer_kinds import _seed_table_dataset
+from tests.test_column_options import _collection as _mesh_collection
 
 _CREATE_TABLE = """
 mutation Create($input: CreateTableDatasetInput!) {
@@ -458,3 +460,34 @@ async def test_the_renderability_pass_does_not_grow_with_the_number_of_lenses(au
         return len(captured)
 
     assert await sync_to_async(measure)() == 3, "one fetch of the lenses, one of the axes, one of the arrays"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_of_any_kind_is_placeable_where_its_container_is_and_as_layer_names_what_it_draws(authenticated_context: HttpContext):
+    """A table lens is placeable where its table is registered; `asLayer: POINT` keeps it, TRACK only with a TRACK_ID column, MESH keeps the mesh lens; nothing is placeable where nothing is registered."""
+    ctx = authenticated_context
+    points, points_system = await _seed_table_dataset(ctx, "points")
+    tracks, tracks_system = await _seed_table_dataset(ctx, "tracks", with_track=True)
+    mesh = await _mesh_collection(ctx)
+    scene = await seed.create_scene(ctx, "Composition")
+    for system in (points_system, tracks_system, await sync_to_async(lambda: mesh.coordinate_system)()):
+        await seed.register_into_scene(ctx, scene, system=system)
+    elsewhere = await seed.create_scene(ctx, "Elsewhere")
+
+    point_window = await seed.create_windowed_lens(ctx, points, [{"axis": "x", "min": 0.0, "max": 10.0}])
+    track_whole = await seed.create_windowed_lens(ctx, tracks)
+    mesh_whole = await seed.create_windowed_lens(ctx, mesh)
+
+    async def offered(space_id: int, as_layer: str | None = None) -> set[str]:
+        result = await schema.execute(LENSES, context_value=ctx, variable_values={"space": str(space_id), "asLayer": as_layer})
+        assert not result.errors, result.errors
+        return {lens["id"] for lens in result.data["lenses"]}
+
+    plain = await offered(scene.world_id)
+    assert {str(point_window.pk), str(track_whole.pk), str(mesh_whole.pk)} <= plain, "every lens of a placeable container, whatever its kind"
+    assert await offered(elsewhere.world_id) == set(), "nothing is registered there"
+    assert await offered(scene.world_id, "POINT") == {str(point_window.pk), str(track_whole.pk)}, "both tables have two SPACE columns"
+    assert await offered(scene.world_id, "TRACK") == {str(track_whole.pk)}, "only the table with a TRACK_ID column"
+    assert await offered(scene.world_id, "MESH") == {str(mesh_whole.pk)}
+    assert await offered(scene.world_id, "IMAGE") == set(), "no array lens is placeable here"

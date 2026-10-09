@@ -595,11 +595,11 @@ class LensLayerKind(str, Enum):
     so a strawberry enum only). It narrows a candidate list, it does not decide
     anything: the create mutations all take any lens they can draw, and none reads this.
 
-    Six members now rather than two, because splitting the fixed-shape recipes out of
-    IMAGE gave three of them kinds of their own, and VECTOR joined as a lens-backed
-    kind in its own right -- and a picker asking "what could I make from this lens?"
-    wants them named. IMAGE stays the pure renderability gate; the members below add
-    a question about the data on top of it.
+    One member per layer kind a lens can source, because a picker asking "what could I make
+    from this lens?" wants them named. The six array kinds ask something of the lens' axes on
+    top of renderability; the five collection kinds ask which container the lens selects over
+    (and, for a table, what its schema declares). A sparse dataset has no layer kind, so a
+    sparse lens answers `placeableIn` without `asLayer` only.
     """
 
     IMAGE = "image"
@@ -608,6 +608,11 @@ class LensLayerKind(str, Enum):
     PHASOR = "phasor"
     LABEL = "label"
     VECTOR = "vector"
+    POINT = "point"
+    TRACK = "track"
+    MESH = "mesh"
+    NETWORK = "network"
+    ANNOTATION = "annotation"
 
 
 _describe(
@@ -618,6 +623,11 @@ _describe(
     PHASOR="Drawable as a phasor layer: renderable, and carrying a MICROTIME or SPECTRUM axis -- the continuous ones a phasor transform means anything over.",
     LABEL="Drawable as a label layer: renderable, and derived by an edge declaring CATEGORIZED -- the values became object ids. The same signal `createSceneFromCoordinateSystem` infers a label layer from, asked of a candidate instead of a source, so a picker and a bootstrapped scene cannot disagree about what a label is.",
     VECTOR="Drawable as a vector layer: renderable, and carrying a DISPLACEMENT value axis -- the values are components of a per-point offset. The same signal `createSceneFromCoordinateSystem` infers a vector layer from, asked of a candidate instead of a source, for LABEL's stated reason.",
+    POINT="Drawable as a point layer: a lens over a table that declares at least two SPACE coordinate columns -- the gate `createPointLayer` applies.",
+    TRACK="Drawable as a track layer: a point-drawable table lens whose table also declares a TRACK_ID column -- the gate `createTrackLayer` applies.",
+    MESH="Drawable as a mesh layer: any lens over a mesh collection placeable here.",
+    NETWORK="Drawable as a network layer: any lens over a network collection placeable here.",
+    ANNOTATION="Drawable as an annotation layer: any lens over an annotation collection placeable here.",
 )
 
 

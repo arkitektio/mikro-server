@@ -778,13 +778,21 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
         # `strawberry.UNSET` rather than None (see `AnnotationFilter._require_frame`), and
         # UNSET is not None -- which would send every unparameterised query down the
         # narrowed path below. Falsiness is right for UNSET, None and False alike.
-        dataset_ids = graph_logic.placeable_lens_dataset_ids(space, derived_only=bool(value.derived_only))
+        placeable = graph_logic.placeable_container_ids(space, derived_only=bool(value.derived_only))
+        dataset_ids = placeable[models.ArrayDataset]
         if not value.as_layer:
-            # The plain path, and it stays a plain indexed `dataset_id__in`: placeability is
-            # a property of the dataset, so every lens of a placeable dataset is placeable
-            # and no `distinct()` is needed. Array lenses only: this asks what a layer over
-            # pixels could draw.
-            return Q(**{f"{prefix}arraylens__dataset_id__in": dataset_ids})
+            # The plain path, and it stays plain indexed `<container>_id__in` lookups, one per
+            # kind: placeability is a property of the container, so every lens of a placeable
+            # container is placeable and no `distinct()` is needed.
+            placeable_lenses = Q(**{f"{prefix}arraylens__dataset_id__in": dataset_ids})
+            for container_model, lens_model in models.Lens.KIND_BY_CONTAINER.items():
+                if lens_model is not models.ArrayLens:
+                    placeable_lenses |= Q(**{f"{prefix}{lens_model.__name__.lower()}__{lens_model.CONTAINER_FIELD}_id__in": placeable[container_model]})
+            return placeable_lenses
+
+        if value.as_layer in _COLLECTION_LAYER_KINDS:
+            lens_model, container_ids = _COLLECTION_LAYER_KINDS[value.as_layer](placeable)
+            return Q(**{f"{prefix}{lens_model.__name__.lower()}__{lens_model.CONTAINER_FIELD}_id__in": container_ids})
 
         if value.as_layer == enums.LensLayerKind.LABEL:
             dataset_ids = graph_logic.categorized_dataset_ids(dataset_ids)
@@ -1146,6 +1154,35 @@ _LENS_KIND_REQUIREMENTS: "dict[enums.LensLayerKind, Callable[[Sequence[coords_lo
     enums.LensLayerKind.RGB: _requires_rgb_capacity,
     enums.LensLayerKind.PHASOR: _requires_phasor_axis,
     enums.LensLayerKind.VECTOR: _requires_vector_axis,
+}
+
+
+def _point_table_ids(table_ids: "set[int]", *, track: bool) -> set[int]:
+    """Of these tables, the ones a point layer draws -- at least two SPACE coordinate columns -- and, for a track layer, the ones that also declare a TRACK_ID column.
+
+    The batched form of the gates `createPointLayer` and `createTrackLayer` apply, so a
+    picker never offers a table lens a layer mutation would refuse. One query over the columns.
+    """
+    if not table_ids:
+        return set()
+    spatial: dict[int, int] = {}
+    tracked: set[int] = set()
+    for table_id, role, axis_type in models.Column.objects.filter(table_id__in=table_ids).values_list("table_id", "role", "axis_type"):
+        if role == enums.ColumnRoleChoices.COORDINATE.value and axis_type == enums.AxisTypeChoices.SPACE.value:
+            spatial[table_id] = spatial.get(table_id, 0) + 1
+        elif role == enums.ColumnRoleChoices.TRACK_ID.value:
+            tracked.add(table_id)
+    drawable = {table_id for table_id, count in spatial.items() if count >= 2}
+    return drawable & tracked if track else drawable
+
+
+#: The collection layer kinds: which lens model answers, over which of the placeable containers.
+_COLLECTION_LAYER_KINDS: "dict[enums.LensLayerKind, Callable[[dict[type, set[int]]], tuple[type, set[int]]]]" = {
+    enums.LensLayerKind.POINT: lambda placeable: (models.TableLens, _point_table_ids(placeable[models.TableDataset], track=False)),
+    enums.LensLayerKind.TRACK: lambda placeable: (models.TableLens, _point_table_ids(placeable[models.TableDataset], track=True)),
+    enums.LensLayerKind.MESH: lambda placeable: (models.MeshLens, placeable[models.MeshCollection]),
+    enums.LensLayerKind.NETWORK: lambda placeable: (models.NetworkLens, placeable[models.NetworkCollection]),
+    enums.LensLayerKind.ANNOTATION: lambda placeable: (models.AnnotationLens, placeable[models.AnnotationCollection]),
 }
 
 

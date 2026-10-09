@@ -2668,14 +2668,24 @@ def placeable_lens_dataset_ids(space: "models.CoordinateSystem", *, derived_only
     return {dataset_id for system in _placeable_systems(space, derived_only=derived_only) if (dataset_id := _fk_dataset_id(system)) is not None}
 
 
-def placeable_table_dataset_ids(space: "models.CoordinateSystem") -> set[int]:
-    """The table datasets whose own coordinate system is placeable in this space.
+def placeable_container_ids(space: "models.CoordinateSystem", *, derived_only: bool = False) -> dict[type, set[int]]:
+    """Every container placeable in this space, by model: the datasets whose lenses reach it, and the collections whose own system does.
 
-    A table owns its system one-to-one, so there is no dataset reduction as there is for a
-    lens: the placeable table datasets are exactly those whose system is in the placeable set.
+    One walk of the placeable systems, then one query per collection model. A collection --
+    a table, a sparse dataset, a mesh, a network, an annotation collection -- owns its system
+    one-to-one, so it is placeable exactly when that system is in the set; a dataset is
+    placeable when any of its systems is (:func:`placeable_lens_dataset_ids`).
     """
-    placeable = {system.pk for system in _placeable_systems(space)}
-    return set(models.TableDataset.objects.filter(coordinate_system_id__in=placeable).values_list("pk", flat=True)) if placeable else set()
+    placeable = placeable_system_ids_in(space, derived_only=derived_only)
+    by_model: dict[type, set[int]] = {models.ArrayDataset: placeable_lens_dataset_ids(space, derived_only=derived_only)}
+    for container in COLLECTION_CONTAINERS:
+        by_model[container.model] = set(container.model.objects.filter(coordinate_system_id__in=placeable).values_list("pk", flat=True)) if placeable else set()
+    return by_model
+
+
+def placeable_table_dataset_ids(space: "models.CoordinateSystem") -> set[int]:
+    """The table datasets whose own coordinate system is placeable in this space (see :func:`placeable_container_ids`)."""
+    return placeable_container_ids(space)[models.TableDataset]
 
 
 def categorized_dataset_ids(dataset_ids: "Iterable[int]") -> set[int]:
