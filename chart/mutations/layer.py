@@ -106,7 +106,7 @@ def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> t
 
     with transaction.atomic():
         if model.lens is not None:
-            lens = get_for_org(core_models.Lens, info, id=model.lens)
+            lens = get_for_org(core_models.ArrayLens, info, id=model.lens)
         else:
             lens = coordinate_system_logic.whole_lens(get_for_org(core_models.ArrayDataset, info, id=model.dataset))
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.TRACE.value, source=lens, **_settings(model))

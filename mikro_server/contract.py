@@ -44,9 +44,34 @@ HOSTS = Hosts(
         ),
         Structure(
             identifier="@mikro/lens",
-            label="Lens",
-            description="A selection over an array dataset: what an action that works on pixels is handed.",
+            label="Array Lens",
+            description="A selection over an array dataset, by index slices: what an action that works on pixels is handed.",
             descriptors=ARRAY_STRUCTURE_DESCRIPTORS,
+        ),
+        Structure(
+            identifier="@mikro/tablelens",
+            label="Table Lens",
+            description="A selection over a table dataset, by value windows on its coordinate columns: what an action that works on rows is handed.",
+        ),
+        Structure(
+            identifier="@mikro/sparselens",
+            label="Sparse Lens",
+            description="A selection over a sparse dataset, by windows on its axes.",
+        ),
+        Structure(
+            identifier="@mikro/meshlens",
+            label="Mesh Lens",
+            description="A selection over a mesh collection, by windows in its own space.",
+        ),
+        Structure(
+            identifier="@mikro/networklens",
+            label="Network Lens",
+            description="A selection over a network collection, by windows in its own space.",
+        ),
+        Structure(
+            identifier="@mikro/annotationlens",
+            label="Annotation Lens",
+            description="A selection over an annotation collection, by windows in its drawing space.",
         ),
         Structure(
             identifier="@mikro/scene",
@@ -80,6 +105,11 @@ HOSTS = Hosts(
             identifier="@mikro/meshcollection",
             label="Mesh Collection",
             description="An immutable collection of meshes.",
+        ),
+        Structure(
+            identifier="@mikro/networkcollection",
+            label="Network Collection",
+            description="An immutable collection of nodes and edges with positions.",
         ),
         Structure(
             identifier="@mikro/file",
@@ -143,6 +173,11 @@ HOSTS = Hosts(
             identifier="@mikro/meshcollection",
             kinds=["CREATED", "DELETED"],
             description="A mesh collection was created or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/networkcollection",
+            kinds=["CREATED", "DELETED"],
+            description="A network collection was created or deleted.",
         ),
         Signal(
             identifier="@mikro/file",

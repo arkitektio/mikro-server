@@ -164,7 +164,7 @@ class TraceChartLayer(ChartLayer):
     """A layer that reads a lens along one axis."""
 
     id: auto
-    lens: core_types.Lens = kante.django_field(description="The lens whose values are read")
+    lens: core_types.ArrayLens = kante.django_field(disable_optimization=True, description="The array lens whose values are read")
     mark: enums.ChartMark = kante.django_field(description="How the values are drawn: a line, markers, both, or steps")
     line_width: float | None = kante.django_field(description="Line width in screen pixels. Null lets the viewer choose")
     marker_size: float | None = kante.django_field(description="Marker size in screen pixels. Null lets the viewer choose")

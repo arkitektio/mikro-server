@@ -11,7 +11,8 @@ from django.contrib.postgres.indexes import GinIndex
 from embeddings.models import EmbeddedDescriptionMixin
 from core import base_models
 from core.logic import coords as coords_logic
-from core.models.coords import CoordinateSystem, Transformation, MeshCollection  # noqa: F401  (re-exported via core.models)
+from core.models.coords import CoordinateSystem, Transformation, MeshCollection, NetworkCollection  # noqa: F401  (re-exported via core.models)
+from polymorphic.models import PolymorphicModel
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -192,9 +193,16 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
 
     @property
     def shape_list(self) -> list:
-        """The dataset's shape: that of its level-0 array."""
-        base = self.data_arrays.order_by("level").first()
-        return base.shape if base and isinstance(base.shape, list) else []
+        """The dataset's shape: that of its level-0 array.
+
+        Read off ``data_arrays.all()`` rather than an ordered ``first()``, so that a caller
+        that prefetched the arrays (a page of layers reading every lens' shape) pays no query
+        here; the lowest level is picked in Python either way.
+        """
+        arrays = [array for array in self.data_arrays.all() if isinstance(array.shape, list)]
+        if not arrays:
+            return []
+        return min(arrays, key=lambda array: array.level).shape
 
     def phasor_histogram_at(self, axis: str, harmonic: int):
         """The persisted phasor distribution over an axis at a harmonic, across all this dataset's anchors."""
@@ -497,64 +505,172 @@ class PhasorCalibration(models.Model):
         constraints = [models.UniqueConstraint(fields=["anchor", "axis", "harmonic"], name="unique_phasor_calibration")]
 
 
-class Lens(models.Model):
-    """A selection over a dataset. Nothing else.
+class Lens(PolymorphicModel):
+    """A selection over a container that lives in a coordinate system. Nothing else.
 
-    **One row per selection.** A lens is a deterministic function of what it selects:
-    its slices are stored in the one normalized spelling
-    (:func:`core.logic.coords.normalize_slices`), and
-    :func:`core.logic.coordinate_system.create_lens` hands back the existing row for a
-    (dataset, slices) pair before it makes one. Every dataset has its *whole* lens -- the
-    one with no slices -- from creation; it is the handle an action is given for the
-    dataset itself, and it cannot be deleted on its own.
+    **One row per selection.** A lens is a deterministic function of what it selects: the
+    selection is stored in one normalized spelling (:func:`core.logic.coords.normalize_slices`
+    for an array, :func:`core.logic.coords.normalize_windows` for everything else), and the
+    creators in :mod:`core.logic.coordinate_system` hand back the existing row for a
+    (container, selection) pair before they make one; the database holds them to it. Every
+    container has its *whole* lens -- the one that selects everything -- from creation; it is
+    the handle an action is given for the container itself, and it cannot be deleted on its
+    own.
 
-    Its shape and dimensions are derived from the dataset and the slices -- they
-    were columns, and two people computing them from the same slices are
-    guaranteed to agree, so there was no reason for a second copy that could
-    drift.
+    **Six kinds, one table per kind, this base for what they share.** What a lens selects
+    over decides what a selection is:
 
-    Every lens has a ``coordinate_system``. A *sliced* lens owns one, and the edge back
-    to the dataset is a stored :class:`~core.models.Transformation`: slicing shifts voxel
-    coordinates, and without the edge an ROI drawn on a cropped lens had no defined path
-    back to its dataset. An **unsliced** lens selects everything, so its space is the
-    dataset's intrinsic space by definition, and it *points at that node* rather than
-    owning a second one joined by an identity edge, which would record nothing (see
-    :attr:`space`). Lenses are immutable, so the decision is made once, at creation.
+    * :class:`ArrayLens` selects by index *slices*. A slice re-indexes -- lens voxel 0 is
+      dataset voxel ``start`` -- which is a real fact, so a sliced array lens owns a
+      coordinate system of its own and a stored :class:`~core.models.Transformation` back
+      into the dataset's intrinsic grid (the edge is derived from the slices, never
+      authored). An unsliced one lives in the intrinsic grid and points at that node.
+    * :class:`TableLens`, :class:`SparseLens`, :class:`MeshLens`, :class:`NetworkLens` and
+      :class:`AnnotationLens` select by value *windows* in their container's own axes. A
+      window keeps and re-indexes nothing: a row with ``t = 4.5`` is the same row, at the
+      same ``t``, inside the lens. So a windowed lens lives in its container's coordinate
+      system, owns no system and no edge, and nothing spatial is stored for it.
 
-    The lens-to-parent edge is **derived from the slices, never authored** --
-    recreating a lens from its slices reproduces its geometry exactly. In
-    particular, per-channel corrections (chromatic drift) are not lens
-    properties: they are acquisition facts, and a correction stored on a view
-    would be a second copy free to disagree with the next view of the same
-    channel. The supported interim pattern is one lens per channel plus a
-    scene-level registration edge authored from the lens' system
-    (``createTransformation`` accepts any input system, and the search in
-    :mod:`core.logic.graph` takes the direct edge because it is both the
-    best-known route and the shortest -- not because directness is itself
-    preferred; there is no such rule). If channel-wise correction becomes a
-    first-class need, it will be a dataset-owned ``aligned`` system with one
-    channel-wise edge from intrinsic -- the physical-space pattern again, never
-    per-view state.
+    Lenses are immutable. Nothing is derived from them that a second copy could disagree
+    with: an array lens' shape, axes and edge follow from its dataset and its slices.
     """
 
-    dataset = models.ForeignKey(ArrayDataset, on_delete=models.CASCADE, related_name="lenses")
-    slices = models.JSONField(help_text="The selection this lens makes over its dataset, as a list of per-dimension slices", default=list)
+    # Denormalized from the container, so a list across every kind scopes in one hop.
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="lenses", help_text="The organization of the container this lens selects over")
 
-    # Always set. An unsliced lens used to own no system, with a null standing for "the
-    # dataset's grid"; under residence it lives in that grid and points at the same node.
+    # Always set by every writer. An array lens' own crop space, or the container's system.
     coordinate_system = models.ForeignKey(
         CoordinateSystem,
         on_delete=models.PROTECT,
-        # Nullable in the database only because the `historical*` twin carries rows written
-        # before this column existed, and a history row must be allowed to say "not
-        # recorded". Every write path sets it, so a live row never has none.
+        # Nullable in the database for the rows written before every lens had one; the
+        # `merge_duplicate_lenses` job places those. Every write path sets it.
         null=True,
         blank=True,
         related_name="lenses",
-        help_text="The coordinate system this lens' voxels are expressed in. An unsliced lens shares its dataset's; a sliced one has its own, with a stored edge carrying the shift",
+        help_text="The coordinate system this lens' selection is expressed in: a sliced array lens' own crop space, with a stored edge carrying the shift; otherwise the container's own system",
     )
 
-    provenance = ProvenanceField()
+    #: The concrete kinds, by the container model each selects over. Filled in as each
+    #: subclass is defined below; read by `core.logic.coordinate_system.whole_lens`.
+    KIND_BY_CONTAINER: "dict[type, type[Lens]]" = {}
+
+    #: The name of the one container FK a subclass carries. Set per subclass.
+    CONTAINER_FIELD: str = ""
+
+    #: The `LensKind` value a subclass answers. Set per subclass.
+    KIND: str = ""
+
+    def _real(self) -> "Lens":
+        """This row as its kind.
+
+        A row reached through a `select_related` across the polymorphic FK arrives as the base;
+        everything else (a manager, a prefetch, a plain FK access) arrives as the kind. The base
+        answers for its kind by fetching it once, so no reader has to know which path it took.
+        """
+        if type(self) is Lens:
+            return self.get_real_instance()
+        return self
+
+    @property
+    def container(self):
+        """The container this lens selects over: the one FK its kind carries."""
+        real = self._real()
+        return getattr(real, type(real).CONTAINER_FIELD)
+
+    @property
+    def container_id(self) -> int:
+        """The id of the container this lens selects over, without fetching it."""
+        real = self._real()
+        return getattr(real, f"{type(real).CONTAINER_FIELD}_id")
+
+    @property
+    def selection(self) -> list:
+        """The stored selection: slices for an array lens, windows for every other kind."""
+        real = self._real()
+        if type(real) is Lens:
+            raise NotImplementedError
+        return real.selection
+
+    @property
+    def is_whole(self) -> bool:
+        """Whether this lens selects all of its container."""
+        return not self.selection
+
+    @property
+    def space(self):
+        """The coordinate system this lens' selection is expressed in: its own, or its container's."""
+        return getattr(self, "coordinate_system", None) or self.container.coordinate_system
+
+    @property
+    def active_anchors(self):
+        """The coordinate anchors this selection keeps. Empty for a container kind that carries none."""
+        return CoordinateAnchor.objects.none()
+
+
+class WindowedLens(models.Model):
+    """What the five value-windowed kinds share: the windows column, in each kind's own table."""
+
+    windows = models.JSONField(help_text="The selection this lens makes, as a list of per-axis value windows in the container's own axes, in the one normalized spelling", default=list)
+
+    class Meta:
+        abstract = True
+
+    @property
+    def windows_list(self) -> list[base_models.WindowModel]:
+        """The windows of the lens as models."""
+        return [base_models.WindowModel(**window) for window in self.windows] if isinstance(self.windows, list) else []
+
+    @property
+    def selection(self) -> list:
+        """The stored selection."""
+        return list(self.windows) if isinstance(self.windows, list) else []
+
+    def _anchors_in_windows(self, anchors):
+        """Narrow a container's anchors to the ones inside every window: global along an axis, or in its range."""
+        for window in self.windows_list:
+            axis_is_global = ~Q(coordinates__has_key=window.axis)
+            in_range = Q()
+            if window.min is not None:
+                in_range &= Q(**{f"coordinates__{window.axis}__gte": window.min})
+            if window.max is not None:
+                in_range &= Q(**{f"coordinates__{window.axis}__lte": window.max})
+            anchors = anchors.filter(axis_is_global | in_range)
+        return anchors.select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
+
+
+class ArrayLens(Lens):
+    """A selection over an array dataset, by index slices.
+
+    Its shape and dimensions are derived from the dataset and the slices -- they were
+    columns, and two people computing them from the same slices are guaranteed to agree,
+    so there was no reason for a second copy that could drift.
+
+    The lens-to-parent edge is **derived from the slices, never authored** -- recreating a
+    lens from its slices reproduces its geometry exactly. In particular, per-channel
+    corrections (chromatic drift) are not lens properties: they are acquisition facts, and a
+    correction stored on a view would be a second copy free to disagree with the next view
+    of the same channel. If channel-wise correction becomes a first-class need, it will be a
+    dataset-owned ``aligned`` system with one channel-wise edge from intrinsic -- the
+    physical-space pattern again, never per-view state.
+    """
+
+    CONTAINER_FIELD = "dataset"
+    KIND = "ARRAY"
+
+    dataset = models.ForeignKey(ArrayDataset, on_delete=models.CASCADE, related_name="lenses")
+    slices = models.JSONField(help_text="The selection this lens makes over its dataset, as a list of per-dimension slices in the one normalized spelling", default=list)
+
+    class Meta:
+        constraints = [
+            # One row per selection. The slices are always written normalized, so JSONB
+            # equality is the selection's equality.
+            models.UniqueConstraint(fields=["dataset", "slices"], name="one_array_lens_per_selection"),
+        ]
+
+    @property
+    def selection(self) -> list:
+        """The stored selection."""
+        return list(self.slices) if isinstance(self.slices, list) else []
 
     @property
     def slices_list(self) -> list[base_models.SliceModel]:
@@ -575,17 +691,6 @@ class Lens(models.Model):
     def shape_list(self) -> list:
         """The shape this lens' slices cut out of its dataset."""
         return coords_logic.lens_shape(self.dataset.shape_list, self.dataset.axis_names, self.slices_list)
-
-    @property
-    def space(self):
-        """The coordinate system this lens' selection is expressed in.
-
-        A lens with no slices selects everything, so its space is the dataset's
-        intrinsic space *by definition* and it owns no system -- the same rule as a
-        level-0 array. A sliced lens shifts voxel coordinates, which is a real fact,
-        so it owns a system and the derived edge that records the shift.
-        """
-        return getattr(self, "coordinate_system", None) or self.dataset.intrinsic_coordinate_system
 
     @property
     def to_parent(self):
@@ -641,6 +746,84 @@ class Lens(models.Model):
         # OPTIMIZATION: prefetch/select the spokes to prevent N+1 database death
         return qs.select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
 
+
+class TableLens(WindowedLens, Lens):
+    """A selection over a table dataset: the rows whose coordinate columns lie in the windows."""
+
+    CONTAINER_FIELD = "table_dataset"
+    KIND = "TABLE"
+
+    table_dataset = models.ForeignKey("TableDataset", on_delete=models.CASCADE, related_name="lenses")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["table_dataset", "windows"], name="one_table_lens_per_selection")]
+
+    @property
+    def active_anchors(self):
+        """The table's anchors inside the windows."""
+        return self._anchors_in_windows(CoordinateAnchor.objects.filter(table=self.table_dataset))
+
+
+class SparseLens(WindowedLens, Lens):
+    """A selection over a sparse dataset: the positions along its axes that lie in the windows. A subset, never a re-indexing: the positions are ids."""
+
+    CONTAINER_FIELD = "sparse_dataset"
+    KIND = "SPARSE"
+
+    sparse_dataset = models.ForeignKey("SparseDataset", on_delete=models.CASCADE, related_name="lenses")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["sparse_dataset", "windows"], name="one_sparse_lens_per_selection")]
+
+    @property
+    def active_anchors(self):
+        """The sparse dataset's anchors inside the windows."""
+        return self._anchors_in_windows(CoordinateAnchor.objects.filter(sparse=self.sparse_dataset))
+
+
+class MeshLens(WindowedLens, Lens):
+    """A selection over a mesh collection: the geometry inside the windows of its own space."""
+
+    CONTAINER_FIELD = "mesh_collection"
+    KIND = "MESH"
+
+    mesh_collection = models.ForeignKey(MeshCollection, on_delete=models.CASCADE, related_name="lenses")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["mesh_collection", "windows"], name="one_mesh_lens_per_selection")]
+
+
+class NetworkLens(WindowedLens, Lens):
+    """A selection over a network collection: the nodes and edges inside the windows of its own space."""
+
+    CONTAINER_FIELD = "network_collection"
+    KIND = "NETWORK"
+
+    network_collection = models.ForeignKey("NetworkCollection", on_delete=models.CASCADE, related_name="lenses")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["network_collection", "windows"], name="one_network_lens_per_selection")]
+
+
+class AnnotationLens(WindowedLens, Lens):
+    """A selection over an annotation collection: the shapes inside the windows of its drawing space."""
+
+    CONTAINER_FIELD = "annotation_collection"
+    KIND = "ANNOTATION"
+
+    annotation_collection = models.ForeignKey("AnnotationCollection", on_delete=models.CASCADE, related_name="lenses")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["annotation_collection", "windows"], name="one_annotation_lens_per_selection")]
+
+
+#: Which lens kind selects over which container, by the container model.
+Lens.KIND_BY_CONTAINER.update(
+    {
+        ArrayDataset: ArrayLens,
+        MeshCollection: MeshLens,
+    }
+)
 
 
 class Scene(models.Model):

@@ -86,7 +86,7 @@ async def test_a_scene_over_a_datasets_intrinsic_grid_places_by_construction(aut
 
     scene = await _adopt(authenticated_context, intrinsic, "PixelSpace")
     assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk)
-    assert [r["__typename"] for r in scene["worldCoordinateSystem"]["residents"]] == ["ArrayDataset", "DataArray", "Lens"], "the scene roots in the space the dataset, its level 0 and its unsliced lens all live in"
+    assert [r["__typename"] for r in scene["worldCoordinateSystem"]["residents"]] == ["ArrayDataset", "DataArray", "ArrayLens"], "the scene roots in the space the dataset, its level 0 and its unsliced lens all live in"
 
     made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene["id"], "lens": str(full.pk), "intensityAxis": "c"}})
     assert not made.errors, made.errors
@@ -129,7 +129,7 @@ async def test_bootstrap_from_an_intrinsic_system_materializes_the_container(aut
 
     assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk)
     assert len(scene["layers"]) == 3, "the container's own data is the one candidate, and its three channels are three layers"
-    sourced = await sync_to_async(lambda: {layer.lens.dataset_id for layer in models.Layer.objects.filter(scene__pk=scene["id"]).select_related("lens")})()
+    sourced = await sync_to_async(lambda: {layer.lens.dataset_id for layer in models.Layer.objects.filter(scene__pk=scene["id"]).prefetch_related("lens")})()
     assert sourced == {dataset.pk}, "one source, however many layers it is drawn as"
     assert scene["worldCoordinateSystem"]["registrations"] == [], "nothing was registered into the grid: the data is in it by definition"
     assert await sync_to_async(models.Transformation.objects.count)() == before, "and the bootstrap authored no edge"
@@ -271,7 +271,7 @@ query DatasetScenes($id: ID!) {
 
 
 def _layer_of(dataset: models.ArrayDataset) -> models.Layer:
-    return models.Layer.objects.get(lens__dataset=dataset)
+    return models.Layer.objects.get(lens__arraylens__dataset=dataset)
 
 
 def _layers_of(dataset: models.ArrayDataset) -> list[models.Layer]:
@@ -281,7 +281,7 @@ def _layers_of(dataset: models.ArrayDataset) -> list[models.Layer]:
     the plural is the normal case; `_layer_of` stays for the recipes that keep their
     channels together (RGB) or have none (LABEL).
     """
-    return list(models.Layer.objects.filter(lens__dataset=dataset).order_by("order"))
+    return list(models.Layer.objects.filter(lens__arraylens__dataset=dataset).order_by("order"))
 
 
 async def _stage_in_own_grid(ctx: HttpContext, dataset: models.ArrayDataset, **policy) -> dict:

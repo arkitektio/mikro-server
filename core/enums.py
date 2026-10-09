@@ -616,6 +616,18 @@ _describe(
 )
 
 
+@strawberry.enum(description="What a lens selects over: an array (by index slices, re-indexing into a space of its own), or a table, a sparse dataset, a mesh collection, a network collection or an annotation collection (by value windows, in the container's own space).")
+class LensKind(str, Enum):
+    """The container kind a lens is a selection over. Derived from the row's concrete model, never stored."""
+
+    ARRAY = "ARRAY"
+    TABLE = "TABLE"
+    SPARSE = "SPARSE"
+    MESH = "MESH"
+    NETWORK = "NETWORK"
+    ANNOTATION = "ANNOTATION"
+
+
 @strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds.")
 class ArrayDatasetSpec(str, Enum):
     """What a dataset structurally is, materialized from its axes at creation.

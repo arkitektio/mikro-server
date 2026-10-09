@@ -125,7 +125,7 @@ class CreateVectorLayerInput:
 
 def create_vector_layer(info: Info, input: CreateVectorLayerInput) -> types.VectorLayer:
     model = input.to_pydantic()
-    lens = get_for_org(models.Lens, info, id=model.lens)
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
     assert_renderable(lens)
     assert_vector_axis(lens)
     _assert_glyph_stride(model.glyph_stride)

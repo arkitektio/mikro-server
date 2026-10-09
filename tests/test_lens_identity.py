@@ -50,7 +50,7 @@ async def _refused(ctx: HttpContext, dataset: models.ArrayDataset, slices: list[
 
 
 async def _lens_ids(dataset: models.ArrayDataset) -> list[int]:
-    return [pk async for pk in models.Lens.objects.filter(dataset=dataset).order_by("pk").values_list("pk", flat=True)]
+    return [pk async for pk in models.ArrayLens.objects.filter(dataset=dataset).order_by("pk").values_list("pk", flat=True)]
 
 
 # --- the whole lens -------------------------------------------------------------
@@ -70,7 +70,7 @@ async def test_a_new_dataset_has_exactly_its_whole_lens(authenticated_context: H
     assert not result.errors, result.errors
     made = result.data["createArrayDataset"]
 
-    lenses = [lens async for lens in models.Lens.objects.filter(dataset_id=made["id"])]
+    lenses = [lens async for lens in models.ArrayLens.objects.filter(dataset_id=made["id"])]
     assert len(lenses) == 1
     assert lenses[0].slices == []
     assert str(lenses[0].coordinate_system_id) == made["intrinsicSystem"]["id"]

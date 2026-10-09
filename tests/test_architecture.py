@@ -283,6 +283,9 @@ def test_every_model_that_owns_a_coordinate_system_is_a_registered_container() -
         # An axis is a component of a coordinate system, not something residing in one. It is
         # on the other side of the relationship from everything in `CONTAINERS`.
         "Axis",
+        # The polymorphic base of the six lens kinds: every row of it is a row of one of them,
+        # and it is the kinds that are registered, each keyed to the container it selects over.
+        "Lens",
     }
 
     registered = {container.model for container in CONTAINERS}

@@ -17,8 +17,8 @@ _LOADER_KEY = "chart_graphs"
 #: The relations the placement logic reads off a layer in Python.
 LAYER_PLACEMENT_RELATIONS = (
     "chart__world",
-    "lens__dataset__coordinate_system",
-    "lens__coordinate_system",
+    # The lens arrives through the prefetch below: a select_related through a polymorphic FK
+    # hands back the base row, and the placement logic needs the kind.
     "table_dataset__coordinate_system",
     "annotation_collection__coordinate_system",
 )
@@ -38,7 +38,7 @@ class ChartGraph(placement.PlacementGraph):
     def __init__(self, chart: "models.Chart", *, loaders: dict | None = None) -> None:
         """Fetch the chart's layers, then the edge universe rooted at its world."""
         self.chart = chart
-        self.layers = list(chart.layers.select_related(*LAYER_PLACEMENT_RELATIONS))
+        self.layers = list(chart.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(*LAYER_SOURCE_AXIS_PREFETCH))
 
         systems = {source.pk for layer in self.layers if (source := chart_logic.layer_source_system(layer)) is not None}
         super().__init__(chart.world, seed_systems=systems, loaders=loaders)

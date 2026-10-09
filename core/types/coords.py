@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     # Only for the lazy annotations below (`scenes`, and the owner union's members):
     # importing them at runtime would be a cycle, since both of these modules import
     # this one's CoordinateSystem.
-    from core.types.array_dataset import ArrayDataset, Annotation, AnnotationCollection, CoordinateAnchor, DataArray, Lens, Scene
+    from core.types.array_dataset import AnnotationLens, ArrayDataset, ArrayLens, Annotation, AnnotationCollection, CoordinateAnchor, DataArray, MeshLens, NetworkLens, Scene, SparseLens, TableLens
     from core.types.file_link import FileLink
     from core.types.folder import Folder
     from core.types.table_dataset import TableDataset
@@ -87,7 +87,12 @@ Resident = Annotated[
     Union[
         Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")],
         Annotated["DataArray", strawberry.lazy("core.types.array_dataset")],
-        Annotated["Lens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["ArrayLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["TableLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["AnnotationLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["MeshCollection", strawberry.lazy("core.types.coords")],
         Annotated["NetworkCollection", strawberry.lazy("core.types.coords")],
         Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")],

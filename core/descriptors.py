@@ -37,12 +37,15 @@ def dataset_descriptors(dataset) -> dict[str, int]:  # noqa: ANN001 - a core.mod
         return {}
 
 
-def lens_descriptors(lens) -> dict[str, int]:  # noqa: ANN001 - a core.models.Lens
-    """A lens' descriptors: its dataset's axes over the shape its slices cut out.
+def lens_descriptors(lens) -> dict[str, int]:  # noqa: ANN001 - a core.models.ArrayLens
+    """An array lens' descriptors: its dataset's axes over the shape its slices cut out.
 
     A lens keeps every axis of its dataset (a slice narrows an axis, it never drops one), so
-    this is the client's ``lens_descriptors`` computed from the same two facts.
+    this is the client's ``lens_descriptors`` computed from the same two facts. A lens over
+    any other container carries no descriptors: nothing about it is counted.
     """
+    if not hasattr(lens, "dataset"):
+        return {}
     try:
         return array_descriptors([axis.type for axis in lens.dataset.axes], lens.shape_list)
     except ValueError:

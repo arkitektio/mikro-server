@@ -498,7 +498,7 @@ async def test_dataset_graph_is_connected(authenticated_context: HttpContext):
     def check():
         systems = set(CoordinateSystem.objects.filter(datasets=dataset).values_list("pk", flat=True))
         systems |= set(CoordinateSystem.objects.filter(data_arrays__dataset=dataset).values_list("pk", flat=True))
-        systems |= set(CoordinateSystem.objects.filter(lenses__dataset=dataset).values_list("pk", flat=True))
+        systems |= set(CoordinateSystem.objects.filter(lenses__arraylens__dataset=dataset).values_list("pk", flat=True))
 
         intrinsic = dataset.intrinsic_coordinate_system.pk
 
@@ -526,7 +526,7 @@ async def test_a_simple_dataset_owns_exactly_one_pixel_system(authenticated_cont
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
     def check():
-        systems = CoordinateSystem.objects.filter(Q(datasets=dataset) | Q(data_arrays__dataset=dataset) | Q(lenses__dataset=dataset)).distinct()
+        systems = CoordinateSystem.objects.filter(Q(datasets=dataset) | Q(data_arrays__dataset=dataset) | Q(lenses__arraylens__dataset=dataset)).distinct()
         assert systems.count() == 1
         intrinsic = dataset.intrinsic_coordinate_system
         assert systems.get().pk == intrinsic.pk
@@ -979,7 +979,7 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     # which asserted the vertices were in exactly that grid and left nowhere to say they
     # were not -- meshes off a half-resolution grid could only be recorded by rewriting
     # every vertex. The IDENTITY stated above is what says the geometry is that grid's.
-    assert [r["__typename"] for r in collection["coordinateSystem"]["residents"]] == ["MeshCollection"], "the vertices live in the collection's own space"
+    assert [r["__typename"] for r in collection["coordinateSystem"]["residents"]] == ["MeshCollection", "MeshLens"], "the vertices live in the collection's own space"
     assert collection["coordinateSystem"]["id"] != str(system.pk)
     assert [axis["name"] for axis in collection["coordinateSystem"]["axes"]] == ["c", "y", "x"], "the axes it stated, which the IDENTITY then holds to the source's"
 

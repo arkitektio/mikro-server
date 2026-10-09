@@ -25,6 +25,7 @@ EXPECTED = {
     "@mikro/scenesnapshot": ["CREATED", "DELETED"],
     "@mikro/tabledataset": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/meshcollection": ["CREATED", "DELETED"],
+    "@mikro/networkcollection": ["CREATED", "DELETED"],
     "@mikro/file": ["CREATED", "DELETED"],
     "@mikro/folder": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/annotationcollection": ["CREATED", "DELETED"],
@@ -56,7 +57,7 @@ def test_the_manifest_declares_every_model_signal():
 def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
     hosted = {s["identifier"]: s for s in service.manifest()["structures"]}
     # Everything signalled is hosted; a lens is hosted without ever being signalled.
-    assert set(hosted) == {*EXPECTED, "@mikro/lens"}
+    assert set(hosted) == {*EXPECTED, "@mikro/lens", "@mikro/tablelens", "@mikro/sparselens", "@mikro/meshlens", "@mikro/networklens", "@mikro/annotationlens"}
     assert hosted["@mikro/folder"]["label"] == "Folder"
     array_keys = [d["key"] for d in hosted["@mikro/arraydataset"]["descriptors"]]
     assert array_keys == [d["key"] for d in hosted["@mikro/lens"]["descriptors"]]

@@ -340,7 +340,7 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
         inputs |= {
             system_id
             for system_id in models.CoordinateSystem.objects.filter(
-                Q(datasets__id=dataset_id) | Q(lenses__dataset_id=dataset_id) | Q(data_arrays__dataset_id=dataset_id)
+                Q(datasets__id=dataset_id) | Q(lenses__arraylens__dataset_id=dataset_id) | Q(data_arrays__dataset_id=dataset_id)
             ).values_list("pk", flat=True)
         }
 

@@ -136,6 +136,7 @@ async def _seed_flim(ctx: HttpContext, *, calibrated: bool = True, lightpath: bo
 _PHASOR_CONTEXT = """
     query Lens($id: ID!) {
         lens(id: $id) {
+          ... on ArrayLens {
             phasor {
                 axis
                 axisType
@@ -147,6 +148,7 @@ _PHASOR_CONTEXT = """
                 calibration { phaseOffset modulationFactor reference }
                 phasorHistogram { bins counts total calibrated }
             }
+          }
         }
     }
 """

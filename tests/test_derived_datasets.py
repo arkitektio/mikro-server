@@ -306,7 +306,7 @@ async def test_the_derivation_is_readable_from_the_source_as_well(authenticated_
 
     # The same fact through the lens the derivation actually named.
     from_lens = await schema.execute(
-        "query L($id: ID!) { lens(id: $id) { id derivedDatasets { id name } } }",
+        "query L($id: ID!) { lens(id: $id) { id ... on ArrayLens { derivedDatasets { id name } } } }",
         context_value=authenticated_context,
         variable_values={"id": str(lens.pk)},
     )
@@ -584,7 +584,7 @@ async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_c
     assert not staged.errors, staged.errors
 
     def label_layer() -> models.Layer:
-        return models.Layer.objects.get(lens__dataset=mask)
+        return models.Layer.objects.get(lens__arraylens__dataset=mask)
 
     layer = await sync_to_async(label_layer)()
     assert layer.kind == enums.LayerKindChoices.LABEL.value, "a stated categorization bootstraps a label layer without an override"
@@ -612,7 +612,7 @@ async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_c
     assert not staged.errors, staged.errors
 
     def intensity_layers() -> list[models.Layer]:
-        return list(models.Layer.objects.filter(lens__dataset=intensity).order_by("order"))
+        return list(models.Layer.objects.filter(lens__arraylens__dataset=intensity).order_by("order"))
 
     # Three, because an intensity image is drawn a channel at a time -- where the label map
     # above is one layer whatever its channel count, its values being ids rather than signals.

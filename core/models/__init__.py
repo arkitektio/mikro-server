@@ -67,6 +67,12 @@ from .array_dataset import (
     PhasorHistogram,
     PhasorCalibration,
     Lens,
+    ArrayLens,
+    TableLens,
+    SparseLens,
+    MeshLens,
+    NetworkLens,
+    AnnotationLens,
     Scene,
     SceneSnapshot,
     Animation,
@@ -119,9 +125,27 @@ __all__ = [
     "PhasorHistogram",
     "PhasorCalibration",
     "Lens",
+    "ArrayLens",
+    "TableLens",
+    "SparseLens",
+    "MeshLens",
+    "NetworkLens",
+    "AnnotationLens",
     "Scene",
     "SceneSnapshot",
     "Animation",
     "AnimationWaypoint",
     "Layer",
 ]
+
+# Which lens kind selects over which container: the array and mesh entries are written beside
+# the lens models; the rest live in modules that import that one, so they are completed here,
+# once every container model exists.
+Lens.KIND_BY_CONTAINER.update(
+    {
+        TableDataset: TableLens,
+        SparseDataset: SparseLens,
+        NetworkCollection: NetworkLens,
+        AnnotationCollection: AnnotationLens,
+    }
+)

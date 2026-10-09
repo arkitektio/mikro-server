@@ -97,7 +97,7 @@ def parent_from_specs(info: Info, derived_from: list[Any] | None) -> Container |
 
     if primary.source_kind == "LENS":
         lens = get_for_org(models.Lens, info, id=primary.source_id)
-        return cast(models.Lens, lens).dataset
+        return cast(Container, cast(models.Lens, lens).container)
 
     # COORDINATE_SYSTEM: a bare space may still be owned by a container (a dataset's own
     # grid named the long way round), and it may be owned by nothing at all.

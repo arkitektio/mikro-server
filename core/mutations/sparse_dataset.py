@@ -297,6 +297,9 @@ def create_sparse_dataset(info: Info, input: CreateSparseDatasetInput) -> types.
             anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
             _write_anchor_spokes(anchor, anchor_input)
 
+        # The lens selecting all of it, from the start: the handle an action is handed for the dataset.
+        coordinate_system_logic.whole_lens(dataset)
+
     return dataset
 
 

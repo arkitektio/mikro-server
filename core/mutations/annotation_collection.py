@@ -105,6 +105,8 @@ def create_annotation_collection(info: Info, input: CreateAnnotationCollectionIn
         # says so. Inside the transaction with it -- a frame naming an edge that rolled back
         # would outlive the reason it was chosen.
         graph_logic.record_bbox_frame(collection, system)
+        # The lens selecting all of it, from the start: the handle an action is handed for the collection.
+        coordinate_system_logic.whole_lens(collection)
 
     return collection
 

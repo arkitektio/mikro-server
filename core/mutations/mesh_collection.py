@@ -157,6 +157,8 @@ def _write_collection(
         # Optional on purpose: a mesh in some absolute space is derived from nothing.
         coordinate_system_logic.write_derivation_edges(info, name=collection.version, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
         file_link_logic.write_file_links(info, container=collection, source_files=model.source_files or [], ctx=ctx)
+        # The lens selecting all of it, from the start: the handle an action is handed for the collection.
+        coordinate_system_logic.whole_lens(collection)
 
     return collection
 

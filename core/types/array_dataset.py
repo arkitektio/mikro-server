@@ -248,7 +248,7 @@ class ArrayDataset(OrgScoped):
     )
     def scenes(self, info: Info) -> List["Scene"]:
         """The scenes this dataset is rendered in, through its lenses' layers."""
-        return list(models.Scene.objects.filter(layers__lens__dataset=self).distinct())
+        return list(models.Scene.objects.filter(layers__lens__arraylens__dataset=self).distinct())
 
     @kante.django_field(
         select_related=["default_scene"],
@@ -556,20 +556,67 @@ class Slice:
     step: int | None
 
 
-@kante.django_type(
+@kante.pydantic_type(base_models.WindowModel, description="A value window along a named axis of a container that is not an array: the positions kept, by value, with an open side as null")
+class Window:
+    axis: str
+    min: float | None
+    max: float | None
+
+
+_LENS_SYSTEM_DESCRIPTION = (
+    "The coordinate system the lens' selection is expressed in. A sliced array lens owns one (the space its slices cut out, with the derived edge recording the shift); "
+    "every other lens selects within its container's own space and resolves to it"
+)
+
+
+@kante.django_interface(
     models.Lens,
+    description=(
+        "A selection over a container that lives in a coordinate system: one row per (container, selection), so the same selection asked for twice is the same id. "
+        "An ArrayLens selects over an array dataset by index slices and, when sliced, owns the crop's space and the edge back into the dataset's grid; every other kind "
+        "selects over its container by value windows in the container's own axes and lives in the container's space. Every container has its whole lens from creation."
+    ),
+)
+class Lens:
+    """A selection over a container. The concrete kind says what the container is and how it is selected over."""
+
+    id: auto
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
+    @classmethod
+    def get_queryset(cls, queryset, info, **kwargs):
+        """Scope the heterogeneous list to the request's organization."""
+        return build_prescoped_queryset(info, queryset)
+
+    @kante.django_field(description="What this lens selects over: an array by slices, or a table, a sparse dataset, a mesh, a network or an annotation collection by windows")
+    def kind(self, info: Info) -> enums.LensKind:
+        """The container kind, from the row's concrete model."""
+        return enums.LensKind(type(self).KIND)
+
+    @kante.django_field(select_related=["coordinate_system"], description=_LENS_SYSTEM_DESCRIPTION)
+    def coordinate_system(self, info: Info) -> CoordinateSystem | None:
+        """The system the lens' selection is expressed in: its own, or its container's."""
+        return self.space
+
+    @kante.django_field(description="The coordinate anchors inside this selection: an anchor global along an axis, or pinned inside the lens' range on it. Empty for a container kind that carries no anchors (meshes, networks, annotation collections)")
+    def active_anchors(self, info: Info) -> List[CoordinateAnchor]:
+        """The anchors the selection keeps."""
+        return list(self.active_anchors)
+
+
+@kante.django_type(
+    models.ArrayLens,
     filters=filters.LensFilter,
     ordering=order.LensOrder,
     pagination=True,
-    description="A Lens is a way of looking at a dataset: a dimensional selection (slices) over a dataset that defines a view of its data",
+    description="A selection over an array dataset by index slices: what an action that works on pixels is handed. Its shape and axes are derived from the dataset and the slices",
 )
-class Lens(OrgScoped):
-    """A selection over a dataset. Its shape and axes are derived from the dataset and the slices."""
-
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+class ArrayLens(Lens, OrgScoped):
+    """A selection over an array dataset. Its shape and axes are derived from the dataset and the slices."""
 
     id: auto
     dataset: ArrayDataset
+
     @kante.django_field(
         select_related=["dataset__default_scene"],
         description="The most recent picture of this lens' dataset's `defaultScene` -- the tile to put on this lens. The same picture the dataset itself reports: the nomination is a fact about the dataset, so every lens over one dataset answers alike. Null when the dataset nominates no scene",
@@ -577,14 +624,6 @@ class Lens(OrgScoped):
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
         """The newest picture of the scene this lens' dataset nominates."""
         return _default_scene_snapshot(info, self.dataset)
-
-    @kante.django_field(
-        select_related=["coordinate_system", "dataset__coordinate_system"],
-        description="The coordinate system the lens' selection is expressed in. A sliced lens owns one (the space its slices cut out, with the derived edge recording the shift); an unsliced lens selects everything, so this resolves to the dataset's INTRINSIC system",
-    )
-    def coordinate_system(self, info: Info) -> CoordinateSystem | None:
-        """The system the lens' selection is expressed in: its own, or intrinsic when unsliced."""
-        return self.space
 
     @kante.django_field(description="The lens' axis names, in array order. A selection never drops or reorders an axis")
     def axis_names(self, info: Info) -> List[str]:
@@ -623,13 +662,10 @@ class Lens(OrgScoped):
         """The datasets whose derivation edges land in this lens' space."""
         return graph_logic.lens_derived_datasets(self)
 
-    @kante.django_field()
+    @kante.django_field(description="The slices, in the one normalized spelling: dataset axis order, explicit ints, a step always present. Empty for the whole lens")
     def slices(self, info: Info) -> List[Slice]:
+        """The stored slices."""
         return self.slices_list
-
-    @kante.django_field()
-    def active_anchors(self, info: Info) -> List[CoordinateAnchor]:
-        return self.active_anchors
 
     @kante.django_field(
         description="Everything needed to reduce one axis of this lens to a phasor: the bin count and width, the period the transform runs over, the laser rate, the instrument-response correction and the persisted distribution. Null when the lens has no MICROTIME or SPECTRUM axis. Derived -- none of it is stored on the lens, and a phasor render node references it rather than copying it, so two layers over one dataset cannot disagree about the instrument"
@@ -637,6 +673,74 @@ class Lens(OrgScoped):
     def phasor(self, info: Info, axis: str | None = None, harmonic: int = 1) -> "PhasorContext | None":
         """The phasor context of one axis of this lens, at one harmonic."""
         return resolve_phasor_context(self, axis_name=axis, harmonic=harmonic)
+
+
+_WINDOWS_DESCRIPTION = "The windows, in the one normalized spelling: container axis order, floats, an open side as null. Empty for the whole lens"
+
+
+@kante.django_type(models.TableLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a table dataset by value windows on its coordinate columns: the rows kept. Lives in the table's own space")
+class TableLens(Lens, OrgScoped):
+    """A selection over a table dataset."""
+
+    id: auto
+    table_dataset: Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]
+
+    @kante.django_field(description=_WINDOWS_DESCRIPTION)
+    def windows(self, info: Info) -> List[Window]:
+        """The stored windows."""
+        return self.windows_list
+
+
+@kante.django_type(models.SparseLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a sparse dataset by windows on its axes: the positions kept, never re-indexed. Lives in the dataset's own space")
+class SparseLens(Lens, OrgScoped):
+    """A selection over a sparse dataset."""
+
+    id: auto
+    sparse_dataset: Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")]
+
+    @kante.django_field(description=_WINDOWS_DESCRIPTION)
+    def windows(self, info: Info) -> List[Window]:
+        """The stored windows."""
+        return self.windows_list
+
+
+@kante.django_type(models.MeshLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a mesh collection by windows in its own space")
+class MeshLens(Lens, OrgScoped):
+    """A selection over a mesh collection."""
+
+    id: auto
+    mesh_collection: Annotated["MeshCollection", strawberry.lazy("core.types.coords")]
+
+    @kante.django_field(description=_WINDOWS_DESCRIPTION)
+    def windows(self, info: Info) -> List[Window]:
+        """The stored windows."""
+        return self.windows_list
+
+
+@kante.django_type(models.NetworkLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a network collection by windows in its own space")
+class NetworkLens(Lens, OrgScoped):
+    """A selection over a network collection."""
+
+    id: auto
+    network_collection: Annotated["NetworkCollection", strawberry.lazy("core.types.coords")]
+
+    @kante.django_field(description=_WINDOWS_DESCRIPTION)
+    def windows(self, info: Info) -> List[Window]:
+        """The stored windows."""
+        return self.windows_list
+
+
+@kante.django_type(models.AnnotationLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over an annotation collection by windows in its drawing space")
+class AnnotationLens(Lens, OrgScoped):
+    """A selection over an annotation collection."""
+
+    id: auto
+    annotation_collection: "AnnotationCollection"
+
+    @kante.django_field(description=_WINDOWS_DESCRIPTION)
+    def windows(self, info: Info) -> List[Window]:
+        """The stored windows."""
+        return self.windows_list
 
 
 @kante.django_type(
@@ -773,7 +877,7 @@ class PhasorContext:
     phasor_histogram: "PhasorHistogram | None" = strawberry.field(description="The persisted (g, s) density at this axis and harmonic, so a client can range the overlay's colormap without reading the cube. Null until a task has computed one")
 
 
-def resolve_phasor_context(lens: "models.Lens", axis_name: str | None, harmonic: int) -> "PhasorContext | None":
+def resolve_phasor_context(lens: "models.ArrayLens", axis_name: str | None, harmonic: int) -> "PhasorContext | None":
     """Assemble the phasor context of one axis of a lens.
 
     The three acquisition facts a phasor needs live in three different places -- the bin width
@@ -1051,7 +1155,10 @@ class ImageLayer(Layer):
     """A layer that composites array (lens) data through a render graph. All placement lives in the coordinate graph."""
 
     id: auto
-    lens: Lens
+    lens: ArrayLens = kante.django_field(
+        disable_optimization=True,
+        description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
+    )
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
@@ -1091,7 +1198,10 @@ class IntensityLayer(Layer):
     """One channel of a lens through a colormap or a tint, with contrast limits, gamma and an optional z-projection."""
 
     id: auto
-    lens: Lens
+    lens: ArrayLens = kante.django_field(
+        disable_optimization=True,
+        description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
+    )
     intensity_axis: str | None
     intensity_index: int
     colormap: enums.ColorMap
@@ -1133,7 +1243,10 @@ class RgbLayer(Layer):
     """Three channels of a lens as the red, green and blue components of one picture."""
 
     id: auto
-    lens: Lens
+    lens: ArrayLens = kante.django_field(
+        disable_optimization=True,
+        description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
+    )
     intensity_axis: str | None
     red_index: int
     green_index: int
@@ -1175,7 +1288,10 @@ class PhasorLayer(Layer):
     """A layer that reduces one axis of a lens to a phasor and colours the pixel by it."""
 
     id: auto
-    lens: Lens
+    lens: ArrayLens = kante.django_field(
+        disable_optimization=True,
+        description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
+    )
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
@@ -1215,7 +1331,10 @@ class VectorLayer(Layer):
     """A layer drawing a vector-valued lens as glyphs sampled from the grid."""
 
     id: auto
-    lens: Lens
+    lens: ArrayLens = kante.django_field(
+        disable_optimization=True,
+        description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
+    )
     glyph: enums.VectorGlyph
     glyph_stride: int | None
     glyph_scale: float | None
@@ -1262,7 +1381,10 @@ class LabelLayer(Layer):
     """A layer that renders a segmentation or instance map. Ids, not intensities."""
 
     id: auto
-    lens: Lens
+    lens: ArrayLens = kante.django_field(
+        disable_optimization=True,
+        description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
+    )
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:

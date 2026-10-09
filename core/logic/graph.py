@@ -65,7 +65,7 @@ class Container:
 CONTAINERS: tuple[Container, ...] = (
     Container(model=models.ArrayDataset, related_name="datasets", root_field="pk", key="dataset"),
     Container(model=models.DataArray, related_name="data_arrays", root_field="dataset_id", key="dataset"),
-    Container(model=models.Lens, related_name="lenses", root_field="dataset_id", key="dataset"),
+    Container(model=models.ArrayLens, related_name="lenses", root_field="dataset_id", key="dataset"),
     Container(model=models.MeshCollection, related_name="mesh_collections", root_field="pk", key="meshcollection", is_collection=True),
     Container(model=models.NetworkCollection, related_name="network_collections", root_field="pk", key="networkcollection", is_collection=True),
     Container(model=models.TableDataset, related_name="table_datasets", root_field="pk", key="tabledataset", is_collection=True),
@@ -78,6 +78,14 @@ CONTAINERS: tuple[Container, ...] = (
     # therefore keyed as a world and was excluded from the `fact_paths` frontier on both sides.
     # Those two readings cannot both be right; this is the one that matches the FK.
     Container(model=models.SparseDataset, related_name="sparse_datasets", root_field="pk", key="sparsedataset", is_collection=True),
+    # A windowed lens lives in its container's own system and keys to that container: it is
+    # a part of the container's node, exactly as an array lens is a part of its dataset's.
+    # `related_name` is the base model's reverse accessor, shared by every lens kind.
+    Container(model=models.TableLens, related_name="lenses", root_field="table_dataset_id", key="tabledataset"),
+    Container(model=models.SparseLens, related_name="lenses", root_field="sparse_dataset_id", key="sparsedataset"),
+    Container(model=models.MeshLens, related_name="lenses", root_field="mesh_collection_id", key="meshcollection"),
+    Container(model=models.NetworkLens, related_name="lenses", root_field="network_collection_id", key="networkcollection"),
+    Container(model=models.AnnotationLens, related_name="lenses", root_field="annotation_collection_id", key="annotationcollection"),
 )
 
 #: The model a container key resolves back to. A key names one *node*, so the three models
@@ -91,8 +99,9 @@ MODEL_BY_KEY: dict[str, type] = {container.key: container.model for container in
 _KEYING_ORDER: tuple[Container, ...] = tuple(sorted(CONTAINERS, key=lambda container: container.model is models.ArrayDataset))
 
 #: The reverse accessors, for ``prefetch_related`` and for the "does anything live here"
-#: fan-out. Derived, so a seventh container is one line above and nothing else.
-RESIDENT_RELATIONS: tuple[str, ...] = tuple(container.related_name for container in CONTAINERS)
+#: fan-out. Derived, so a seventh container is one line above and nothing else. Every lens
+#: kind shares one accessor, so it appears once.
+RESIDENT_RELATIONS: tuple[str, ...] = (*dict.fromkeys(container.related_name for container in CONTAINERS if not issubclass(container.model, models.Lens)), "lenses")
 
 #: The collections alone -- the containers that own their space rather than sharing a
 #: dataset's. :func:`collection_in` and the seeding paths ask for exactly these.
@@ -772,7 +781,7 @@ def assert_field_is_dereferenceable(field: "models.CoordinateSystem") -> None:
         return
     if next(iter(field.network_collections.all()[:1]), None) is not None:
         return
-    if next(iter(field.lenses.all()[:1]), None) is not None:
+    if models.ArrayLens.objects.filter(coordinate_system=field).exists():
         raise ValueError(
             f"Only a lens lives in coordinate system '{field.name}': a lens is a selection over a dataset and owns no array, so there is nothing to sample. Name the dataset's own system as the field."
         )
@@ -1853,7 +1862,7 @@ def _datasets_derived_into(output_filter: "Q", exclude_pk: int) -> list["models.
 def derived_datasets(dataset: "models.ArrayDataset") -> list["models.ArrayDataset"]:
     """The datasets computed from this one: every dataset whose `derivedFrom` names a space of ours."""
     return _datasets_derived_into(
-        Q(output__datasets=dataset) | Q(output__lenses__dataset=dataset) | Q(output__data_arrays__dataset=dataset),
+        Q(output__datasets=dataset) | Q(output__lenses__arraylens__dataset=dataset) | Q(output__data_arrays__dataset=dataset),
         exclude_pk=dataset.pk,
     )
 
@@ -1871,7 +1880,7 @@ def derived_containers(dataset: "models.ArrayDataset") -> list:
     Kind-blind and priority-blind, as the narrow one is: an UNMAPPABLE child still came from
     here, and a fusion that named this source second is still a child.
     """
-    spaces = Q(output__datasets=dataset) | Q(output__lenses__dataset=dataset) | Q(output__data_arrays__dataset=dataset)
+    spaces = Q(output__datasets=dataset) | Q(output__lenses__arraylens__dataset=dataset) | Q(output__data_arrays__dataset=dataset)
     edges = list(models.Transformation.objects.filter(spaces, parent__isnull=True).select_related("input", "output").order_by("pk"))
     if not edges:
         return []
@@ -1899,13 +1908,12 @@ def derived_containers(dataset: "models.ArrayDataset") -> list:
     return [found[key] for key in wanted if key in found]
 
 
-def lens_derived_datasets(lens: "models.Lens") -> list["models.ArrayDataset"]:
+def lens_derived_datasets(lens: "models.ArrayLens") -> list["models.ArrayDataset"]:
     """The datasets computed from this lens' selection.
 
-    An unsliced lens owns no system -- its space *is* the dataset's intrinsic -- so it
-    reports what was derived from the whole grid, and two unsliced lenses over one dataset
-    report the same children. That is not a leak: the model has one space there, and
-    saying otherwise would invent a distinction nothing stored can support.
+    An unsliced lens lives in the dataset's intrinsic system, so it reports what was derived
+    from the whole grid. That is not a leak: the model has one space there, and saying
+    otherwise would invent a distinction nothing stored can support.
     """
     space = lens.space
     if space is None:
@@ -2001,7 +2009,7 @@ def _placement_universe(
             # enter through the lineage terms below.
             Q(input=source_system)
             | Q(input__datasets__in=lineage_ids)
-            | Q(input__lenses__dataset__in=lineage_ids)
+            | Q(input__lenses__arraylens__dataset__in=lineage_ids)
             | Q(input__data_arrays__dataset__in=lineage_ids)
             | Q(input=world)
             | Q(output=world)
@@ -2081,8 +2089,14 @@ def container_q(keys: "Iterable[tuple]", *, field: str) -> Q:
         if not pks:
             continue
         # A dataset key matches its own grid *and* its levels' and lenses': three containers
-        # share that key, so this loop contributes three joins for it.
-        lookup = f"{field}__{container.related_name}__in" if container.root_field == "pk" else f"{field}__{container.related_name}__dataset__in"
+        # share that key, so this loop contributes three joins for it. A lens kind is reached
+        # through the base relation and then its own child table.
+        if container.root_field == "pk":
+            lookup = f"{field}__{container.related_name}__in"
+        elif issubclass(container.model, models.Lens):
+            lookup = f"{field}__{container.related_name}__{container.model.__name__.lower()}__{container.root_field.removesuffix('_id')}__in"
+        else:
+            lookup = f"{field}__{container.related_name}__dataset__in"
         query |= Q(**{lookup: pks})
     return query
 
@@ -2391,7 +2405,7 @@ def residence_map(system_ids: "Iterable[int]") -> dict[int, int]:
     mapping: dict[int, int] = {}
     # Descending pk so the lowest wins each slot, and datasets last: a space a dataset itself
     # lives in is that dataset's, even when another's lens or level also sits there.
-    for source, dataset_field in ((models.Lens, "dataset_id"), (models.DataArray, "dataset_id"), (models.ArrayDataset, "pk")):
+    for source, dataset_field in ((models.ArrayLens, "dataset_id"), (models.DataArray, "dataset_id"), (models.ArrayDataset, "pk")):
         for system_id, dataset_id in source.objects.filter(coordinate_system_id__in=ids).order_by("-pk").values_list("coordinate_system_id", dataset_field):
             mapping[system_id] = dataset_id
     return mapping
@@ -3453,11 +3467,11 @@ def compute_intrinsic_bbox(system: "models.CoordinateSystem", vectors: list[list
 
 
 def lens_source_system(lens: "models.Lens") -> "models.CoordinateSystem | None":
-    """The space a lens' data is expressed in.
+    """The space a lens' data is expressed in: its own crop space, or its container's system.
 
-    An unsliced lens owns no system: its space is the dataset's intrinsic space.
+    Only a sliced array lens owns a system; every other lens lives in its container's.
     """
-    return getattr(lens, "coordinate_system", None) or lens.dataset.intrinsic_coordinate_system
+    return getattr(lens, "coordinate_system", None) or getattr(lens.container, "coordinate_system", None)
 
 
 def layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem | None":
@@ -3509,7 +3523,7 @@ def system_dataset(system: "models.CoordinateSystem") -> "models.ArrayDataset | 
     dataset = next(iter(system.datasets.all()[:1]), None)
     if dataset is not None:
         return dataset
-    lens = next(iter(system.lenses.all()[:1]), None)
+    lens = models.ArrayLens.objects.filter(coordinate_system=system).select_related("dataset").first()
     if lens is not None:
         return lens.dataset
     array = next(iter(system.data_arrays.all()[:1]), None)

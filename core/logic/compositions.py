@@ -93,6 +93,11 @@ def register_delete_guard(model: type[django_models.Model], guard: Callable[[dja
 
 
 def assert_deletable(item: django_models.Model) -> None:
-    """Run every guard registered for this row's model."""
-    for guard in _DELETE_GUARDS.get(type(item), ()):
-        guard(item)
+    """Run every guard registered for this row's model, or for a model it inherits from.
+
+    Walked up the bases so a guard registered for a polymorphic base (the lens kinds) runs
+    for every row of a kind, which is what the row arrives as.
+    """
+    for cls in type(item).__mro__:
+        for guard in _DELETE_GUARDS.get(cls, ()):
+            guard(item)

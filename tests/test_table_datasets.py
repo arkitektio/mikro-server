@@ -92,7 +92,7 @@ async def test_a_coordinate_table_owns_a_placeable_space(authenticated_context: 
     assert not result.errors, result.errors
     table = result.data["createTableDataset"]
 
-    assert [r["__typename"] for r in table["coordinateSystem"]["residents"]] == ["TableDataset"], "the rows live in the table's own space"
+    assert [r["__typename"] for r in table["coordinateSystem"]["residents"]] == ["TableDataset", "TableLens"], "the rows live in the table's own space"
     axes = table["coordinateSystem"]["axes"]
     assert [a["name"] for a in axes] == ["y", "x"]
     assert [a["type"] for a in axes] == ["SPACE", "SPACE"]

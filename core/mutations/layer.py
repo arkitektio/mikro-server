@@ -283,7 +283,7 @@ def create_layer(
 ) -> types.ImageLayer:
     model = input.to_pydantic()
 
-    lens = get_for_org(models.Lens, info, id=model.lens)
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
     scene = get_for_org(models.Scene, info, id=model.scene)
 
     assert_renderable(lens)
@@ -384,7 +384,7 @@ def update_layer(
 
     layer = get_for_org(models.Layer, info, id=model.id)
     assert_kind(layer, enums.LayerKind.IMAGE, mutation="updateLayer")
-    lens = get_for_org(models.Lens, info, id=model.lens) if model.lens else layer.lens
+    lens = get_for_org(models.ArrayLens, info, id=model.lens) if model.lens else layer.lens
     scene = get_for_org(models.Scene, info, id=model.scene) if model.scene else layer.scene
 
     assert_renderable(lens)
@@ -452,7 +452,7 @@ def update_layer(
 
 def _create_graph_layer(info: Info, *, lens_id: str, scene_id: str, root: layer_models.BlendNodeModel, blending: enums.Blending, opacity: float | None, visible: bool | None, order: int | None) -> "models.Layer":
     """Create an image layer from a prebuilt render graph. Placement is a scene-level edge, not a layer field."""
-    lens = get_for_org(models.Lens, info, id=lens_id)
+    lens = get_for_org(models.ArrayLens, info, id=lens_id)
     scene = get_for_org(models.Scene, info, id=scene_id)
     render_graph = layer_models.LayerRenderGraphModel(root=root).model_dump(mode="json")
 
@@ -479,7 +479,7 @@ def _create_flat_layer(info: Info, *, lens_id: str, scene_id: str, kind: enums.L
     columns, which is exactly what differs between the callers -- everything above it is
     shared, and shared here rather than copied four times.
     """
-    lens = get_for_org(models.Lens, info, id=lens_id)
+    lens = get_for_org(models.ArrayLens, info, id=lens_id)
     scene = get_for_org(models.Scene, info, id=scene_id)
 
     graph_logic.assert_placeable_in(scene.world, graph_logic.lens_source_system(lens), destination=f"the world of scene '{scene.name}'")
@@ -537,7 +537,7 @@ class CreateRgbLayerInput:
 
 def create_rgb_layer(info: Info, input: CreateRgbLayerInput) -> types.RgbLayer:
     model = input.to_pydantic()
-    lens = get_for_org(models.Lens, info, id=model.lens)
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
     assert_renderable(lens)
     intensity_axis = default_intensity_axis(lens, model.intensity_axis)
 
@@ -664,7 +664,7 @@ def _create_intensity_layer(info: Info, model, *, projection_mode: enums.Project
     an intensity layer with `projection_mode` set, and not a kind of its own. Two mutations
     because they are two things to ask for; one function because they are one thing to build.
     """
-    lens = get_for_org(models.Lens, info, id=model.lens)
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
     render = assert_renderable(lens)
     intensity_axis = default_intensity_axis(lens, model.intensity_axis)
     intensity_index = model.intensity_index or 0
@@ -1523,7 +1523,7 @@ class CreateLabelLayerInput:
 
 def create_label_layer(info: Info, input: CreateLabelLayerInput) -> types.LabelLayer:
     model = input.to_pydantic()
-    lens = get_for_org(models.Lens, info, id=model.lens)
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
     scene = get_for_org(models.Scene, info, id=model.scene)
     assert_renderable(lens)
 
@@ -1670,7 +1670,7 @@ class CreatePhasorLayerInput:
 
 def create_phasor_layer(info: Info, input: CreatePhasorLayerInput) -> types.PhasorLayer:
     model = input.to_pydantic()
-    lens = get_for_org(models.Lens, info, id=model.lens)
+    lens = get_for_org(models.ArrayLens, info, id=model.lens)
     assert_renderable(lens)
 
     phasor_axis = default_phasor_axis(lens, model.phasor_axis)

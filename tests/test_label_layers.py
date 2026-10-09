@@ -1157,7 +1157,7 @@ async def test_a_lens_offers_its_own_options(authenticated_context: HttpContext)
     await _object_table(authenticated_context, mask)
 
     nested = await schema.execute(
-        "query Nested($id: ID!) { lens(id: $id) { colorByOptions { column { name } control joinPath { column { name } } } } }",
+        "query Nested($id: ID!) { lens(id: $id) { ... on ArrayLens { colorByOptions { column { name } control joinPath { column { name } } } } } }",
         context_value=authenticated_context,
         variable_values={"id": str(lens.id)},
     )

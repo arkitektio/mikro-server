@@ -528,6 +528,50 @@ def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[
     return normalized
 
 
+class WindowLike(Protocol):
+    """What this module reads off a window: a pydantic ``WindowModel``, a GraphQL input, a test stub."""
+
+    axis: str
+    min: float | None
+    max: float | None
+
+
+def normalize_windows(axis_names: Sequence[str], windows: Iterable["WindowLike"]) -> list[dict[str, float | str | None]]:
+    """The one spelling of a value selection over a container that is not an array.
+
+    A window keeps the positions along an axis whose value lies in ``[min, max]``; it
+    re-indexes nothing, so unlike :func:`normalize_slices` there is no shape to resolve
+    against and an open side stays open (``None``). What is normalized is the spelling:
+    floats, container axis order, one window per axis, and a window open on both sides
+    dropped -- it keeps everything, and a lens that carried one would be a second whole lens.
+
+    Refused, in prose: an axis the container does not have, an axis windowed twice, and a
+    window whose ``min`` is not below its ``max`` (an empty window selects nothing).
+    """
+    by_axis: dict[str, WindowLike] = {}
+    for window in windows:
+        if window.axis not in axis_names:
+            raise ValueError(f"Window names axis '{window.axis}', which the container does not have (its axes are {list(axis_names)})")
+        if window.axis in by_axis:
+            raise ValueError(f"Axis '{window.axis}' is windowed twice; one window per axis")
+        by_axis[window.axis] = window
+
+    normalized: list[dict[str, float | str | None]] = []
+    for axis in axis_names:
+        window = by_axis.get(axis)
+        if window is None:
+            continue
+        low = None if window.min is None else float(window.min)
+        high = None if window.max is None else float(window.max)
+        if low is None and high is None:
+            continue
+        if low is not None and high is not None and not low < high:
+            raise ValueError(f"Window over axis '{axis}' runs from {low} to {high} and keeps nothing; its min must be below its max")
+        normalized.append({"axis": axis, "min": low, "max": high})
+
+    return normalized
+
+
 def lens_to_parent(dataset_axis_names: Sequence[str], slices: Iterable) -> tuple[str, dict]:
     """The edge from a lens' coordinate system to its dataset's level-0 array system.
 

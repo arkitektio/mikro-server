@@ -131,7 +131,7 @@ async def test_a_lens_lives_in_its_own_space_and_a_scene_may_root_there(authenti
     assert lens_system.pk != intrinsic.pk, "a sliced lens gets a space of its own"
 
     sliced = await _system(authenticated_context, lens_system.pk)
-    assert [resident["__typename"] for resident in sliced["residents"]] == ["Lens"]
+    assert [resident["__typename"] for resident in sliced["residents"]] == ["ArrayLens"]
 
 
 @pytest.mark.django_db(transaction=True)

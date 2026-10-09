@@ -79,7 +79,7 @@ def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[
     None where the server holds no geometry: a mesh collection's vertices and a table's rows
     are in Parquet it never opens.
     """
-    if isinstance(resident, models.Lens):
+    if isinstance(resident, models.ArrayLens):
         shape = resident.shape_list
     elif isinstance(resident, models.DataArray):
         shape = resident.shape
@@ -190,8 +190,12 @@ class SpaceGraph:
                 continue
             if isinstance(resident, models.ArrayDataset):
                 dataset_id = resident.pk
-            elif isinstance(resident, (models.Lens, models.DataArray)):
+            elif isinstance(resident, (models.ArrayLens, models.DataArray)):
                 dataset_id = resident.dataset_id
+            elif isinstance(resident, models.Lens):
+                # A windowed lens lives in its container's own system, and the container
+                # itself is a resident there: it speaks for the lens.
+                continue
             else:
                 # A collection has no array dataset of its own: no shapes, no coordinate
                 # anchors. It used to borrow its *source* dataset's id here, which then read
@@ -205,15 +209,15 @@ class SpaceGraph:
             # them as a separate thing in view would return the same pixels several times.
             # The dataset itself is the thing a client asked about; a level or a lens counts
             # only where no dataset of its own is in the set.
-            if isinstance(resident, (models.Lens, models.DataArray)) and ("ArrayDataset", dataset_id) in by_container:
+            if isinstance(resident, (models.ArrayLens, models.DataArray)) and ("ArrayDataset", dataset_id) in by_container:
                 continue
-            by_container.pop(("Lens", None), None)
+            by_container.pop(("ArrayLens", None), None)
             by_container[key] = candidate
 
         # Drop the levels and lenses a dataset in the set already speaks for.
         dataset_pks = {pk for kind, pk in by_container if kind == "ArrayDataset"}
         self._sources = sorted(
-            (source for key, source in by_container.items() if not (key[0] in ("Lens", "DataArray") and source.dataset_id in dataset_pks)),
+            (source for key, source in by_container.items() if not (key[0] in ("ArrayLens", "DataArray") and source.dataset_id in dataset_pks)),
             key=lambda source: (type(source.container).__name__, source.container.pk),
         )
         return self._sources
@@ -391,7 +395,7 @@ class SpaceGraph:
         """
         extents: dict[int, dict[str, list[float]] | None] = {}
         for resident in self._residents:
-            if not isinstance(resident, models.Lens) or resident.pk in skip or resident.coordinate_system is None:
+            if not isinstance(resident, models.ArrayLens) or resident.pk in skip or resident.coordinate_system is None:
                 continue
             names = [axis.name for axis in resident.coordinate_system.axes.all()]
             dataset_shape = self.shapes().get(resident.dataset_id) or []

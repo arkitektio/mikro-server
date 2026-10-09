@@ -271,7 +271,7 @@ async def test_a_lens_owned_field_is_refused(authenticated_context: HttpContext)
 
     def lens_field_edge() -> None:
         lens_system = models.CoordinateSystem.objects.create(name="crop", organization=authenticated_context.request.organization)
-        models.Lens.objects.create(dataset=mask, coordinate_system=lens_system, slices=[])
+        models.ArrayLens.objects.create(dataset=mask, coordinate_system=lens_system, organization=mask.organization, slices=[{"axis": "y", "start": 0, "stop": 32, "step": 1}])
         models.Transformation.objects.create(
             kind=enums.TransformKindChoices.FIELD.value,
             input=mask_system,

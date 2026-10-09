@@ -162,7 +162,7 @@ async def test_nchildren_caps_the_sources_in_registration_order(authenticated_co
     assert len(scene["layers"]) == 6, "two of the three sources, whole: three channels apiece"
     # The first two registrations (by pk) are the ones taken.
     placed_lens_dataset_ids = await sync_to_async(
-        lambda: set(models.Layer.objects.filter(scene__pk=scene["id"]).values_list("lens__dataset__pk", flat=True))
+        lambda: set(models.Layer.objects.filter(scene__pk=scene["id"]).values_list("lens__arraylens__dataset__pk", flat=True))
     )()
     assert placed_lens_dataset_ids == {datasets[0].pk, datasets[1].pk}, "nchildren limits how many sources are materialized"
 
@@ -194,7 +194,7 @@ async def test_nchildren_counts_sources_and_never_truncates_an_acquisition(authe
     scene = await _scene_from(authenticated_context, space["id"], nchildren=1)
 
     assert len(scene["layers"]) == 4, "one source was taken, and all four of its channels came with it"
-    taken = await sync_to_async(lambda: set(models.Layer.objects.filter(scene__pk=scene["id"]).values_list("lens__dataset__pk", flat=True)))()
+    taken = await sync_to_async(lambda: set(models.Layer.objects.filter(scene__pk=scene["id"]).values_list("lens__arraylens__dataset__pk", flat=True)))()
     assert taken == {datasets[0].pk}, "the cap is one source, not one layer"
 
 
@@ -343,7 +343,7 @@ async def test_a_non_renderable_dataset_is_skipped_not_fatal(authenticated_conte
     for layer in scene["layers"]:
         assert layer["kind"] == "INTENSITY"
         assert layer["pathToWorld"] is not None
-    placed_dataset_ids = await sync_to_async(lambda: set(models.Layer.objects.filter(scene__pk=scene["id"]).values_list("lens__dataset_id", flat=True)))()
+    placed_dataset_ids = await sync_to_async(lambda: set(models.Layer.objects.filter(scene__pk=scene["id"]).values_list("lens__arraylens__dataset_id", flat=True)))()
     assert placed_dataset_ids == {good.pk}
 
 

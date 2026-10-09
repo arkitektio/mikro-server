@@ -44,7 +44,7 @@ class SceneGraph(placement.PlacementGraph):
         # The layers, with every relation the placement logic walks in Python. The
         # optimizer cannot infer these: it prefetches what the *selection set* names, and
         # a client asking only for `pathToWorld` never names `lens`.
-        self.layers = list(scene.layers.select_related(*LAYER_PLACEMENT_RELATIONS))
+        self.layers = list(scene.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(*LAYER_SOURCE_AXIS_PREFETCH))
 
         # The scene's whole contribution to the universe: the spaces its layers draw from.
         # Seeding by *system* is right here and would be wrong for a space graph -- each
@@ -155,6 +155,8 @@ class SceneGraph(placement.PlacementGraph):
 LAYER_SOURCE_AXIS_PREFETCH = (
     "lens__coordinate_system__axes",
     "lens__dataset__coordinate_system__axes",
+    # The level-0 shape, which every lens' `shape` and the renderability checks read.
+    "lens__dataset__data_arrays",
     "annotation_collection__coordinate_system__axes",
     "mesh_collection__coordinate_system__axes",
     "table_dataset__coordinate_system__axes",
@@ -162,10 +164,12 @@ LAYER_SOURCE_AXIS_PREFETCH = (
 
 #: The relations the placement logic reads off a layer in Python. `Layer` is one table
 #: discriminated by `kind`, so a single select_related covers every layer kind.
+#:
+#: The lens is deliberately *not* here: a `select_related` through a polymorphic FK hands back
+#: the base row, and the placement logic needs the kind. It arrives through the prefetch above,
+#: which goes through the polymorphic manager and hands back the kind.
 LAYER_PLACEMENT_RELATIONS = (
     "scene__world",
-    "lens__dataset__coordinate_system",
-    "lens__coordinate_system",
     "annotation_collection__coordinate_system",
     "mesh_collection__coordinate_system",
     "table_dataset__coordinate_system",

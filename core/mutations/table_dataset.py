@@ -520,6 +520,9 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
             _write_anchor_spokes(anchor, anchor_input)
 
+        # The lens selecting all of it, from the start: the handle an action is handed for the table.
+        coordinate_system_logic.whole_lens(dataset)
+
     return dataset
 
 

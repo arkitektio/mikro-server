@@ -21,6 +21,7 @@ from core.creation import CreationContext
 from core.input_unions import camel_field, prose_errors
 from core.inputs.coords import AxisInputModel, CoordinateInput, CoordinateInputModel
 from core.inputs.validators import assert_rgba, assert_shape_vectors
+from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org
@@ -166,6 +167,8 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
         visible=True,
         order=0,
     )
+    # Minted here like every collection: the whole lens is the collection's handle.
+    coordinate_system_logic.whole_lens(collection)
     return collection
 
 

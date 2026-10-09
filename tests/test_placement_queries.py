@@ -372,3 +372,38 @@ async def test_creating_a_layer_is_flat_in_scene_size(authenticated_context: Htt
 
     large_queries = await measure(7)
     assert large_queries == small_queries, f"creating a layer costs more in a bigger scene: {small_queries} queries at 3 layers, {large_queries} at 7"
+
+
+SCENE_LENSES = """
+query SceneLenses {
+  scenes {
+    id
+    layers {
+      id
+      ... on ImageLayer { renderAxes { x y } lens { id shape axisNames coordinateSystem { id } dataset { id axisNames } slices { axis start stop step } } }
+      ... on IntensityLayer { renderAxes { x y } lens { id shape axisNames coordinateSystem { id } dataset { id axisNames } slices { axis start stop step } } }
+    }
+  }
+}
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_scenes_lenses_are_flat_in_layer_count(authenticated_context: HttpContext):
+    """Reading each layer's lens -- the selection, its space and its dataset -- costs the same at 7 layers as at 3.
+
+    The lens is reached across a polymorphic foreign key the optimizer cannot follow to the
+    kind's own table, so the layer's own prefetch is what serves it; this is what says that
+    prefetch covers what a scene page reads.
+    """
+    await _seed_scene(authenticated_context, layer_count=3)
+    small_data, small_queries = await _execute(authenticated_context, SCENE_LENSES)
+    await models.Scene.objects.all().adelete()
+    await _seed_scene(authenticated_context, layer_count=7)
+    large_data, large_queries = await _execute(authenticated_context, SCENE_LENSES)
+
+    assert len(small_data["scenes"][0]["layers"]) == 3
+    assert len(large_data["scenes"][0]["layers"]) == 7
+    assert sum(1 for layer in large_data["scenes"][0]["layers"] if layer.get("lens", {}).get("shape")) >= 3, "the image layers answered their lens"
+    assert large_queries == small_queries, f"the lens query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"

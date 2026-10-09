@@ -700,9 +700,34 @@ class AnnotationFilter(IdsFilterMixin):
 class LensFilter(IdsFilterMixin):
     id: auto
 
-    @kante.filter_field(description="Filter by the dataset this lens looks at")
+    @kante.filter_field(description="Filter by the kind of container the lens selects over")
+    def kind(self, info: Info, value: enums.LensKind, prefix: str) -> Q:
+        model = next(model for model in models.Lens.KIND_BY_CONTAINER.values() if model.KIND == value.value)
+        return Q(**{f"{prefix}{model.__name__.lower()}__isnull": False})
+
+    @kante.filter_field(description="Filter to the array lenses over this dataset")
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}dataset_id": value})
+        return Q(**{f"{prefix}arraylens__dataset_id": value})
+
+    @kante.filter_field(description="Filter to the lenses over this table dataset")
+    def table_dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}tablelens__table_dataset_id": value})
+
+    @kante.filter_field(description="Filter to the lenses over this sparse dataset")
+    def sparse_dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}sparselens__sparse_dataset_id": value})
+
+    @kante.filter_field(description="Filter to the lenses over this mesh collection")
+    def mesh_collection(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}meshlens__mesh_collection_id": value})
+
+    @kante.filter_field(description="Filter to the lenses over this network collection")
+    def network_collection(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}networklens__network_collection_id": value})
+
+    @kante.filter_field(description="Filter to the lenses over this annotation collection")
+    def annotation_collection(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}annotationlens__annotation_collection_id": value})
 
     @kante.filter_field(
         description=(
@@ -724,8 +749,9 @@ class LensFilter(IdsFilterMixin):
         if not value.as_layer:
             # The plain path, and it stays a plain indexed `dataset_id__in`: placeability is
             # a property of the dataset, so every lens of a placeable dataset is placeable
-            # and no `distinct()` is needed.
-            return Q(**{f"{prefix}dataset_id__in": dataset_ids})
+            # and no `distinct()` is needed. Array lenses only: this asks what a layer over
+            # pixels could draw.
+            return Q(**{f"{prefix}arraylens__dataset_id__in": dataset_ids})
 
         if value.as_layer == enums.LensLayerKind.LABEL:
             dataset_ids = graph_logic.categorized_dataset_ids(dataset_ids)
@@ -884,7 +910,7 @@ class CoordinateSystemFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterM
 
     @kante.filter_field(description="Filter to the spaces this dataset's data lives in: its own grid, and the grids of its pyramid levels and lenses")
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}datasets__id": value}) | Q(**{f"{prefix}lenses__dataset_id": value}) | Q(**{f"{prefix}data_arrays__dataset_id": value})
+        return Q(**{f"{prefix}datasets__id": value}) | Q(**{f"{prefix}lenses__arraylens__dataset_id": value}) | Q(**{f"{prefix}data_arrays__dataset_id": value})
 
     @kante.filter_field(description="Filter by a scene composing over this system as its world")
     def scene(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
@@ -1116,7 +1142,7 @@ def _renderable_lens_ids(dataset_ids: "set[int]", requires: "Callable[[Sequence[
     if not dataset_ids:
         return set()
 
-    lenses = list(models.Lens.objects.filter(dataset_id__in=dataset_ids).only("id", "dataset_id", "slices"))
+    lenses = list(models.ArrayLens.objects.filter(dataset_id__in=dataset_ids).only("id", "dataset_id", "slices"))
     if not lenses:
         return set()
 
@@ -1195,7 +1221,7 @@ def _derived_dataset_ids(source_id: strawberry.ID | None = None):
     """
     source_dataset = Coalesce(
         "output__datasets__id",
-        "output__lenses__dataset_id",
+        "output__lenses__arraylens__dataset_id",
         "output__data_arrays__dataset_id",
     )
     edges = (
@@ -1241,5 +1267,5 @@ def _systems_derived_from_dataset(dataset_id: strawberry.ID):
         parent__isnull=True,
         input__isnull=False,
     ).filter(
-        Q(output__datasets__id=dataset_id) | Q(output__lenses__dataset_id=dataset_id) | Q(output__data_arrays__dataset_id=dataset_id)
+        Q(output__datasets__id=dataset_id) | Q(output__lenses__arraylens__dataset_id=dataset_id) | Q(output__data_arrays__dataset_id=dataset_id)
     ).values("input_id")

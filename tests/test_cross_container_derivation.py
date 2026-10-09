@@ -26,6 +26,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
+from core.logic import coordinate_system as coordinate_system_logic
 from core import enums, models
 from core.inputs.coords import derived_from_union_types
 from mikro_server.schema import schema
@@ -119,7 +120,7 @@ async def test_a_measurement_table_says_which_image_it_was_measured_from(authent
     edge = table["derivedFrom"][0]
     assert edge["kind"] == "UNMAPPABLE", "an omitted transform records the lineage and claims no geometry"
     assert edge["valueRelation"] == "TRANSFORMED"
-    assert [r["__typename"] for r in edge["output"]["residents"]] == ["ArrayDataset", "DataArray", "Lens"], "the far end is the image the rows were measured from"
+    assert [r["__typename"] for r in edge["output"]["residents"]] == ["ArrayDataset", "DataArray", "ArrayLens"], "the far end is the image the rows were measured from"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -141,7 +142,7 @@ async def test_an_image_says_which_table_it_was_reconstructed_from(authenticated
     assert len(parents) == 1, "the table parent must not be dropped"
     assert parents[0]["kind"] == "SCALE"
     residents = parents[0]["output"]["residents"]
-    assert [r["__typename"] for r in residents] == ["TableDataset"] and residents[0]["name"] == "Localizations"
+    assert [r["__typename"] for r in residents] == ["TableDataset", "TableLens"] and residents[0]["name"] == "Localizations"
 
 
 async def _reconstruction(ctx: HttpContext, table: dict, *, transform: dict) -> str:
@@ -206,7 +207,7 @@ async def test_a_reconstruction_is_placed_through_its_localization_table(authent
         dataset = models.ArrayDataset.objects.get(pk=render)
         # An unsliced lens: its space *is* the dataset's intrinsic grid, so the layer sits
         # exactly where the reconstruction does.
-        lens = models.Lens.objects.create(dataset=dataset, slices=[])
+        lens = coordinate_system_logic.whole_lens(dataset)
         models.Layer.objects.create(kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens)
 
     await sync_to_async(register_and_layer)()

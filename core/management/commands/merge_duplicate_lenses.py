@@ -1,22 +1,25 @@
-"""Make the lenses that exist obey the rule new ones are made under: one row per (dataset, selection).
+"""Make the lenses that exist obey the rule new ones are made under: one row per (container, selection).
 
-A lens is a deterministic function of what it selects (`core.logic.coordinate_system.create_lens`),
-and every dataset has its whole lens from creation. Lenses minted before that rule do not: a scene
-bootstrap wrote a fresh unsliced lens each time, `createLens` wrote one per call, and the slices
-were stored as the caller spelled them. This converges them, dataset by dataset:
+A lens is a deterministic function of what it selects (`core.logic.coordinate_system`), and
+every container has its whole lens from creation. Rows written before that rule do not: a scene
+bootstrap wrote a fresh unsliced lens each time, `createLens` wrote one per call, slices were
+stored as the caller spelled them, and no container but an array had a lens at all. This
+converges them, container by container:
 
-1. **Normalize** the stored slices of every sliced lens to the one spelling
-   (`core.logic.coords.normalize_slices`). The selection is unchanged. Where the lens' own edge
-   back to its dataset -- the one from the lens' system into the intrinsic system -- disagrees
-   with what the normalized slices derive (a slice stored with a negative start wrote a negative
-   translation), that edge's parameters are rewritten. No edge changes systems.
-2. **Backfill** the whole lens for every dataset that has none.
-3. **Merge** duplicates onto the lowest pk. `Layer.lens` and `ChartLayer.lens` are repointed. An
-   unsliced duplicate shares the intrinsic system and is simply deleted. A sliced duplicate owns a
-   system: it is deleted, with its edge and its system, only when nothing else is attached to that
-   system -- no other resident, no scene or chart over it, no edge besides its own, nothing that
-   PROTECTs it. Otherwise it is left in place and reported, because moving what is attached would
-   be a decision this command is not entitled to.
+1. **Normalize** the stored selection of every lens to the one spelling
+   (`core.logic.coords.normalize_slices` / `normalize_windows`). The selection is unchanged.
+   Where an array lens' own edge back to its dataset -- the one from the lens' system into the
+   intrinsic system -- disagrees with what the normalized slices derive (a slice stored with a
+   negative start wrote a negative translation), that edge's parameters are rewritten. No edge
+   changes systems.
+2. **Backfill** the whole lens for every container of every kind that has none.
+3. **Merge** array lenses that duplicate one selection onto the lowest pk. `Layer.lens` and
+   `ChartLayer.lens` are repointed. An unsliced duplicate shares the intrinsic system and is
+   simply deleted. A sliced duplicate owns a system: it is deleted, with its edge and its
+   system, only when nothing else is attached to that system -- no other resident, no scene or
+   chart over it, no edge besides its own, nothing that PROTECTs it. Otherwise it is left in
+   place and reported. The database refuses a duplicate since the lens tables were split, so
+   this step finds work only on rows written around it by hand.
 
 Re-runnable: it finds what is still owed and does nothing when nothing is. Listed in the image's
 setup, so it runs inside `migrate` for every build, before the release serves -- and no row spelled
@@ -28,6 +31,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from typing import cast
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -46,14 +50,14 @@ def _key(slices: list[dict[str, int | str]]) -> str:
     return json.dumps(slices, sort_keys=True)
 
 
-def _own_edges(lens: models.Lens) -> Iterable[models.Transformation]:
+def _own_edges(lens: models.ArrayLens) -> Iterable[models.Transformation]:
     """The top-level edge(s) from this lens' own system into its dataset's intrinsic system."""
     if lens.coordinate_system_id is None or lens.coordinate_system_id == lens.dataset.coordinate_system_id:
         return ()
     return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id, parent__isnull=True)
 
 
-def _system_is_private_to(lens: models.Lens) -> str | None:
+def _system_is_private_to(lens: models.ArrayLens) -> str | None:
     """Why this sliced lens' system cannot be deleted with it, or None when it can.
 
     The same three questions `deleteCoordinateSystem` asks -- residents, compositions, edges --
@@ -85,7 +89,7 @@ def _system_is_private_to(lens: models.Lens) -> str | None:
 class Command(BaseCommand):
     """Normalize, backfill and merge lenses so that one selection is one row."""
 
-    help = "Normalize stored lens slices, give every dataset its whole lens, and merge duplicate lenses onto one row."
+    help = "Normalize stored lens selections, give every container its whole lens, and merge duplicate array lenses onto one row."
 
     dry_run: bool = False
     counts: dict[str, int]
@@ -95,7 +99,7 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Report what would change without writing anything.")
 
     def handle(self, *args, **options) -> None:
-        """Converge every dataset's lenses, one transaction per dataset."""
+        """Converge every container's lenses, one transaction per container."""
         self.dry_run = options["dry_run"]
         self.counts = {"normalized": 0, "edges_repaired": 0, "backfilled": 0, "merged_unsliced": 0, "merged_sliced": 0, "left": 0}
 
@@ -108,6 +112,19 @@ class Command(BaseCommand):
                 if self.dry_run:
                     transaction.set_rollback(True)
 
+        for noun, containers in (
+            ("table dataset", models.TableDataset.objects.filter(coordinate_system__isnull=False)),
+            ("sparse dataset", models.SparseDataset.objects.filter(coordinate_system__isnull=False)),
+            ("mesh collection", models.MeshCollection.objects.filter(coordinate_system__isnull=False)),
+            ("network collection", models.NetworkCollection.objects.filter(coordinate_system__isnull=False)),
+            ("annotation collection", models.AnnotationCollection.objects.filter(coordinate_system__isnull=False)),
+        ):
+            for container in containers.order_by("pk").iterator():
+                with transaction.atomic():
+                    self._converge_windowed(noun, container)
+                    if self.dry_run:
+                        transaction.set_rollback(True)
+
         verb = "would " if self.dry_run else ""
         self.stdout.write(
             self.style.SUCCESS(
@@ -119,52 +136,77 @@ class Command(BaseCommand):
         if self.counts["left"]:
             self.stdout.write(f"{self.counts['left']} duplicate sliced lens(es) left in place because something else is attached to their system; each is named above.")
 
+    # --- a container that is not an array ------------------------------------------
+
+    def _converge_windowed(self, noun: str, container: object) -> None:
+        kind = coordinate_system_logic.lens_kind_for(container)
+        axis_names = [axis.name for axis in container.coordinate_system.axes.all()]  # type: ignore[attr-defined]
+        if not kind.objects.filter(**{kind.CONTAINER_FIELD: container}, windows=[]).exists():
+            self.counts["backfilled"] += 1
+            self.stdout.write(f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of {noun} {container.pk}")  # type: ignore[attr-defined]
+        coordinate_system_logic.whole_lens(container)
+        for lens in kind.objects.filter(**{kind.CONTAINER_FIELD: container}).order_by("pk"):
+            try:
+                normalized = coords_logic.normalize_windows(axis_names, lens.windows_list)
+            except ValueError as error:
+                self.stdout.write(f"lens {lens.pk} of {noun} {container.pk} left as is: its windows do not resolve ({error})")  # type: ignore[attr-defined]
+                continue
+            if normalized != lens.windows:
+                self.counts["normalized"] += 1
+                self.stdout.write(f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.windows} -> {normalized}")
+                kind.objects.filter(pk=lens.pk).update(windows=normalized)
+
     # --- one dataset ---------------------------------------------------------------
 
     def _converge(self, dataset: models.ArrayDataset) -> None:
         shape, axis_names = dataset.shape_list, dataset.axis_names
-        lenses = list(dataset.lenses.order_by("pk").select_related("coordinate_system"))
+        lenses = list(models.ArrayLens.objects.filter(dataset=dataset).order_by("pk").select_related("coordinate_system"))
 
-        # 1. The one spelling. A row whose slices resolve to nothing narrower than the array is
-        #    the whole lens under another name and joins that group below.
-        groups: dict[str, list[models.Lens]] = {}
+        # 1. The one spelling, computed for every row before anything is written: the database
+        #    holds one row per spelling, so a row is rewritten only once the rows it would then
+        #    duplicate are folded into it.
+        groups: dict[str, list[tuple[models.ArrayLens, list]]] = {}
         for lens in lenses:
             try:
                 normalized = coords_logic.normalize_slices(shape, axis_names, lens.slices_list)
             except ValueError as error:
                 self.stdout.write(f"lens {lens.pk} of dataset '{dataset.name}' ({dataset.pk}) left as is: its slices do not resolve ({error})")
                 continue
-            if normalized and normalized != lens.slices:
-                self._normalize(lens, normalized)
-            elif not normalized and lens.coordinate_system_id is None:
+            if not normalized and lens.coordinate_system_id is None:
                 # Written before every lens had a system: an unsliced lens lives in the grid.
                 self.counts["normalized"] += 1
                 self.stdout.write(f"{'would place' if self.dry_run else 'placed'} lens {lens.pk} in the intrinsic system it had no row for")
                 lens.coordinate_system_id = dataset.coordinate_system_id
                 models.Lens.objects.filter(pk=lens.pk).update(coordinate_system_id=dataset.coordinate_system_id)
-            groups.setdefault(_key(normalized), []).append(lens)
+            groups.setdefault(_key(normalized), []).append((lens, normalized))
 
         # 2. The whole lens, whatever that group holds. Reads `whole_lens` so the row is the one
         #    `createArrayDataset` would have made, and so a dry run still names it.
-        if not any(lens.coordinate_system_id == dataset.coordinate_system_id and not lens.slices for lens in groups.get(_key([]), [])):
+        if not any(lens.coordinate_system_id == dataset.coordinate_system_id and not lens.slices for lens, _ in groups.get(_key([]), [])):
             self.counts["backfilled"] += 1
             self.stdout.write(f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of dataset '{dataset.name}' ({dataset.pk})")
-        whole = coordinate_system_logic.whole_lens(dataset)
-        whole_group = [lens for lens in groups.pop(_key([]), []) if lens.pk != whole.pk]
-        for duplicate in whole_group:
-            self._merge(duplicate, into=whole)
+        whole = cast(models.ArrayLens, coordinate_system_logic.whole_lens(dataset))
+        for duplicate, _ in groups.pop(_key([]), []):
+            if duplicate.pk != whole.pk:
+                self._merge(duplicate, into=whole)
 
-        # 3. Everything else: lowest pk keeps.
-        for group in groups.values():
-            keeper, *duplicates = group
-            for duplicate in duplicates:
+        # 3. Everything else: lowest pk keeps, the rest fold into it, and only then is the
+        #    keeper's spelling rewritten -- unless a row it could not fold still holds it.
+        for members in groups.values():
+            (keeper, normalized), *duplicates = members
+            for duplicate, _ in duplicates:
                 self._merge(duplicate, into=keeper)
+            if normalized != keeper.slices:
+                if models.ArrayLens.objects.filter(dataset=dataset, slices=normalized).exclude(pk=keeper.pk).exists():
+                    self.stdout.write(f"lens {keeper.pk} keeps its spelling {keeper.slices}: the normalized one {normalized} is held by a duplicate left in place")
+                    continue
+                self._normalize(keeper, normalized)
 
-    def _normalize(self, lens: models.Lens, normalized: list[dict[str, int | str]]) -> None:
+    def _normalize(self, lens: models.ArrayLens, normalized: list[dict[str, int | str]]) -> None:
         self.counts["normalized"] += 1
         self.stdout.write(f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.slices} -> {normalized}")
         lens.slices = normalized
-        models.Lens.objects.filter(pk=lens.pk).update(slices=normalized)
+        models.ArrayLens.objects.filter(pk=lens.pk).update(slices=normalized)
 
         kind, params = coords_logic.lens_to_parent(lens.dataset.axis_names, lens.slices_list)
         for edge in _own_edges(lens):
@@ -178,7 +220,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{'would repair' if self.dry_run else 'repaired'} edge {edge.pk} of lens {lens.pk} (its own, into intrinsic): translation {edge.params.get('translation')} -> {params['translation']}")
             models.Transformation.objects.filter(pk=edge.pk).update(params=params)
 
-    def _merge(self, duplicate: models.Lens, *, into: models.Lens) -> None:
+    def _merge(self, duplicate: models.ArrayLens, *, into: models.ArrayLens) -> None:
         sliced = duplicate.coordinate_system_id not in (None, duplicate.dataset.coordinate_system_id)
         if sliced:
             reason = _system_is_private_to(duplicate)

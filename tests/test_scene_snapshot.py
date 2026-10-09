@@ -64,7 +64,7 @@ mutation SetDefault($input: SetDefaultSceneInput!) {
 LATEST = """
 query Latest($dataset: ID!, $lens: ID!, $scene: ID!) {
   arrayDataset(id: $dataset) { latestSnapshot { name } }
-  lens(id: $lens) { latestSnapshot { name } }
+  lens(id: $lens) { ... on ArrayLens { latestSnapshot { name } } }
   scene(id: $scene) { latestSnapshot { name } }
 }
 """

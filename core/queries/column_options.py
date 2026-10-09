@@ -129,7 +129,7 @@ def _mesh_system(info: Info, mesh_collection: strawberry.ID) -> "models.Coordina
 
 def _lens_system(info: Info, lens: strawberry.ID) -> "models.CoordinateSystem":
     """The space a mask's pixels live in, scoped to the caller's org."""
-    return column_options_logic.lens_source_system(get_for_org(models.Lens, info, id=lens))
+    return column_options_logic.lens_source_system(get_for_org(models.ArrayLens, info, id=lens))
 
 
 def _color_by_options(specs: "list[column_options_logic.ColumnOptionSpec]") -> "list[types.ColorByOption]":

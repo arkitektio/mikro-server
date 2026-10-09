@@ -80,7 +80,7 @@ async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(au
 def test_the_lens_has_no_render_axes() -> None:
     """A selection does not choose how it is looked at: the field is the layer's alone."""
     printed = schema.as_str()
-    lens_type = re.search(r"\ntype Lens\b[^{]*\{(.*?)\n\}", printed, re.S)
+    lens_type = re.search(r"\n(?:type|interface) Lens\b[^{]*\{(.*?)\n\}", printed, re.S)
     assert lens_type, "no `Lens` type in the SDL"
     assert "renderAxes" not in lens_type.group(1)
     assert "renderAxes" in printed, "the layers still answer it"

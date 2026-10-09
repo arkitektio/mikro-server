@@ -15,9 +15,10 @@ caller.
 """
 
 import datetime
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import cast
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from core import enums, models
 from core.creation import CreationContext
@@ -479,37 +480,89 @@ def _assert_lens_placeable(dataset: "models.ArrayDataset") -> "models.Coordinate
     return intrinsic
 
 
-def whole_lens(dataset: "models.ArrayDataset") -> "models.Lens":
-    """The lens selecting all of a dataset: the one row that exists for it, made if it does not.
+def lens_kind_for(container: object) -> "type[models.Lens]":
+    """The lens model that selects over this container, or a refusal naming what can be selected over."""
+    kind = models.Lens.KIND_BY_CONTAINER.get(type(container))
+    if kind is None:
+        raise ValueError(f"A {type(container).__name__} is not something a lens selects over; a lens selects over one of: {', '.join(sorted(model.__name__ for model in models.Lens.KIND_BY_CONTAINER))}")
+    return kind
 
-    Every array dataset has this lens from creation (``createArrayDataset`` ends with it), so
-    on a dataset written by this release the lookup always finds one. The create branch is for
-    the datasets written before that rule and not yet visited by ``merge_duplicate_lenses``.
 
-    It takes no creation context because nothing is minted beside the row: an unsliced lens
-    selects everything, so its space *is* the dataset's intrinsic space, and it points at
-    that node rather than owning a second one joined by an identity edge.
+def _get_or_create(kind: "type[models.Lens]", *, container: object, selection: list, make: "Callable[[], models.Lens]") -> "models.Lens":
+    """The one row for (container, selection), making it when it is not there.
+
+    The database holds the identity (a unique constraint per kind), so two requests
+    minting the same selection at once resolve by one of them losing the race and reading
+    what the other wrote: no lock, and no second row.
     """
-    intrinsic = _assert_lens_placeable(dataset)
-    with transaction.atomic():
-        # Serialized per dataset: two requests minting the whole lens at once must not both
-        # miss the lookup. The row lock stands in for the unique constraint a later major adds.
-        models.ArrayDataset.objects.select_for_update().get(pk=dataset.pk)
-        existing = models.Lens.objects.filter(dataset=dataset, slices=[]).order_by("pk").first()
-        if existing is not None:
-            # The row the caller asked about, carrying the instance it asked with: a reader that
-            # goes on to `lens.dataset` must not pay a query the create branch would not.
-            existing.dataset = dataset
-            return existing
-        return models.Lens.objects.create(dataset=dataset, coordinate_system=intrinsic, slices=[])
+    field, column = kind.CONTAINER_FIELD, "slices" if kind is models.ArrayLens else "windows"
+    lookup = {field: container, column: selection}
+    existing = kind.objects.filter(**lookup).first()
+    if existing is not None:
+        setattr(existing, field, container)
+        return existing
+    try:
+        with transaction.atomic():
+            return make()
+    except IntegrityError:
+        return kind.objects.get(**lookup)
+
+
+def whole_lens(container: object) -> "models.Lens":
+    """The lens selecting all of a container: the one row that exists for it, made if it does not.
+
+    Every container has this lens from creation (each `create*` mutation ends with it), so on
+    a container written by this release the lookup always finds one. The create branch is for
+    the containers written before that rule and not yet visited by ``merge_duplicate_lenses``.
+
+    It takes no creation context because nothing is minted beside the row: a whole lens
+    selects everything, so its space *is* the container's, and it points at that node rather
+    than owning a second one joined by an identity edge.
+    """
+    kind = lens_kind_for(container)
+    if isinstance(container, models.ArrayDataset):
+        system = _assert_lens_placeable(container)
+    else:
+        system = getattr(container, "coordinate_system", None)
+        if system is None:
+            raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
+
+    def make() -> "models.Lens":
+        return kind.objects.create(**{kind.CONTAINER_FIELD: container}, coordinate_system=system, organization=container.organization)  # type: ignore[attr-defined]
+
+    return _get_or_create(kind, container=container, selection=[], make=make)
+
+
+def create_windowed_lens(container: object, windows: list) -> "models.Lens":
+    """The lens keeping these windows of a container that is not an array: the one that exists, or a new one.
+
+    A window re-indexes nothing, so the lens lives in the container's own system and no edge
+    is written; what is stored is the selection, in its one normalized spelling
+    (:func:`core.logic.coords.normalize_windows`). Windows that keep everything are
+    :func:`whole_lens`.
+    """
+    kind = lens_kind_for(container)
+    if kind is models.ArrayLens:
+        raise ValueError("An array dataset is selected over by slices (`createLens`), not by windows")
+    system = getattr(container, "coordinate_system", None)
+    if system is None:
+        raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
+    normalized = coords_logic.normalize_windows([axis.name for axis in system.axes.all()], windows)
+    if not normalized:
+        return whole_lens(container)
+
+    def make() -> "models.Lens":
+        return kind.objects.create(**{kind.CONTAINER_FIELD: container}, coordinate_system=system, organization=container.organization, windows=normalized)  # type: ignore[attr-defined]
+
+    return _get_or_create(kind, container=container, selection=normalized, make=make)
 
 
 def create_lens(
     dataset: "models.ArrayDataset",
     slices: list,
     ctx: CreationContext,
-) -> "models.Lens":
-    """The lens making this selection over this dataset: the one that exists, or a new one.
+) -> "models.ArrayLens":
+    """The array lens making this selection over this dataset: the one that exists, or a new one.
 
     A lens is a deterministic function of what it selects -- one row per (dataset, normalized
     slices) -- so asking twice for the same voxels hands back the same id, and two scenes, two
@@ -527,25 +580,19 @@ def create_lens(
     intrinsic = _assert_lens_placeable(dataset)
     normalized = coords_logic.normalize_slices(dataset.shape_list, dataset.axis_names, slices)
     if not normalized:
-        return whole_lens(dataset)
+        return cast(models.ArrayLens, whole_lens(dataset))
 
-    with transaction.atomic():
-        # The same per-dataset lock `whole_lens` takes, for the same reason.
-        models.ArrayDataset.objects.select_for_update().get(pk=dataset.pk)
-        existing = models.Lens.objects.filter(dataset=dataset, slices=normalized).order_by("pk").first()
-        if existing is not None:
-            existing.dataset = dataset
-            return existing
-
+    def make() -> "models.Lens":
         # The space before the lens, so there is one write each.
         lens_system = models.CoordinateSystem.objects.create(
             name=f"{dataset.name}/lens",
             creator=ctx.user,
             organization=ctx.organization,
         )
-        lens = models.Lens.objects.create(
+        lens = models.ArrayLens.objects.create(
             dataset=dataset,
             coordinate_system=lens_system,
+            organization=dataset.organization,
             slices=normalized,
         )
 
@@ -562,20 +609,22 @@ def create_lens(
             slices=lens.slices_list,
             ctx=ctx,
         )
+        return lens
 
-    return lens
+    return cast(models.ArrayLens, _get_or_create(models.ArrayLens, container=dataset, selection=normalized, make=make))
 
 
 def assert_lens_deletable(lens: "models.Lens") -> None:
-    """Refuse to delete a lens something still looks through, and a dataset's whole lens.
+    """Refuse to delete a lens something still looks through, and a container's whole lens.
 
     The PROTECT half of ``deleteLens``. ``Layer.lens`` and ``ChartLayer.lens`` cascade, and a
     lens is shared -- every scene over one selection holds the same row -- so deleting one
     would take layers out of scenes the caller never named. The whole lens is the handle an
-    action is handed for the dataset itself; it goes when the dataset goes, not before.
+    action is handed for the container itself; it goes when the container goes, not before.
     """
-    if not lens.slices_list:
-        raise ValueError(f"Lens {lens.pk} selects the whole of dataset '{lens.dataset.name}' ({lens.dataset_id}) and cannot be deleted on its own: it is the dataset's handle, and goes with the dataset.")
+    if lens.is_whole:
+        container = lens.container
+        raise ValueError(f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk} and cannot be deleted on its own: it is the container's handle, and goes with the container.")
 
     layers = list(lens.layers.select_related("scene").order_by("pk")[:5])
     chart_layers = list(lens.chart_layers.select_related("chart").order_by("pk")[:5])

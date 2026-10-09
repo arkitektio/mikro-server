@@ -215,7 +215,7 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
         return
 
     stranded: list[tuple] = []
-    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene", "lens", "mesh_collection", "network_collection", "table_dataset").order_by("pk"):
+    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene", "mesh_collection", "network_collection", "table_dataset").prefetch_related("lens").order_by("pk"):
         named = _picker_tables(layer) & tables
         if not named:
             continue

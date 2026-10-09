@@ -44,3 +44,12 @@ class SliceInput:
     start: int | None = strawberry.field(default=None, description="The starting index of the slice, or None to start from the beginning")
     stop: int | None = strawberry.field(default=None, description="The stopping index of the slice, or None to go to the end")
     step: int | None = strawberry.field(default=None, description="The step size of the slice, or None to use the default step")
+
+
+@kante.pydantic_input(base_models.WindowInputModel, description="Input type for a window along one axis of a container that is not an array: the positions kept, by value")
+class WindowInput:
+    """Input for a value window along a single axis of a table, sparse dataset, mesh, network or annotation collection"""
+
+    axis: str = strawberry.field(description="The name of the axis the window constrains, e.g. 't' for a table's time column")
+    min: float | None = strawberry.field(default=None, description="The smallest position kept, inclusive, or None for no lower bound")
+    max: float | None = strawberry.field(default=None, description="The largest position kept, inclusive, or None for no upper bound")

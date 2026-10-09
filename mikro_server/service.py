@@ -28,8 +28,14 @@ service = Service("mikro", hosts=contract.description.hosts, description="Micros
 # --- Structures: what mikro hosts -----------------------------------------------------
 
 arraydataset = service.structure(models.ArrayDataset, "@mikro/arraydataset", describe=dataset_descriptors)
-# Hosted, never announced: a lens is a way of looking at a dataset, and it is the dataset whose arrival is news.
-lens = service.structure(models.Lens, "@mikro/lens", describe=lens_descriptors)
+# Hosted, never announced: a lens is a way of looking at a container, and it is the container
+# whose arrival is news. One structure per kind, so a port typed on pixels is never handed rows.
+lens = service.structure(models.ArrayLens, "@mikro/lens", describe=lens_descriptors)
+tablelens = service.structure(models.TableLens, "@mikro/tablelens")
+sparselens = service.structure(models.SparseLens, "@mikro/sparselens")
+meshlens = service.structure(models.MeshLens, "@mikro/meshlens")
+networklens = service.structure(models.NetworkLens, "@mikro/networklens")
+annotationlens = service.structure(models.AnnotationLens, "@mikro/annotationlens")
 scene = service.structure(
     models.Scene,
     "@mikro/scene",
@@ -47,6 +53,7 @@ chart = service.structure(chart_models.Chart, "@mikro/chart", describe=_chart_de
 scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
 tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset")
 meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection")
+networkcollection = service.structure(models.NetworkCollection, "@mikro/networkcollection")
 file = service.structure(models.File, "@mikro/file", describe=lambda file: {"@mikro/content_type": file.content_type or ""})
 folder = service.structure(models.Folder, "@mikro/folder")
 annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection")
@@ -64,6 +71,7 @@ service.model_signal(chart, organization=org)
 service.model_signal(scenesnapshot, organization=org)
 service.model_signal(tabledataset, organization=org)
 service.model_signal(meshcollection, organization=org)
+service.model_signal(networkcollection, organization=org)
 service.model_signal(file, organization=org)
 service.model_signal(folder, organization=org)
 service.model_signal(annotationcollection, organization=org)

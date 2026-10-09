@@ -23,6 +23,7 @@ from core.inputs.file_link import file_link_union_types
 from core.inputs.identification import identification_union_types
 from core.render.layer.constants import layer_render_node_types
 from core.types.layers import layer_types
+from core.types.lenses import lens_types
 from core.types.attribute_plans import sample_step_types
 from core.types.coords import transformation_types
 from datalayer.duck import DuckExtension
@@ -119,8 +120,9 @@ class Query:
     chart_layers: list[chart_types.ChartLayer] = field(filters=chart_filters.ChartLayerFilter, ordering=chart_filters.ChartLayerOrder, pagination=True, description="List layers drawn in charts (a heterogeneous list of layer kinds)")
     chart_layer: chart_types.ChartLayer = field(description="Get a single chart layer by ID")
 
-    lenses: list[types.Lens] = field(description="List lenses (parameterized ways of looking at an array dataset)")
-    lens: types.Lens = field(description="Get a single lens by ID")
+    # Unoptimized: the optimizer cannot follow a polymorphic interface to its kinds' own tables.
+    lenses: list[types.Lens] = field(filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, disable_optimization=True, description="List lenses: selections over array datasets (by slices) and over tables, sparse datasets, meshes, networks and annotation collections (by windows), a heterogeneous list of lens kinds")
+    lens: types.Lens = field(disable_optimization=True, description="Get a single lens of any kind by ID")
 
     array_datasets: list[types.ArrayDataset] = field(description="List array datasets (N-dimensional arrays with named dimensions and anchored metadata)")
     array_dataset: types.ArrayDataset = field(description="Get a single array dataset by ID")
@@ -509,9 +511,14 @@ class Mutation:
 
     create_lens = mutation(
         resolver=mutations.create_lens,
-        description="Create a new lens from an existing dataset and slicing constraints",
+        description="The array lens making a selection over a dataset by slices: the one that exists for that selection, or a new one with its coordinate system and its edge back into the dataset's grid",
     )
-    delete_lens = mutation(resolver=mutations.delete_lens, description="Delete an existing lens")
+    create_table_lens = mutation(resolver=mutations.create_table_lens, description="The lens keeping these windows of a table dataset's coordinate columns: the one that exists, or a new one. It lives in the table's own space")
+    create_sparse_lens = mutation(resolver=mutations.create_sparse_lens, description="The lens keeping these windows of a sparse dataset's axes: the one that exists, or a new one. A subset of positions, never a re-indexing")
+    create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
+    create_network_lens = mutation(resolver=mutations.create_network_lens, description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one")
+    create_annotation_lens = mutation(resolver=mutations.create_annotation_lens, description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one")
+    delete_lens = mutation(resolver=mutations.delete_lens, description="Delete a lens of any kind. Refused while a layer draws through it, and for a container's whole lens")
 
     create_scene = mutation(
         resolver=mutations.create_scene,
@@ -827,7 +834,7 @@ schema = Schema(
         KoherentExtension,
         DuckExtension,
     ],
-    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *chart_types.chart_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
+    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *lens_types, *chart_types.chart_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
     # The union member inputs above are referenced by no field: they are published for
     # codegen, and the directive on each says which flat union input it belongs to.
     schema_directives=[unionElementOf],
