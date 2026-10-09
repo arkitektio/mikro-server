@@ -52,7 +52,7 @@ def _key(slices: list[dict[str, int | str]]) -> str:
 
 def _own_edges(lens: models.ArrayLens) -> Iterable[models.Transformation]:
     """The top-level edge(s) from this lens' own system into its dataset's intrinsic system."""
-    if lens.coordinate_system_id is None or lens.coordinate_system_id == lens.dataset.coordinate_system_id:
+    if lens.coordinate_system_id == lens.dataset.coordinate_system_id:
         return ()
     return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id, parent__isnull=True)
 
@@ -64,7 +64,7 @@ def _system_is_private_to(lens: models.ArrayLens) -> str | None:
     plus the two PROTECT relations a delete would trip over.
     """
     system = lens.coordinate_system
-    if system is None or system.pk == lens.dataset.coordinate_system_id:
+    if system.pk == lens.dataset.coordinate_system_id:
         return "it lives in the intrinsic system"
     for relation in graph_logic.RESIDENT_RELATIONS:
         residents = getattr(system, relation).all()
@@ -172,12 +172,6 @@ class Command(BaseCommand):
             except ValueError as error:
                 self.stdout.write(f"lens {lens.pk} of dataset '{dataset.name}' ({dataset.pk}) left as is: its slices do not resolve ({error})")
                 continue
-            if not normalized and lens.coordinate_system_id is None:
-                # Written before every lens had a system: an unsliced lens lives in the grid.
-                self.counts["normalized"] += 1
-                self.stdout.write(f"{'would place' if self.dry_run else 'placed'} lens {lens.pk} in the intrinsic system it had no row for")
-                lens.coordinate_system_id = dataset.coordinate_system_id
-                models.Lens.objects.filter(pk=lens.pk).update(coordinate_system_id=dataset.coordinate_system_id)
             groups.setdefault(_key(normalized), []).append((lens, normalized))
 
         # 2. The whole lens, whatever that group holds. Reads `whole_lens` so the row is the one
@@ -221,7 +215,7 @@ class Command(BaseCommand):
             models.Transformation.objects.filter(pk=edge.pk).update(params=params)
 
     def _merge(self, duplicate: models.ArrayLens, *, into: models.ArrayLens) -> None:
-        sliced = duplicate.coordinate_system_id not in (None, duplicate.dataset.coordinate_system_id)
+        sliced = duplicate.coordinate_system_id != duplicate.dataset.coordinate_system_id
         if sliced:
             reason = _system_is_private_to(duplicate)
             if reason is not None:
@@ -242,7 +236,6 @@ class Command(BaseCommand):
             self.counts["merged_sliced"] += 1
             # Its edge, then its system; the axes cascade with the system.
             models.Transformation.objects.filter(Q(input=system) | Q(output=system)).delete()
-            if system is not None:
-                system.delete()
+            system.delete()
         else:
             self.counts["merged_unsliced"] += 1

@@ -673,14 +673,11 @@ class Lens(PolymorphicModel):
         ),
     )
 
-    # Always set by every writer. An array lens' own crop space, or the container's system.
+    # An array lens' own crop space, or the container's system. Never null: a selection is
+    # stated in a space, and the database holds every writer to it.
     coordinate_system = models.ForeignKey(
         CoordinateSystem,
         on_delete=models.PROTECT,
-        # Nullable in the database for the rows written before every lens had one; the
-        # `merge_duplicate_lenses` job places those. Every write path sets it.
-        null=True,
-        blank=True,
         related_name="lenses",
         help_text="The coordinate system this lens' selection is expressed in: a sliced array lens' own crop space, with a stored edge carrying the shift; otherwise the container's own system",
     )
@@ -732,9 +729,9 @@ class Lens(PolymorphicModel):
         return not self.selection
 
     @property
-    def space(self):
+    def space(self) -> CoordinateSystem:
         """The coordinate system this lens' selection is expressed in: its own, or its container's."""
-        return getattr(self, "coordinate_system", None) or self.container.coordinate_system
+        return self.coordinate_system
 
     @property
     def active_anchors(self):

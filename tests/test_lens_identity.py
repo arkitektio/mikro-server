@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.db import IntegrityError
 from datalayer.models import ZarrStore
 from kante.context import HttpContext
 
@@ -214,3 +215,13 @@ async def test_a_chart_trace_from_a_dataset_reads_its_whole_lens(authenticated_c
     assert made["lens"]["id"] == str(whole_id)
     assert await _lens_ids(profile) == [whole_id]
     assert await sync_to_async(chart_models.ChartLayer.objects.filter(lens_id=whole_id).count)() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_cannot_be_written_without_a_space(authenticated_context: HttpContext):
+    """A selection is stated in a space; the database refuses a row that names none."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Placed", axes=seed.YX_AXES, shapes=[[8, 8]])
+    with pytest.raises(IntegrityError):
+        await models.ArrayLens.objects.acreate(dataset=dataset, organization=ctx.request.organization, slices=[{"axis": "y", "start": 0, "stop": 4, "step": 1}], coordinate_system=None)

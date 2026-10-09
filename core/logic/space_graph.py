@@ -84,7 +84,7 @@ def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[
         # system carries its dataset's axes (prefetched with the residents) and `shapes` the
         # level-0 shape, so this costs no query.
         dataset_shape = shapes.get(resident.dataset_id) or []
-        names = [axis.name for axis in resident.coordinate_system.axes.all()] if resident.coordinate_system is not None else []
+        names = [axis.name for axis in resident.coordinate_system.axes.all()]
         if not dataset_shape or len(names) != len(dataset_shape):
             return None
         return coords_logic.lens_voxel_box(dataset_shape, names, resident.slices_list)
@@ -402,7 +402,7 @@ class SpaceGraph:
         """
         extents: dict[int, dict[str, list[float]] | None] = {}
         for resident in self._residents:
-            if not isinstance(resident, models.ArrayLens) or resident.pk in skip or resident.coordinate_system is None:
+            if not isinstance(resident, models.ArrayLens) or resident.pk in skip:
                 continue
             names = [axis.name for axis in resident.coordinate_system.axes.all()]
             dataset_shape = self.shapes().get(resident.dataset_id) or []
