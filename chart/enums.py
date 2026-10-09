@@ -48,8 +48,9 @@ class ChartMark(str, Enum):
 
 
 #: The source foreign key each kind names, and the only one a layer of that kind may set.
+#: Every kind reads through a lens; what differs is the lens kind the chart layer accepts.
 SOURCE_FIELD: dict[str, str] = {
     ChartLayerKindChoices.TRACE.value: "lens",
-    ChartLayerKindChoices.SERIES.value: "table_dataset",
-    ChartLayerKindChoices.ANNOTATION.value: "annotation_collection",
+    ChartLayerKindChoices.SERIES.value: "lens",
+    ChartLayerKindChoices.ANNOTATION.value: "lens",
 }

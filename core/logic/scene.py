@@ -418,7 +418,7 @@ def _materialize_layers(
             models.Layer.objects.create(
                 kind=enums.LayerKind.MESH,
                 scene=scene,
-                mesh_collection=mesh,
+                lens=coordinate_system_logic.whole_lens(mesh),
                 material_color=[255, 255, 255, 255],
                 wireframe=False,
                 blending=enums.Blending.NORMAL,
@@ -438,7 +438,7 @@ def _materialize_layers(
             models.Layer.objects.create(
                 kind=enums.LayerKind.NETWORK,
                 scene=scene,
-                network_collection=network,
+                lens=coordinate_system_logic.whole_lens(network),
                 material_color=[255, 255, 255, 255],
                 directed=False,
                 show_nodes=False,
@@ -489,7 +489,7 @@ def _materialize_layers(
             models.Layer.objects.create(
                 kind=enums.LayerKind.ANNOTATION,
                 scene=scene,
-                annotation_collection=annotations,
+                lens=coordinate_system_logic.whole_lens(annotations),
                 blending=enums.Blending.NORMAL,
                 opacity=1.0,
                 visible=True,
@@ -519,7 +519,7 @@ def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "model
     return models.Layer.objects.create(
         kind=enums.LayerKind.TRACK if is_track else enums.LayerKind.POINT,
         scene=scene,
-        table_dataset=table_dataset,
+        lens=coordinate_system_logic.whole_lens(table_dataset),
         point_size=None if is_track else 3.0,
         line_width=1.0 if is_track else None,
         colormap=enums.ColorMap.VIRIDIS,

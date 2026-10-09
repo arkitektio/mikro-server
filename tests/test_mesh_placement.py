@@ -16,6 +16,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
+from core.logic import coordinate_system as coordinate_system_logic
 from core import enums, models
 from mikro_server.schema import schema
 from tests import seed
@@ -90,7 +91,7 @@ async def test_a_mesh_layer_reaches_world(authenticated_context: HttpContext):
         # Written through the ORM rather than `createMeshLayer`, which would run its own
         # placement gate and refuse before this query could observe the path. That gate is
         # the point of the mutation; this file is about what the *read* side computes.
-        models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, mesh_collection=collection)
+        models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, lens=coordinate_system_logic.whole_lens(collection))
 
     await sync_to_async(place)()
 
@@ -114,7 +115,7 @@ async def test_an_unregistered_mesh_layer_has_no_path(authenticated_context: Htt
     collection = await _mesh_collection(authenticated_context, dataset)
     scene = await seed.create_scene(authenticated_context, "Composition")
 
-    await sync_to_async(models.Layer.objects.create)(kind=enums.LayerKindChoices.MESH.value, scene=scene, mesh_collection=collection)
+    await sync_to_async(lambda: models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, lens=coordinate_system_logic.whole_lens(collection)))()
 
     result = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
     assert not result.errors, result.errors

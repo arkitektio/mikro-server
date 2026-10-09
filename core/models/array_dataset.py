@@ -1183,40 +1183,11 @@ class Layer(models.Model):
     # field, not a fragment per kind to read the same string.
     name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the layer, e.g. the channel it draws ('DAPI'). Null when nobody has named it")
 
-    # --- source references (exactly one set, per kind) ---
-    lens = models.ForeignKey(Lens, on_delete=models.CASCADE, related_name="layers", null=True, blank=True, help_text="(image/intensity/rgb/phasor/label/vector) The lens that defines the array data source and constraints")
-    annotation_collection = models.ForeignKey(
-        "AnnotationCollection",
-        on_delete=models.CASCADE,
-        related_name="layers",
-        null=True,
-        blank=True,
-        help_text="(annotation) The annotation collection, owning its own coordinate system, whose drawn shapes this layer renders",
-    )
-    table_dataset = models.ForeignKey(
-        "TableDataset",
-        on_delete=models.CASCADE,
-        related_name="layers",
-        null=True,
-        blank=True,
-        help_text="(point/track) The table dataset whose declared coordinate columns provide the coordinates; its own coordinate system is the space, and its column roles are the mapping -- nothing is duplicated per layer",
-    )
-    mesh_collection = models.ForeignKey(
-        "MeshCollection",
-        on_delete=models.CASCADE,
-        related_name="mesh_layers",
-        null=True,
-        blank=True,
-        help_text="(mesh) The versioned mesh collection, owning its own coordinate system, that this layer renders",
-    )
-    network_collection = models.ForeignKey(
-        "NetworkCollection",
-        on_delete=models.CASCADE,
-        related_name="network_layers",
-        null=True,
-        blank=True,
-        help_text="(network) The versioned network collection, owning its own coordinate system, that this layer renders",
-    )
+    # --- the source: one lens, whatever the kind ---
+    # Every layer draws through a lens: an array lens for the six array kinds, a table lens
+    # for a point or track layer, a mesh, network or annotation lens for the collection kinds.
+    # The lens is the selection and the space; the layer carries how it is drawn.
+    lens = models.ForeignKey(Lens, on_delete=models.CASCADE, related_name="layers", help_text="The lens this layer draws through: the selection over its container, and the space the data is placed from. An array lens for the array kinds, a table lens for point and track layers, a mesh, network or annotation lens for the collection kinds")
     # --- image render settings ---
     render_graph = models.JSONField(null=True, blank=True, default=None, help_text="(image) The composable render recipe (channels + transfer functions + in-layer blend) that is the single source of truth for how the image layer is rendered.")
 

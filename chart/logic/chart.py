@@ -124,20 +124,14 @@ def create_chart(
 # --- placement ----------------------------------------------------------------
 
 
-def source_of(layer: "models.ChartLayer") -> "core_models.Lens | core_models.TableDataset | core_models.AnnotationCollection":
-    """The row a layer reads: the one its kind names."""
-    return getattr(layer, enums.SOURCE_FIELD[layer.kind])
+def source_of(layer: "models.ChartLayer") -> "core_models.Lens":
+    """The lens a layer reads through, whatever its kind."""
+    return layer.lens
 
 
-def source_system_of(source: object) -> "core_models.CoordinateSystem | None":
-    """The space a source's data is expressed in.
-
-    A lens is the one source that may borrow its space: an unsliced lens lives in its
-    dataset's grid. Everything else owns the space it is in.
-    """
-    if isinstance(source, core_models.Lens):
-        return graph_logic.lens_source_system(source)
-    return source.coordinate_system
+def source_system_of(source: "core_models.Lens") -> "core_models.CoordinateSystem | None":
+    """The space a lens' data is expressed in: its own crop space for a sliced array lens, its container's otherwise."""
+    return graph_logic.lens_source_system(source)
 
 
 def layer_source_system(layer: "models.ChartLayer") -> "core_models.CoordinateSystem | None":
@@ -294,9 +288,15 @@ def create_layer(
 
     values: dict[str, object] = {}
     if kind == enums.ChartLayerKindChoices.TRACE.value:
+        if not isinstance(source, core_models.ArrayLens):
+            raise ValueError(f"{what} is not an array lens; a trace reads an array along one of its axes.")
         assert_trace(source, along)
     elif kind == enums.ChartLayerKindChoices.SERIES.value:
-        values["value_column"] = resolve_value_column(source, along, value_column)
+        if not isinstance(source, core_models.TableLens):
+            raise ValueError(f"{what} is not a table lens; a series reads a table's value column.")
+        values["value_column"] = resolve_value_column(source.table_dataset, along, value_column)
+    elif not isinstance(source, core_models.AnnotationLens):
+        raise ValueError(f"{what} is not an annotation lens; an annotation layer draws a collection's marks.")
 
     if order is None:
         last = chart.layers.order_by("-order").values_list("order", flat=True).first()
@@ -396,8 +396,7 @@ def bootstrap_chart_from_system(system: "core_models.CoordinateSystem", *, name:
                 # poison the transaction the others are written in. The whole lens an array
                 # is drawn through is the dataset's own, shared row -- nothing to take back.
                 with transaction.atomic():
-                    source = coordinate_system_logic.whole_lens(container) if kind == enums.ChartLayerKindChoices.TRACE.value else container
-                    create_layer(chart, kind=kind, source=source, name=container.name)
+                    create_layer(chart, kind=kind, source=coordinate_system_logic.whole_lens(container), name=container.name)
             except ValueError:
                 continue
             drawn += 1

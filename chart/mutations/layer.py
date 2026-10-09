@@ -18,6 +18,7 @@ from core.input_unions import prose_errors
 from core.logic import coordinate_system as coordinate_system_logic
 from core.inputs.validators import Alpha, assert_rgba
 from core.mutations._generic import make_delete
+from core.mutations._sources import resolve_source_lens
 from core.scoping import get_for_org
 
 
@@ -117,7 +118,8 @@ def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> t
 
 class CreateSeriesChartLayerInputModel(_Style):
     chart: str
-    table_dataset: str
+    table_dataset: str | None = None
+    lens: str | None = None
     value_column: str | None = None
 
 
@@ -134,7 +136,8 @@ class CreateSeriesChartLayerInput:
     """Input for creating a series layer."""
 
     chart: strawberry.ID = strawberry.field(description="The chart to draw in")
-    table_dataset: strawberry.ID = strawberry.field(description="The table dataset to read")
+    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset to read, through its whole lens. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="The table lens to read through: the rows its windows keep. Exactly one of this and `tableDataset`")
     value_column: str | None = strawberry.field(default=None, description="The numeric attribute column read as the value. May be omitted when the table has exactly one")
     name: str | None = strawberry.field(default=None, description=_NAME)
     visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
@@ -150,10 +153,10 @@ def create_series_chart_layer(info: Info, input: CreateSeriesChartLayerInput) ->
     """Draw a table's value column against the coordinate column laid along a chart's axis."""
     model = input.to_pydantic()
     chart = get_for_org(models.Chart, info, id=model.chart)
-    table = get_for_org(core_models.TableDataset, info, id=model.table_dataset)
+    lens = resolve_source_lens(info, kind=core_models.TableLens, lens=model.lens, container_model=core_models.TableDataset, container=model.table_dataset, what="tableDataset")
 
     with transaction.atomic():
-        return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.SERIES.value, source=table, value_column=model.value_column, **_settings(model))
+        return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.SERIES.value, source=lens, value_column=model.value_column, **_settings(model))
 
 
 # --- annotation ---------------------------------------------------------------
@@ -162,6 +165,7 @@ def create_series_chart_layer(info: Info, input: CreateSeriesChartLayerInput) ->
 class CreateAnnotationChartLayerInputModel(BaseModel):
     chart: str
     annotation_collection: str | None = None
+    lens: str | None = None
     name: str | None = None
     visible: bool | None = None
     order: int | None = None
@@ -181,7 +185,8 @@ class CreateAnnotationChartLayerInput:
     """Input for creating an annotation layer."""
 
     chart: strawberry.ID = strawberry.field(description="The chart to draw in")
-    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="An existing annotation collection to draw. Omit to make a new drawing surface for this chart")
+    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="An existing annotation collection to draw, through its whole lens. Omit both this and `lens` to make a new drawing surface for this chart")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="An annotation lens to draw through. Omit both this and `annotationCollection` to make a new drawing surface for this chart")
     name: str | None = strawberry.field(default=None, description="A human-readable name for the layer, and for the collection when one is made")
     visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
     order: int | None = strawberry.field(default=None, description=_ORDER)
@@ -196,13 +201,13 @@ def create_annotation_chart_layer(info: Info, input: CreateAnnotationChartLayerI
 
     settings = {field: getattr(model, field) for field in ("name", "visible", "order", "opacity") if getattr(model, field) is not None}
     with transaction.atomic():
-        if model.annotation_collection is not None:
-            collection = get_for_org(core_models.AnnotationCollection, info, id=model.annotation_collection)
-            if chart.layers.filter(annotation_collection=collection).exists():
-                raise ValueError(f"Annotation collection {collection.pk} is already drawn in chart '{chart.name}'. One layer per collection: per-mark styling lives on the annotations.")
+        if model.annotation_collection is not None or model.lens is not None:
+            lens = resolve_source_lens(info, kind=core_models.AnnotationLens, lens=model.lens, container_model=core_models.AnnotationCollection, container=model.annotation_collection, what="annotationCollection")
+            if chart.layers.filter(lens=lens).exists():
+                raise ValueError(f"Annotation collection {lens.annotation_collection_id} is already drawn in chart '{chart.name}'. One layer per collection: per-mark styling lives on the annotations.")
         else:
-            collection = chart_logic.mint_annotation_collection(chart, name=model.name, ctx=ctx)
-        return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.ANNOTATION.value, source=collection, **settings)
+            lens = coordinate_system_logic.whole_lens(chart_logic.mint_annotation_collection(chart, name=model.name, ctx=ctx))
+        return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.ANNOTATION.value, source=lens, **settings)
 
 
 # --- update / delete ----------------------------------------------------------

@@ -20,6 +20,7 @@ from django.db.backends import utils as db_utils
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
 
+from core.logic import coordinate_system as coordinate_system_logic
 from core import enums, models
 from core.logic import scene_graph, space_graph
 from mikro_server.schema import schema
@@ -175,7 +176,7 @@ async def _seed_scene(ctx: HttpContext, *, layer_count: int) -> models.Scene:
             kind=enums.AnnotationKindChoices.RECTANGLE.value,
             vectors=[[0.0, 0.0, 0.0], [0.0, 8.0, 8.0]],
         )
-        models.Layer.objects.create(kind=enums.LayerKindChoices.ANNOTATION.value, scene=scene, annotation_collection=annotation_collection)
+        models.Layer.objects.create(kind=enums.LayerKindChoices.ANNOTATION.value, scene=scene, lens=coordinate_system_logic.whole_lens(annotation_collection))
 
         store = seed._seed_fabriks_store_sync(ctx, axes=None, populated=True)
         collection = models.MeshCollection.objects.create(version="v1", spec_version="fabriks/1", store=store, organization=ctx.request.organization)
@@ -190,7 +191,7 @@ async def _seed_scene(ctx: HttpContext, *, layer_count: int) -> models.Scene:
             output=datasets[0].intrinsic_coordinate_system,
             organization=ctx.request.organization,
         )
-        models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, mesh_collection=collection)
+        models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, lens=coordinate_system_logic.whole_lens(collection))
 
         # Authoring the edge into the world is the placement (one truth per space):
         # nothing to add to any scene.

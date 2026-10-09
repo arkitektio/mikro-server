@@ -214,7 +214,12 @@ class LayerKindChoices(TextChoices):
 #: drawing array data and leave a layer with no space to be in and no levels to place. That is
 #: not hypothetical: it is exactly what adding INTENSITY, RGB and PHASOR did to two hand-written
 #: `(IMAGE, LABEL)` tuples, and the layers came back UNREGISTERED rather than erroring.
-LENS_BACKED_KINDS: frozenset[str] = frozenset(
+LENS_BACKED_KINDS: frozenset[str] = frozenset(kind.value for kind in LayerKindChoices)
+
+#: The kinds that draw an *array* lens: the ones with a pyramid to walk, axes to face the
+#: screen with, and a renderability gate. The other kinds draw a table, mesh, network or
+#: annotation lens.
+ARRAY_LAYER_KINDS: frozenset[str] = frozenset(
     {
         LayerKindChoices.IMAGE.value,
         LayerKindChoices.INTENSITY.value,

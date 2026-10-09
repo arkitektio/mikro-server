@@ -529,15 +529,7 @@ def test_every_kind_that_draws_a_lens_is_a_lens_backed_kind() -> None:
 
     space = object()
     for kind in sorted(lens_kinds):
-        layer = SimpleNamespace(
-            kind=kind,
-            lens_id=1,
-            lens=SimpleNamespace(coordinate_system=space),
-            annotation_collection_id=None,
-            mesh_collection_id=None,
-            network_collection_id=None,
-            table_dataset_id=None,
-        )
+        layer = SimpleNamespace(kind=kind, lens_id=1, lens=SimpleNamespace(coordinate_system=space))
         assert graph_logic.layer_source_system(layer) is space, (
             f"a {kind} layer draws a lens but `layer_source_system` does not route it through "
             f"the lens arm -- it has no space to be in and comes back UNREGISTERED. Add "

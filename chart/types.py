@@ -201,7 +201,12 @@ class SeriesChartLayer(ChartLayer):
     """A layer that reads a table's value column against a coordinate column."""
 
     id: auto
-    table_dataset: core_types.TableDataset = kante.django_field(description="The table dataset whose columns are read")
+    lens: core_types.TableLens = kante.django_field(disable_optimization=True, description="The table lens this series reads through: the rows its windows keep")
+
+    @kante.django_field(description="The table dataset whose columns are read: the container of the lens")
+    def table_dataset(self, info: Info) -> core_types.TableDataset:
+        """The lens' table."""
+        return self.lens.table_dataset
     value_column: str = kante.django_field(description="The numeric attribute column read as the value")
     mark: enums.ChartMark = kante.django_field(description="How the values are drawn: a line, markers, both, or steps")
     line_width: float | None = kante.django_field(description="Line width in screen pixels. Null lets the viewer choose")
@@ -222,7 +227,7 @@ class SeriesChartLayer(ChartLayer):
     @kante.django_field(description="The unit the value column's values are in, as the table declares it. Null when the column declares none. A chart may hold layers in several units: it commits only to its axis")
     def value_unit(self, info: Info) -> kanne_scalars.Unit | None:
         """The declared unit of the value column."""
-        column = next((column for column in self.table_dataset.columns.all() if column.name == self.value_column), None)
+        column = next((column for column in self.lens.table_dataset.columns.all() if column.name == self.value_column), None)
         return column.unit if column is not None else None
 
     @classmethod
@@ -241,7 +246,12 @@ class AnnotationChartLayer(ChartLayer):
     """A layer that draws an annotation collection's marks in a chart."""
 
     id: auto
-    annotation_collection: core_types.AnnotationCollection = kante.django_field(description="The annotation collection whose marks this layer draws. Its own coordinate system is the layer's space")
+    lens: core_types.AnnotationLens = kante.django_field(disable_optimization=True, description="The annotation lens this layer draws through")
+
+    @kante.django_field(description="The annotation collection whose marks this layer draws: the container of the lens. Its own coordinate system is the layer's space")
+    def annotation_collection(self, info: Info) -> core_types.AnnotationCollection:
+        """The lens' collection."""
+        return self.lens.annotation_collection
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook

@@ -3475,35 +3475,15 @@ def lens_source_system(lens: "models.Lens") -> "models.CoordinateSystem | None":
 
 
 def layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem | None":
-    """The coordinate system a layer's data is expressed in, per kind.
+    """The coordinate system a layer's data is expressed in: its lens' space.
 
-    Every array-backed layer's data lives in its lens' space, an annotation layer's in its
-    collection's drawing space, a mesh layer's in its collection's, and a
-    point/track layer's in the space of the table dataset it draws from.
-
-    Kinds group here exactly as they group on their source FK -- IMAGE, INTENSITY, RGB,
-    PHASOR and LABEL over a lens; POINT and TRACK over a table -- and the grouping is the
-    whole point: what distinguishes the members of a group is how each is *drawn*, which is
-    not a spatial question and so does not reach this function. Read the list off
-    :data:`core.enums.LENS_BACKED_KINDS` rather than spelling it again, so that adding a way of drawing
-    array data cannot leave a layer with no space to be in.
+    Every layer draws through a lens, whatever its kind -- an array lens for the array kinds,
+    a table lens for points and tracks, a mesh, network or annotation lens for the collection
+    kinds -- so the one question has one answer for all of them.
     """
-    if layer.kind in enums.LENS_BACKED_KINDS and layer.lens_id:
-        return lens_source_system(layer.lens)
-    if layer.kind == enums.LayerKindChoices.ANNOTATION.value and layer.annotation_collection_id:
-        return getattr(layer.annotation_collection, "coordinate_system", None)
-    if layer.kind == enums.LayerKindChoices.MESH.value and layer.mesh_collection_id:
-        # A reverse one-to-one now, since the collection owns its system: Django raises
-        # (an AttributeError subclass) rather than returning None when there is none.
-        return getattr(layer.mesh_collection, "coordinate_system", None)
-    if layer.kind == enums.LayerKindChoices.NETWORK.value and layer.network_collection_id:
-        # Same shape as a mesh collection: the collection owns its space, and `derivedFrom`
-        # relates it to whatever the network was traced in.
-        return getattr(layer.network_collection, "coordinate_system", None)
-    if layer.kind in (enums.LayerKindChoices.POINT.value, enums.LayerKindChoices.TRACK.value) and layer.table_dataset_id:
-        # The table dataset owns its space, the same way a mesh collection does.
-        return getattr(layer.table_dataset, "coordinate_system", None)
-    return None
+    if layer.lens_id is None:
+        return None
+    return lens_source_system(layer.lens)
 
 
 def system_dataset(system: "models.CoordinateSystem") -> "models.ArrayDataset | None":

@@ -179,15 +179,16 @@ def _layer_source_system(layer):
     """
     from core.logic import column_options as column_options_logic
 
-    if layer.mesh_collection_id is not None:
-        return column_options_logic.mesh_collection_system(layer.mesh_collection)
-    if layer.network_collection_id is not None:
-        return column_options_logic.network_collection_system(layer.network_collection)
-    if layer.table_dataset_id is not None:
-        return layer.table_dataset.coordinate_system_or_none
-    if layer.lens_id is not None:
-        return column_options_logic.lens_source_system(layer.lens)
-    return None
+    if layer.lens_id is None:
+        return None
+    lens = layer.lens
+    if isinstance(lens, models.MeshLens):
+        return column_options_logic.mesh_collection_system(lens.mesh_collection)
+    if isinstance(lens, models.NetworkLens):
+        return column_options_logic.network_collection_system(lens.network_collection)
+    if isinstance(lens, models.TableLens):
+        return lens.table_dataset.coordinate_system_or_none
+    return column_options_logic.lens_source_system(lens)
 
 
 def assert_edge_not_stranding_a_picker(edge) -> None:
@@ -215,7 +216,7 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
         return
 
     stranded: list[tuple] = []
-    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene", "mesh_collection", "network_collection", "table_dataset").prefetch_related("lens").order_by("pk"):
+    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene").prefetch_related("lens").order_by("pk"):
         named = _picker_tables(layer) & tables
         if not named:
             continue

@@ -31,6 +31,7 @@ from core.mutations.layer import (
     network_reachable_walks,
 )
 from core.render.layer import inputs as layer_inputs
+from core.mutations._sources import resolve_source_lens
 from core.scoping import get_for_org
 
 _LINE_WIDTH_DESCRIPTION = (
@@ -100,7 +101,8 @@ def assert_max_level(collection, max_level: int | None) -> None:
 
 class CreateNetworkLayerInputModel(BaseModel):
     scene: str
-    network_collection: str
+    network_collection: str | None = None
+    lens: str | None = None
     material_color: list[int] | None = None
     line_width: float | None = None
     node_size_column: str | None = None
@@ -127,7 +129,8 @@ class CreateNetworkLayerInput:
     """Input for creating a network layer."""
 
     scene: strawberry.ID = strawberry.field(description="The scene this layer is drawn in")
-    network_collection: strawberry.ID = strawberry.field(description="The network collection to render. It owns its own coordinate system, and `derivedFrom` is what relates that system to the scene's world")
+    network_collection: strawberry.ID | None = strawberry.field(default=None, description="The network collection to render, drawn through its whole lens. It owns its own coordinate system, and `derivedFrom` is what relates that system to the scene's world. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="The network lens to draw through. Exactly one of this and `networkCollection`")
     material_color: list[int] | None = strawberry.field(default=None, description="The flat colour of every segment, as RGBA. Default opaque white")
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH_DESCRIPTION)
     node_size_column: str | None = strawberry.field(default=None, description=_NODE_SIZE_DESCRIPTION)
@@ -156,7 +159,8 @@ def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.Ne
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    collection = get_for_org(models.NetworkCollection, info, id=model.network_collection)
+    lens = resolve_source_lens(info, kind=models.NetworkLens, lens=model.lens, container_model=models.NetworkCollection, container=model.network_collection, what="networkCollection")
+    collection = lens.network_collection
 
     graph_logic.assert_placeable_in(scene.world, getattr(collection, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")
     assert_max_level(collection, model.max_level)
@@ -172,7 +176,7 @@ def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.Ne
     return models.Layer.objects.create(
         kind=enums.LayerKind.NETWORK,
         scene=scene,
-        network_collection=collection,
+        lens=lens,
         material_color=model.material_color if model.material_color is not None else [255, 255, 255, 255],
         line_width=model.line_width,
         node_size_column=model.node_size_column,
@@ -261,16 +265,16 @@ def update_network_layer(info: Info, input: UpdateNetworkLayerInput) -> types.Ne
     if input.show_nodes is not None:
         layer.show_nodes = input.show_nodes
     if input.max_level is not strawberry.UNSET:
-        assert_max_level(layer.network_collection, input.max_level)
+        assert_max_level(layer.lens.network_collection, input.max_level)
         layer.max_level = input.max_level
 
     # The pickers, with `updateMeshLayer`'s exact patch semantics: replaced wholesale when
     # named, and an index left dangling by a shortened picker is dropped rather than kept.
     color_bys_input = None if input.color_bys is None else [entry.to_pydantic() for entry in input.color_bys]
     filter_bys_input = None if input.filter_bys is None else [entry.to_pydantic() for entry in input.filter_bys]
-    walks = network_reachable_walks(info, layer.network_collection) if (color_bys_input is not None or filter_bys_input is not None) else None
+    walks = network_reachable_walks(info, layer.lens.network_collection) if (color_bys_input is not None or filter_bys_input is not None) else None
 
-    color_bys = build_network_color_bys(info, layer.network_collection, color_bys_input, walks=walks)
+    color_bys = build_network_color_bys(info, layer.lens.network_collection, color_bys_input, walks=walks)
     if color_bys is not None:
         layer.network_color_bys = color_bys
         if input.active_color_by is strawberry.UNSET and layer.active_color_by is not None and layer.active_color_by >= len(color_bys):
@@ -283,7 +287,7 @@ def update_network_layer(info: Info, input: UpdateNetworkLayerInput) -> types.Ne
             assert_active_color_by(layer.network_color_bys or [], input.active_color_by)
             layer.active_color_by = input.active_color_by
 
-    filter_bys = build_network_filter_bys(info, layer.network_collection, filter_bys_input, walks=walks)
+    filter_bys = build_network_filter_bys(info, layer.lens.network_collection, filter_bys_input, walks=walks)
     if filter_bys is not None:
         layer.network_filter_bys = filter_bys
         if input.active_filter_bys is None:

@@ -1569,7 +1569,12 @@ class AnnotationLayer(Layer):
     """A layer that renders an annotation collection's drawn shapes in a scene."""
 
     id: auto
-    annotation_collection: AnnotationCollection = kante.django_field(description="The annotation collection whose shapes this layer renders. Its own coordinate system is the layer's space")
+    lens: AnnotationLens = kante.django_field(disable_optimization=True, description="The annotation lens this layer draws through")
+
+    @kante.django_field(description="The annotation collection whose shapes this layer renders: the container of the lens. Its own coordinate system is the layer's space")
+    def annotation_collection(self, info: Info) -> AnnotationCollection:
+        """The lens' collection."""
+        return self.lens.annotation_collection
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
@@ -1595,7 +1600,7 @@ def _coordinate_column_named(layer: "models.Layer", axis_name: str) -> str | Non
     the same bargain the array path already makes, and the honest end state is for a coordinate
     column to *declare* which screen axis it is, which is an input change (see item 14).
     """
-    coordinates = layer.table_dataset.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value)
+    coordinates = layer.lens.table_dataset.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value)
     if not coordinates:
         return None
 
@@ -1619,7 +1624,7 @@ def _coordinate_column_named(layer: "models.Layer", axis_name: str) -> str | Non
 
 def _role_column(layer: "models.Layer", role: str) -> str | None:
     """The name of the table dataset's column of a given role, or None."""
-    columns = layer.table_dataset.columns_by_role(role)
+    columns = layer.lens.table_dataset.columns_by_role(role)
     return columns[0].name if columns else None
 
 
@@ -1634,9 +1639,14 @@ class PointLayer(Layer):
     """A layer that renders a point cloud from a table dataset, placed and styled in a scene."""
 
     id: auto
-    table_dataset: Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")] = kante.django_field(
-        description="The table dataset the points are drawn from. Its declared coordinate columns provide the coordinates and its own system provides the placement -- the column fields below are derived from its schema, never stored per layer"
+    lens: TableLens = kante.django_field(disable_optimization=True, description="The table lens this layer draws through: the rows its windows keep, in the table's own space")
+
+    @kante.django_field(
+        description="The table dataset the points are drawn from: the container of the lens. Its declared coordinate columns provide the coordinates and its own system provides the placement -- the column fields below are derived from its schema, never stored per layer"
     )
+    def table_dataset(self, info: Info) -> Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]:
+        """The lens' table."""
+        return self.lens.table_dataset
     size_column: str | None
     color_column: str | None
     point_size: float | None
@@ -1714,9 +1724,14 @@ class TrackLayer(Layer):
     """A layer that renders trajectories from a table dataset, placed and styled in a scene."""
 
     id: auto
-    table_dataset: Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")] = kante.django_field(
-        description="The table dataset the tracks are drawn from. Its coordinate and TRACK_ID columns provide the trajectories -- the column fields below are derived from its schema, never stored per layer"
+    lens: TableLens = kante.django_field(disable_optimization=True, description="The table lens this layer draws through: the rows its windows keep, in the table's own space")
+
+    @kante.django_field(
+        description="The table dataset the tracks are drawn from: the container of the lens. Its coordinate and TRACK_ID columns provide the trajectories -- the column fields below are derived from its schema, never stored per layer"
     )
+    def table_dataset(self, info: Info) -> Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]:
+        """The lens' table."""
+        return self.lens.table_dataset
     color_by_column: str | None
     line_width: float | None
     colormap: enums.ColorMap | None
@@ -1762,10 +1777,12 @@ class MeshLayer(Layer):
     """A layer that renders a 3D mesh, placed and styled in a scene."""
 
     id: auto
-    collection: MeshCollection | None = kante.django_field(
-        field_name="mesh_collection",
-        description="The versioned, coordinate-system-anchored mesh collection this layer renders. Its geometry is fetched from the collection's Parquet catalog, not through this API",
-    )
+    lens: MeshLens = kante.django_field(disable_optimization=True, description="The mesh lens this layer draws through")
+
+    @kante.django_field(description="The versioned, coordinate-system-anchored mesh collection this layer renders: the container of the lens. Its geometry is fetched from the collection's Parquet catalog, not through this API")
+    def collection(self, info: Info) -> MeshCollection | None:
+        """The lens' collection."""
+        return self.lens.mesh_collection
     material_color: list[int] | None
     wireframe: bool
     shading: enums.MeshShading
@@ -1822,10 +1839,12 @@ class NetworkLayer(Layer):
     """A layer that renders a node/edge network, placed and styled in a scene."""
 
     id: auto
-    collection: NetworkCollection | None = kante.django_field(
-        field_name="network_collection",
-        description="The versioned, coordinate-system-anchored network collection this layer renders. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API",
-    )
+    lens: NetworkLens = kante.django_field(disable_optimization=True, description="The network lens this layer draws through")
+
+    @kante.django_field(description="The versioned, coordinate-system-anchored network collection this layer renders: the container of the lens. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API")
+    def collection(self, info: Info) -> NetworkCollection | None:
+        """The lens' collection."""
+        return self.lens.network_collection
     material_color: list[int] | None
     line_width: float | None = kante.django_field(
         description="The flat width of every segment, in scene units. A well-defined length only from `placementInvariance` SIMILARITY up. Overridden where `nodeSizeColumn` or `edgeWidthColumn` is set"

@@ -109,7 +109,7 @@ class SceneGraph(placement.PlacementGraph):
         for a general image layer. How the level is *drawn* is the only thing that differs,
         and nothing here asks.
         """
-        if layer.kind not in enums.LENS_BACKED_KINDS or not layer.lens_id:
+        if layer.kind not in enums.ARRAY_LAYER_KINDS or not layer.lens_id:
             return []
 
         dataset_id = layer.lens.dataset_id
@@ -158,9 +158,6 @@ LAYER_SOURCE_AXIS_PREFETCH = (
     # The lens, as its kind, with its container's chain loaded per kind: a plain nested lookup
     # cannot follow a mix of kinds into their own tables (see `load_lens_sources`).
     Prefetch("lens", queryset=models.Lens.objects.with_sources()),
-    "annotation_collection__coordinate_system__axes",
-    "mesh_collection__coordinate_system__axes",
-    "table_dataset__coordinate_system__axes",
 )
 
 #: The relations the placement logic reads off a layer in Python. `Layer` is one table
@@ -169,12 +166,7 @@ LAYER_SOURCE_AXIS_PREFETCH = (
 #: The lens is deliberately *not* here: a `select_related` through a polymorphic FK hands back
 #: the base row, and the placement logic needs the kind. It arrives through the prefetch above,
 #: which goes through the polymorphic manager and hands back the kind.
-LAYER_PLACEMENT_RELATIONS = (
-    "scene__world",
-    "annotation_collection__coordinate_system",
-    "mesh_collection__coordinate_system",
-    "table_dataset__coordinate_system",
-)
+LAYER_PLACEMENT_RELATIONS = ("scene__world",)
 
 
 def for_request(info: "Info", scene: "models.Scene") -> SceneGraph:

@@ -10,15 +10,6 @@ from koherent.fields import ProvenanceField
 from chart import enums
 
 
-def _exactly_the_source_its_kind_names() -> Q:
-    """Each kind's row sets its own source foreign key and leaves the others null."""
-    condition = Q()
-    for kind, field in enums.SOURCE_FIELD.items():
-        others = {f"{other}__isnull": True for other in enums.SOURCE_FIELD.values() if other != field}
-        condition |= Q(kind=kind, **{f"{field}__isnull": False}, **others)
-    return condition
-
-
 class Chart(models.Model):
     """A composition of layers along one metric axis.
 
@@ -79,10 +70,8 @@ class ChartLayer(models.Model):
     opacity = models.FloatField(default=1.0, help_text="Layer alpha (0..1)")
     color = models.JSONField(null=True, blank=True, help_text="The colour the layer is drawn in, as RGBA. Null to let the viewer choose")
 
-    # --- sources (exactly the one the kind names) ---
-    lens = models.ForeignKey("core.Lens", on_delete=models.CASCADE, related_name="chart_layers", null=True, blank=True, help_text="(trace) The lens whose values are read along one of its axes")
-    table_dataset = models.ForeignKey("core.TableDataset", on_delete=models.CASCADE, related_name="chart_layers", null=True, blank=True, help_text="(series) The table whose value column is read against a coordinate column")
-    annotation_collection = models.ForeignKey("core.AnnotationCollection", on_delete=models.CASCADE, related_name="chart_layers", null=True, blank=True, help_text="(annotation) The collection whose marks are drawn")
+    # --- the source: one lens, whatever the kind ---
+    lens = models.ForeignKey("core.Lens", on_delete=models.CASCADE, related_name="chart_layers", help_text="The lens this layer reads through: an array lens for a trace, a table lens for a series, an annotation lens for marks")
 
     # --- series ---
     value_column = models.CharField(max_length=255, null=True, blank=True, help_text="(series) The numeric column read as the value. The coordinate column is not stored: it is the column the table's placement lays along the chart's axis")
@@ -97,10 +86,10 @@ class ChartLayer(models.Model):
     class Meta:
         ordering = ["order", "id"]
         constraints = [
-            models.CheckConstraint(condition=_exactly_the_source_its_kind_names(), name="chart_layer_has_the_source_its_kind_names"),
+            # One annotation layer per collection in a chart: the marks are drawn once.
             models.UniqueConstraint(
-                fields=["chart", "annotation_collection"],
-                condition=Q(annotation_collection__isnull=False),
+                fields=["chart", "lens"],
+                condition=Q(kind="annotation"),
                 name="one_chart_layer_per_annotation_collection",
             ),
         ]

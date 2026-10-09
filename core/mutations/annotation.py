@@ -158,17 +158,17 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     # it stays that way.
     graph_logic.record_bbox_frame(collection, system)
 
+    # Minted here like every collection: the whole lens is the collection's handle, and the
+    # layer draws through it.
     models.Layer.objects.create(
         kind=enums.LayerKind.ANNOTATION,
         scene=scene,
-        annotation_collection=collection,
+        lens=coordinate_system_logic.whole_lens(collection),
         blending=enums.Blending.NORMAL,
         opacity=1.0,
         visible=True,
         order=0,
     )
-    # Minted here like every collection: the whole lens is the collection's handle.
-    coordinate_system_logic.whole_lens(collection)
     return collection
 
 

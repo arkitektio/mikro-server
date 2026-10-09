@@ -178,7 +178,9 @@ async def test_clearing_a_scene_tells_its_followers_about_every_layer(db, authen
     """`clearScene` deletes through the queryset: still one delete event per layer."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
-    layers = [await models.Layer.objects.acreate(scene=scene) for _ in range(2)]
+    image = await seed.create_array_dataset(ctx, "Drawn")
+    lens = await seed.create_lens(ctx, image)
+    layers = [await models.Layer.objects.acreate(scene=scene, kind="image", lens=lens) for _ in range(2)]
 
     async with following(LAYERS, "layers", channels.scene_layers_room(scene.pk), {"scene": str(scene.pk)}) as follower:
         await _run(ctx, "mutation C($input: ClearSceneInput!) { clearScene(input: $input) { id } }", {"id": str(scene.pk)})

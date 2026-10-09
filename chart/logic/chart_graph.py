@@ -17,20 +17,12 @@ from core.logic import placement
 _LOADER_KEY = "chart_graphs"
 
 #: The relations the placement logic reads off a layer in Python.
-LAYER_PLACEMENT_RELATIONS = (
-    "chart__world",
-    # The lens arrives through the prefetch below: a select_related through a polymorphic FK
-    # hands back the base row, and the placement logic needs the kind.
-    "table_dataset__coordinate_system",
-    "annotation_collection__coordinate_system",
-)
+# The lens arrives through the prefetch below: a select_related through a polymorphic FK hands
+# back the base row, and the placement logic needs the kind.
+LAYER_PLACEMENT_RELATIONS = ("chart__world",)
 
 #: The axes of every space a layer can name as its source: a reverse relation, so a prefetch.
-LAYER_SOURCE_AXIS_PREFETCH = (
-    Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),
-    "table_dataset__coordinate_system__axes",
-    "annotation_collection__coordinate_system__axes",
-)
+LAYER_SOURCE_AXIS_PREFETCH = (Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),)
 
 
 class ChartGraph(placement.PlacementGraph):

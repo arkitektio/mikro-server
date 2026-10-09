@@ -223,7 +223,8 @@ async def test_delete_scene(db, authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_delete_layer(db, authenticated_context: HttpContext):
     scene = await seed.create_scene(authenticated_context)
-    layer = await models.Layer.objects.acreate(scene=scene)
+    image = await seed.create_array_dataset(authenticated_context, "Drawn")
+    layer = await models.Layer.objects.acreate(scene=scene, kind="image", lens=await seed.create_lens(authenticated_context, image))
 
     mutation = "mutation($id: ID!) { deleteLayer(input: {id: $id}) }"
     result = await schema.execute(mutation, variable_values={"id": str(layer.pk)}, context_value=authenticated_context)

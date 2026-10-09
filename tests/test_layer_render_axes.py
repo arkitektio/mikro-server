@@ -57,7 +57,7 @@ _CASES = {
 @pytest.mark.asyncio
 async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(authenticated_context: HttpContext):
     """One layer per lens-backed kind, each over a lens whose axes fill that kind's slot, each answering the mapping its axes imply."""
-    assert set(_CASES) == set(enums.LENS_BACKED_KINDS), "a lens-backed kind this test does not build a layer for"
+    assert set(_CASES) == set(enums.ARRAY_LAYER_KINDS), "an array-lens kind this test does not build a layer for"
 
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Every kind")
@@ -70,7 +70,7 @@ async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(au
     assert not result.errors, result.errors
     layers = result.data["scene"]["layers"]
 
-    assert len(layers) == len(enums.LENS_BACKED_KINDS)
+    assert len(layers) == len(enums.ARRAY_LAYER_KINDS)
     expected_by_kind = {kind: expected for kind, (_, _, expected) in _CASES.items()}
     for layer in layers:
         kind = layer["__typename"].removesuffix("Layer").lower()

@@ -22,6 +22,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
+from core.logic import coordinate_system as coordinate_system_logic
 from core import enums, models
 from core.logic import attribute_plans as attribute_plans_logic
 from mikro_server.schema import schema
@@ -929,15 +930,15 @@ async def test_a_colouring_written_before_join_paths_still_reads(authenticated_c
     scene = await _scene_for(authenticated_context, collection)
     table = await _table(authenticated_context, "shape-stats", SHAPE_COLUMNS, identified_by={"object": [{"kind": "MESH_COLLECTION", "meshCollection": str(collection.pk)}]})
 
-    legacy = await sync_to_async(models.Layer.objects.create)(
+    legacy = await sync_to_async(lambda: models.Layer.objects.create(
         kind=enums.LayerKindChoices.MESH.value,
         scene=scene,
-        mesh_collection=collection,
+        lens=coordinate_system_logic.whole_lens(collection),
         mesh_color_bys=[{"table": table, "column": "volume", "colormap": "viridis", "label": "Volume"}],
         active_color_by=0,
         mesh_filter_bys=[{"table": table, "column": "volume", "min": 1.0, "max": None, "values": None, "exclude": False, "label": "Big"}],
         active_filter_bys=[0],
-    )
+    ))()
 
     result = await schema.execute(
         "query Layer($id: ID!) { layer(id: $id) { ... on MeshLayer { colorBys { column joinPath { table column } } filterBys { column joinPath { table column } } } } }",
@@ -1064,7 +1065,8 @@ async def test_an_update_checks_reachability_as_hard_as_a_create(authenticated_c
 async def test_updating_a_layer_that_is_not_a_mesh_is_refused(authenticated_context: HttpContext):
     """The vocabulary is per-kind: an image layer has no material to set."""
     scene = await seed.create_scene(authenticated_context, "Composition")
-    layer = await sync_to_async(models.Layer.objects.create)(kind=enums.LayerKindChoices.IMAGE.value, scene=scene)
+    image = await seed.create_array_dataset(authenticated_context, "Not a mesh")
+    layer = await sync_to_async(models.Layer.objects.create)(kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=await seed.create_lens(authenticated_context, image))
 
     result = await schema.execute(
         UPDATE_LAYER,
