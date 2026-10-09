@@ -15,6 +15,7 @@ caller.
 """
 
 import datetime
+import math
 from collections.abc import Callable, Iterable, Sequence
 from typing import cast
 
@@ -27,6 +28,7 @@ from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
 from core.logic import compositions as compositions_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
+from core.logic import placement as placement_logic
 from core.scoping import get_for_org
 
 
@@ -742,3 +744,70 @@ def create_sub_windowed_lens(parent: "models.Lens", windows: list, ctx: Creation
     """A window of a window: the tighter of the two bounds per axis, as the container's lens keeping them (:func:`core.logic.coords.intersect_windows`)."""
     narrowed = coords_logic.intersect_windows(parent.windows_list, windows)  # type: ignore[attr-defined]
     return create_windowed_lens(parent.container, [base_models.WindowInputModel(**entry) for entry in narrowed], ctx)
+
+
+def _box_to_dataset_slices(dataset: "models.ArrayDataset", system: "models.CoordinateSystem", bounds: dict[str, list[float]], *, pins: dict[str, int] | None = None) -> list[dict[str, int | str]]:
+    """A box in ``system``, as the dataset's slices: composed into its pixel grid along the one placement path, then cut on the half-open voxel rule.
+
+    The same walk a layer's `asAffine` takes (:class:`core.logic.placement.PlacementGraph`),
+    rooted at the dataset's grid and seeded with the box's system, so a box stated in a
+    sibling dataset's grid is reached through the world both are registered into, walking
+    that sibling's edge backwards. An axis of the grid the map does not constrain is kept
+    whole, unless ``pins`` names it.
+    """
+    intrinsic = _assert_lens_placeable(dataset)
+    names = [axis.name for axis in system.axes.all()]
+    unknown = [axis for axis in bounds if axis not in names]
+    if unknown:
+        raise ValueError(f"The box names axes {unknown} that coordinate system '{system.name}' does not have; its axes are {names}")
+    mins = [bounds[axis][0] if axis in bounds else -math.inf for axis in names]
+    maxs = [bounds[axis][1] if axis in bounds else math.inf for axis in names]
+    if system.pk == intrinsic.pk:
+        forms = {axis: coords_logic.AxedForm(coefficients=tuple(1.0 if index == column else 0.0 for column in range(len(names))), constant=0.0) for index, axis in enumerate(names)}
+        source_axes = names
+    else:
+        graph_logic.assert_placeable_in(intrinsic, system, destination=f"the pixel grid of dataset '{dataset.name}'")
+        condensed = placement_logic.PlacementGraph(intrinsic, seed_systems=[system.pk]).condensed(system)
+        if condensed is None:
+            raise ValueError(f"Coordinate system '{system.name}' has no placement path into the pixel grid of dataset '{dataset.name}', so a box stated in it cannot be cut from the dataset")
+        by_axis = dict(zip(names, zip(mins, maxs)))
+        source_axes = list(condensed.input_axes)
+        mins = [by_axis[axis][0] if axis in by_axis else -math.inf for axis in source_axes]
+        maxs = [by_axis[axis][1] if axis in by_axis else math.inf for axis in source_axes]
+        forms = coords_logic._forms_from_matrix(condensed.matrix, condensed.output_axes, len(source_axes))
+    return coords_logic.box_to_slices(forms, source_axes, mins, maxs, dataset.axis_names, dataset.shape_list, pins=pins)
+
+
+def create_lens_from_box(dataset: "models.ArrayDataset", system: "models.CoordinateSystem", windows: list, ctx: CreationContext) -> "models.ArrayLens":
+    """The dataset's lens for the voxels under a box stated in another coordinate system -- micrometres in a physical space, a sibling's grid through a shared world."""
+    # Not `normalize_windows`: a box may be a plane (`z` from 2 to 2), which a lens window may
+    # not be, and an axis it leaves out is simply unbounded.
+    bounds: dict[str, list[float]] = {}
+    for window in windows:
+        if window.axis in bounds:
+            raise ValueError(f"Axis '{window.axis}' is bounded twice; one window per axis")
+        if window.min is None and window.max is None:
+            continue
+        if window.min is not None and window.max is not None and window.min > window.max:
+            raise ValueError(f"The box runs from {window.min} to {window.max} along '{window.axis}' and covers nothing; its min must not exceed its max")
+        bounds[window.axis] = [-math.inf if window.min is None else float(window.min), math.inf if window.max is None else float(window.max)]
+    slices = _box_to_dataset_slices(dataset, system, bounds)
+    return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
+
+
+def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "models.Annotation", ctx: CreationContext) -> "models.ArrayLens":
+    """The dataset's lens that bounds an annotation: the voxels under the shape's stored box, in the frame the collection states it in.
+
+    ``intrinsicBbox`` is already half a voxel padded, so a rectangle on rows 1..4 is the box
+    ``[0.5, 4.5]`` and cuts exactly rows 1 to 4. A pin on an axis the drawing space lacks
+    ("on channel 1" of the image under a (y, x) tracing) keeps that one position.
+    """
+    stored = annotation.intrinsic_bbox
+    system = annotation.collection.effective_bbox_system
+    if not stored or system is None:
+        raise ValueError(f"Annotation {annotation.pk} has no geometry to cut a lens from: its collection states no box for it")
+    names = [axis.name for axis in system.axes.all()]
+    bounds = {axis: [float(low), float(high)] for axis, low, high in zip(names, stored["min"], stored["max"])}
+    pins = {axis: int(value) for axis, value in (annotation.coordinates or {}).items() if axis not in names and axis in dataset.axis_names}
+    slices = _box_to_dataset_slices(dataset, system, bounds, pins=pins)
+    return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)

@@ -1525,11 +1525,12 @@ def box_to_slices(
     ``forms`` is the composed map from the box's space into the grid, one functional per
     dataset axis it reaches (:func:`compose_forms`), its coefficients over ``source_axis_names``;
     ``mins``/``maxs`` the box, positional over those same axes, infinite where open. An output axis the map does not reach is left whole,
-    unless ``pins`` names it (a pinned index keeps that one voxel). A dataset voxel ``n`` covers
+    unless ``pins`` names it (a pinned index keeps that one voxel); so is one the box leaves
+    open, and a side left open runs to the array's edge. A dataset voxel ``n`` covers
     ``[n - 0.5, n + 0.5)``, and it is kept when its cell meets the box: ``n > lo - 0.5`` and
     ``n < hi + 0.5``, which is the half-open rule the overlap filter applies, so a box ending
     exactly on a voxel face does not take the voxel beyond it. Clamped to the array; a box
-    that lands outside it is refused, as is one that is open along an axis the map reads.
+    that lands outside it is refused.
     """
     pinned = dict(pins or {})
     slices: list[dict[str, int | str]] = []
@@ -1543,11 +1544,8 @@ def box_to_slices(
                 slices.append({"axis": axis, "start": value, "stop": value + 1, "step": 1})
             continue
         low, high = form_interval(form, mins, maxs)
-        if not (math.isfinite(low) and math.isfinite(high)):
-            open_axes = [name for name, factor, lo, hi in zip(source_axis_names, form.coefficients, mins, maxs, strict=True) if factor != 0.0 and not (math.isfinite(lo) and math.isfinite(hi))]
-            raise ValueError(f"The box is open along {', '.join(repr(name) for name in open_axes)}, which places '{axis}' in the dataset; a crop has to be finite on every axis it is cut on")
-        start = max(0, math.floor(low - 0.5) + 1)
-        stop = min(size, math.ceil(high + 0.5))
+        start = max(0, math.floor(low - 0.5) + 1) if math.isfinite(low) else 0
+        stop = min(size, math.ceil(high + 0.5)) if math.isfinite(high) else size
         if start >= stop:
             raise ValueError(f"The box lies outside the dataset along '{axis}': it covers [{low}, {high}] and the axis spans [-0.5, {size - 0.5}]")
         slices.append({"axis": axis, "start": start, "stop": stop, "step": 1})

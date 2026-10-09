@@ -118,8 +118,8 @@ def test_a_box_on_a_voxel_face_does_not_take_the_voxel_beyond_it() -> None:
     assert got == [{"axis": "y", "start": 1, "stop": 5, "step": 1}, {"axis": "x", "start": 2, "stop": 7, "step": 1}], "faces at halves: [0.5, 4.5] is voxels 1..4"
     with pytest.raises(ValueError, match="outside the dataset"):
         coords.box_to_slices(identity, ["y", "x"], [10.0, 0.0], [12.0, 1.0], ["y", "x"], [6, 8])
-    with pytest.raises(ValueError, match="open along 'x'"):
-        coords.box_to_slices(identity, ["y", "x"], [0.0, -math.inf], [1.0, math.inf], ["y", "x"], [6, 8])
+    assert coords.box_to_slices(identity, ["y", "x"], [0.0, -math.inf], [1.0, math.inf], ["y", "x"], [6, 8]) == [{"axis": "y", "start": 0, "stop": 2, "step": 1}, {"axis": "x", "start": 0, "stop": 8, "step": 1}], "an open axis is whole; an open side runs to the edge"
+    assert coords.box_to_slices(identity, ["y", "x"], [3.0, 0.0], [math.inf, 1.0], ["y", "x"], [6, 8])[0] == {"axis": "y", "start": 3, "stop": 6, "step": 1}
 
 
 def test_an_axis_the_map_does_not_reach_is_whole_unless_pinned() -> None:

@@ -32,3 +32,10 @@ class WindowInputModel(BaseModel):
     axis: str
     min: float | None = None
     max: float | None = None
+
+
+class LensBoxInputModel(BaseModel):
+    """A box stated in a coordinate system the dataset reaches: the voxels under it are the crop."""
+
+    coordinate_system: str
+    windows: list[WindowInputModel]

@@ -498,6 +498,88 @@ def _compose_by_numpy(parent: list[dict], child: list[dict]) -> list[dict]:
     return out
 
 
+# --- a box in another space, and a crop to an annotation ----------------------------------------
+
+
+async def _lens_from(ctx: HttpContext, dataset: models.ArrayDataset, **selection: object) -> dict | list:
+    result = await schema.execute(CREATE_LENS, context_value=_fresh_request(ctx), variable_values={"input": {"dataset": str(dataset.pk), **selection}})
+    return result.errors if result.errors else result.data["createLens"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_box_in_micrometres_cuts_exactly_the_voxels_whose_cells_it_meets(authenticated_context: HttpContext):
+    """Voxel j of a 0.5 um grid at offset 100 covers [100 + 0.5 j - 0.25, 100 + 0.5 j + 0.25): the oracle is that cell test, voxel by voxel, and the lens is the dataset's row for it."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Calibrated", shapes=[SHAPE])
+    scale, offset = 0.5, 100.0
+    physical = await seed.create_physical_space(
+        ctx,
+        dataset,
+        axes=[seed.physical_axis("c", enums.AxisType.CHANNEL, "a.u."), seed.physical_axis("y", enums.AxisType.SPACE, "micrometer"), seed.physical_axis("x", enums.AxisType.SPACE, "micrometer")],
+        affine=[[1.0, 0.0, 0.0, 0.0], [0.0, scale, 0.0, offset], [0.0, 0.0, scale, offset]],
+    )
+    box = {"y": (100.5, 102.0), "x": (101.0, 103.4)}
+    cut = await _lens_from(ctx, dataset, box={"coordinateSystem": str(physical.pk), "windows": [{"axis": axis, "min": lo, "max": hi} for axis, (lo, hi) in box.items()]})
+    assert isinstance(cut, dict), cut
+
+    expected = []
+    for index, axis in enumerate(["y", "x"]):
+        lo, hi = box[axis]
+        kept = [j for j in range(SHAPE[index + 1]) if (offset + scale * j - scale / 2) < hi and lo < (offset + scale * j + scale / 2)]
+        expected.append({"axis": axis, "start": kept[0], "stop": kept[-1] + 1})
+    assert expected == [{"axis": "y", "start": 1, "stop": 5}, {"axis": "x", "start": 2, "stop": 8}]
+    arr, view = _oracle(SHAPE, ["c", "y", "x"], expected)
+    assert cut["shape"] == list(view.shape)
+    _assert_maps_every_voxel(_matrix(cut["toParent"], 3), arr, view)
+    assert (await _lens(ctx, dataset, expected))["id"] == cut["id"], "the same voxels asked for as slices are the same row"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_box_in_a_siblings_grid_is_reached_through_the_world_they_share(authenticated_context: HttpContext):
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "Composition")
+    drawn_on = await seed.create_array_dataset(ctx, "DrawnOn", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    beside = await seed.create_array_dataset(ctx, "Beside", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    apart = await seed.create_array_dataset(ctx, "Apart", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    for dataset in (drawn_on, beside):
+        await seed.register_into_scene(ctx, scene, dataset)
+    beside_grid = await sync_to_async(lambda: beside.intrinsic_coordinate_system)()
+    apart_grid = await sync_to_async(lambda: apart.intrinsic_coordinate_system)()
+
+    cut = await _lens_from(ctx, drawn_on, box={"coordinateSystem": str(beside_grid.pk), "windows": [{"axis": "z", "min": 2, "max": 2}, {"axis": "y", "min": 10, "max": 20}, {"axis": "x", "min": 10, "max": 20}]})
+    assert isinstance(cut, dict), cut
+    assert cut["shape"] == [1, 11, 11], "both are registered as the identity into one world: beside's voxels are drawn_on's, 10..20 inclusive"
+
+    refused = await _lens_from(ctx, drawn_on, box={"coordinateSystem": str(apart_grid.pk), "windows": [{"axis": "y", "min": 10, "max": 20}]})
+    assert isinstance(refused, list) and "pixel grid" in refused[0].message, "a grid nothing connects to the dataset's"
+    half_open = await _lens_from(ctx, drawn_on, box={"coordinateSystem": str(beside_grid.pk), "windows": [{"axis": "y", "min": 10}]})
+    assert isinstance(half_open, dict) and half_open["shape"] == [8, 54, 64], "an open side runs to the array's edge, and an axis the box leaves out is whole"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_cut_to_an_annotation_bounds_exactly_the_shape(authenticated_context: HttpContext):
+    """Crop to the ROI: a rectangle on rows 1..4 and columns 2..6 is the lens y[1:5], x[2:7], which overlaps that shape and not one outside it."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Flat", axes=seed.YX_AXES, shapes=[[6, 8]])
+    collection = await _collection_on(ctx, axes=["y", "x"], derived_from={"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}})
+    rectangle = await _draw(ctx, collection["id"], "RECTANGLE", [[1.0, 2.0], [1.0, 6.0], [4.0, 6.0], [4.0, 2.0]])
+    elsewhere = await _draw(ctx, collection["id"], "POINT", [[5.0, 3.0]])
+
+    cut = await _lens_from(ctx, dataset, annotation=rectangle["id"])
+    assert isinstance(cut, dict), cut
+    arr, view = _oracle([6, 8], ["y", "x"], [{"axis": "y", "start": 1, "stop": 5}, {"axis": "x", "start": 2, "stop": 7}])
+    assert cut["shape"] == list(view.shape)
+    _assert_maps_every_voxel(_matrix(cut["toParent"], 2), arr, view)
+    assert cut["id"] in await _overlapping(ctx, rectangle["id"])
+    assert cut["id"] not in await _overlapping(ctx, elsewhere["id"]), "row 5 begins where the crop ends"
+
+    both = await _lens_from(ctx, dataset, annotation=rectangle["id"], slices=[{"axis": "y", "start": 0, "stop": 1}])
+    assert isinstance(both, list) and "one selection" in both[0].message
+
+
 # --- 7. levels ----------------------------------------------------------------------------------
 
 

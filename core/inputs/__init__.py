@@ -10,6 +10,7 @@ import kante
 from pydantic import BaseModel, Field
 from core import base_models
 
+
 class AssociateInputModel(BaseModel):
     selfs: List[str] = Field(description="The IDs of the items to associate")
     other: str = Field(description="The ID of the target item")
@@ -53,3 +54,12 @@ class WindowInput:
     axis: str = strawberry.field(description="The name of the axis the window constrains, e.g. 't' for a table's time column")
     min: float | None = strawberry.field(default=None, description="The smallest position kept, inclusive, or None for no lower bound")
     max: float | None = strawberry.field(default=None, description="The largest position kept, inclusive, or None for no upper bound")
+
+
+@kante.pydantic_input(
+    base_models.LensBoxInputModel,
+    description="A box in any coordinate system an array dataset reaches -- micrometres in a physical space, a sibling dataset's grid through a shared world -- as the selection of a lens: the voxels whose cells the box meets, once the box is composed into the dataset's pixel grid",
+)
+class LensBoxInput:
+    coordinate_system: strawberry.ID = strawberry.field(description="The coordinate system the windows are stated in. The dataset's pixel grid must reach it affinely (walking the transformation edges either way)")
+    windows: list[WindowInput] = strawberry.field(description="The box, one window per axis it bounds; a side left open runs to the array's edge, and an axis of the grid the box says nothing about is kept whole. A window may be a plane (min equal to max)")
