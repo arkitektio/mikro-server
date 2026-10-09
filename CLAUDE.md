@@ -26,7 +26,10 @@ anything is recreated — and runs everything else as a job the image offers by 
 
 What this service declares:
 
-- Setup, in order: `ensureadmin`.
+- Setup, in order: `ensureadmin`, `merge_duplicate_lenses`. The second normalizes stored lens
+  slices, gives every dataset its whole lens and merges duplicate lenses onto one row; it is in
+  the setup so that no lens spelled the old way is left when the release starts minting lenses
+  by get-or-create. It changes nothing the second time and reports what it leaves in place.
 - Other jobs: `purge_orphaned_stores`, `respec_datasets`, `backfill_default_scenes`, `backfill_parquet_schemas`. The two backfills are
   safe beside a serving release and report what is still owed; neither is in the setup, so
   an operator runs them.

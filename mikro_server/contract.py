@@ -209,6 +209,9 @@ contract = Contract(
         "respec_datasets": Job(("respec_datasets",), "Recompute the spec of datasets created before an axis of one position stopped counting"),
         "backfill_default_scenes": Job(("backfill_default_scenes",), "Nominate a default scene for datasets that have none, by the old sole-occupancy rule"),
         "backfill_parquet_schemas": Job(("backfill_parquet_schemas",), "Record the columns of parquet stores finished before they were recorded"),
+        "merge_duplicate_lenses": Job(("merge_duplicate_lenses",), "Normalize stored lens slices, give every dataset its whole lens, and merge duplicate lenses onto one row"),
     },
-    setup=("ensureadmin",),
+    # `merge_duplicate_lenses` runs for every build, before the release serves: a lens row spelled
+    # the old way would otherwise escape the lookup `createLens` makes and mint a duplicate.
+    setup=("ensureadmin", "merge_duplicate_lenses"),
 )
