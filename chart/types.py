@@ -14,6 +14,8 @@ from chart.logic import chart_graph
 from core import enums as core_enums
 from core import types as core_types
 from core.inputs.coords import CoordinateInput, at_map
+from core.render import filter_by as filter_by_models
+from core.render.layer.types import LabelFilterBy
 from core.types.coords import AffinePlacement, PlacementStep
 from core.types._shared import DESCRIPTORS_DESCRIPTION, OrgScoped, build_prescoped_queryset, resolve_descriptors
 from core.types.auth import User
@@ -203,6 +205,14 @@ class SeriesChartLayer(ChartLayer):
     id: auto
     lens: core_types.TableLens = kante.django_field(disable_optimization=True, description="The table lens this series reads through: the rows its windows keep")
 
+    @kante.django_field(
+        description="The lens' windows as row filters, always applied: a row is read when every one keeps it (`min <= column <= max`, an omitted side open). The selection the series draws, derived from the lens; empty for a whole lens"
+    )
+    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+        """The lens' windows as row filters."""
+        del info
+        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
+
     @kante.django_field(description="The table dataset whose columns are read: the container of the lens")
     def table_dataset(self, info: Info) -> core_types.TableDataset:
         """The lens' table."""
@@ -247,6 +257,12 @@ class AnnotationChartLayer(ChartLayer):
 
     id: auto
     lens: core_types.AnnotationLens = kante.django_field(disable_optimization=True, description="The annotation lens this layer draws through")
+
+    @kante.django_field(description="The lens' windows as a clip box in the collection's own space: marks outside it are not drawn. Derived from the lens; empty for a whole lens")
+    def clip(self, info: Info) -> List[core_types.Window]:
+        """The lens' windows as a clip box."""
+        del info
+        return self.lens.windows_list
 
     @kante.django_field(description="The annotation collection whose marks this layer draws: the container of the lens. Its own coordinate system is the layer's space")
     def annotation_collection(self, info: Info) -> core_types.AnnotationCollection:

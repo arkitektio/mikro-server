@@ -22,12 +22,17 @@ objects a viewer draws, and the viewer runs it against the parquet it already re
 stores the rule and refuses one nothing could run.
 """
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from core.render.color_by import AxisPositionModel
 from core.render.joins import JoinStepModel
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from core.logic.coords import WindowLike
 
 
 class FilterByModel(BaseModel):
@@ -194,3 +199,14 @@ class NetworkFilterByModel(PickerFilterByModel):
     The one picker whose rules may be GRAPH-kind, exactly as
     :class:`~core.render.color_by.NetworkColorByModel` is for colourings.
     """
+
+
+def filters_for_windows(table_id: str, windows: "Iterable[WindowLike]") -> list[LabelFilterByModel]:
+    """A table lens' windows as row filters a renderer applies: one COLUMN rule per window, inclusive on both ends, as a window is.
+
+    A table's axes are its coordinate columns by construction, so a window's axis names the
+    column outright. These are the lens' selection, not a picker entry: always applied, on top
+    of whatever ``filterBys`` the layer offers. Derived on read, never stored -- the lens is
+    the one record of what it selects.
+    """
+    return [LabelFilterByModel(kind="COLUMN", table=table_id, column=window.axis, min=window.min, max=window.max, label=f"{window.axis} window") for window in windows]

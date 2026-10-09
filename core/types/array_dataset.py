@@ -610,6 +610,12 @@ class Window:
     max: float | None
 
 
+_WINDOW_FILTERS_DESCRIPTION = (
+    "The lens' windows as row filters, always applied: a row is drawn when every one keeps it (`min <= column <= max`, an omitted side open), on top of whatever `filterBys` are active. "
+    "The selection the layer draws, derived from the lens and never stored; empty for a whole lens"
+)
+_CLIP_DESCRIPTION = "The lens' windows as a clip box in the collection's own space: geometry outside it is not drawn. The selection the layer draws, derived from the lens; empty for a whole lens"
+
 _LENS_SYSTEM_DESCRIPTION = (
     "The coordinate system the lens' selection is expressed in. A sliced array lens owns one (the space its slices cut out, with the derived edge recording the shift); "
     "every other lens selects within its container's own space and resolves to it"
@@ -824,6 +830,32 @@ class AnnotationLens(Lens, OrgScoped):
     def windows(self, info: Info) -> List[Window]:
         """The stored windows."""
         return self.windows_list
+
+    @kante.django_field(
+        description=(
+            "The collection's annotations this lens keeps: those whose own reach -- vertices and pins, in the drawing space the windows are stated in -- meets every window. Every "
+            "annotation for a whole lens. Decided per shape, so it costs a read of the collection"
+        )
+    )
+    def annotations(self, info: Info) -> List["Annotation"]:
+        """The shapes inside the windows."""
+        del info
+        collection = self.annotation_collection
+        rows = list(collection.annotations.order_by("pk"))
+        if self.is_whole:
+            return rows
+        system = collection.coordinate_system_or_none
+        if system is None:
+            return []
+        names = [axis.name for axis in system.axes.all()]
+        bounds = coords_logic.window_bounds(self.windows_list)
+        kept = []
+        for annotation in rows:
+            pins = {name: float(value) for name, value in (annotation.coordinates or {}).items()}
+            box = coords_logic.annotation_box(names, annotation.vectors or [], pins, padded=False)
+            if box is not None and coords_logic.boxes_overlap(box, bounds):
+                kept.append(annotation)
+        return kept
 
 
 @kante.django_type(
@@ -1658,6 +1690,12 @@ class AnnotationLayer(Layer):
     id: auto
     lens: AnnotationLens = kante.django_field(disable_optimization=True, description="The annotation lens this layer draws through")
 
+    @kante.django_field(description=_CLIP_DESCRIPTION)
+    def clip(self, info: Info) -> List[Window]:
+        """The lens' windows as a clip box."""
+        del info
+        return self.lens.windows_list
+
     @kante.django_field(description="The annotation collection whose shapes this layer renders: the container of the lens. Its own coordinate system is the layer's space")
     def annotation_collection(self, info: Info) -> AnnotationCollection:
         """The lens' collection."""
@@ -1770,6 +1808,12 @@ class PointLayer(Layer):
         del info
         return [filter_by_models.LabelFilterByModel(**entry) for entry in (self.point_filter_bys or [])]
 
+    @kante.django_field(description=_WINDOW_FILTERS_DESCRIPTION)
+    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+        """The lens' windows as row filters."""
+        del info
+        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
+
     @kante.django_field(description="The coordinate column whose axis is named 'x', from the dataset's declared schema")
     def x_column(self, info: Info) -> str | None:
         """The x-coordinate column."""
@@ -1812,6 +1856,12 @@ class TrackLayer(Layer):
 
     id: auto
     lens: TableLens = kante.django_field(disable_optimization=True, description="The table lens this layer draws through: the rows its windows keep, in the table's own space")
+
+    @kante.django_field(description=_WINDOW_FILTERS_DESCRIPTION)
+    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+        """The lens' windows as row filters."""
+        del info
+        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
 
     @kante.django_field(
         description="The table dataset the tracks are drawn from: the container of the lens. Its coordinate and TRACK_ID columns provide the trajectories -- the column fields below are derived from its schema, never stored per layer"
@@ -1865,6 +1915,12 @@ class MeshLayer(Layer):
 
     id: auto
     lens: MeshLens = kante.django_field(disable_optimization=True, description="The mesh lens this layer draws through")
+
+    @kante.django_field(description=_CLIP_DESCRIPTION)
+    def clip(self, info: Info) -> List[Window]:
+        """The lens' windows as a clip box."""
+        del info
+        return self.lens.windows_list
 
     @kante.django_field(description="The versioned, coordinate-system-anchored mesh collection this layer renders: the container of the lens. Its geometry is fetched from the collection's Parquet catalog, not through this API")
     def collection(self, info: Info) -> MeshCollection | None:
@@ -1927,6 +1983,12 @@ class NetworkLayer(Layer):
 
     id: auto
     lens: NetworkLens = kante.django_field(disable_optimization=True, description="The network lens this layer draws through")
+
+    @kante.django_field(description=_CLIP_DESCRIPTION)
+    def clip(self, info: Info) -> List[Window]:
+        """The lens' windows as a clip box."""
+        del info
+        return self.lens.windows_list
 
     @kante.django_field(description="The versioned, coordinate-system-anchored network collection this layer renders: the container of the lens. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API")
     def collection(self, info: Info) -> NetworkCollection | None:
