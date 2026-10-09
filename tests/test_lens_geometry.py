@@ -343,6 +343,24 @@ async def test_a_crop_overlaps_exactly_the_annotations_on_the_rows_it_selects(au
     assert crop["id"] not in found[5], "row 5 begins where the crop ends"
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_stepped_lens_keeps_only_the_anchors_on_the_indices_it_selects(authenticated_context: HttpContext):
+    """`y 0:6:2` keeps rows 0, 2 and 4: an anchor pinned to row 1 is inside the range and outside the lens."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Pinned", axes=seed.YX_AXES, shapes=[[6, 8]])
+    lens = await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 0, "stop": 6, "step": 2}])
+    for row in range(6):
+        await models.CoordinateAnchor.objects.acreate(dataset=dataset, organization=ctx.request.organization, coordinates={"y": row})
+    await models.CoordinateAnchor.objects.acreate(dataset=dataset, organization=ctx.request.organization, coordinates={})
+
+    result = await schema.execute("query Anchors($id: ID!) { lens(id: $id) { activeAnchors { coordinates } } }", context_value=_fresh_request(ctx), variable_values={"id": str(lens.pk)})
+    assert not result.errors, result.errors
+
+    pinned = sorted(anchor["coordinates"].get("y", -1) for anchor in result.data["lens"]["activeAnchors"])
+    assert pinned == [-1, *range(*slice(0, 6, 2).indices(6))], "the global anchor and the rows the step lands on; the odd rows are in range and not in the lens"
+
+
 # --- 7. levels ----------------------------------------------------------------------------------
 
 

@@ -836,17 +836,23 @@ class ArrayLens(Lens):
         """
         qs = CoordinateAnchor.objects.filter(dataset=self.dataset)
 
-        # Loop through the axis constraints of the Lens
+        # Every stored slice is normalized -- explicit start, stop and step -- so there is no
+        # spelling to fall back on: each one narrows the query.
         for slc in self.slices_list:
             axis = slc.axis
+            start, stop, step = int(slc.start or 0), int(slc.stop or 0), int(slc.step or 1)
 
             # Condition A: The anchor is global for this axis (key doesn't exist)
             axis_is_global = ~Q(coordinates__has_key=axis)
 
-            if slc.start is not None and slc.stop is not None:
-                axis_in_range = Q(**{f"coordinates__{axis}__gte": slc.start, f"coordinates__{axis}__lt": slc.stop})
+            if step == 1:
+                axis_in_range = Q(**{f"coordinates__{axis}__gte": start, f"coordinates__{axis}__lt": stop})
             else:
-                continue  # Failsafe for unhandled slice types
+                # A stepped lens keeps every k-th index and nothing between: an anchor on a
+                # skipped row is not in this lens, however far inside the range it sits. The
+                # indices are enumerated rather than tested by congruence, so a pin spelled
+                # `2.0` in the JSON still matches as a number.
+                axis_in_range = Q(**{f"coordinates__{axis}__in": list(range(start, stop, step))})
 
             # The anchor must either be global for this axis, OR fall inside the slice limits
             qs = qs.filter(axis_is_global | axis_in_range)
