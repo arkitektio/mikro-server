@@ -17,7 +17,7 @@ from django.core.management import call_command
 from kante.context import HttpContext
 
 from core import enums, models
-from core.logic import coords
+from core.logic import coords, space_graph
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_condensed_placement import AS_AFFINE, _apply, _fresh_request
@@ -341,6 +341,51 @@ async def test_a_crop_overlaps_exactly_the_annotations_on_the_rows_it_selects(au
     assert crop["id"] in found[2] and crop["id"] in found[4], "the first and last rows of the crop"
     assert crop["id"] not in found[1], "row 1 ends where the crop begins; a shared face is not an overlap"
     assert crop["id"] not in found[5], "row 5 begins where the crop ends"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_stepped_crop_overlaps_exactly_the_rows_it_keeps_at_its_ends(authenticated_context: HttpContext):
+    """`y 1:6:2` keeps rows 1, 3 and 5: a point on row 0 is outside it and one on row 5 inside.
+
+    The lens' box is the footprint of the voxels it keeps, not `n·step` voxels from its start:
+    pushing a plain `[-0.5, n-0.5]` box through `SCALE(2)` would stretch it to `[0, 6]` and call
+    row 0 an overlap. A point on a skipped interior row still overlaps -- the extent is a box,
+    and that stays a known limit.
+    """
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Flat", axes=seed.YX_AXES, shapes=[[6, 8]])
+    stepped = await _lens(ctx, dataset, [{"axis": "y", "start": 1, "stop": 6, "step": 2}])
+    collection = await _collection_on(ctx, axes=["y", "x"], derived_from={"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}})
+
+    found = {}
+    for row in (0, 1, 5):
+        drawn = await _draw(ctx, collection["id"], "POINT", [[float(row), 3.0]])
+        found[row] = await _overlapping(ctx, drawn["id"])
+
+    assert stepped["id"] in found[1] and stepped["id"] in found[5], "the first and the last row the step lands on"
+    assert stepped["id"] not in found[0], "row 0 ends where the kept row 1 begins, and the stretched box would have covered it"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_stepped_lens_extent_is_the_footprint_of_the_voxels_it_keeps(authenticated_context: HttpContext):
+    """In the dataset's own grid, a stepped lens' extent is half a voxel around the first and the last voxel it keeps."""
+    ctx = authenticated_context
+    slices = [{"axis": "y", "start": 0, "stop": 6, "step": 2}, {"axis": "x", "start": 1, "stop": 8, "step": 3}]
+    dataset = await seed.create_array_dataset(ctx, "Stepped", axes=seed.SIMPLE_AXES, shapes=[SHAPE])
+    lens = await _lens(ctx, dataset, slices)
+
+    arr, view = _oracle(SHAPE, ["c", "y", "x"], slices)
+    kept = np.argwhere(np.isin(arr, view))
+    expected = {axis: [float(kept[:, i].min()) - 0.5, float(kept[:, i].max()) + 0.5] for i, axis in enumerate(["c", "y", "x"])}
+
+    def extents() -> dict:
+        graph = space_graph.SpaceGraph(dataset.intrinsic_coordinate_system, organization=ctx.request.organization)
+        return graph.lens_extents()
+
+    extent = (await sync_to_async(extents)())[int(lens["id"])]
+    assert extent == expected, "the box of the kept voxels: [-0.5, 4.5] on y (rows 0, 2, 4) and [0.5, 7.5] on x (columns 1, 4, 7)"
 
 
 @pytest.mark.django_db(transaction=True)

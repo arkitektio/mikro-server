@@ -80,7 +80,14 @@ def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[
     are in Parquet it never opens.
     """
     if isinstance(resident, models.ArrayLens):
-        shape = resident.shape_list
+        # In the lens' own space, with the voxels a step skips left out of the box. The lens'
+        # system carries its dataset's axes (prefetched with the residents) and `shapes` the
+        # level-0 shape, so this costs no query.
+        dataset_shape = shapes.get(resident.dataset_id) or []
+        names = [axis.name for axis in resident.coordinate_system.axes.all()] if resident.coordinate_system is not None else []
+        if not dataset_shape or len(names) != len(dataset_shape):
+            return None
+        return coords_logic.lens_voxel_box(dataset_shape, names, resident.slices_list)
     elif isinstance(resident, models.DataArray):
         shape = resident.shape
     elif isinstance(resident, models.ArrayDataset):
@@ -403,8 +410,8 @@ class SpaceGraph:
                 # No array, or axes that do not describe it: nothing to bound, as in `anchors_in`.
                 extents[resident.pk] = None
                 continue
-            shape = coords_logic.lens_shape(dataset_shape, names, resident.slices_list)
-            extents[resident.pk] = self.extent_of(resident.coordinate_system, [-0.5] * len(shape), [float(size) - 0.5 for size in shape])
+            mins, maxs = coords_logic.lens_voxel_box(dataset_shape, names, resident.slices_list)
+            extents[resident.pk] = self.extent_of(resident.coordinate_system, mins, maxs)
         return extents
 
     def in_view(self, region: dict[str, list[float]], *, with_anchors: bool, at: dict[str, int] | None = None) -> list[Hit]:

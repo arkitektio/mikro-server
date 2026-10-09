@@ -521,6 +521,29 @@ def lens_shape(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], 
     return shape
 
 
+def lens_voxel_box(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable) -> tuple[list[float], list[float]]:
+    """The box of the voxels a lens keeps, in the lens' own space, half a voxel around each centre.
+
+    Lens voxel ``i`` is dataset voxel ``start + i·step``, and that voxel's cell -- half a dataset
+    voxel either side of its centre -- is ``[i - 0.5/step, i + 0.5/step]`` once pulled back
+    through the lens' edge. So a stepped lens' box is ``[-0.5/step, (n - 1) + 0.5/step]`` per
+    axis: through ``SCALE(step)·TRANSLATION(start)`` that is ``[start - 0.5, start + (n-1)·step + 0.5]``
+    in the dataset, the footprint of the voxels it keeps. Pushing the plain ``[-0.5, n - 0.5]``
+    box instead would claim ``n·step`` voxels, half a step too wide at either end. At step 1 the
+    two agree, so an unstepped lens' box is the ``[-0.5, S - 0.5]`` of every other resident.
+    """
+    by_axis = {slice_.axis: slice_ for slice_ in slices}
+    shape = lens_shape(dataset_shape, dataset_axis_names, by_axis.values())
+    mins: list[float] = []
+    maxs: list[float] = []
+    for axis, size in zip(dataset_axis_names, shape, strict=True):
+        selection = by_axis.get(axis)
+        step = float(selection.step or 1) if selection is not None else 1.0
+        mins.append(-0.5 / step)
+        maxs.append((size - 1) + 0.5 / step)
+    return mins, maxs
+
+
 def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
     """The one spelling of a selection: a lens' slices resolved against its dataset.
 
