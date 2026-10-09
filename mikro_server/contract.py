@@ -153,6 +153,45 @@ HOSTS = Hosts(
         ),
     ],
     signals=[
+        # A lens of every kind is announced: a crop or a window is an event an action may wait
+        # for, and the handle it is then given. `@mikro/is_whole` is how a trigger tells a crop
+        # from the whole lens a container is born with.
+        Signal(
+            identifier="@mikro/lens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(ARRAY_DESCRIPTORS),
+            description="A selection over an array dataset was made, renamed or deleted, with its axis counts, extents, value kind and whether it selects everything.",
+        ),
+        Signal(
+            identifier="@mikro/tablelens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(TABLE_DESCRIPTORS),
+            description="A selection over a table dataset was made, renamed or deleted, with what its schema says and whether it selects everything.",
+        ),
+        Signal(
+            identifier="@mikro/sparselens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(SPARSE_DESCRIPTORS),
+            description="A selection over a sparse dataset was made, renamed or deleted, with its rank, its layouts and whether it selects everything.",
+        ),
+        Signal(
+            identifier="@mikro/meshlens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(MESH_DESCRIPTORS),
+            description="A selection over a mesh collection was made, renamed or deleted, with its axes and whether it selects everything.",
+        ),
+        Signal(
+            identifier="@mikro/networklens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(NETWORK_DESCRIPTORS),
+            description="A selection over a network collection was made, renamed or deleted, with its axes, whether nodes carry attributes and whether it selects everything.",
+        ),
+        Signal(
+            identifier="@mikro/annotationlens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(ANNOTATION_DESCRIPTORS),
+            description="A selection over an annotation collection was made, renamed or deleted, with how many shapes it holds and whether it selects everything.",
+        ),
         Signal(
             identifier="@mikro/arraydataset",
             kinds=["CREATED", "UPDATED", "DELETED"],

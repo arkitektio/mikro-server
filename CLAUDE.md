@@ -12,7 +12,9 @@ owns the crop's space and the edge back into the grid; `TableLens`, `SparseLens`
 own nothing. **Every layer and chart layer draws through a lens**, whatever its kind; a layer
 mutation takes the lens or the container (its whole lens). A lens is reached across a
 polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never `select_related` it,
-or you get the base row.
+or you get the base row. Every kind is hosted *and announced* (`mikro_server/contract.py`,
+`mikro_server/service.py`), described in its container's vocabulary by `core/descriptors.py`;
+`@mikro/is_whole` tells a crop or a window from the whole lens a container is born with.
 
 ## Migrations and jobs
 

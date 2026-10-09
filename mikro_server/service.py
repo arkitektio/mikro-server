@@ -66,6 +66,15 @@ sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", 
 org = organization_of()
 
 service.model_signal(arraydataset, organization=org)
+# Per concrete kind: `post_save` never fires for the polymorphic base. A whole lens is
+# announced with its container (it is the handle an action is given for it); a crop or a
+# window on its own, with `@mikro/is_whole` false.
+service.model_signal(lens, organization=org)
+service.model_signal(tablelens, organization=org)
+service.model_signal(sparselens, organization=org)
+service.model_signal(meshlens, organization=org)
+service.model_signal(networklens, organization=org)
+service.model_signal(annotationlens, organization=org)
 service.model_signal(scene, organization=org)
 service.model_signal(chart, organization=org)
 service.model_signal(scenesnapshot, organization=org)
