@@ -227,6 +227,24 @@ async def test_phasor_context_of_a_sliced_lens_reports_the_lens_bins(db, authent
     assert "6.25 nanosecond" in context["window"]  # but the window is halved, because the data is
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_phasor_context_of_a_stepped_lens_reports_the_lens_grid(db, authenticated_context: HttpContext):
+    """A lens that steps tau samples every other bin: the spacing the transform sees doubles, and
+    the period it covers is still the whole axis, because the data still spans it."""
+    dataset = await seed.create_array_dataset(authenticated_context, "FLIM", axes=_FLIM_AXES, shapes=[_FLIM_SHAPE])
+    await seed.create_physical_space(authenticated_context, dataset, axes=_FLIM_CALIBRATED_AXES, scale=_FLIM_SCALE)
+    lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "tau", "start": 0, "stop": 16, "step": 2}])
+
+    result = await schema.execute(_PHASOR_CONTEXT, context_value=authenticated_context, variable_values={"id": str(lens.id)})
+    assert not result.errors, result.errors
+
+    context = result.data["lens"]["phasor"]
+    assert context["bins"] == 8
+    assert "1.5625 nanosecond" in context["binWidth"], "two dataset bins apart: the lens' own spacing, not the dataset's"
+    assert "12.5 nanosecond" in context["window"], "8 bins at twice the width still cover the full period"
+
+
 # ---------------------------------------------------------------------------
 # The metadata spokes
 # ---------------------------------------------------------------------------

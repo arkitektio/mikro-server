@@ -975,8 +975,13 @@ def resolve_phasor_context(lens: "models.ArrayLens", axis_name: str | None, harm
             return None
 
     dataset = lens.dataset
-    bin_width = _resolve_bin_width(dataset, axis.name, len(axis_specs))
     bins = lens.get_size_of_axis(axis.name)
+    # A lens that *steps* the axis samples every k-th bin: the spacing the transform sees is
+    # k dataset bins, and the period it covers is that spacing times the lens' bin count. The
+    # context reports the lens' own grid, so a stepped lens renders right rather than being
+    # handed a window k times too short.
+    step = next((int(slice_.step or 1) for slice_ in lens.slices_list if slice_.axis == axis.name), 1)
+    bin_width = _scaled_quantity(_resolve_bin_width(dataset, axis.name, len(axis_specs)), step)
 
     return PhasorContext(
         axis=axis.name,

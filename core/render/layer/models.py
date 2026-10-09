@@ -136,8 +136,10 @@ class PhasorNodeModel(BaseModel):
     through the layer that owns it. Nothing here draws a scatter plot.
 
     Known limitation: a lens that *slices* its phasor axis narrows the window the transform
-    is taken over, which is physically a different transform than the full-period one. The
-    phasor still renders; it is just not comparable to one taken over the full axis.
+    is taken over, and one that *steps* it coarsens the bins, which is physically a different
+    transform than the full-period one. The context reports the lens' own bin width and
+    window, so the phasor renders right; it is just not comparable to one taken over the full
+    axis at full resolution.
     """
 
     kind: Literal["phasor"] = "phasor"
