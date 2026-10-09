@@ -610,6 +610,39 @@ class Lens(PolymorphicModel):
     # Denormalized from the container, so a list across every kind scopes in one hop.
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="lenses", help_text="The organization of the container this lens selects over")
 
+    # Who made the selection, when, and under which task -- the same four facts every
+    # container carries. The first to ask for a selection is its creator: asking again hands
+    # back the row and changes nothing. A whole lens exists from its container's creation and
+    # carries the container's provenance. `creator` is SET_NULL where a container's is CASCADE:
+    # a lens is shared by every composition over its selection, and a user leaving must not
+    # empty other people's scenes. No history table: the only edits are the name and the
+    # nomination, and `HistoricalLens` was dropped with the kinds for that reason.
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When this selection was first asked for")
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_lenses",
+        help_text="Who made this selection: the first to ask for it. The container's creator for a whole lens, which exists from the container's creation",
+    )
+    created_through = models.ForeignKey(
+        "koherent.Task",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_lenses",
+        help_text="The task this selection was made under, if any",
+    )
+    created_through_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_lenses",
+        help_text="The assigner of the creating task, denormalized for fast filtering",
+    )
+
     # A label, and the one thing here that is not derived and not immutable. It is not a fact
     # of the selection: two people would compute the same shape from the same slices, but only
     # one of them knows the cut is "nucleus 3". So it takes no part in deciding whether a lens

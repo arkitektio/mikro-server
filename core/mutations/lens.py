@@ -70,7 +70,7 @@ def create_table_lens(info: Info, input: CreateTableLensInput) -> types.TableLen
     """The table lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
     table = get_for_org(models.TableDataset, info, id=model.table_dataset)
-    return coordinate_system_logic.create_windowed_lens(table, model.windows or [])
+    return coordinate_system_logic.create_windowed_lens(table, model.windows or [], CreationContext.from_info(info))
 
 
 class CreateSparseLensInputModel(BaseModel):
@@ -88,7 +88,7 @@ def create_sparse_lens(info: Info, input: CreateSparseLensInput) -> types.Sparse
     """The sparse lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
     dataset = get_for_org(models.SparseDataset, info, id=model.sparse_dataset)
-    return coordinate_system_logic.create_windowed_lens(dataset, model.windows or [])
+    return coordinate_system_logic.create_windowed_lens(dataset, model.windows or [], CreationContext.from_info(info))
 
 
 class CreateMeshLensInputModel(BaseModel):
@@ -106,7 +106,7 @@ def create_mesh_lens(info: Info, input: CreateMeshLensInput) -> types.MeshLens:
     """The mesh lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
     collection = get_for_org(models.MeshCollection, info, id=model.mesh_collection)
-    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [])
+    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [], CreationContext.from_info(info))
 
 
 class CreateNetworkLensInputModel(BaseModel):
@@ -124,7 +124,7 @@ def create_network_lens(info: Info, input: CreateNetworkLensInput) -> types.Netw
     """The network lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
     collection = get_for_org(models.NetworkCollection, info, id=model.network_collection)
-    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [])
+    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [], CreationContext.from_info(info))
 
 
 class CreateAnnotationLensInputModel(BaseModel):
@@ -142,7 +142,7 @@ def create_annotation_lens(info: Info, input: CreateAnnotationLensInput) -> type
     """The annotation lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
     collection = get_for_org(models.AnnotationCollection, info, id=model.annotation_collection)
-    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [])
+    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [], CreationContext.from_info(info))
 
 
 class DeleteLensInputModel(BaseModel):

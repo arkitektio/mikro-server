@@ -517,7 +517,10 @@ def whole_lens(container: object) -> "models.Lens":
 
     It takes no creation context because nothing is minted beside the row: a whole lens
     selects everything, so its space *is* the container's, and it points at that node rather
-    than owning a second one joined by an identity edge.
+    than owning a second one joined by an identity edge. Its provenance is the container's --
+    it is the container's handle, made with the container by whoever made that, and minted
+    for an older container by the setup job or by the first layer over it, neither of whom
+    made the selection.
     """
     kind = lens_kind_for(container)
     if isinstance(container, models.ArrayDataset):
@@ -528,18 +531,33 @@ def whole_lens(container: object) -> "models.Lens":
             raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
 
     def make() -> "models.Lens":
-        return kind.objects.create(**{kind.CONTAINER_FIELD: container}, coordinate_system=system, organization=container.organization)  # type: ignore[attr-defined]
+        return kind.objects.create(  # type: ignore[attr-defined]
+            **{kind.CONTAINER_FIELD: container},
+            coordinate_system=system,
+            organization=container.organization,  # type: ignore[attr-defined]
+            **_container_provenance(container),
+        )
 
     return _get_or_create(kind, container=container, selection=[], make=make)
 
 
-def create_windowed_lens(container: object, windows: list) -> "models.Lens":
+def _container_provenance(container: object) -> dict[str, int | None]:
+    """A container's creator and task, as the ids a whole lens is stamped with. A mesh or network collection carries no task."""
+    return {
+        "creator_id": getattr(container, "creator_id", None),
+        "created_through_id": getattr(container, "created_through_id", None),
+        "created_through_by_id": getattr(container, "created_through_by_id", None),
+    }
+
+
+def create_windowed_lens(container: object, windows: list, ctx: CreationContext) -> "models.Lens":
     """The lens keeping these windows of a container that is not an array: the one that exists, or a new one.
 
     A window re-indexes nothing, so the lens lives in the container's own system and no edge
     is written; what is stored is the selection, in its one normalized spelling
     (:func:`core.logic.coords.normalize_windows`). Windows that keep everything are
-    :func:`whole_lens`.
+    :func:`whole_lens`. A new row is stamped with ``ctx``: the first to ask for a selection is
+    its creator, and asking again hands back the row unchanged.
     """
     kind = lens_kind_for(container)
     if kind is models.ArrayLens:
@@ -552,7 +570,14 @@ def create_windowed_lens(container: object, windows: list) -> "models.Lens":
         return whole_lens(container)
 
     def make() -> "models.Lens":
-        return kind.objects.create(**{kind.CONTAINER_FIELD: container}, coordinate_system=system, organization=container.organization, windows=normalized)  # type: ignore[attr-defined]
+        return kind.objects.create(  # type: ignore[attr-defined]
+            **{kind.CONTAINER_FIELD: container},
+            coordinate_system=system,
+            organization=container.organization,  # type: ignore[attr-defined]
+            windows=normalized,
+            creator=ctx.user,
+            **ctx.provenance_kwargs(),
+        )
 
     return _get_or_create(kind, container=container, selection=normalized, make=make)
 
@@ -594,6 +619,8 @@ def create_lens(
             coordinate_system=lens_system,
             organization=dataset.organization,
             slices=normalized,
+            creator=ctx.user,
+            **ctx.provenance_kwargs(),
         )
 
         # A lens sees the same axes as the array it slices; only the extent changes.

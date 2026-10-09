@@ -56,7 +56,7 @@ import uuid
 from asgiref.sync import sync_to_async  # noqa: E402
 
 from core import enums  # noqa: E402
-from core.base_models import SliceInputModel  # noqa: E402
+from core.base_models import SliceInputModel, WindowInputModel  # noqa: E402
 from core.creation import CreationContext  # noqa: E402
 from core.logic import coords as coords_logic  # noqa: E402
 from core.logic import graph as graph_logic  # noqa: E402
@@ -206,6 +206,11 @@ def _seed_lens_sync(ctx: HttpContext, dataset: ArrayDataset, slices: list | None
 async def create_lens(ctx: HttpContext, dataset: ArrayDataset, slices: list | None = None) -> Lens:
     """The lens making this selection over a dataset: the existing row, or a new one with its system and edge."""
     return await sync_to_async(_seed_lens_sync)(ctx, dataset, slices)
+
+
+async def create_windowed_lens(ctx: HttpContext, container: object, windows: list | None = None) -> Lens:
+    """The lens keeping these windows of a container that is not an array: the existing row, or a new one stamped with the context."""
+    return await sync_to_async(lambda: coordinate_system_logic.create_windowed_lens(container, [WindowInputModel(**entry) for entry in windows or []], _creation(ctx)))()
 
 
 def _register_into_scene_sync(ctx: HttpContext, scene: Scene, dataset: ArrayDataset | None, system: CoordinateSystem | None):
