@@ -9,12 +9,24 @@ A lens is a selection over a container that lives in a coordinate system, one ro
 (`core.logic.coordinate_system.whole_lens`). `ArrayLens` selects by slices and, when sliced,
 owns the crop's space and the edge back into the grid; `TableLens`, `SparseLens`, `MeshLens`,
 `NetworkLens` and `AnnotationLens` select by value windows in the container's own space and
-own nothing. **Every layer and chart layer draws through a lens**, whatever its kind; a layer
-mutation takes the lens or the container (its whole lens). A lens is reached across a
-polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never `select_related` it,
-or you get the base row. Every kind is hosted *and announced* (`mikro_server/contract.py`,
-`mikro_server/service.py`), described in its container's vocabulary by `core/descriptors.py`;
-`@mikro/is_whole` tells a crop or a window from the whole lens a container is born with.
+own nothing, but a window *bounds*: a windowed lens has an extent on the axes it windows and
+is silent elsewhere (absence, never an infinity, is how a box says nothing about an axis),
+so `overlapsAnnotation`, `placeableIn` and `inView` answer for every kind. A lens carries
+`creator`, `created_at` and task provenance (the first to ask for a selection is its creator;
+a whole lens carries its container's) and is owned by its maker or its container's owner.
+**Every layer and chart layer draws through a lens**, whatever its kind; a layer mutation
+takes the lens or the container (its whole lens), and a point, track or series layer hands
+its lens' windows on as `windowFilters`, a collection layer as `clip` -- derived, never
+stored. Every create-lens mutation composes over a lens (slices compose, windows intersect),
+and `createLens` also cuts from a `box` in any space the dataset reaches or from an
+`annotation`; the result is always the container's row for what is selected. A lens is
+reached across a polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never
+`select_related` it, or you get the base row. Every kind is hosted *and announced*
+(`mikro_server/contract.py`, `mikro_server/service.py`), described in its container's
+vocabulary by `core/descriptors.py`; `@mikro/is_whole` tells a crop or a window from the
+whole lens a container is born with. The pure arithmetic -- normalizing, composing, boxing,
+cutting -- lives in `core/logic/coords.py` and is oracle-tested in `tests/test_selection_math.py`
+and `tests/test_lens_geometry.py`.
 
 ## Migrations and jobs
 
