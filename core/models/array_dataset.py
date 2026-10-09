@@ -12,8 +12,11 @@ from embeddings.models import EmbeddedDescriptionMixin
 from core import base_models
 from core.logic import coords as coords_logic
 from core.models.coords import CoordinateSystem, Transformation, MeshCollection, NetworkCollection  # noqa: F401  (re-exported via core.models)
+from polymorphic.managers import PolymorphicManager
 from polymorphic.models import PolymorphicModel
+from polymorphic.query import PolymorphicQuerySet
 from typing import TYPE_CHECKING
+from collections.abc import Iterable
 
 if TYPE_CHECKING:
     from core.models.sparse_dataset import SparseDataset
@@ -505,6 +508,63 @@ class PhasorCalibration(models.Model):
         constraints = [models.UniqueConstraint(fields=["anchor", "axis", "harmonic"], name="unique_phasor_calibration")]
 
 
+#: What each lens kind's readers walk in Python, per kind: the container, its system and that
+#: system's axes -- and for an array lens the level-0 arrays its shape is read off. Keyed by
+#: the kind's `CONTAINER_FIELD`; the array kind adds its arrays.
+def _source_relations(kind: "type[Lens]") -> tuple[list[str], list[str]]:
+    field = kind.CONTAINER_FIELD
+    select = [f"{field}__coordinate_system"]
+    prefetch = [f"{field}__coordinate_system__axes", "coordinate_system__axes"]
+    if field == "dataset":
+        prefetch.append("dataset__data_arrays")
+    return select, prefetch
+
+
+def load_lens_sources(lenses: "Iterable[Lens]") -> None:
+    """Batch-load, per kind, what every lens' readers walk: its container, that container's system and axes, and for an array lens its arrays.
+
+    A lens is reached across a polymorphic foreign key, and Django's nested `prefetch_related`
+    cannot follow a mix of kinds into their own tables (`lens__dataset` is a field of one kind
+    only). So the kinds are grouped, each is fetched once with its own chain selected, and the
+    loaded relations are copied onto the instances the caller holds. Flat in the number of
+    lenses: one query per kind present, plus the prefetches.
+    """
+    by_kind: dict[type, dict[int, Lens]] = {}
+    for lens in lenses:
+        if lens is None or type(lens) is Lens:
+            continue
+        by_kind.setdefault(type(lens), {})[lens.pk] = lens
+    for kind, held in by_kind.items():
+        select, prefetch = _source_relations(kind)
+        for loaded in kind.objects.non_polymorphic().filter(pk__in=held).select_related(*select).prefetch_related(*prefetch):
+            target = held[loaded.pk]
+            target._state.fields_cache.update(loaded._state.fields_cache)
+            target._prefetched_objects_cache = {**getattr(target, "_prefetched_objects_cache", {}), **getattr(loaded, "_prefetched_objects_cache", {})}
+
+
+class LensQuerySet(PolymorphicQuerySet):
+    """The polymorphic queryset, with an opt-in to load every row's container chain in a batch."""
+
+    _load_sources: bool = False
+
+    def with_sources(self) -> "LensQuerySet":
+        """Load each row's container, its system and axes (and an array's arrays) once the rows are fetched."""
+        clone = self._chain()
+        clone._load_sources = True
+        return clone
+
+    def _clone(self) -> "LensQuerySet":
+        clone = super()._clone()
+        clone._load_sources = self._load_sources
+        return clone
+
+    def _fetch_all(self) -> None:
+        super()._fetch_all()
+        if self._load_sources and self._result_cache:
+            load_lens_sources(self._result_cache)
+            self._load_sources = False
+
+
 class Lens(PolymorphicModel):
     """A selection over a container that lives in a coordinate system. Nothing else.
 
@@ -534,6 +594,8 @@ class Lens(PolymorphicModel):
     Lenses are immutable. Nothing is derived from them that a second copy could disagree
     with: an array lens' shape, axes and edge follow from its dataset and its slices.
     """
+
+    objects = PolymorphicManager.from_queryset(LensQuerySet)()
 
     # Denormalized from the container, so a list across every kind scopes in one hop.
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="lenses", help_text="The organization of the container this lens selects over")

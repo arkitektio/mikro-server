@@ -585,8 +585,9 @@ class Lens:
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
-        """Scope the heterogeneous list to the request's organization."""
-        return build_prescoped_queryset(info, queryset)
+        """Scope the heterogeneous list to the request's organization, and load each row's container chain in a batch."""
+        scoped = build_prescoped_queryset(info, queryset)
+        return scoped.with_sources() if hasattr(scoped, "with_sources") else scoped
 
     @kante.django_field(description="What this lens selects over: an array by slices, or a table, a sparse dataset, a mesh, a network or an annotation collection by windows")
     def kind(self, info: Info) -> enums.LensKind:

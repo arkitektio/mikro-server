@@ -20,6 +20,8 @@ answer is the same for two scenes over one world does not belong on a scene at a
 
 from kante.types import Info
 
+from django.db.models import Prefetch
+
 from core import enums, models
 from core.logic import placement
 from core.logic import graph as graph_logic
@@ -153,10 +155,9 @@ class SceneGraph(placement.PlacementGraph):
 #: resolver's own instance -- a prefetch on `self.layers` populates a different object and
 #: buys nothing. Five queries for a whole scene, against one per layer without it.
 LAYER_SOURCE_AXIS_PREFETCH = (
-    "lens__coordinate_system__axes",
-    "lens__dataset__coordinate_system__axes",
-    # The level-0 shape, which every lens' `shape` and the renderability checks read.
-    "lens__dataset__data_arrays",
+    # The lens, as its kind, with its container's chain loaded per kind: a plain nested lookup
+    # cannot follow a mix of kinds into their own tables (see `load_lens_sources`).
+    Prefetch("lens", queryset=models.Lens.objects.with_sources()),
     "annotation_collection__coordinate_system__axes",
     "mesh_collection__coordinate_system__axes",
     "table_dataset__coordinate_system__axes",

@@ -5,10 +5,12 @@ chart adds is which space each of its layers draws from -- so the universe is fe
 for the chart, however many layers ask.
 """
 
+from django.db.models import Prefetch
 from kante.types import Info
 
 from chart import models
 from chart.logic import chart as chart_logic
+from core import models as core_models
 from core.logic import placement
 
 #: Where a `ChartGraph` memo lives on the request context, keyed by chart pk.
@@ -25,8 +27,7 @@ LAYER_PLACEMENT_RELATIONS = (
 
 #: The axes of every space a layer can name as its source: a reverse relation, so a prefetch.
 LAYER_SOURCE_AXIS_PREFETCH = (
-    "lens__coordinate_system__axes",
-    "lens__dataset__coordinate_system__axes",
+    Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),
     "table_dataset__coordinate_system__axes",
     "annotation_collection__coordinate_system__axes",
 )
