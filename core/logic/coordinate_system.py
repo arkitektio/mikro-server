@@ -21,7 +21,7 @@ from typing import cast
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
-from core import enums, models
+from core import base_models, enums, models
 from core.creation import CreationContext
 from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
 from core.logic import compositions as compositions_logic
@@ -723,3 +723,22 @@ def delete_lens(lens: "models.Lens") -> str | None:
         models.Transformation.objects.filter(Q(input=system) | Q(output=system)).delete()
         system.delete()
     return reason
+
+
+def create_sub_lens(parent: "models.ArrayLens", slices: list, ctx: CreationContext) -> "models.ArrayLens":
+    """A crop of a crop: ``slices`` stated in the parent lens' own index space, as the dataset's lens that selects those voxels.
+
+    Composed through the parent's slices (:func:`core.logic.coords.compose_slices`) and then
+    made as any other lens of the dataset, so identity falls out: a crop of a crop that
+    selects what an existing crop selects *is* that crop. Over a whole lens the composition
+    is the identity, which is how every ``createLens`` goes through here.
+    """
+    dataset = parent.dataset
+    composed = coords_logic.compose_slices(dataset.shape_list, dataset.axis_names, parent.slices_list, slices)
+    return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in composed], ctx)
+
+
+def create_sub_windowed_lens(parent: "models.Lens", windows: list, ctx: CreationContext) -> "models.Lens":
+    """A window of a window: the tighter of the two bounds per axis, as the container's lens keeping them (:func:`core.logic.coords.intersect_windows`)."""
+    narrowed = coords_logic.intersect_windows(parent.windows_list, windows)  # type: ignore[attr-defined]
+    return create_windowed_lens(parent.container, [base_models.WindowInputModel(**entry) for entry in narrowed], ctx)

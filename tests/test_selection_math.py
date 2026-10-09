@@ -58,12 +58,16 @@ def test_a_crop_of_a_crop_is_the_crop_numpy_takes(parent: list, child: list) -> 
 
 
 def test_a_child_slice_that_keeps_nothing_is_refused() -> None:
-    with pytest.raises(ValueError, match="keeps nothing"):
+    with pytest.raises(ValueError, match="selects nothing"):
         coords.compose_slices(SHAPE, AXES, [_Slice("y", 1, 3)], [_Slice("y", 5, 9)])
     with pytest.raises(ValueError, match="positive"):
         coords.compose_slices(SHAPE, AXES, [], [_Slice("y", None, None, -1)])
     with pytest.raises(ValueError, match="does not have"):
         coords.compose_slices(SHAPE, AXES, [], [_Slice("t", 0, 1)])
+    with pytest.raises(ValueError, match="sliced twice"):
+        coords.compose_slices(SHAPE, AXES, [], [_Slice("y", 0, 1), _Slice("y", 1, 2)])
+    with pytest.raises(ValueError, match="windowed twice"):
+        coords.intersect_windows([], [_Window("t", 0.0, 1.0), _Window("t", 1.0, 2.0)])
 
 
 # --- a window of a window ---------------------------------------------------------------

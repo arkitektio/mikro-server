@@ -445,6 +445,59 @@ async def test_an_annotation_lens_overlaps_the_shapes_in_its_window_on_its_own_c
     assert str(window.pk) not in await _overlapping(ctx, outside["id"])
 
 
+# --- a crop of a crop -------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "parent, child",
+    [
+        ([{"axis": "y", "start": 1, "stop": 5}, {"axis": "x", "start": 2, "stop": 8}], [{"axis": "y", "start": 1, "stop": 3}, {"axis": "x", "start": -4}]),
+        ([{"axis": "y", "start": 0, "stop": 6, "step": 2}], [{"axis": "y", "start": 1, "stop": 3}, {"axis": "c", "start": 1, "stop": 2}]),
+        ([{"axis": "y", "start": 0, "stop": 6, "step": 2}, {"axis": "x", "start": 1, "stop": 8, "step": 3}], [{"axis": "x", "start": 0, "stop": 3, "step": 2}]),
+        ([], [{"axis": "x", "start": 3}]),
+    ],
+)
+async def test_a_crop_of_a_crop_is_the_datasets_lens_for_those_voxels(authenticated_context: HttpContext, parent: list[dict], child: list[dict]):
+    """Slices stated over a lens compose through it: the result is the row the same voxels asked of the dataset give, and its edge maps every voxel."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Nested", axes=seed.SIMPLE_AXES, shapes=[SHAPE])
+    outer = await _lens(ctx, dataset, parent)
+    inner = await schema.execute(CREATE_LENS, context_value=_fresh_request(ctx), variable_values={"input": {"lens": outer["id"], "slices": child}})
+    assert not inner.errors, inner.errors
+    cut = inner.data["createLens"]
+
+    arr = np.arange(math.prod(SHAPE)).reshape(SHAPE)
+    by_axis = lambda slices: {entry["axis"]: entry for entry in slices}  # noqa: E731
+    index = lambda slices: tuple(slice(by_axis(slices)[a].get("start"), by_axis(slices)[a].get("stop"), by_axis(slices)[a].get("step")) if a in by_axis(slices) else slice(None) for a in ["c", "y", "x"])  # noqa: E731
+    view = arr[index(parent)][index(child)]
+
+    assert cut["shape"] == list(view.shape)
+    _assert_maps_every_voxel(_matrix(cut["toParent"], len(SHAPE)) if cut["toParent"] else [[1.0 if i == j else 0.0 for j in range(len(SHAPE) + 1)] for i in range(len(SHAPE))], arr, view)
+    composed = [{"axis": a, "start": s.start, "stop": s.stop, "step": s.step} for a, s in zip(["c", "y", "x"], index(parent)) if s != slice(None)]
+    direct = await _lens(ctx, dataset, [entry for entry in _compose_by_numpy(parent, child)])
+    assert direct["id"] == cut["id"], "the same voxels asked of the dataset are the same row"
+    del composed
+
+
+def _compose_by_numpy(parent: list[dict], child: list[dict]) -> list[dict]:
+    """The dataset slices numpy would need for `arr[parent][child]`, by composing index ranges."""
+    out = []
+    parent_by = {entry["axis"]: entry for entry in parent}
+    child_by = {entry["axis"]: entry for entry in child}
+    for axis, size in zip(["c", "y", "x"], SHAPE):
+        p, c = parent_by.get(axis), child_by.get(axis)
+        if p is None and c is None:
+            continue
+        kept = list(range(size))[slice(p.get("start"), p.get("stop"), p.get("step")) if p else slice(None)]
+        if c is not None:
+            kept = kept[slice(c.get("start"), c.get("stop"), c.get("step"))]
+        step = (kept[1] - kept[0]) if len(kept) > 1 else 1
+        out.append({"axis": axis, "start": kept[0], "stop": kept[-1] + 1, "step": step})
+    return out
+
+
 # --- 7. levels ----------------------------------------------------------------------------------
 
 

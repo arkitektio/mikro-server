@@ -1455,10 +1455,13 @@ def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
     not name keeps the parent's selection; a child slice that keeps nothing is refused.
     """
     parent_by_axis = {slice_.axis: slice_ for slice_ in parent_slices}
-    child_by_axis = {slice_.axis: slice_ for slice_ in child_slices}
-    unknown = [axis for axis in child_by_axis if axis not in dataset_axis_names]
-    if unknown:
-        raise ValueError(f"Slices name axes the dataset does not have: {unknown}; its axes are {list(dataset_axis_names)}")
+    child_by_axis: dict[str, SliceLike] = {}
+    for slice_ in child_slices:
+        if slice_.axis not in dataset_axis_names:
+            raise ValueError(f"Axis '{slice_.axis}' is not an axis of the dataset, which the lens does not have either; its axes are {list(dataset_axis_names)}")
+        if slice_.axis in child_by_axis:
+            raise ValueError(f"Axis '{slice_.axis}' is sliced twice; one slice per axis")
+        child_by_axis[slice_.axis] = slice_
     composed: list[dict[str, int | str]] = []
     for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
         parent = parent_by_axis.get(axis)
@@ -1478,7 +1481,7 @@ def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
         cs, ce, cst = slice(child.start, child.stop, child.step).indices(extent)
         count = len(range(cs, ce, cst))
         if count == 0:
-            raise ValueError(f"Slice over axis '{axis}' ({child.start}:{child.stop}:{child.step}) keeps nothing of the {extent} voxels the lens has along it")
+            raise ValueError(f"Slice over axis '{axis}' ({child.start}:{child.stop}:{child.step}) selects nothing of the {extent} voxels the lens has along it")
         start = ps + pstep * cs
         step = pstep * cst
         composed.append({"axis": axis, "start": start, "stop": start + (count - 1) * step + 1, "step": step})
@@ -1492,6 +1495,11 @@ def intersect_windows(parent_windows: Iterable["WindowLike"], child_windows: Ite
     or above its max), so a selection inside a selection is one row like any other.
     """
     bounds: dict[str, list[float | None]] = {}
+    named: set[str] = set()
+    for window in child_windows:
+        if window.axis in named:
+            raise ValueError(f"Axis '{window.axis}' is windowed twice; one window per axis")
+        named.add(window.axis)
     for window in (*parent_windows, *child_windows):
         low, high = bounds.setdefault(window.axis, [None, None])
         if window.min is not None:

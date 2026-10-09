@@ -225,3 +225,21 @@ async def test_a_lens_is_found_by_its_containers_label_whatever_the_container(au
     mesh_whole = await models.MeshLens.objects.aget(mesh_collection_id=mesh_id)
     network_whole = await models.NetworkLens.objects.aget(network_collection_id=network_id)
     assert await found("v1") == {("MESH", str(mesh_whole.pk)), ("NETWORK", str(network_whole.pk))}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_window_of_a_window_is_the_tables_lens_for_the_tighter_bounds(authenticated_context: HttpContext):
+    """Windows stated over a lens intersect with its own; an empty intersection is refused."""
+    ctx = authenticated_context
+    table_id, mutation, field = await _a_table(ctx)
+    outer = await _create(ctx, mutation, field, table_id, [{"axis": "t", "min": 2.0, "max": 8.0}])
+    inner = await _create(ctx, mutation, "lens", outer["id"], [{"axis": "t", "min": 5.0, "max": 20.0}])
+    direct = await _create(ctx, mutation, field, table_id, [{"axis": "t", "min": 5.0, "max": 8.0}])
+    assert inner["id"] == direct["id"], "t 5..8, whichever way it was asked for"
+    assert inner["id"] != outer["id"]
+
+    refused = await _create(ctx, mutation, "lens", outer["id"], [{"axis": "t", "min": 9.0}])
+    assert isinstance(refused, list) and "keeps nothing" in refused[0].message
+    both = await schema.execute(f"mutation M($input: {mutation}Input!) {{ {mutation[0].lower() + mutation[1:]}(input: $input) {{ id }} }}", context_value=ctx, variable_values={"input": {field: table_id, "lens": outer["id"], "windows": []}})
+    assert both.errors and "exactly one" in both.errors[0].message.lower()

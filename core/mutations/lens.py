@@ -1,9 +1,12 @@
 """Lenses: one selection, one row, over any container that lives in a coordinate system.
 
 ``createLens`` selects over an array by slices; the five ``create<Kind>Lens`` mutations select
-over the other containers by value windows. Every one is get-or-create: asking twice for the
-same selection hands back the same id. ``deleteLens`` takes any kind, and refuses a lens in use
-or a container's whole lens (:func:`core.logic.coordinate_system.assert_lens_deletable`).
+over the other containers by value windows. Each takes the container, or a lens over it: a
+selection stated over a lens is cut from that lens -- slices compose, windows intersect -- and
+is the container's row for what it ends up selecting, so a crop of a crop that equals an
+existing crop is that crop. Every one is get-or-create: asking twice for the same selection
+hands back the same id. ``deleteLens`` takes any kind, and refuses a lens in use or a
+container's whole lens (:func:`core.logic.coordinate_system.assert_lens_deletable`).
 """
 
 from kante.types import Info
@@ -19,18 +22,24 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.scoping import get_for_org
 from core.mutations import array_dataset as array_dataset_mutations
 from core.mutations._generic import assert_can_delete, make_delete
+from core.mutations._sources import resolve_source_lens
 
 
 class CreateLensInputModel(BaseModel):
-    dataset: str
+    dataset: str | None = None
+    lens: str | None = None
     slices: list[base_models.SliceInputModel] | None = None
     name: str | None = None
 
 
-@kante.pydantic_input(CreateLensInputModel, description="Input for the lens making a selection over an array dataset, by slices")
+_OVER = "Exactly one of `dataset` and `lens`: the array dataset to select over, or an array lens to select *within* -- the slices are then stated in that lens' own index space and composed through it, and the result is the dataset's lens for the voxels that keeps"
+
+
+@kante.pydantic_input(CreateLensInputModel, description="Input for the lens making a selection over an array dataset -- or within one of its lenses -- by slices")
 class CreateLensInput:
-    dataset: strawberry.ID = strawberry.field(description="The array dataset to select over")
-    slices: list[inputs.SliceInput] = strawberry.field(default=None, description="Optional slices selecting a window of the dataset, one per axis to restrict. Omit (or pass an empty list) for the lens that selects everything -- the dataset's whole lens, which exists from creation. The same selection, however spelled, is the same lens")
+    dataset: strawberry.ID | None = strawberry.field(default=None, description=_OVER)
+    lens: strawberry.ID | None = strawberry.field(default=None, description="An array lens to cut from, in place of `dataset`: a crop of a crop. The slices are stated in this lens' index space")
+    slices: list[inputs.SliceInput] = strawberry.field(default=None, description="Optional slices selecting a window of the dataset (or of the lens), one per axis to restrict. Omit (or pass an empty list) for everything -- the dataset's whole lens, or the lens cut from. The same selection, however spelled, is the same lens")
     name: str | None = strawberry.field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name -- finding a selection is not a request to rename it, `updateLens` is")
 
 
@@ -41,10 +50,10 @@ def create_lens(
     """The array lens making this selection: the one that exists, or a new one with its coordinate system and its edge back into the dataset."""
     model = input.to_pydantic()
 
-    dataset = get_for_org(models.ArrayDataset, info, id=model.dataset)
+    parent = resolve_source_lens(info, kind=models.ArrayLens, lens=model.lens, container_model=models.ArrayDataset, container=model.dataset, what="dataset", role="a selection by slices is cut from")
     ctx = CreationContext.from_info(info)
 
-    lens = coordinate_system_logic.create_lens(dataset, model.slices or [], ctx)
+    lens = coordinate_system_logic.create_sub_lens(parent, model.slices or [], ctx)
     name = (model.name or "").strip() or None
     if name and lens.name is None:
         lens.name = name
@@ -52,97 +61,109 @@ def create_lens(
     return lens
 
 
-_WINDOWS = "Optional windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for the lens that selects everything -- the container's whole lens, which exists from creation. A window keeps and re-indexes nothing, so the lens lives in the container's own coordinate system"
+_WINDOWS = "Optional windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Stated over a lens, they narrow that lens' windows. Omit for everything -- the container's whole lens, which exists from creation, or the lens cut from. A window keeps and re-indexes nothing, so the lens lives in the container's own coordinate system"
+_WITHIN = "A lens of this kind to select within, in place of the container: the windows then intersect with its own, and the result is the container's lens for what that keeps"
+
+
+def _windowed(info: Info, *, kind: type, container_model: type, container: str | None, lens: str | None, windows: list | None, what: str) -> "models.Lens":
+    """The windowed lens of one kind: over the container, or within one of its lenses."""
+    parent = resolve_source_lens(info, kind=kind, lens=lens, container_model=container_model, container=container, what=what, role="a selection by windows is cut from")
+    return coordinate_system_logic.create_sub_windowed_lens(parent, windows or [], CreationContext.from_info(info))
 
 
 class CreateTableLensInputModel(BaseModel):
-    table_dataset: str
+    table_dataset: str | None = None
+    lens: str | None = None
     windows: list[base_models.WindowInputModel] | None = None
 
 
 @kante.pydantic_input(CreateTableLensInputModel, description="Input for the lens making a selection over a table dataset, by windows on its coordinate columns")
 class CreateTableLensInput:
-    table_dataset: strawberry.ID = strawberry.field(description="The table dataset to select over")
+    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset to select over. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
     windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_table_lens(info: Info, input: CreateTableLensInput) -> types.TableLens:
     """The table lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
-    table = get_for_org(models.TableDataset, info, id=model.table_dataset)
-    return coordinate_system_logic.create_windowed_lens(table, model.windows or [], CreationContext.from_info(info))
+    return _windowed(info, kind=models.TableLens, container_model=models.TableDataset, container=model.table_dataset, lens=model.lens, windows=model.windows, what="tableDataset")
 
 
 class CreateSparseLensInputModel(BaseModel):
-    sparse_dataset: str
+    sparse_dataset: str | None = None
+    lens: str | None = None
     windows: list[base_models.WindowInputModel] | None = None
 
 
 @kante.pydantic_input(CreateSparseLensInputModel, description="Input for the lens making a selection over a sparse dataset, by windows on its axes")
 class CreateSparseLensInput:
-    sparse_dataset: strawberry.ID = strawberry.field(description="The sparse dataset to select over")
+    sparse_dataset: strawberry.ID | None = strawberry.field(default=None, description="The sparse dataset to select over. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
     windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_sparse_lens(info: Info, input: CreateSparseLensInput) -> types.SparseLens:
     """The sparse lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
-    dataset = get_for_org(models.SparseDataset, info, id=model.sparse_dataset)
-    return coordinate_system_logic.create_windowed_lens(dataset, model.windows or [], CreationContext.from_info(info))
+    return _windowed(info, kind=models.SparseLens, container_model=models.SparseDataset, container=model.sparse_dataset, lens=model.lens, windows=model.windows, what="sparseDataset")
 
 
 class CreateMeshLensInputModel(BaseModel):
-    mesh_collection: str
+    mesh_collection: str | None = None
+    lens: str | None = None
     windows: list[base_models.WindowInputModel] | None = None
 
 
 @kante.pydantic_input(CreateMeshLensInputModel, description="Input for the lens making a selection over a mesh collection, by windows in its own space")
 class CreateMeshLensInput:
-    mesh_collection: strawberry.ID = strawberry.field(description="The mesh collection to select over")
+    mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="The mesh collection to select over. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
     windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_mesh_lens(info: Info, input: CreateMeshLensInput) -> types.MeshLens:
     """The mesh lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
-    collection = get_for_org(models.MeshCollection, info, id=model.mesh_collection)
-    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [], CreationContext.from_info(info))
+    return _windowed(info, kind=models.MeshLens, container_model=models.MeshCollection, container=model.mesh_collection, lens=model.lens, windows=model.windows, what="meshCollection")
 
 
 class CreateNetworkLensInputModel(BaseModel):
-    network_collection: str
+    network_collection: str | None = None
+    lens: str | None = None
     windows: list[base_models.WindowInputModel] | None = None
 
 
 @kante.pydantic_input(CreateNetworkLensInputModel, description="Input for the lens making a selection over a network collection, by windows in its own space")
 class CreateNetworkLensInput:
-    network_collection: strawberry.ID = strawberry.field(description="The network collection to select over")
+    network_collection: strawberry.ID | None = strawberry.field(default=None, description="The network collection to select over. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
     windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_network_lens(info: Info, input: CreateNetworkLensInput) -> types.NetworkLens:
     """The network lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
-    collection = get_for_org(models.NetworkCollection, info, id=model.network_collection)
-    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [], CreationContext.from_info(info))
+    return _windowed(info, kind=models.NetworkLens, container_model=models.NetworkCollection, container=model.network_collection, lens=model.lens, windows=model.windows, what="networkCollection")
 
 
 class CreateAnnotationLensInputModel(BaseModel):
-    annotation_collection: str
+    annotation_collection: str | None = None
+    lens: str | None = None
     windows: list[base_models.WindowInputModel] | None = None
 
 
 @kante.pydantic_input(CreateAnnotationLensInputModel, description="Input for the lens making a selection over an annotation collection, by windows in its drawing space")
 class CreateAnnotationLensInput:
-    annotation_collection: strawberry.ID = strawberry.field(description="The annotation collection to select over")
+    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="The annotation collection to select over. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
     windows: list[inputs.WindowInput] = strawberry.field(default=None, description=_WINDOWS)
 
 
 def create_annotation_lens(info: Info, input: CreateAnnotationLensInput) -> types.AnnotationLens:
     """The annotation lens keeping these windows: the one that exists, or a new one."""
     model = input.to_pydantic()
-    collection = get_for_org(models.AnnotationCollection, info, id=model.annotation_collection)
-    return coordinate_system_logic.create_windowed_lens(collection, model.windows or [], CreationContext.from_info(info))
+    return _windowed(info, kind=models.AnnotationLens, container_model=models.AnnotationCollection, container=model.annotation_collection, lens=model.lens, windows=model.windows, what="annotationCollection")
 
 
 class DeleteLensInputModel(BaseModel):

@@ -23,15 +23,16 @@ def resolve_source_lens(
     container_model: type,
     container: str | None,
     what: str,
+    role: str = "this layer draws through",
 ) -> models.Lens:
-    """The lens a layer draws through, from exactly one of ``lens`` and ``container``."""
+    """The lens a layer draws through -- or a selection is cut from -- from exactly one of ``lens`` and ``container``."""
     if (lens is None) == (container is None):
-        raise ValueError(f"Name exactly one of `lens` (a {kind.KIND.lower()} lens) or `{what}` (the container, drawn through its whole lens).")
+        raise ValueError(f"Name exactly one of `lens` (a {kind.KIND.lower()} lens) or `{what}` (the container, through its whole lens).")
     if lens is not None:
         if not kind.objects.filter(pk=lens).exists():
             found = models.Lens.objects.filter(pk=lens).first()
             if found is None:
                 raise ValueError(f"Lens {lens} does not exist.")
-            raise ValueError(f"Lens {lens} is a {type(found).KIND.lower()} lens; this layer draws through a {kind.KIND.lower()} lens. Pass a lens over a {what}, or the {what} itself.")
+            raise ValueError(f"Lens {lens} is a {type(found).KIND.lower()} lens; {role} a {kind.KIND.lower()} lens. Pass a lens over a {what}, or the {what} itself.")
         return get_for_org(kind, info, id=lens)
     return coordinate_system_logic.whole_lens(get_for_org(container_model, info, id=container))
