@@ -623,17 +623,6 @@ class Lens(OrgScoped):
         """The datasets whose derivation edges land in this lens' space."""
         return graph_logic.lens_derived_datasets(self)
 
-    @kante.django_field(
-        description=(
-            "Which axis of the data source maps to screen x, y, z, time and intensity. Derived from the axis types: spatial axes are in array order, so the last is x. "
-            "**Deprecated**: how data is looked at is the view's convention, not the selection's, so read `renderAxes` on the layer. This answers the same value until it goes"
-        ),
-        deprecation_reason="Read `renderAxes` on the layer: which axis faces the screen is the view's convention, not the selection's",
-    )
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """The renderer's axis mapping, derived from the axis types. Deprecated: the layer answers it."""
-        return coords_logic.resolve_render_axes(self.axis_specs)
-
     @kante.django_field()
     def slices(self, info: Info) -> List[Slice]:
         return self.slices_list
@@ -1037,7 +1026,7 @@ _RENDER_AXES_DESCRIPTION = (
     "Which axis of this layer's lens faces screen x, y, z, time and intensity (and which carries the phasor or the vector components). A convention of the *view*, which is why it "
     "is a field of the layer: a lens is a selection and a coordinate system is a container of axes, and neither chooses how it is looked at. Derived on every read from the axis "
     "types and names by the one server-side rule (`core.logic.coords.resolve_render_axes`), never stored, so two layers over one lens -- and two clients over one layer -- cannot "
-    "transpose the axes differently. `Lens.renderAxes` answers the same today and is deprecated in favour of this"
+    "transpose the axes differently. A lens has no such field: a selection does not choose how it is looked at"
 )
 
 

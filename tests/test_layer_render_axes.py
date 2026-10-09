@@ -1,9 +1,11 @@
-"""`renderAxes` belongs to the view: every lens-backed layer kind answers it, and answers what its lens does.
+"""`renderAxes` belongs to the view: every lens-backed layer kind answers it, and the lens does not.
 
 Which axis faces screen x, y, z, time and intensity is a convention of how data is looked
-at, so it is a field of the layer. The lens keeps answering, deprecated, until clients have
-moved; the two must agree for as long as both exist.
+at, so it is a field of the layer. A lens is a selection and chooses nothing about how it
+is looked at, so it carries no such field.
 """
+
+import re
 
 import pytest
 from kante.context import HttpContext
@@ -19,38 +21,47 @@ query Layers($id: ID!) {{
   scene(id: $id) {{
     layers {{
       __typename
-      ... on ImageLayer {{ {RENDER_AXES} lens {{ {RENDER_AXES} }} }}
-      ... on IntensityLayer {{ {RENDER_AXES} lens {{ {RENDER_AXES} }} }}
-      ... on RgbLayer {{ {RENDER_AXES} lens {{ {RENDER_AXES} }} }}
-      ... on PhasorLayer {{ {RENDER_AXES} lens {{ {RENDER_AXES} }} }}
-      ... on VectorLayer {{ {RENDER_AXES} lens {{ {RENDER_AXES} }} }}
-      ... on LabelLayer {{ {RENDER_AXES} lens {{ {RENDER_AXES} }} }}
+      ... on ImageLayer {{ {RENDER_AXES} }}
+      ... on IntensityLayer {{ {RENDER_AXES} }}
+      ... on RgbLayer {{ {RENDER_AXES} }}
+      ... on PhasorLayer {{ {RENDER_AXES} }}
+      ... on VectorLayer {{ {RENDER_AXES} }}
+      ... on LabelLayer {{ {RENDER_AXES} }}
     }}
   }}
 }}
 """
 
-#: The axes each kind needs for its own slot of the mapping to be filled: a phasor layer
-#: wants a MICROTIME axis, a vector layer a DISPLACEMENT axis, the rest a channel axis.
-_AXES_BY_KIND = {
-    enums.LayerKindChoices.IMAGE.value: (seed.SIMPLE_AXES, [3, 64, 64]),
-    enums.LayerKindChoices.INTENSITY.value: (seed.SIMPLE_AXES, [3, 64, 64]),
-    enums.LayerKindChoices.RGB.value: (seed.SIMPLE_AXES, [3, 64, 64]),
-    enums.LayerKindChoices.LABEL.value: (seed.SIMPLE_AXES, [3, 64, 64]),
-    enums.LayerKindChoices.PHASOR.value: ([seed.axis("tau", enums.AxisType.MICROTIME), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)], [8, 64, 64]),
-    enums.LayerKindChoices.VECTOR.value: ([seed.axis("v", enums.AxisType.DISPLACEMENT), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)], [2, 64, 64]),
+#: The axes each kind needs for its own slot of the mapping to be filled, and the mapping a
+#: renderer must then be handed: a phasor layer wants a MICROTIME axis, a vector layer a
+#: DISPLACEMENT axis, the rest a channel axis. Spatial axes named for the screen bind by name.
+_CASES = {
+    enums.LayerKindChoices.IMAGE.value: (seed.SIMPLE_AXES, [3, 64, 64], {"x": "x", "y": "y", "z": None, "t": None, "intensity": "c", "phasor": None, "vector": None}),
+    enums.LayerKindChoices.INTENSITY.value: (seed.SIMPLE_AXES, [3, 64, 64], {"x": "x", "y": "y", "z": None, "t": None, "intensity": "c", "phasor": None, "vector": None}),
+    enums.LayerKindChoices.RGB.value: (seed.SIMPLE_AXES, [3, 64, 64], {"x": "x", "y": "y", "z": None, "t": None, "intensity": "c", "phasor": None, "vector": None}),
+    enums.LayerKindChoices.LABEL.value: (seed.SIMPLE_AXES, [3, 64, 64], {"x": "x", "y": "y", "z": None, "t": None, "intensity": "c", "phasor": None, "vector": None}),
+    enums.LayerKindChoices.PHASOR.value: (
+        [seed.axis("tau", enums.AxisType.MICROTIME), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        [8, 64, 64],
+        {"x": "x", "y": "y", "z": None, "t": None, "intensity": None, "phasor": "tau", "vector": None},
+    ),
+    enums.LayerKindChoices.VECTOR.value: (
+        [seed.axis("v", enums.AxisType.DISPLACEMENT), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        [2, 64, 64],
+        {"x": "x", "y": "y", "z": None, "t": None, "intensity": None, "phasor": None, "vector": "v"},
+    ),
 }
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_lens_backed_layer_answers_render_axes_as_its_lens_does(authenticated_context: HttpContext):
-    """One layer per lens-backed kind, each over a lens whose axes fill that kind's slot, and `layer.renderAxes == layer.lens.renderAxes` for all of them."""
-    assert set(_AXES_BY_KIND) == set(enums.LENS_BACKED_KINDS), "a lens-backed kind this test does not build a layer for"
+async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(authenticated_context: HttpContext):
+    """One layer per lens-backed kind, each over a lens whose axes fill that kind's slot, each answering the mapping its axes imply."""
+    assert set(_CASES) == set(enums.LENS_BACKED_KINDS), "a lens-backed kind this test does not build a layer for"
 
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Every kind")
-    for order, (kind, (axes, shape)) in enumerate(_AXES_BY_KIND.items()):
+    for order, (kind, (axes, shape, _)) in enumerate(_CASES.items()):
         dataset = await seed.create_array_dataset(ctx, kind, axes=axes, shapes=[shape])
         lens = await seed.create_lens(ctx, dataset)
         await models.Layer.objects.acreate(scene=scene, kind=kind, lens=lens, order=order)
@@ -60,17 +71,16 @@ async def test_every_lens_backed_layer_answers_render_axes_as_its_lens_does(auth
     layers = result.data["scene"]["layers"]
 
     assert len(layers) == len(enums.LENS_BACKED_KINDS)
+    expected_by_kind = {kind: expected for kind, (_, _, expected) in _CASES.items()}
     for layer in layers:
-        assert layer["renderAxes"] == layer["lens"]["renderAxes"], layer["__typename"]
-        assert layer["renderAxes"]["x"] == "x" and layer["renderAxes"]["y"] == "y"
-
-    by_type = {layer["__typename"]: layer["renderAxes"] for layer in layers}
-    assert by_type["IntensityLayer"]["intensity"] == "c"
-    assert by_type["PhasorLayer"]["phasor"] == "tau"
-    assert by_type["VectorLayer"]["vector"] == "v"
+        kind = layer["__typename"].removesuffix("Layer").lower()
+        assert layer["renderAxes"] == expected_by_kind[kind], layer["__typename"]
 
 
-def test_the_lens_field_is_deprecated_in_favour_of_the_layers() -> None:
-    """The schema says where to read it now; the value does not change until the field goes."""
+def test_the_lens_has_no_render_axes() -> None:
+    """A selection does not choose how it is looked at: the field is the layer's alone."""
     printed = schema.as_str()
-    assert "@deprecated(reason: \"Read `renderAxes` on the layer" in printed
+    lens_type = re.search(r"\ntype Lens\b[^{]*\{(.*?)\n\}", printed, re.S)
+    assert lens_type, "no `Lens` type in the SDL"
+    assert "renderAxes" not in lens_type.group(1)
+    assert "renderAxes" in printed, "the layers still answer it"

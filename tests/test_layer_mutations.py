@@ -484,7 +484,7 @@ async def test_scene_layers_resolves_imagelayer_polymorphically(db, authenticate
                     id
                     opacity
                     ... on RgbLayer {
-                        lens { renderAxes { x y z intensity } }
+                        renderAxes { x y z intensity }
                         redIndex
                         greenIndex
                         blueIndex
@@ -501,11 +501,11 @@ async def test_scene_layers_resolves_imagelayer_polymorphically(db, authenticate
     assert layers[0]["id"] == str(layer_id)
     assert [layers[0]["redIndex"], layers[0]["greenIndex"], layers[0]["blueIndex"]] == [0, 1, 2]
 
-    # The render axes are derived from the axis types, not stored on the layer --
+    # The render axes are derived from the lens' axis types on every read, never stored --
     # so two layers over one lens cannot disagree about which axis is x. Note that
     # x is the LAST spatial axis: the old stored rule took the first, and for these
     # (c, y, x) axes it wrote xDim="y".
-    assert layers[0]["lens"]["renderAxes"] == {"x": "x", "y": "y", "z": None, "intensity": "c"}
+    assert layers[0]["renderAxes"] == {"x": "x", "y": "y", "z": None, "intensity": "c"}
 
 
 @pytest.mark.django_db(transaction=True)
