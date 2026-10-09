@@ -189,6 +189,31 @@ async def test_a_crop_whose_space_is_registered_elsewhere_leaves_the_space_behin
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_deleting_a_container_takes_the_layers_drawn_through_its_lenses_in_every_scene(db, authenticated_context: HttpContext, bot_context: HttpContext):
+    """A lens is refused while layers draw through it; its container is not. Deleting what a layer drew takes the layer, whoever's scene it is in, and the scene stays.
+
+    Said rather than guarded: a scene has no owner to decide "someone else's" by, and the
+    cascade is what a container's deletion has always meant. The lens' refusal names it as
+    the one way to take every layer over a selection.
+    """
+    ctx = authenticated_context
+    array_dataset = await _seed_array_dataset(ctx, creator=ctx.request.user)
+    crop = await seed.create_lens(ctx, array_dataset, slices=[{"axis": "y", "start": 4, "stop": 20}])
+    scene = await seed.create_scene(bot_context, "Bot's composition")
+    layer = await models.Layer.objects.acreate(scene=scene, kind="image", lens=crop)
+
+    refused = await schema.execute("mutation($id: ID!) { deleteLens(input: {id: $id}) }", variable_values={"id": str(crop.pk)}, context_value=ctx)
+    assert refused.errors and "Deleting the container" in refused.errors[0].message, refused.errors
+
+    result = await schema.execute("mutation($id: ID!) { deleteArrayDataset(input: {id: $id}) }", variable_values={"id": str(array_dataset.pk)}, context_value=ctx)
+    assert not result.errors, result.errors
+    assert not await models.Layer.objects.filter(pk=layer.pk).aexists(), "the layer went with what it drew"
+    assert not await models.Lens.objects.filter(pk=crop.pk).aexists()
+    assert await models.Scene.objects.filter(pk=scene.pk).aexists(), "the scene, which is not the dataset's, stays"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_a_datasets_whole_lens_cannot_be_deleted(db, authenticated_context: HttpContext):
     """The whole lens is the dataset's handle: it goes with the dataset, never on its own."""
     array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)

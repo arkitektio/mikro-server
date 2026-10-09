@@ -663,7 +663,10 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
     total = lens.layers.count() + lens.chart_layers.count()
     described = [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers] + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
     more = f" (and {total - len(described)} more)" if total > len(described) else ""
-    raise ValueError(f"Lens {lens.pk} cannot be deleted: {total} layer(s) draw through it -- {', '.join(described)}{more}. Delete those layers first, or leave the lens; it is shared by every composition over this selection.")
+    raise ValueError(
+        f"Lens {lens.pk} cannot be deleted: {total} layer(s) draw through it -- {', '.join(described)}{more}. Delete those layers first, or leave the lens; it is shared by every "
+        "composition over this selection. Deleting the container it selects over is the one thing that takes every layer over it with it."
+    )
 
 
 def lens_own_edges(lens: "models.ArrayLens") -> "Iterable[models.Transformation]":
