@@ -21,6 +21,7 @@ from core import channels, models
 from datalayer.models import ZarrStore
 from mikro_server.schema import schema
 from tests import seed
+from tests.test_windowed_lenses import _CONTAINERS, _create
 
 LAYERS = """
 subscription Layers($scene: ID!) {
@@ -36,6 +37,16 @@ ARRAY_DATASETS = """
 subscription ArrayDatasets($folder: ID) {
   arrayDatasets(folder: $folder) {
     create { id name folder { id } intrinsicSystem { axes { name } } }
+    update { id name }
+    delete
+  }
+}
+"""
+
+LENSES = """
+subscription Lenses($kind: LensKind, $container: ID) {
+  lenses(kind: $kind, container: $container) {
+    create { __typename id kind name descriptors ... on ArrayLens { dataset { id } } }
     update { id name }
     delete
   }
@@ -279,6 +290,78 @@ async def test_scenes_are_followed(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_a_datasets_lenses_are_followed(db, authenticated_context: HttpContext):
+    """A dataset's followers hear its crops only; the organization's hear every container's."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Followed", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    other = await seed.create_array_dataset(ctx, "Other", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    org_room = channels.org_lenses_room(ctx.request.organization.id)
+
+    create = "mutation C($input: CreateLensInput!) { createLens(input: $input) { id } }"
+    rename = "mutation R($input: UpdateLensInput!) { updateLens(input: $input) { id } }"
+    delete = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }"
+    crop = [{"axis": "c", "start": 0, "stop": 1}]
+
+    async with (
+        following(LENSES, "lenses", channels.container_lenses_room("ARRAY", dataset.pk), {"kind": "ARRAY", "container": str(dataset.pk)}) as of_dataset,
+        following(LENSES, "lenses", org_room) as in_org,
+    ):
+        stray = (await _run(ctx, create, {"dataset": str(other.pk), "slices": crop}))["createLens"]["id"]
+        assert (await in_org.next())["create"]["id"] == stray
+        assert await of_dataset.silent(), "a crop of another dataset reached this dataset's followers"
+
+        lens = (await _run(ctx, create, {"dataset": str(dataset.pk), "slices": crop}))["createLens"]["id"]
+        for follower in (of_dataset, in_org):
+            event = await follower.next()
+            assert event["update"] is None and event["delete"] is None
+            created = event["create"]
+            assert (created["__typename"], created["id"], created["kind"], created["name"], created["dataset"]["id"]) == ("ArrayLens", lens, "ARRAY", None, str(dataset.pk))
+            assert created["descriptors"]["@mikro/is_whole"] is False and created["descriptors"]["@mikro/n_channels"] == 1
+
+        await _run(ctx, rename, {"id": lens, "name": "nucleus"})
+        for follower in (of_dataset, in_org):
+            assert await follower.next() == {"create": None, "update": {"id": lens, "name": "nucleus"}, "delete": None}
+
+        await _run(ctx, delete, {"id": lens})
+        for follower in (of_dataset, in_org):
+            assert await follower.next() == {"create": None, "update": None, "delete": lens}
+            assert await follower.silent()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", list(_CONTAINERS))
+async def test_a_windowed_lens_is_followed(db, authenticated_context: HttpContext, kind: str):
+    """A container of any kind can be followed; a window over it arrives as its kind."""
+    ctx = authenticated_context
+    make, model, axis = _CONTAINERS[kind]
+    container_id, mutation, field = await make(ctx)
+
+    async with following(LENSES, "lenses", channels.container_lenses_room(kind, container_id), {"kind": kind, "container": container_id}) as follower:
+        windowed = await _create(ctx, mutation, field, container_id, [{"axis": axis, "min": 0, "max": 5}])
+        event = await follower.next()
+        assert (event["create"]["id"], event["create"]["kind"], event["create"]["__typename"]) == (windowed["id"], kind, model.__name__)
+        assert event["create"]["descriptors"]["@mikro/is_whole"] is False
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_deleting_a_container_tells_its_lens_followers(db, authenticated_context: HttpContext):
+    """The cascade announces every lens the container took with it: the whole lens and the crop."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Doomed", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
+    whole = await models.ArrayLens.objects.aget(dataset=dataset, slices=[])
+    crop = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}])
+
+    async with following(LENSES, "lenses", channels.container_lenses_room("ARRAY", dataset.pk), {"kind": "ARRAY", "container": str(dataset.pk)}) as follower:
+        await _run(ctx, "mutation D($input: DeleteArrayDatasetInput!) { deleteArrayDataset(input: $input) }", {"id": str(dataset.pk)})
+        gone = {(await follower.next())["delete"], (await follower.next())["delete"]}
+        assert gone == {str(whole.pk), str(crop.pk)}
+        assert await follower.silent()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_another_organization_hears_nothing(db, authenticated_context: HttpContext, other_org_context: HttpContext):
     """Org-wide followers of another organization are in another room; a foreign scene or folder cannot be followed at all."""
     ctx = authenticated_context
@@ -289,7 +372,8 @@ async def test_another_organization_hears_nothing(db, authenticated_context: Htt
         await _run(ctx, "mutation C($input: CreateSceneInput!) { createScene(input: $input) { id } }", {"name": "Ours"})
         assert await theirs.silent(), "a scene of one organization reached another's followers"
 
-    for query, variables in ((LAYERS, {"scene": str(scene.pk)}), (ARRAY_DATASETS, {"folder": str(folder.pk)}), (TABLE_DATASETS, {"folder": str(folder.pk)})):
+    dataset = await seed.create_array_dataset(ctx, "Theirs")
+    for query, variables in ((LAYERS, {"scene": str(scene.pk)}), (ARRAY_DATASETS, {"folder": str(folder.pk)}), (TABLE_DATASETS, {"folder": str(folder.pk)}), (LENSES, {"kind": "ARRAY", "container": str(dataset.pk)})):
         refusal = await _refused(query, variables, token="othertest")
         assert "does not exist in this organization" in json.dumps(refusal), refusal
 

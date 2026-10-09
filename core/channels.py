@@ -12,6 +12,7 @@ layer_channel = build_channel(RowSignal, name="LayerSignal")
 array_dataset_channel = build_channel(RowSignal, name="ArrayDatasetSignal")
 table_dataset_channel = build_channel(RowSignal, name="TableDatasetSignal")
 scene_channel = build_channel(RowSignal, name="SceneSignal")
+lens_channel = build_channel(RowSignal, name="LensSignal")
 
 
 # Room names are built in one place so the broadcasting signals and the
@@ -53,6 +54,15 @@ def folder_table_datasets_room(folder_id: int | str) -> str:
 
 def org_scenes_room(org_id: int) -> str:
     return f"org_{org_id}_scenes"
+
+
+def org_lenses_room(org_id: int) -> str:
+    return f"org_{org_id}_lenses"
+
+
+def container_lenses_room(kind: str, container_id: int | str) -> str:
+    """The lenses of one container: keyed by its lens kind and its id, because ids collide across the container tables."""
+    return f"{kind.lower()}_lenses_{container_id}"
 
 
 def announce[S: BaseModel](channel: Channel[S], signal: S, rooms: list[str]) -> None:

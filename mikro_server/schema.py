@@ -826,6 +826,13 @@ class Subscription:
         description="Follow the table datasets of one folder, or of the whole organization when no folder is given: an event for every one created, edited or deleted",
     )
     scenes = subscription(resolver=subscriptions.scenes, description="Follow the organization's scenes: an event for every one created, edited or deleted")
+    lenses = subscription(
+        resolver=subscriptions.lenses,
+        description=(
+            "Follow the lenses of one container -- given by its kind and its id -- or of the whole organization when neither is given: an event for every selection made, renamed or "
+            "deleted, the whole lens a new container is born with included. Carries changes only -- read the container's current lenses first"
+        ),
+    )
 
 
 class Schema(QuietErrorsSchema, kante.Schema):

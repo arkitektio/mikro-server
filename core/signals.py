@@ -96,3 +96,13 @@ _relay_rows(models.Layer, channels.layer_channel, lambda layer: [channels.scene_
 _relay_rows(models.ArrayDataset, channels.array_dataset_channel, _array_dataset_rooms)
 _relay_rows(models.TableDataset, channels.table_dataset_channel, _table_dataset_rooms)
 _relay_rows(models.Scene, channels.scene_channel, lambda scene: [channels.org_scenes_room(scene.organization_id)])
+
+
+def _lens_rooms(lens: models.Lens) -> list[str]:
+    return [channels.org_lenses_room(lens.organization_id), channels.container_lenses_room(type(lens).KIND, lens.container_id)]
+
+
+# Per concrete kind: `post_save` fires with the concrete class as sender and never for the
+# polymorphic base, so a relay connected on `Lens` would hear nothing.
+for _kind in models.Lens.KIND_BY_CONTAINER.values():
+    _relay_rows(_kind, channels.lens_channel, _lens_rooms)
