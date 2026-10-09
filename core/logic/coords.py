@@ -1414,6 +1414,138 @@ def window_bounds(windows: Iterable["WindowLike"]) -> dict[str, list[float]]:
     return {window.axis: [-math.inf if window.min is None else float(window.min), math.inf if window.max is None else float(window.max)] for window in windows}
 
 
+def window_box(axis_names: Sequence[str], windows: Iterable["WindowLike"]) -> tuple[list[float], list[float]]:
+    """A windowed lens' box, positional over its container's axes: a window's bounds on the axes it names, infinite elsewhere.
+
+    The infinities are internal: they ride through :func:`form_interval` (a zero coefficient
+    is skipped, so no ``0 * inf``) and come out as infinite intervals, which
+    :func:`bounded_axes` drops before anything is serialized or compared. A box says nothing
+    about an axis by leaving it out, never by writing a number for it.
+    """
+    bounds = window_bounds(windows)
+    mins = [bounds[axis][0] if axis in bounds else -math.inf for axis in axis_names]
+    maxs = [bounds[axis][1] if axis in bounds else math.inf for axis in axis_names]
+    return mins, maxs
+
+
+def bounded_axes(box: dict[str, list[float]]) -> dict[str, list[float]]:
+    """The axes of a box that are actually bounded: an interval with an infinite end is dropped.
+
+    The one place an infinity is retired. A box that leaves an axis out says nothing about it,
+    which is what :func:`boxes_overlap` reads; an infinity written for it would survive into a
+    GraphQL Float, which cannot carry one.
+    """
+    return {axis: interval for axis, interval in box.items() if math.isfinite(interval[0]) and math.isfinite(interval[1])}
+
+
+def shares_a_bounded_axis(a: dict[str, list[float]], b: dict[str, list[float]]) -> bool:
+    """Whether two boxes constrain any axis in common -- without one, their overlap is vacuous and has not been shown."""
+    return bool(set(a) & set(b))
+
+
+def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], parent_slices: Iterable["SliceLike"], child_slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
+    """A crop of a crop, as slices of the dataset: the child's slices, stated in the parent lens' own index space, composed through the parent's.
+
+    Lens voxel ``i`` of the parent is dataset voxel ``ps + i·pstep``, so a child slice
+    ``cs:ce:cst`` over the parent keeps dataset voxels ``ps + pstep·(cs + k·cst)`` -- a slice
+    with start ``ps + pstep·cs``, step ``pstep·cst`` and as many voxels as the child keeps. The
+    child's spellings resolve against the parent's extent by Python's own rules (negatives,
+    open bounds, a stop past the end), and the result is handed to :func:`normalize_slices`,
+    so a crop of a crop that equals an existing crop *is* that crop. An axis the child does
+    not name keeps the parent's selection; a child slice that keeps nothing is refused.
+    """
+    parent_by_axis = {slice_.axis: slice_ for slice_ in parent_slices}
+    child_by_axis = {slice_.axis: slice_ for slice_ in child_slices}
+    unknown = [axis for axis in child_by_axis if axis not in dataset_axis_names]
+    if unknown:
+        raise ValueError(f"Slices name axes the dataset does not have: {unknown}; its axes are {list(dataset_axis_names)}")
+    composed: list[dict[str, int | str]] = []
+    for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
+        parent = parent_by_axis.get(axis)
+        child = child_by_axis.get(axis)
+        if parent is None and child is None:
+            continue
+        if parent is not None:
+            ps, pe, pstep = slice(parent.start, parent.stop, parent.step).indices(size)
+        else:
+            ps, pe, pstep = 0, size, 1
+        extent = len(range(ps, pe, pstep))
+        if child is None:
+            composed.append({"axis": axis, "start": ps, "stop": pe, "step": pstep})
+            continue
+        if child.step is not None and child.step <= 0:
+            raise ValueError(f"Slice over axis '{axis}' has step {child.step}; a lens keeps every k-th voxel for a positive k")
+        cs, ce, cst = slice(child.start, child.stop, child.step).indices(extent)
+        count = len(range(cs, ce, cst))
+        if count == 0:
+            raise ValueError(f"Slice over axis '{axis}' ({child.start}:{child.stop}:{child.step}) keeps nothing of the {extent} voxels the lens has along it")
+        start = ps + pstep * cs
+        step = pstep * cst
+        composed.append({"axis": axis, "start": start, "stop": start + (count - 1) * step + 1, "step": step})
+    return composed
+
+
+def intersect_windows(parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]) -> list[dict[str, float | str | None]]:
+    """A window of a window: per axis the tighter of the two bounds, an open side staying open, an axis only one names passing through.
+
+    Handed to :func:`normalize_windows`, which refuses a window that keeps nothing (a min at
+    or above its max), so a selection inside a selection is one row like any other.
+    """
+    bounds: dict[str, list[float | None]] = {}
+    for window in (*parent_windows, *child_windows):
+        low, high = bounds.setdefault(window.axis, [None, None])
+        if window.min is not None:
+            low = float(window.min) if low is None else max(low, float(window.min))
+        if window.max is not None:
+            high = float(window.max) if high is None else min(high, float(window.max))
+        bounds[window.axis] = [low, high]
+    return [{"axis": axis, "min": low, "max": high} for axis, (low, high) in bounds.items()]
+
+
+def box_to_slices(
+    forms: dict[str, AxedForm],
+    source_axis_names: Sequence[str],
+    mins: Sequence[float],
+    maxs: Sequence[float],
+    dataset_axis_names: Sequence[str],
+    dataset_shape: Sequence[int],
+    *,
+    pins: Mapping[str, int] | None = None,
+) -> list[dict[str, int | str]]:
+    """The slices of a dataset that a box stated in another space covers, once that space is composed into the dataset's grid.
+
+    ``forms`` is the composed map from the box's space into the grid, one functional per
+    dataset axis it reaches (:func:`compose_forms`), its coefficients over ``source_axis_names``;
+    ``mins``/``maxs`` the box, positional over those same axes, infinite where open. An output axis the map does not reach is left whole,
+    unless ``pins`` names it (a pinned index keeps that one voxel). A dataset voxel ``n`` covers
+    ``[n - 0.5, n + 0.5)``, and it is kept when its cell meets the box: ``n > lo - 0.5`` and
+    ``n < hi + 0.5``, which is the half-open rule the overlap filter applies, so a box ending
+    exactly on a voxel face does not take the voxel beyond it. Clamped to the array; a box
+    that lands outside it is refused, as is one that is open along an axis the map reads.
+    """
+    pinned = dict(pins or {})
+    slices: list[dict[str, int | str]] = []
+    for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
+        form = forms.get(axis)
+        if form is None:
+            if axis in pinned:
+                value = int(pinned[axis])
+                if not 0 <= value < size:
+                    raise ValueError(f"Pin {axis}={value} lies outside the dataset, whose axis '{axis}' has {size} positions")
+                slices.append({"axis": axis, "start": value, "stop": value + 1, "step": 1})
+            continue
+        low, high = form_interval(form, mins, maxs)
+        if not (math.isfinite(low) and math.isfinite(high)):
+            open_axes = [name for name, factor, lo, hi in zip(source_axis_names, form.coefficients, mins, maxs, strict=True) if factor != 0.0 and not (math.isfinite(lo) and math.isfinite(hi))]
+            raise ValueError(f"The box is open along {', '.join(repr(name) for name in open_axes)}, which places '{axis}' in the dataset; a crop has to be finite on every axis it is cut on")
+        start = max(0, math.floor(low - 0.5) + 1)
+        stop = min(size, math.ceil(high + 0.5))
+        if start >= stop:
+            raise ValueError(f"The box lies outside the dataset along '{axis}': it covers [{low}, {high}] and the axis spans [-0.5, {size - 0.5}]")
+        slices.append({"axis": axis, "start": start, "stop": stop, "step": 1})
+    return slices
+
+
 def boxes_overlap(a: dict[str, list[float]], b: dict[str, list[float]], *, closed: bool = True) -> bool:
     """Whether two axis-keyed boxes overlap: a conjunction over the axes they BOTH constrain.
 
