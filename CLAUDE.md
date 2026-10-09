@@ -2,6 +2,18 @@
 
 Notes for whoever changes this service, person or agent.
 
+## Lenses
+
+A lens is a selection over a container that lives in a coordinate system, one row per
+(container, normalized selection), and every container has its whole lens from creation
+(`core.logic.coordinate_system.whole_lens`). `ArrayLens` selects by slices and, when sliced,
+owns the crop's space and the edge back into the grid; `TableLens`, `SparseLens`, `MeshLens`,
+`NetworkLens` and `AnnotationLens` select by value windows in the container's own space and
+own nothing. **Every layer and chart layer draws through a lens**, whatever its kind; a layer
+mutation takes the lens or the container (its whole lens). A lens is reached across a
+polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never `select_related` it,
+or you get the base row.
+
 ## Migrations and jobs
 
 A container of this image only serves. An installer (konstruktor) prepares the database with
@@ -13,6 +25,12 @@ anything is recreated — and runs everything else as a job the image offers by 
 <https://github.com/arkitektio/arkitekt-service/blob/main/docs/migrations-and-jobs.md>. The ones that are broken most easily:
 
 - A model change and its migration are one commit.
+- A `RunPython` step sits alone in its migration, between the schema migration that adds what it
+  writes and the one that drops what it read. Postgres will not alter or index a table in the
+  transaction that just rewrote its rows under deferred constraints, and Django defers index
+  creation to the end of a migration -- so a data step beside any `AddField` or `RemoveField`
+  fails on a populated hub and passes on an empty one. The lens migrations (`core/0003`-`0007`,
+  `chart/0002`-`0003`) are the pattern.
 - Within a major, a migration leaves a schema the previous release still runs on: a failed
   update, and a rollback, start the old build on the migrated database. What cannot do that
   is a `feat!:`.
