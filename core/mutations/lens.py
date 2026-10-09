@@ -168,7 +168,8 @@ def lens_owner(item: "models.Lens") -> tuple:
     return (item.creator_id, item.created_through_by_id, getattr(container, "creator_id", None), getattr(container, "created_through_by_id", None))
 
 
-delete_lens = make_delete(models.Lens, DeleteLensInput, owner=lens_owner)
+# A sliced array lens takes its own space and edge with it, unless something else is attached to that space.
+delete_lens = make_delete(models.Lens, DeleteLensInput, owner=lens_owner, delete=coordinate_system_logic.delete_lens)
 
 
 class UpdateLensInputModel(BaseModel):

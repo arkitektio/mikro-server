@@ -64,12 +64,13 @@ def dataset_owner(item):
     return (item.dataset.creator_id, item.dataset.created_through_by_id)
 
 
-def make_delete(model, input_type, owner=None):
+def make_delete(model, input_type, owner=None, delete=None):
     """Build a delete resolver: fetch org-scoped by id, guard ownership, delete.
 
     ``owner`` is an explicit callable returning the user ids allowed to delete
     the fetched item; when ``None`` the delete is only org-scoped (shared
-    resources with no per-user owner).
+    resources with no per-user owner). ``delete`` is how the row goes -- ``item.delete()``
+    unless the model takes something private with it, as a crop takes its own space.
 
     A row that must not be deleted *at all*, whoever asks -- the PROTECT half, where
     ``owner`` is the permission half -- is refused by the guards registered for its model
@@ -91,7 +92,10 @@ def make_delete(model, input_type, owner=None):
             # few minutes is right when the alternative is destroying bytes inside a
             # transaction that might roll back. `purge_orphaned_stores` collects them.
             orphaned = storage.stores_orphaned_by(item)
-            item.delete()
+            if delete is None:
+                item.delete()
+            else:
+                delete(item)
             storage.flag_orphaned(orphaned)
         return parsed.id
 

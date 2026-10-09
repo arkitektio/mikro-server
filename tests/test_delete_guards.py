@@ -151,6 +151,44 @@ async def test_delete_lens(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_deleting_a_crop_takes_its_own_space_and_edge(db, authenticated_context: HttpContext):
+    """A crop owns the space it re-indexes into and the edge back to the grid; nothing else is attached, so both go with it."""
+    ctx = authenticated_context
+    array_dataset = await _seed_array_dataset(ctx, creator=ctx.request.user)
+    systems_before = await models.CoordinateSystem.objects.acount()
+    edges_before = await models.Transformation.objects.acount()
+    crop = await seed.create_lens(ctx, array_dataset, slices=[{"axis": "y", "start": 4, "stop": 20}])
+    assert await models.CoordinateSystem.objects.acount() == systems_before + 1 and await models.Transformation.objects.acount() == edges_before + 1
+
+    result = await schema.execute("mutation($id: ID!) { deleteLens(input: {id: $id}) }", variable_values={"id": str(crop.pk)}, context_value=ctx)
+    assert not result.errors, result.errors
+
+    assert not await models.CoordinateSystem.objects.filter(pk=crop.coordinate_system_id).aexists(), "the crop's space went with it"
+    assert await models.CoordinateSystem.objects.acount() == systems_before and await models.Transformation.objects.acount() == edges_before
+    assert await models.CoordinateSystem.objects.filter(pk=array_dataset.coordinate_system_id).aexists(), "the grid it was cut from stays"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_crop_whose_space_is_registered_elsewhere_leaves_the_space_behind(db, authenticated_context: HttpContext):
+    """Someone built on the crop's space -- registered it into another -- so the space outlives the crop, with the edges it had."""
+    ctx = authenticated_context
+    array_dataset = await _seed_array_dataset(ctx, creator=ctx.request.user)
+    crop = await seed.create_lens(ctx, array_dataset, slices=[{"axis": "y", "start": 4, "stop": 20}])
+    elsewhere = await models.CoordinateSystem.objects.acreate(name="elsewhere", organization=ctx.request.organization)
+    await models.Transformation.objects.acreate(kind="TRANSLATION", input_id=crop.coordinate_system_id, output=elsewhere, params={"translation": [0.0, 0.0]}, organization=ctx.request.organization)
+    edges_before = await models.Transformation.objects.filter(input_id=crop.coordinate_system_id).acount()
+
+    result = await schema.execute("mutation($id: ID!) { deleteLens(input: {id: $id}) }", variable_values={"id": str(crop.pk)}, context_value=ctx)
+    assert not result.errors, result.errors
+
+    assert not await models.Lens.objects.filter(pk=crop.pk).aexists()
+    assert await models.CoordinateSystem.objects.filter(pk=crop.coordinate_system_id).aexists(), "the space stays: it is registered elsewhere"
+    assert await models.Transformation.objects.filter(input_id=crop.coordinate_system_id).acount() == edges_before == 2, "with both its edges"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_a_datasets_whole_lens_cannot_be_deleted(db, authenticated_context: HttpContext):
     """The whole lens is the dataset's handle: it goes with the dataset, never on its own."""
     array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)

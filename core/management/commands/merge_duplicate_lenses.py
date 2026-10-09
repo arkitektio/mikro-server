@@ -30,7 +30,6 @@ printed, not failed on: the installer must not be stopped by a lens someone buil
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
 from typing import cast
 
 from django.core.management.base import BaseCommand
@@ -39,51 +38,13 @@ from django.db.models import Q
 
 from chart.models import ChartLayer
 from core import enums, models
-from core.logic import compositions as compositions_logic
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
-from core.logic import graph as graph_logic
 
 
 def _key(slices: list[dict[str, int | str]]) -> str:
     """The grouping key of a normalized selection: its JSON, stable across runs."""
     return json.dumps(slices, sort_keys=True)
-
-
-def _own_edges(lens: models.ArrayLens) -> Iterable[models.Transformation]:
-    """The top-level edge(s) from this lens' own system into its dataset's intrinsic system."""
-    if lens.coordinate_system_id == lens.dataset.coordinate_system_id:
-        return ()
-    return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id, parent__isnull=True)
-
-
-def _system_is_private_to(lens: models.ArrayLens) -> str | None:
-    """Why this sliced lens' system cannot be deleted with it, or None when it can.
-
-    The same three questions `deleteCoordinateSystem` asks -- residents, compositions, edges --
-    plus the two PROTECT relations a delete would trip over.
-    """
-    system = lens.coordinate_system
-    if system.pk == lens.dataset.coordinate_system_id:
-        return "it lives in the intrinsic system"
-    for relation in graph_logic.RESIDENT_RELATIONS:
-        residents = getattr(system, relation).all()
-        if relation == "lenses":
-            residents = residents.exclude(pk=lens.pk)
-        if residents.exists():
-            return f"other {relation.replace('_', ' ')} live in its system"
-    try:
-        compositions_logic.assert_no_composition_over(system)
-    except ValueError:
-        return "a scene or chart is laid out over its system"
-    own = [edge.pk for edge in _own_edges(lens)]
-    if models.Transformation.objects.filter(Q(input=system) | Q(output=system), parent__isnull=True).exclude(pk__in=own).exists():
-        return "its system has registration edges besides its own"
-    if system.fields_of.exists():
-        return "its system is the field of a transformation"
-    if system.annotation_bbox_frames.exists():
-        return "annotation boxes are expressed in its system"
-    return None
 
 
 class Command(BaseCommand):
@@ -203,7 +164,7 @@ class Command(BaseCommand):
         models.ArrayLens.objects.filter(pk=lens.pk).update(slices=normalized)
 
         kind, params = coords_logic.lens_to_parent(lens.dataset.axis_names, lens.slices_list)
-        for edge in _own_edges(lens):
+        for edge in coordinate_system_logic.lens_own_edges(lens):
             if kind != enums.TransformKindChoices.TRANSLATION.value or edge.kind != kind:
                 # A stepped lens is a SEQUENCE of child rows; its spelling never changed the
                 # scale, and its starts are left to a later pass if one is ever needed.
@@ -217,7 +178,7 @@ class Command(BaseCommand):
     def _merge(self, duplicate: models.ArrayLens, *, into: models.ArrayLens) -> None:
         sliced = duplicate.coordinate_system_id != duplicate.dataset.coordinate_system_id
         if sliced:
-            reason = _system_is_private_to(duplicate)
+            reason = coordinate_system_logic.lens_space_is_shared_because(duplicate)
             if reason is not None:
                 self.counts["left"] += 1
                 self.stdout.write(f"lens {duplicate.pk} duplicates lens {into.pk} but is left in place: {reason} (system {duplicate.coordinate_system_id})")
@@ -230,12 +191,6 @@ class Command(BaseCommand):
         models.Layer.objects.filter(lens=duplicate).update(lens=into)
         ChartLayer.objects.filter(lens=duplicate).update(lens=into)
 
-        system = duplicate.coordinate_system
-        duplicate.delete()
-        if sliced:
-            self.counts["merged_sliced"] += 1
-            # Its edge, then its system; the axes cascade with the system.
-            models.Transformation.objects.filter(Q(input=system) | Q(output=system)).delete()
-            system.delete()
-        else:
-            self.counts["merged_unsliced"] += 1
+        # The row, and for a sliced one its edge and its system, as `deleteLens` takes them.
+        coordinate_system_logic.delete_lens(duplicate)
+        self.counts["merged_sliced" if sliced else "merged_unsliced"] += 1

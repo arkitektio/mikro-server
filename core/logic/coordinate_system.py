@@ -15,14 +15,16 @@ caller.
 """
 
 import datetime
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import cast
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 
 from core import enums, models
 from core.creation import CreationContext
 from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
+from core.logic import compositions as compositions_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.scoping import get_for_org
@@ -662,3 +664,59 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
     described = [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers] + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
     more = f" (and {total - len(described)} more)" if total > len(described) else ""
     raise ValueError(f"Lens {lens.pk} cannot be deleted: {total} layer(s) draw through it -- {', '.join(described)}{more}. Delete those layers first, or leave the lens; it is shared by every composition over this selection.")
+
+
+def lens_own_edges(lens: "models.ArrayLens") -> "Iterable[models.Transformation]":
+    """The top-level edge(s) from a sliced array lens' own system into its dataset's intrinsic system; none for a whole lens."""
+    if lens.coordinate_system_id == lens.dataset.coordinate_system_id:
+        return ()
+    return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id, parent__isnull=True)
+
+
+def lens_space_is_shared_because(lens: "models.ArrayLens") -> str | None:
+    """Why a sliced array lens' own system cannot go with it, or None when it can.
+
+    The same three questions ``deleteCoordinateSystem`` asks -- residents, compositions,
+    edges -- plus the two PROTECT relations a delete would trip over. A crop's space is its
+    own until someone builds on it: registers it elsewhere, roots a scene at it, draws a
+    collection whose boxes are stated in it. Then the space outlives the crop, as a bare
+    space with the edge it had.
+    """
+    system = lens.coordinate_system
+    if system.pk == lens.dataset.coordinate_system_id:
+        return "it lives in the intrinsic system"
+    for relation in graph_logic.RESIDENT_RELATIONS:
+        residents = getattr(system, relation).all()
+        if relation == "lenses":
+            residents = residents.exclude(pk=lens.pk)
+        if residents.exists():
+            return f"other {relation.replace('_', ' ')} live in its system"
+    try:
+        compositions_logic.assert_no_composition_over(system)
+    except ValueError:
+        return "a scene or chart is laid out over its system"
+    own = [edge.pk for edge in lens_own_edges(lens)]
+    if models.Transformation.objects.filter(Q(input=system) | Q(output=system), parent__isnull=True).exclude(pk__in=own).exists():
+        return "its system has registration edges besides its own"
+    if system.fields_of.exists():
+        return "its system is the field of a transformation"
+    if system.annotation_bbox_frames.exists():
+        return "annotation boxes are expressed in its system"
+    return None
+
+
+def delete_lens(lens: "models.Lens") -> str | None:
+    """Delete a lens; a sliced array lens' own system and edge go with it unless something else is attached.
+
+    Returns why the space was left behind, or None when nothing was. The lens row goes first
+    -- its system is PROTECTed by it -- then the edges in and out of the system, then the
+    system; its axes cascade. A windowed lens and a whole lens own nothing and simply go.
+    """
+    sliced = isinstance(lens, models.ArrayLens) and lens.coordinate_system_id != lens.dataset.coordinate_system_id
+    reason = lens_space_is_shared_because(lens) if sliced else None
+    system = lens.coordinate_system if sliced and reason is None else None
+    lens.delete()
+    if system is not None:
+        models.Transformation.objects.filter(Q(input=system) | Q(output=system)).delete()
+        system.delete()
+    return reason
