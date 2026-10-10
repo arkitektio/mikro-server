@@ -356,7 +356,7 @@ async def test_annotation_layer_in_a_second_scene_needs_a_registration(db, authe
     refused = await schema.execute(
         layer_mutation,
         context_value=ctx,
-        variable_values={"i": {"scene": str(scene_b.id), "annotationCollection": collection_id}},
+        variable_values={"i": {"scene": str(scene_b.id), "lens": await seed.whole_lens_id(models.AnnotationCollection, collection_id)}},
     )
     assert refused.errors, "an unregistered collection must be refused in a foreign scene"
     assert "createTransformation" in str(refused.errors[0])
@@ -370,7 +370,7 @@ async def test_annotation_layer_in_a_second_scene_needs_a_registration(db, authe
     allowed = await schema.execute(
         layer_mutation,
         context_value=ctx,
-        variable_values={"i": {"scene": str(scene_b.id), "annotationCollection": collection_id}},
+        variable_values={"i": {"scene": str(scene_b.id), "lens": await seed.whole_lens_id(models.AnnotationCollection, collection_id)}},
     )
     assert not allowed.errors, allowed.errors
 

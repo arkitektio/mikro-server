@@ -282,7 +282,7 @@ async def test_a_one_dimensional_dataset_is_drawn_as_a_trace(authenticated_conte
     await profile.arefresh_from_db(fields=["stored_spec"])
     assert enums.ArrayDatasetSpec.TRACE in profile.spec, "what a chart draws whole is what the spec calls a trace"
 
-    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk)}))["createTraceChartLayer"]
+    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk))}))["createTraceChartLayer"]
     assert made["kind"] == "TRACE"
     assert made["mark"] == "LINE"
     assert made["alongAxis"] == "d"
@@ -308,7 +308,7 @@ async def test_a_free_channel_axis_is_the_series_axis(authenticated_context: Htt
     await spectra.arefresh_from_db(fields=["stored_spec"])
     assert enums.ArrayDatasetSpec.TRACE in spectra.spec
 
-    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(spectra.pk)}))["createTraceChartLayer"]
+    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(spectra.pk))}))["createTraceChartLayer"]
     assert made["alongAxis"] == "d"
     assert made["seriesAxis"] == "c"
 
@@ -326,7 +326,7 @@ async def test_a_second_free_metric_axis_is_a_surface_not_a_trace(authenticated_
     await image.arefresh_from_db(fields=["stored_spec"])
     assert enums.ArrayDatasetSpec.TRACE not in image.spec
 
-    whole = await _run(ctx, TRACE, {"chart": chart["id"], "dataset": str(image.pk)})
+    whole = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(image.pk))})
     assert whole.errors, "y is free and metric: that is a surface"
     assert "'y' (32)" in str(whole.errors[0]) and "slice the lens" in str(whole.errors[0]), whole.errors
 
@@ -358,7 +358,7 @@ async def test_how_a_trace_looks_is_a_setting_not_a_kind(authenticated_context: 
     chart = await _chart(ctx)
     profile = await _dataset(ctx, "Profile", [("d", enums.AxisType.SPACE)], [64])
     await _lay_along(ctx, profile, chart, "d")
-    layer_id = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk), "mark": "MARKERS"}))["createTraceChartLayer"]["id"]
+    layer_id = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk)), "mark": "MARKERS"}))["createTraceChartLayer"]["id"]
 
     for mark in ("LINE", "LINE_MARKERS", "STEPS"):
         updated = (await _ok(ctx, UPDATE_LAYER, {"id": layer_id, "mark": mark, "lineWidth": 2.0}))["updateChartLayer"]
@@ -389,7 +389,7 @@ async def test_a_table_is_drawn_as_a_series(authenticated_context: HttpContext):
     # axis of a BY_DIMENSION is not unit-converted for its author.
     await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["d"], "affine": [[0.001, 0.0]]})
 
-    made = (await _ok(ctx, SERIES, {"chart": chart["id"], "tableDataset": table["id"]}))["createSeriesChartLayer"]
+    made = (await _ok(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"])}))["createSeriesChartLayer"]
     assert made["kind"] == "SERIES"
     assert made["valueColumn"] == "intensity", "the only numeric attribute, so it need not be named"
     assert made["coordinateColumn"] == "x"
@@ -412,16 +412,16 @@ async def test_a_series_value_is_one_numeric_attribute_column(authenticated_cont
     table = await _table(ctx, "measurements", columns)
     await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["d"]})
 
-    ambiguous = await _run(ctx, SERIES, {"chart": chart["id"], "tableDataset": table["id"]})
+    ambiguous = await _run(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"])})
     assert ambiguous.errors and "cannot be inferred" in str(ambiguous.errors[0]), ambiguous.errors
 
-    text = await _run(ctx, SERIES, {"chart": chart["id"], "tableDataset": table["id"], "valueColumn": "note"})
+    text = await _run(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"]), "valueColumn": "note"})
     assert text.errors and "not a numeric attribute column" in str(text.errors[0]), text.errors
 
-    coordinate = await _run(ctx, SERIES, {"chart": chart["id"], "tableDataset": table["id"], "valueColumn": "x"})
+    coordinate = await _run(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"]), "valueColumn": "x"})
     assert coordinate.errors and "is the coordinate column" in str(coordinate.errors[0]), coordinate.errors
 
-    made = (await _ok(ctx, SERIES, {"chart": chart["id"], "tableDataset": table["id"], "valueColumn": "background"}))["createSeriesChartLayer"]
+    made = (await _ok(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"]), "valueColumn": "background"}))["createSeriesChartLayer"]
     assert made["valueColumn"] == "background"
     assert made["valueUnit"] is None
 
@@ -462,13 +462,13 @@ async def test_an_existing_collection_is_drawn_once(authenticated_context: HttpC
     chart = await _chart(ctx)
     collection = (await _ok(ctx, CREATE_COLLECTION, {"name": "Events", "axes": [{"name": "d", "type": "SPACE"}]}))["createAnnotationCollection"]
 
-    unplaced = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "annotationCollection": collection["id"]})
+    unplaced = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.AnnotationCollection, collection["id"])})
     assert unplaced.errors and "Nothing places" in str(unplaced.errors[0]), unplaced.errors
 
     await _register(ctx, collection["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["d"], "outputAxes": ["d"]})
-    await _ok(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "annotationCollection": collection["id"]})
+    await _ok(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.AnnotationCollection, collection["id"])})
 
-    twice = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "annotationCollection": collection["id"]})
+    twice = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.AnnotationCollection, collection["id"])})
     assert twice.errors and "already drawn" in str(twice.errors[0]), twice.errors
 
 
@@ -500,7 +500,7 @@ async def test_data_nothing_places_along_the_axis_is_refused(authenticated_conte
     chart = await _chart(ctx)
     profile = await _dataset(ctx, "Profile", [("d", enums.AxisType.SPACE)], [64])
 
-    refused = await _run(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk)})
+    refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk))})
     assert refused.errors and "Nothing places" in str(refused.errors[0]), refused.errors
     assert "the axis of chart 'Profile'" in str(refused.errors[0])
     assert not await sync_to_async(models.Transformation.objects.filter(output_id=chart["worldCoordinateSystem"]["id"]).exists)(), "no registration was fabricated"
@@ -519,7 +519,7 @@ async def test_reaching_the_axis_through_a_field_is_not_placement(authenticated_
     field_id = await _register(ctx, signal_system.pk, object_system.pk, {"kind": "FIELD", "field": str(signal_system.pk), "inputAxes": ["d"], "outputAxes": ["i"]})
     await _register(ctx, object_system.pk, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["i"], "outputAxes": ["d"]})
 
-    refused = await _run(ctx, TRACE, {"chart": chart["id"], "dataset": str(signal.pk)})
+    refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(signal.pk))})
     assert refused.errors, "reachable, and still not placed"
     assert "affinely" in str(refused.errors[0]) and f"{field_id} (FIELD)" in str(refused.errors[0]), refused.errors
 
@@ -546,7 +546,7 @@ async def test_a_route_that_says_nothing_about_the_axis_lays_nothing_along_it(au
     await _register(ctx, (await _system_of(profile)).pk, frame, {"kind": "BY_DIMENSION", "inputAxes": ["a"], "outputAxes": ["e"], "affine": [[0.25, 0.0]]})
     await _register(ctx, frame, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["d"], "outputAxes": ["d"]})
 
-    refused = await _run(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk)})
+    refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk))})
     assert refused.errors and "says nothing about the axis 'd'" in str(refused.errors[0]), refused.errors
 
 
@@ -559,7 +559,7 @@ async def test_a_map_reading_the_axis_from_two_data_axes_lays_neither_along_it(a
     image = await _dataset(ctx, "Image", [("y", enums.AxisType.SPACE), ("x", enums.AxisType.SPACE)], [1, 64])
     await _register(ctx, (await _system_of(image)).pk, chart["worldCoordinateSystem"]["id"], {"kind": "AFFINE", "affine": [[1.0, 1.0, 0.0]]})
 
-    refused = await _run(ctx, TRACE, {"chart": chart["id"], "dataset": str(image.pk)})
+    refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(image.pk))})
     assert refused.errors and "from 2 of the data's axes (y, x)" in str(refused.errors[0]), refused.errors
 
 
@@ -576,7 +576,7 @@ async def test_where_a_layer_sits_follows_the_edge_with_no_write_to_the_layer(au
     # Both axes are metric; `b` has one position, so the lens is a trace along `a`.
     data = await _dataset(ctx, "Data", [("a", enums.AxisType.SPACE), ("b", enums.AxisType.SPACE)], [64, 1])
     first = await _lay_along(ctx, data, chart, "a", scale=0.25)
-    layer_id = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(data.pk)}))["createTraceChartLayer"]["id"]
+    layer_id = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(data.pk))}))["createTraceChartLayer"]["id"]
     row = await sync_to_async(lambda: chart_models.ChartLayer.objects.filter(pk=layer_id).values().get())()
 
     (layer,) = await _layers(ctx, chart["id"])
@@ -652,8 +652,8 @@ async def test_deleting_a_chart_deletes_nothing_it_drew_and_deleting_data_takes_
     gone = await _dataset(ctx, "Gone", [("d", enums.AxisType.SPACE)], [64])
     for dataset in (kept, gone):
         await _lay_along(ctx, dataset, chart, "d")
-    kept_layer = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(kept.pk)}))["createTraceChartLayer"]
-    gone_layer = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(gone.pk)}))["createTraceChartLayer"]
+    kept_layer = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(kept.pk))}))["createTraceChartLayer"]
+    gone_layer = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(gone.pk))}))["createTraceChartLayer"]
 
     # Data going away takes the layers that drew it, and nothing else.
     await sync_to_async(models.Lens.objects.filter(pk=gone_layer["lens"]["id"]).delete)()
@@ -750,7 +750,7 @@ async def test_a_profile_derived_from_an_image_is_charted_in_micrometres_with_a_
     chart = (await _ok(ctx, CREATE_CHART, {"name": "Intensity along the cell", "coordinateSystem": str(distance.pk)}))["createChart"]
     assert chart["axis"] == {"name": "d", "type": "SPACE", "unit": "micrometer"}
 
-    trace = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk), "name": "GFP", "mark": "LINE_MARKERS"}))["createTraceChartLayer"]
+    trace = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk)), "name": "GFP", "mark": "LINE_MARKERS"}))["createTraceChartLayer"]
     assert trace["alongAxis"] == "d"
 
     # A mark on the trace: 7.4 um along, at a height of 812 counts.

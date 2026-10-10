@@ -130,7 +130,7 @@ async def _create_layer(ctx: HttpContext, scene: models.Scene, collection: model
     return await schema.execute(
         CREATE_LAYER,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.pk), "networkCollection": str(collection.pk), **extra}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.NetworkCollection, str(collection.pk)), **extra}},
     )
 
 

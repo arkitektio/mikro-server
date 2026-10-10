@@ -953,14 +953,6 @@ class AnnotationLens(WindowedLens, Lens):
 
 
 #: Which lens kind selects over which container, by the container model.
-Lens.KIND_BY_CONTAINER.update(
-    {
-        ArrayDataset: ArrayLens,
-        MeshCollection: MeshLens,
-    }
-)
-
-
 class Scene(models.Model):
     """A composition of layers over a shared world coordinate system.
 

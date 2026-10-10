@@ -8,7 +8,7 @@ import kante
 import strawberry
 from django.db import transaction
 from kante.types import Info
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from chart import enums, models, types
 from chart.logic import chart as chart_logic
@@ -18,7 +18,7 @@ from core.input_unions import prose_errors
 from core.logic import coordinate_system as coordinate_system_logic
 from core.inputs.validators import Alpha, assert_rgba
 from core.mutations._generic import make_delete
-from core.mutations._sources import resolve_source_lens
+from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 
@@ -65,14 +65,7 @@ _MARKER_SIZE = "Marker size in screen pixels. Omit to let the viewer choose"
 
 class CreateTraceChartLayerInputModel(_Style):
     chart: str
-    lens: str | None = None
-    dataset: str | None = None
-
-    @model_validator(mode="after")
-    def _one_selection(self) -> "CreateTraceChartLayerInputModel":
-        if (self.lens is None) == (self.dataset is None):
-            raise ValueError("A trace reads exactly one of `lens` (a selection of an array) or `dataset` (the whole array).")
-        return self
+    lens: str
 
 
 @prose_errors
@@ -88,8 +81,7 @@ class CreateTraceChartLayerInput:
     """Input for creating a trace layer."""
 
     chart: strawberry.ID = strawberry.field(description="The chart to draw in")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The lens to read. Exactly one of `lens` and `dataset`")
-    dataset: strawberry.ID | None = strawberry.field(default=None, description="An array dataset to read whole, through its whole lens. Exactly one of `lens` and `dataset`")
+    lens: strawberry.ID = strawberry.field(description="The array lens to read as a trace. A dataset's whole lens is its `fullLens`")
     name: str | None = strawberry.field(default=None, description=_NAME)
     visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
     order: int | None = strawberry.field(default=None, description=_ORDER)
@@ -106,7 +98,7 @@ def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> t
     chart = get_for_org(models.Chart, info, id=model.chart)
 
     with transaction.atomic():
-        lens = resolve_source_lens(info, kind=core_models.ArrayLens, lens=model.lens, container_model=core_models.ArrayDataset, container=model.dataset, what="dataset")
+        lens = lens_of_kind(info, kind=core_models.ArrayLens, lens=model.lens, role="a trace reads")
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.TRACE.value, source=lens, **_settings(model))
 
 
@@ -115,8 +107,7 @@ def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> t
 
 class CreateSeriesChartLayerInputModel(_Style):
     chart: str
-    table_dataset: str | None = None
-    lens: str | None = None
+    lens: str
     value_column: str | None = None
 
 
@@ -133,8 +124,7 @@ class CreateSeriesChartLayerInput:
     """Input for creating a series layer."""
 
     chart: strawberry.ID = strawberry.field(description="The chart to draw in")
-    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset to read, through its whole lens. Exactly one of this and `lens`")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The table lens to read through: the rows its windows keep. Exactly one of this and `tableDataset`")
+    lens: strawberry.ID = strawberry.field(description="The table lens to read as a series: which rows. A table's whole lens is its `fullLens`")
     value_column: str | None = strawberry.field(default=None, description="The numeric attribute column read as the value. May be omitted when the table has exactly one")
     name: str | None = strawberry.field(default=None, description=_NAME)
     visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
@@ -150,7 +140,7 @@ def create_series_chart_layer(info: Info, input: CreateSeriesChartLayerInput) ->
     """Draw a table's value column against the coordinate column laid along a chart's axis."""
     model = input.to_pydantic()
     chart = get_for_org(models.Chart, info, id=model.chart)
-    lens = resolve_source_lens(info, kind=core_models.TableLens, lens=model.lens, container_model=core_models.TableDataset, container=model.table_dataset, what="tableDataset")
+    lens = lens_of_kind(info, kind=core_models.TableLens, lens=model.lens, role="a series reads")
 
     with transaction.atomic():
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.SERIES.value, source=lens, value_column=model.value_column, **_settings(model))
@@ -161,7 +151,6 @@ def create_series_chart_layer(info: Info, input: CreateSeriesChartLayerInput) ->
 
 class CreateAnnotationChartLayerInputModel(BaseModel):
     chart: str
-    annotation_collection: str | None = None
     lens: str | None = None
     name: str | None = None
     visible: bool | None = None
@@ -182,8 +171,7 @@ class CreateAnnotationChartLayerInput:
     """Input for creating an annotation layer."""
 
     chart: strawberry.ID = strawberry.field(description="The chart to draw in")
-    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="An existing annotation collection to draw, through its whole lens. Omit both this and `lens` to make a new drawing surface for this chart")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="An annotation lens to draw through. Omit both this and `annotationCollection` to make a new drawing surface for this chart")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="The annotation lens to draw through -- a collection's whole lens is its `fullLens`. Omit to mint a fresh collection in the chart's world and draw its whole lens")
     name: str | None = strawberry.field(default=None, description="A human-readable name for the layer, and for the collection when one is made")
     visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
     order: int | None = strawberry.field(default=None, description=_ORDER)
@@ -198,8 +186,8 @@ def create_annotation_chart_layer(info: Info, input: CreateAnnotationChartLayerI
 
     settings = {field: getattr(model, field) for field in ("name", "visible", "order", "opacity") if getattr(model, field) is not None}
     with transaction.atomic():
-        if model.annotation_collection is not None or model.lens is not None:
-            lens = resolve_source_lens(info, kind=core_models.AnnotationLens, lens=model.lens, container_model=core_models.AnnotationCollection, container=model.annotation_collection, what="annotationCollection")
+        if model.lens is not None:
+            lens = lens_of_kind(info, kind=core_models.AnnotationLens, lens=model.lens, role="an annotation chart layer draws through")
             if chart.layers.filter(lens=lens).exists():
                 raise ValueError(f"Lens {lens.pk} over annotation collection {lens.annotation_collection_id} is already drawn in chart '{chart.name}'. One layer per lens: per-mark styling lives on the annotations, and another window over the collection is another lens.")
         else:

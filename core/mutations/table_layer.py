@@ -12,11 +12,11 @@ from core.render import filter_by as filter_by_models
 from core.render.layer import inputs as layer_inputs
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
-from core.mutations._sources import resolve_source_lens
+from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 
-def _resolve_table_lens(info: Info, *, lens: str | None, table_dataset: str | None) -> "models.TableLens":
+def _resolve_table_lens(info: Info, *, lens: str) -> "models.TableLens":
     """The table lens a point/track layer draws through, checked for a place to draw it.
 
     The dataset is the whole mapping: its declared coordinate columns are the
@@ -24,7 +24,7 @@ def _resolve_table_lens(info: Info, *, lens: str | None, table_dataset: str | No
     identities. Nothing is bound per layer -- a per-layer copy of any of it could
     disagree with the schema the dataset already declares. The lens is which rows of it.
     """
-    resolved = resolve_source_lens(info, kind=models.TableLens, lens=lens, container_model=models.TableDataset, container=table_dataset, what="tableDataset")
+    resolved = lens_of_kind(info, kind=models.TableLens, lens=lens)
     dataset = resolved.table_dataset
     spatial = [col for col in dataset.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value) if col.axis_type == enums.AxisTypeChoices.SPACE.value]
     if len(spatial) < 2:
@@ -79,8 +79,7 @@ def build_point_pickers(info: Info, table_dataset, color_bys, filter_bys):
 
 class CreatePointLayerInputModel(BaseModel):
     scene: str
-    table_dataset: str | None = None
-    lens: str | None = None
+    lens: str
     color_bys: list[layer_inputs.LabelColorByInputModel] | None = None
     active_color_by: int | None = None
     filter_bys: list[layer_inputs.LabelFilterByInputModel] | None = None
@@ -102,8 +101,7 @@ class CreatePointLayerInput:
     active_color_by: int | None = strawberry.field(default=None, description="Which entry of `colorBys` is drawn, as an index into it. Null means every point takes the flat colour")
     filter_bys: list[layer_inputs.LabelFilterByInput] | None = strawberry.field(default=None, description="The filters this layer offers. Each keeps or drops points by a column of a table this layer's ids key into")
     active_filter_bys: list[int] | None = strawberry.field(default=None, description="Which entries of `filterBys` are applied, as indices into it. Combined with AND")
-    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset whose declared coordinate columns provide the points, drawn through its whole lens. Its own coordinate system is the space and its column roles are the mapping -- no per-layer column binding exists. Exactly one of this and `lens`")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The table lens to draw through: the rows its windows keep. Exactly one of this and `tableDataset`")
+    lens: strawberry.ID = strawberry.field(description="The table lens to draw through: which rows, in the table's own space. A table's whole lens is its `fullLens`")
     size_column: str | None = strawberry.field(default=None, description="The measure column mapped to per-point size -- a per-layer display choice among the dataset's columns")
     point_size: float | None = strawberry.field(default=None, description="The default point size in scene units (default 3.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
     colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the active entry of the colour picker maps through (default 'viridis')")
@@ -118,7 +116,7 @@ def create_point_layer(info: Info, input: CreatePointLayerInput) -> types.PointL
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    lens = _resolve_table_lens(info, lens=model.lens, table_dataset=model.table_dataset)
+    lens = _resolve_table_lens(info, lens=model.lens)
     table_dataset = lens.table_dataset
 
     graph_logic.assert_placeable_in(scene.world, table_dataset.coordinate_system_or_none, destination=f"the world of scene '{scene.name}'")
@@ -219,8 +217,7 @@ def update_point_layer(info: Info, input: UpdatePointLayerInput) -> types.PointL
 
 class CreateTrackLayerInputModel(BaseModel):
     scene: str
-    table_dataset: str | None = None
-    lens: str | None = None
+    lens: str
     color_by_column: str | None = None
     line_width: float | None = None
     colormap: enums.ColorMap | None = None
@@ -234,8 +231,7 @@ class CreateTrackLayerInputModel(BaseModel):
 @kante.pydantic_input(CreateTrackLayerInputModel, description="Create a layer that renders trajectories (e.g. particle/cell tracks) from a table dataset, grouped by its TRACK_ID column")
 class CreateTrackLayerInput:
     scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset whose declared coordinate + TRACK_ID columns provide the tracks, drawn through its whole lens. Exactly one of this and `lens`")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The table lens to draw through: the rows its windows keep. Exactly one of this and `tableDataset`")
+    lens: strawberry.ID = strawberry.field(description="The table lens to draw through: which rows, in the table's own space. A table's whole lens is its `fullLens`")
     color_by_column: str | None = strawberry.field(default=None, description="The measure column used to color tracks (used with colormap) -- a per-layer display choice among the dataset's columns")
     line_width: float | None = strawberry.field(default=None, description="The width of the track lines in scene units (default 1.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
     colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap used to color tracks by their color_by_column (default 'viridis')")
@@ -250,7 +246,7 @@ def create_track_layer(info: Info, input: CreateTrackLayerInput) -> types.TrackL
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    lens = _resolve_table_lens(info, lens=model.lens, table_dataset=model.table_dataset)
+    lens = _resolve_table_lens(info, lens=model.lens)
     table_dataset = lens.table_dataset
 
     if not table_dataset.columns_by_role(enums.ColumnRoleChoices.TRACK_ID.value):

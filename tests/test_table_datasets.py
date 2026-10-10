@@ -431,7 +431,7 @@ async def test_a_point_layer_over_a_table_dataset_reaches_world(authenticated_co
         }
         """,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "tableDataset": table_id}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.TableDataset, table_id)}},
     )
     assert not made.errors, made.errors
     # The mappings come from the declared columns, by name.
@@ -472,7 +472,7 @@ async def test_column_mappings_are_by_name_not_position(authenticated_context: H
         }
         """,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "tableDataset": table_id}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.TableDataset, table_id)}},
     )
     assert not made.errors, made.errors
     layer = made.data["createPointLayer"]
@@ -508,7 +508,7 @@ async def test_an_unregistered_derived_table_layer_is_rejected(authenticated_con
       createPointLayer(input: $input) { id placementValidity }
     }
     """
-    variables = {"input": {"scene": str(scene.pk), "tableDataset": created.data["createTableDataset"]["id"]}}
+    variables = {"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.TableDataset, created.data["createTableDataset"]["id"])}}
 
     refused = await schema.execute(make, context_value=authenticated_context, variable_values=variables)
     assert refused.errors, "an unplaced source must be refused, not silently unplaced"
@@ -546,7 +546,7 @@ async def test_a_freestanding_table_layer_is_rejected_until_its_space_is_registe
       createPointLayer(input: $input) { id }
     }
     """
-    variables = {"input": {"scene": str(scene.pk), "tableDataset": table_id}}
+    variables = {"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.TableDataset, table_id)}}
 
     refused = await schema.execute(make, context_value=authenticated_context, variable_values=variables)
     assert refused.errors, "a freestanding table's space reaches no world until someone registers it"
@@ -650,7 +650,7 @@ async def test_a_point_layer_colours_by_its_own_table_without_an_edge(authentica
         variable_values={
             "input": {
                 "scene": str(scene.pk),
-                "tableDataset": table_id,
+                "lens": await seed.whole_lens_id(models.TableDataset, table_id),
                 "colorBys": [{"table": table_id, "column": "intensity", "colormap": "VIRIDIS", "label": "Intensity"}],
                 "activeColorBy": 0,
             }
@@ -718,7 +718,7 @@ async def test_a_point_layer_refuses_a_table_it_cannot_reach(authenticated_conte
         variable_values={
             "input": {
                 "scene": str(scene.pk),
-                "tableDataset": table_id,
+                "lens": await seed.whole_lens_id(models.TableDataset, table_id),
                 "colorBys": [{"table": "999999", "column": "whatever", "colormap": "VIRIDIS"}],
             }
         },

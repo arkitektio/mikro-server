@@ -208,6 +208,11 @@ async def create_lens(ctx: HttpContext, dataset: ArrayDataset, slices: list | No
     return await sync_to_async(_seed_lens_sync)(ctx, dataset, slices)
 
 
+async def whole_lens_id(model: type, pk: object) -> str:
+    """The id of a container's whole lens, by container model and id: what a layer mutation takes where it used to take the container."""
+    return await sync_to_async(lambda: str(coordinate_system_logic.whole_lens(model.objects.get(pk=pk)).pk))()
+
+
 async def channel_lens(ctx: HttpContext, lens: Lens, index: int = 0, axis: str = "c") -> Lens:
     """The lens pinning one channel of ``lens``: what an intensity, label or phasor layer draws through, and what each RGB component is.
 

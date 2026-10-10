@@ -682,11 +682,28 @@ class AnnotationFilter(IdsFilterMixin):
         return Q(**{f"{prefix}coordinates__contains": {coordinate.name: coordinate.value for coordinate in value}})
 
     @kante.filter_field(
-        description="Filter to annotations whose intrinsic bounding box overlaps this box (GiST-backed). Only meaningful within one frame: pass `collection` or `coordinateSystem` alongside. A box of lower rank is zero-filled on the missing coordinates"
+        description="Filter to annotations whose intrinsic bounding box overlaps this box (GiST-backed). Only meaningful within one frame: pass `collection` or `coordinateSystem` alongside, and bound every axis of that frame -- a box of lower rank is refused rather than zero-filled on the missing coordinates"
     )
     def intersects(self, info: Info, value: BoundingBoxInput, prefix: str) -> Q:
         self._require_frame("intersects")
+        rank = self._frame_rank()
+        if rank is not None and (len(value.min) != rank or len(value.max) != rank):
+            raise ValueError(
+                f"`intersects` names a box of rank {len(value.min)} in a frame of {rank} axes. A probe bounds every axis of its frame: a coordinate left out would be read as 0, "
+                "which is a position, not an absence."
+            )
         return Q(**{f"{prefix}bbox_cube__overlaps": (value.min, value.max)})
+
+    def _frame_rank(self) -> int | None:
+        """How many axes the frame the predicate was scoped to has: the collection's box frame, or the named system."""
+        if self.collection is not strawberry.UNSET and self.collection is not None:
+            collection = models.AnnotationCollection.objects.filter(pk=self.collection).first()
+            frame = collection.effective_bbox_system if collection is not None else None
+            return frame.axes.count() if frame is not None else None
+        if self.coordinate_system is not strawberry.UNSET and self.coordinate_system is not None:
+            system = models.CoordinateSystem.objects.filter(pk=self.coordinate_system).first()
+            return system.axes.count() if system is not None else None
+        return None
 
     @kante.filter_field(
         description="Filter to annotations whose intrinsic bounding box contains this point (GiST-backed). Only meaningful within one frame: pass `collection` or `coordinateSystem` alongside"

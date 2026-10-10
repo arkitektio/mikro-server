@@ -65,7 +65,6 @@ class Container:
 CONTAINERS: tuple[Container, ...] = (
     Container(model=models.ArrayDataset, related_name="datasets", root_field="pk", key="dataset"),
     Container(model=models.DataArray, related_name="data_arrays", root_field="dataset_id", key="dataset"),
-    Container(model=models.ArrayLens, related_name="lenses", root_field="dataset_id", key="dataset"),
     Container(model=models.MeshCollection, related_name="mesh_collections", root_field="pk", key="meshcollection", is_collection=True),
     Container(model=models.NetworkCollection, related_name="network_collections", root_field="pk", key="networkcollection", is_collection=True),
     Container(model=models.TableDataset, related_name="table_datasets", root_field="pk", key="tabledataset", is_collection=True),
@@ -81,11 +80,12 @@ CONTAINERS: tuple[Container, ...] = (
     # A windowed lens lives in its container's own system and keys to that container: it is
     # a part of the container's node, exactly as an array lens is a part of its dataset's.
     # `related_name` is the base model's reverse accessor, shared by every lens kind.
-    Container(model=models.TableLens, related_name="lenses", root_field="table_dataset_id", key="tabledataset"),
-    Container(model=models.SparseLens, related_name="lenses", root_field="sparse_dataset_id", key="sparsedataset"),
-    Container(model=models.MeshLens, related_name="lenses", root_field="mesh_collection_id", key="meshcollection"),
-    Container(model=models.NetworkLens, related_name="lenses", root_field="network_collection_id", key="networkcollection"),
-    Container(model=models.AnnotationLens, related_name="lenses", root_field="annotation_collection_id", key="annotationcollection"),
+    # One row per lens kind, derived from the registry: a lens lives in its container's fact
+    # tree, keyed as the container is.
+    *(
+        Container(model=lens_model, related_name="lenses", root_field=f"{lens_model.CONTAINER_FIELD}_id", key="dataset" if container_model is models.ArrayDataset else container_model.__name__.lower())
+        for container_model, lens_model in models.Lens.KIND_BY_CONTAINER.items()
+    ),
 )
 
 #: The model a container key resolves back to. A key names one *node*, so the three models
@@ -2416,19 +2416,6 @@ def residence_map(system_ids: "Iterable[int]") -> dict[int, int]:
     return mapping
 
 
-def _fk_dataset_id(system: "models.CoordinateSystem | None") -> int | None:
-    """The dataset a system belongs to by its ownership FK -- no derivation-edge follow.
-
-    The FK-only sibling of :func:`system_dataset`: a collection's own (mesh / table) system
-    is anchored to a dataset by an *edge*, not an FK, so this returns None for it. That is
-    the wanted behaviour for the lens key -- a lens always lives on a dataset-owned system --
-    and it keeps the batch a pure in-memory read over the already-fetched FKs.
-    """
-    if system is None:
-        return None
-    return residence_map([system.pk]).get(system.pk)
-
-
 def _keys_for(edges: "Iterable[models.Transformation]") -> dict[int, tuple]:
     """The container key of every endpoint of these edges, in one batch."""
     endpoints = {edge.input_id for edge in edges if edge.input_id} | {edge.output_id for edge in edges if edge.output_id}
@@ -2446,7 +2433,7 @@ def _derivation_descendants(container_keys: set[tuple]) -> set[tuple]:
     did not survive places nothing downstream.
 
     **Containers, not datasets.** Keyed on dataset ids this walk could not see a collection
-    at either end -- `_fk_dataset_id` was None for one -- so a table-parented dataset was
+    at either end -- the FK-only residency lookup was None for one -- so a table-parented dataset was
     never discovered as a descendant and was placed by nothing. A table registered into a
     world now carries its reconstruction along, which is the whole point of a localization
     table having a metric space.
@@ -2648,41 +2635,28 @@ def placeable_system_ids_in(space: "models.CoordinateSystem", *, derived_only: b
     return {system_id for system_id in reachable if keys.get(system_id) in descendants}
 
 
-def _placeable_systems(space: "models.CoordinateSystem", *, derived_only: bool = False) -> list["models.CoordinateSystem"]:
-    """The placeable coordinate systems as rows.
-
-    No `select_related` of owners any more: a space has none. Callers that need to know what
-    lives in these spaces ask :func:`residence_map` over their ids, in three queries.
-    """
-    return list(models.CoordinateSystem.objects.filter(pk__in=placeable_system_ids_in(space, derived_only=derived_only)))
-
-
 def placeable_lens_dataset_ids(space: "models.CoordinateSystem", *, derived_only: bool = False) -> set[int]:
     """The datasets every one of whose lenses is placeable in this space.
 
     Placeability is a property of the *dataset*, not the individual lens: an unsliced lens'
     space is the intrinsic system, a sliced lens' system reaches it across a crop/scale, and
     a dataset anchored in its physical space reaches the destination through that space -- so
-    if any of a dataset's systems reaches it, every lens of it does. Keying on ``dataset_id``
-    is therefore both correct and indexed, and needs no ``distinct()``.
-
-    ``derived_only`` passes straight through to :func:`placeable_system_ids_in`: the
-    question is asked of the container, and a dataset's lenses and levels share its
-    container, so the reduction is the same either way.
+    if any of a dataset's systems reaches it, every lens of it does. One walk
+    (:func:`placeable_system_ids_in`) and one residency lookup (:func:`residence_map`).
     """
-    return {dataset_id for system in _placeable_systems(space, derived_only=derived_only) if (dataset_id := _fk_dataset_id(system)) is not None}
+    return set(residence_map(placeable_system_ids_in(space, derived_only=derived_only)).values())
 
 
 def placeable_container_ids(space: "models.CoordinateSystem", *, derived_only: bool = False) -> dict[type, set[int]]:
     """Every container placeable in this space, by model: the datasets whose lenses reach it, and the collections whose own system does.
 
-    One walk of the placeable systems, then one query per collection model. A collection --
-    a table, a sparse dataset, a mesh, a network, an annotation collection -- owns its system
-    one-to-one, so it is placeable exactly when that system is in the set; a dataset is
-    placeable when any of its systems is (:func:`placeable_lens_dataset_ids`).
+    One walk of the placeable systems, one residency lookup for the datasets, then one query
+    per collection model. A collection -- a table, a sparse dataset, a mesh, a network, an
+    annotation collection -- owns its system one-to-one, so it is placeable exactly when that
+    system is in the set; a dataset is placeable when any of its systems is.
     """
     placeable = placeable_system_ids_in(space, derived_only=derived_only)
-    by_model: dict[type, set[int]] = {models.ArrayDataset: placeable_lens_dataset_ids(space, derived_only=derived_only)}
+    by_model: dict[type, set[int]] = {models.ArrayDataset: set(residence_map(placeable).values())}
     for container in COLLECTION_CONTAINERS:
         by_model[container.model] = set(container.model.objects.filter(coordinate_system_id__in=placeable).values_list("pk", flat=True)) if placeable else set()
     return by_model

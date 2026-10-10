@@ -9,14 +9,13 @@ from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
 from core.mutations.layer import assert_active_color_by, assert_active_filter_bys, build_mesh_color_bys, build_mesh_filter_bys, mesh_reachable_tables
 from core.render.layer import inputs as layer_inputs
-from core.mutations._sources import resolve_source_lens
+from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 
 class CreateMeshLayerInputModel(BaseModel):
     scene: str
-    mesh_collection: str | None = None
-    lens: str | None = None
+    lens: str
     material_color: list[int] | None = None
     wireframe: bool | None = None
     shading: enums.MeshShading | None = None
@@ -78,8 +77,7 @@ def assert_max_level(collection, max_level: int | None) -> None:
 @kante.pydantic_input(CreateMeshLayerInputModel, description="Create a layer that renders a mesh collection (surface reconstructions / isosurfaces) in a scene. The collection's own coordinate system is the layer's space, so it must already have a path to the scene's world")
 class CreateMeshLayerInput:
     scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="The mesh collection whose geometry this layer renders, drawn through its whole lens. Its own coordinate system is the layer's space. Exactly one of this and `lens`")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The mesh lens to draw through. Exactly one of this and `meshCollection`")
+    lens: strawberry.ID = strawberry.field(description="The mesh lens to draw through: which meshes, in the collection's own space. A collection's whole lens is its `fullLens`")
     material_color: list[int] | None = strawberry.field(default=None, description="Material (surface) color of the mesh, as RGBA (default white)")
     wireframe: bool | None = strawberry.field(default=None, description="Whether to render the mesh as a wireframe (default false)")
     shading: enums.MeshShading | None = strawberry.field(default=None, description="How the surface is lit (default SMOOTH)")
@@ -98,7 +96,7 @@ def create_mesh_layer(info: Info, input: CreateMeshLayerInput) -> types.MeshLaye
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    lens = resolve_source_lens(info, kind=models.MeshLens, lens=model.lens, container_model=models.MeshCollection, container=model.mesh_collection, what="meshCollection")
+    lens = lens_of_kind(info, kind=models.MeshLens, lens=model.lens)
     collection = lens.mesh_collection
 
     graph_logic.assert_placeable_in(scene.world, getattr(collection, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")

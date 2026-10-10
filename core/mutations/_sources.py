@@ -15,6 +15,16 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.scoping import get_for_org
 
 
+def lens_of_kind(info: Info, *, kind: type[models.Lens], lens: str, role: str = "this layer draws through") -> models.Lens:
+    """The lens of one kind a layer draws through, refused in prose when the id names a lens of another kind."""
+    if not kind.objects.filter(pk=lens).exists():
+        found = models.Lens.objects.filter(pk=lens).first()
+        if found is None:
+            raise ValueError(f"Lens {lens} does not exist.")
+        raise ValueError(f"Lens {lens} is a {type(found).KIND.lower()} lens; {role} a {kind.KIND.lower()} lens. Pass a {kind.KIND.lower()} lens -- a container's whole lens is its `fullLens`.")
+    return get_for_org(kind, info, id=lens)
+
+
 def resolve_source_lens(
     info: Info,
     *,
@@ -25,14 +35,9 @@ def resolve_source_lens(
     what: str,
     role: str = "this layer draws through",
 ) -> models.Lens:
-    """The lens a layer draws through -- or a selection is cut from -- from exactly one of ``lens`` and ``container``."""
+    """The lens a selection is cut from, from exactly one of ``lens`` and ``container``: what the create-lens mutations take, where a container is where a selection is first named."""
     if (lens is None) == (container is None):
         raise ValueError(f"Name exactly one of `lens` (a {kind.KIND.lower()} lens) or `{what}` (the container, through its whole lens).")
     if lens is not None:
-        if not kind.objects.filter(pk=lens).exists():
-            found = models.Lens.objects.filter(pk=lens).first()
-            if found is None:
-                raise ValueError(f"Lens {lens} does not exist.")
-            raise ValueError(f"Lens {lens} is a {type(found).KIND.lower()} lens; {role} a {kind.KIND.lower()} lens. Pass a lens over a {what}, or the {what} itself.")
-        return get_for_org(kind, info, id=lens)
+        return lens_of_kind(info, kind=kind, lens=lens, role=role)
     return coordinate_system_logic.whole_lens(get_for_org(container_model, info, id=container))

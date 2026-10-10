@@ -73,12 +73,11 @@ class Command(BaseCommand):
                 if self.dry_run:
                     transaction.set_rollback(True)
 
+        # Every windowed kind the registry knows, so a seventh kind joins this job unasked.
         for noun, containers in (
-            ("table dataset", models.TableDataset.objects.filter(coordinate_system__isnull=False)),
-            ("sparse dataset", models.SparseDataset.objects.filter(coordinate_system__isnull=False)),
-            ("mesh collection", models.MeshCollection.objects.filter(coordinate_system__isnull=False)),
-            ("network collection", models.NetworkCollection.objects.filter(coordinate_system__isnull=False)),
-            ("annotation collection", models.AnnotationCollection.objects.filter(coordinate_system__isnull=False)),
+            (str(container_model._meta.verbose_name), container_model.objects.filter(coordinate_system__isnull=False))
+            for container_model, lens_model in models.Lens.KIND_BY_CONTAINER.items()
+            if lens_model is not models.ArrayLens
         ):
             for container in containers.order_by("pk").iterator():
                 with transaction.atomic():

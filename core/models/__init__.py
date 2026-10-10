@@ -138,13 +138,16 @@ __all__ = [
     "Layer",
 ]
 
-# Which lens kind selects over which container: the array and mesh entries are written beside
-# the lens models; the rest live in modules that import that one, so they are completed here,
-# once every container model exists.
+# The one registry of lens kinds: which lens model selects over which container, written here
+# because this is the first place every container model exists. Everything that enumerates the
+# kinds derives from it -- the coordinate graph's lens containers, the merge job's rounds, the
+# subscriptions' and filters' kind lookups -- so a seventh kind is one line here, plus its model.
 Lens.KIND_BY_CONTAINER.update(
     {
+        ArrayDataset: ArrayLens,
         TableDataset: TableLens,
         SparseDataset: SparseLens,
+        MeshCollection: MeshLens,
         NetworkCollection: NetworkLens,
         AnnotationCollection: AnnotationLens,
     }

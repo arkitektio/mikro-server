@@ -7,14 +7,13 @@ from pydantic import BaseModel
 from core.logic import graph as graph_logic
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
-from core.mutations._sources import resolve_source_lens
+from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 
 class CreateAnnotationLayerInputModel(BaseModel):
     scene: str
-    annotation_collection: str | None = None
-    lens: str | None = None
+    lens: str
     blending: enums.Blending | None = None
     opacity: Alpha | None = None
     visible: bool | None = None
@@ -28,8 +27,7 @@ class CreateAnnotationLayerInputModel(BaseModel):
 )
 class CreateAnnotationLayerInput:
     scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="The annotation collection whose shapes this layer renders, drawn through its whole lens. Its own coordinate system is the layer's space. Exactly one of this and `lens`")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The annotation lens to draw through. Exactly one of this and `annotationCollection`")
+    lens: strawberry.ID = strawberry.field(description="The annotation lens to draw through: which shapes, in the collection's own space. A collection's whole lens is its `fullLens`")
     blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
     opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
     visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
@@ -47,7 +45,7 @@ def create_annotation_layer(info: Info, input: CreateAnnotationLayerInput) -> ty
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    lens = resolve_source_lens(info, kind=models.AnnotationLens, lens=model.lens, container_model=models.AnnotationCollection, container=model.annotation_collection, what="annotationCollection")
+    lens = lens_of_kind(info, kind=models.AnnotationLens, lens=model.lens)
     collection = lens.annotation_collection
 
     graph_logic.assert_placeable_in(scene.world, collection.coordinate_system_or_none, destination=f"the world of scene '{scene.name}'")

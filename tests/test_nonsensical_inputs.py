@@ -202,7 +202,7 @@ async def test_a_layer_alpha_stays_between_transparent_and_opaque(authenticated_
     result = await schema.execute(
         CREATE_MESH_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.id), "meshCollection": "1", "opacity": opacity}},
+        variable_values={"input": {"scene": str(scene.id), "lens": "1", "opacity": opacity}},
     )
     assert result.errors, f"opacity {opacity} is not an alpha"
     assert "runs from 0 (transparent) to 1 (opaque)" in str(result.errors[0]), str(result.errors[0])

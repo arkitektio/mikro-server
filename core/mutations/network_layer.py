@@ -31,7 +31,7 @@ from core.mutations.layer import (
     network_reachable_walks,
 )
 from core.render.layer import inputs as layer_inputs
-from core.mutations._sources import resolve_source_lens
+from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 _LINE_WIDTH_DESCRIPTION = (
@@ -101,8 +101,7 @@ def assert_max_level(collection, max_level: int | None) -> None:
 
 class CreateNetworkLayerInputModel(BaseModel):
     scene: str
-    network_collection: str | None = None
-    lens: str | None = None
+    lens: str
     material_color: list[int] | None = None
     line_width: float | None = None
     node_size_column: str | None = None
@@ -129,8 +128,7 @@ class CreateNetworkLayerInput:
     """Input for creating a network layer."""
 
     scene: strawberry.ID = strawberry.field(description="The scene this layer is drawn in")
-    network_collection: strawberry.ID | None = strawberry.field(default=None, description="The network collection to render, drawn through its whole lens. It owns its own coordinate system, and `derivedFrom` is what relates that system to the scene's world. Exactly one of this and `lens`")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="The network lens to draw through. Exactly one of this and `networkCollection`")
+    lens: strawberry.ID = strawberry.field(description="The network lens to draw through: which nodes and edges, in the collection's own space. A collection's whole lens is its `fullLens`")
     material_color: list[int] | None = strawberry.field(default=None, description="The flat colour of every segment, as RGBA. Default opaque white")
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH_DESCRIPTION)
     node_size_column: str | None = strawberry.field(default=None, description=_NODE_SIZE_DESCRIPTION)
@@ -159,7 +157,7 @@ def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.Ne
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    lens = resolve_source_lens(info, kind=models.NetworkLens, lens=model.lens, container_model=models.NetworkCollection, container=model.network_collection, what="networkCollection")
+    lens = lens_of_kind(info, kind=models.NetworkLens, lens=model.lens)
     collection = lens.network_collection
 
     graph_logic.assert_placeable_in(scene.world, getattr(collection, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")

@@ -148,7 +148,7 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_c
         result = await schema.execute(
             CREATE_LAYER,
             context_value=authenticated_context,
-            variable_values={"input": {"scene": str(scene.pk), "meshCollection": str(collection.pk), "colorBys": [entry]}},
+            variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.pk)), "colorBys": [entry]}},
         )
         assert not result.errors, f"offered {entry} and the mutation refused it: {result.errors}"
         assert result.data["createMeshLayer"]["colorBys"][0]["joinPath"] == entry["joinPath"]
@@ -160,7 +160,7 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_c
     refused = await schema.execute(
         CREATE_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "meshCollection": str(collection.pk), "colorBys": [{"table": unrelated, "column": "volume", "colormap": "VIRIDIS"}]}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.pk)), "colorBys": [{"table": unrelated, "column": "volume", "colormap": "VIRIDIS"}]}},
     )
     assert refused.errors
 

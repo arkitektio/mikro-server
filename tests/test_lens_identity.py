@@ -210,7 +210,7 @@ async def test_a_chart_trace_from_a_dataset_reads_its_whole_lens(authenticated_c
     await _lay_along(ctx, profile, chart, "d")
     (whole_id,) = await _lens_ids(profile)
 
-    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "dataset": str(profile.pk)}))["createTraceChartLayer"]
+    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk))}))["createTraceChartLayer"]
 
     assert made["lens"]["id"] == str(whole_id)
     assert await _lens_ids(profile) == [whole_id]
