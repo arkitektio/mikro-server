@@ -764,7 +764,7 @@ class SetDefaultSceneInputModel(BaseModel):
     scene: str | None = Field(default=None, description="The scene to nominate, or null to clear the nomination")
 
 
-@kante.pydantic_input(SetDefaultSceneInputModel, description="Nominate the scene to open for a dataset, and take its thumbnail from")
+@kante.pydantic_input(SetDefaultSceneInputModel, description="Nominate the scene to open for a dataset, and take its thumbnail from: the same write as `setLensDefaultScene` on the dataset's whole lens")
 class SetDefaultSceneInput:
     """Input for nominating a dataset's default scene."""
 
@@ -773,20 +773,21 @@ class SetDefaultSceneInput:
 
 
 def nominate_default_scene(info: Info, dataset: "models.ArrayDataset", scene: "models.Scene | None") -> "models.ArrayDataset":
-    """Write one dataset's nomination, having checked the caller may.
+    """Write one dataset's nomination -- which its whole lens holds -- having checked the caller may.
 
     **Guarded on the dataset, not the scene**, and that is not a detail: `Scene` carries no
     `creator` column at all -- which is why `delete_scene` passes `owner=None` -- so a check on
-    the scene has nothing to read. The dataset does carry one, and the dataset is what this
-    writes. Without the check any member of the organization could repoint any dataset's
-    thumbnail.
+    the scene has nothing to read. The dataset does carry one, and the dataset's cards are
+    what this changes. Without the check any member of the organization could repoint any
+    dataset's thumbnail.
 
     Org scoping is the caller's job (both ids arrive through `get_for_org`); this is the
     ownership half, which scoping does not cover.
     """
     assert_can_delete(info, dataset, self_owner)
-    dataset.default_scene = scene
-    dataset.save(update_fields=["default_scene"])
+    whole = coordinate_system_logic.whole_lens(dataset)
+    whole.default_scene = scene
+    whole.save(update_fields=["default_scene"])
     return dataset
 
 

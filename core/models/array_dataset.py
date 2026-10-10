@@ -74,26 +74,8 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
         help_text="The coordinate system this dataset's pixels are expressed in: its level-0 grid. PROTECT, because a space cannot be deleted while data lives in it",
     )
 
-    # A *choice*, not a fact, which is the whole reason it may be stored. Which scenes show
-    # this dataset is derivable from the graph and is `ArrayDataset.scenes`; a second copy of that
-    # would be free to disagree with it, and `core.logic.scene` rejects one by name. Which of
-    # them to open first is derivable from nothing -- a dataset anchored in five scenes leaves
-    # the graph with no opinion and a person with one. This records the opinion.
-    #
-    # Inert, in the same register as `AnnotationCollection.scene`: no walk crosses it, it gates
-    # no placement, and nothing but the thumbnail lookup reads it. SET_NULL for that model's
-    # reason too -- deleting a scene must never delete or hide the data it showed.
-    default_scene = models.ForeignKey(
-        "Scene",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="default_for",
-        help_text=(
-            "The scene to open for this dataset, and the one its thumbnail is taken from. Bookkeeping only: it claims nothing about where the data sits and is not an answer to "
-            "which scenes *show* this dataset -- that is `scenes`, a question the coordinate graph answers. Several datasets may nominate one scene. Cleared, not cascaded, when the scene is deleted"
-        ),
-    )
+    # The scene to open for this dataset is a nomination its *whole lens* holds (`Lens.default_scene`):
+    # one owner for one fact, whichever door it was written through. `nominated_scene_id` reads it.
 
     # Filing, not placement. A folder says where a user keeps this dataset; it says nothing
     # about what space the data is in -- that is the coordinate graph's job, and the two must
@@ -177,6 +159,11 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
     def axis_names(self) -> list:
         """The dataset's axis names, in array order. Derived from the intrinsic axes."""
         return [axis.name for axis in self.axes]
+
+    @property
+    def nominated_scene_id(self) -> int | None:
+        """The scene this dataset nominates to open: the nomination its whole lens holds. One query; the GraphQL type prefetches it."""
+        return ArrayLens.objects.filter(dataset_id=self.pk, slices=[]).values_list("default_scene_id", flat=True).first()
 
     @property
     def spec(self) -> list:
@@ -656,13 +643,10 @@ class Lens(PolymorphicModel):
         help_text="What someone called this selection, e.g. 'nucleus 3'. Optional, editable, and no part of the lens' identity: a lens is its container and its selection",
     )
 
-    # A nomination, exactly as `ArrayDataset.default_scene` is, and bookkeeping for the same
-    # reason: it says which composition to open for this selection and where its thumbnail
-    # comes from, and nothing about where the data sits. A whole lens over a container that
-    # nominates a scene of its own (an array dataset) answers with the container's -- a second
-    # column for the same answer could only disagree with the first -- and writes it there.
-    # Every other lens, a whole one over a table, a mesh, a network, an annotation collection
-    # or a sparse dataset included, holds its nomination here: nothing else holds it.
+    # A nomination, and bookkeeping: it says which composition to open for this selection and
+    # where its thumbnail comes from, and nothing about where the data sits. The one owner of
+    # the fact for every kind: a container's nomination *is* its whole lens' (an array dataset
+    # answers through it), and a crop or a window that nominates nothing falls back to it.
     default_scene = models.ForeignKey(
         "Scene",
         on_delete=models.SET_NULL,
@@ -670,8 +654,8 @@ class Lens(PolymorphicModel):
         blank=True,
         related_name="default_for_lenses",
         help_text=(
-            "The scene to open for this lens, and the one its thumbnail is taken from. A whole array lens answers with its dataset's nomination and holds none here; every other lens holds its own. "
-            "Bookkeeping, not placement -- which scenes *show* this lens is `scenes`. Cleared, not cascaded, when the scene is deleted"
+            "The scene to open for this lens, and the one its thumbnail is taken from. The one place a nomination lives: a container's is its whole lens', and a selection that nominates "
+            "nothing falls back to that. Bookkeeping, not placement -- which scenes *show* this lens is `scenes`. Cleared, not cascaded, when the scene is deleted"
         ),
     )
 
@@ -741,21 +725,20 @@ class Lens(PolymorphicModel):
         return CoordinateAnchor.objects.none()
 
     @property
-    def container_nominates(self) -> bool:
-        """Whether the container has a nomination of its own for a whole lens to answer with. Only an array dataset does."""
-        return isinstance(self.container, ArrayDataset)
-
-    @property
     def nominated_scene_id(self) -> int | None:
-        """The scene to open for this lens: its own nomination, else its container's.
+        """The scene to open for this lens: its own nomination, else its container's whole lens'.
 
-        A whole array lens answers with its dataset's and holds none of its own. The fallback
-        is what keeps a crop nobody has staged from going blank -- until it has a composition
-        of its own, the picture of its container is the best one there is.
+        The fallback is what keeps a crop or a window nobody has staged from going blank --
+        until it has a composition of its own, the picture of its container is the best one
+        there is -- and it is the same for every kind, because every container's nomination is
+        held by its whole lens.
         """
-        if self.default_scene_id is not None and not (self.is_whole and self.container_nominates):
+        if self.default_scene_id is not None or self.is_whole:
             return self.default_scene_id
-        return getattr(self.container, "default_scene_id", None)
+        real = self._real()
+        kind = type(real)
+        column = "slices" if kind is ArrayLens else "windows"
+        return kind.objects.filter(**{f"{kind.CONTAINER_FIELD}_id": real.container_id, column: []}).values_list("default_scene_id", flat=True).first()
 
 
 class WindowedLens(models.Model):

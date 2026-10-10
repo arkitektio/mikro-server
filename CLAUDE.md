@@ -63,9 +63,9 @@ What this service declares:
   annotation collection) its whole lens and folds duplicate array lenses onto one row; the
   database refuses duplicates since the lens tables were split, so it is a guard for rows
   written by hand. It changes nothing the second time and reports what it leaves in place.
-- Other jobs: `purge_orphaned_stores`, `respec_datasets`, `backfill_default_scenes`, `backfill_parquet_schemas`. The two backfills are
-  safe beside a serving release and report what is still owed; neither is in the setup, so
-  an operator runs them.
+- Other jobs: `purge_orphaned_stores`, `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe
+  beside a serving release and reports what is still owed; it is not in the setup, so an
+  operator runs it.
 
 `tests/test_prepared.py` holds the contract to this: migrations committed, every job a command
 of this service, the setup run twice. In `deployments/next` the service runs

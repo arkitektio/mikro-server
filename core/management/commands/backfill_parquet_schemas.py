@@ -9,7 +9,7 @@ trip on a request path, which is exactly what recording it was meant to remove.
 **A command and not a data migration, deliberately.** This does S3 and DuckDB I/O. A migration
 doing that fails `migrate` on any machine without datalayer credentials -- CI, a fresh checkout,
 a colleague's laptop -- and holds a transaction open for as long as the object store takes. The
-same reason `backfill_default_scenes` is a command.
+same reason the other backfills have been commands.
 
 Log-and-continue: a store whose bytes have been deleted, or whose object is not readable as
 parquet, stays NULL and is counted. It renders exactly as it did before; it simply cannot be

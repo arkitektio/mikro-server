@@ -560,15 +560,11 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
         """Match datasets converted from this series of a file."""
         return Q(**{f"{prefix}file_links__series_identifier": value, f"{prefix}file_links__direction": enums.FileLinkDirectionChoices.SOURCE.value})
 
-    @kante.filter_field(
-        description=(
-            "Filter by whether the dataset nominates a scene to open. False finds the ones with no thumbnail -- what `backfill_default_scenes` could not seed, and the work "
-            "remaining before that command can be deleted"
-        )
-    )
+    @kante.filter_field(description="Filter by whether the dataset nominates a scene to open (through its whole lens). False finds the ones with no thumbnail")
     def has_default_scene(self, info: Info, value: bool, prefix: str) -> Q:
-        """Match datasets that do or do not nominate a default scene."""
-        return Q(**{f"{prefix}default_scene__isnull": not value})
+        """Match datasets whose whole lens does or does not nominate a scene."""
+        nominating = models.ArrayLens.objects.filter(dataset_id=OuterRef(f"{prefix}pk" if prefix else "pk"), slices=[], default_scene__isnull=False)
+        return Q(Exists(nominating)) if value else ~Q(Exists(nominating))
 
 
 @kante.filter_type(models.Animation)
@@ -830,14 +826,14 @@ class SceneFilter(IdsFilterMixin):
     def lens(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}pk__in": models.Layer.objects.filter(lens_id=value).values("scene_id")})
 
-    # Named `defaultForDataset`, not `defaultFor`, because the *field* `Scene.defaultFor` is
-    # already the list of datasets nominating this scene. One name meaning a list on the type
-    # and a single id on its filter is the sort of thing that reads fine while being written
-    # and confuses everyone afterwards.
-    @kante.filter_field(description="Filter to the scene this dataset nominates as its default. A choice someone made, not the set of scenes that show the dataset -- for that, ask the dataset's `scenes`")
-    def default_for_dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        """Match the scene a given dataset nominates."""
-        return Q(**{f"{prefix}default_for__id": value})
+    # Named `defaultForLens`, not `defaultFor`, because the *field* `Scene.defaultFor` is already
+    # the list of lenses nominating this scene. One name meaning a list on the type and a single
+    # id on its filter is the sort of thing that reads fine while being written and confuses
+    # everyone afterwards.
+    @kante.filter_field(description="Filter to the scene this lens nominates as its default -- a container's whole lens for the container. A choice someone made, not the set of scenes that show the lens; for that, ask the lens' `scenes`")
+    def default_for_lens(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        """Match the scene a given lens nominates."""
+        return Q(**{f"{prefix}default_for_lenses__id": value})
 
 
 

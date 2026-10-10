@@ -22,7 +22,6 @@ from core.inputs.validators import assert_rgba
 from core.logic import scene as scene_logic
 from core.mutations._generic import make_delete
 from core.scoping import get_for_org
-from core.mutations import array_dataset as array_dataset_mutations
 from core.mutations import lens as lens_mutations
 
 
@@ -69,22 +68,23 @@ class CreateSceneInput:
         default=None,
         description="An existing coordinate system to adopt as this scene's world instead of creating one: a shared space, a dataset's intrinsic pixel grid, a physical space, or a collection's space -- anything except a derived pixel grid (a pyramid level, a sliced lens) (a slice of a grid). The scene composes over the space as it is -- axes and epoch come from it, so `axes` and `epoch` must not be passed alongside. The space is never owned by the scene: many scenes can share it, it survives their deletion, and while a scene is rooted in it the space (and its container) cannot be deleted. Over an owned space only that container's own data tree composes; foreign data needs a shared space",
     )
-    default_for: list[strawberry.ID] | None = strawberry.field(default=None, description="The datasets that should open this scene by default, and take their thumbnail from it. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must own each dataset named")
+    default_for: list[strawberry.ID] | None = strawberry.field(default=None, description="The lenses that should open this scene by default, and take their thumbnail from it -- a container's whole lens (`fullLens`) to nominate for the container. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must be the maker of each lens named or own its container")
 
 
-def _nominate_all(info: Info, scene: "models.Scene", dataset_ids: "list[str] | None") -> None:
-    """Point each named dataset at this scene as its default, guarding each write.
+def _nominate_all(info: Info, scene: "models.Scene", lens_ids: "list[str] | None") -> None:
+    """Point each named lens at this scene as its default, guarding each write.
 
-    One transaction: nominating three datasets and failing the third must not leave two
-    pointing at the scene. The ownership check lives on the dataset (`Scene` has no creator),
-    so a caller naming a dataset they do not own is refused before anything is written.
+    One transaction: nominating three lenses and failing the third must not leave two
+    pointing at the scene. The ownership check lives on the lens and its container (`Scene`
+    has no creator), so a caller naming a lens they may not edit is refused before anything
+    is written. A container is nominated for through its whole lens (`fullLens`).
     """
-    if not dataset_ids:
+    if not lens_ids:
         return
     with transaction.atomic():
-        for dataset_id in dataset_ids:
-            dataset = get_for_org(models.ArrayDataset, info, id=dataset_id)
-            array_dataset_mutations.nominate_default_scene(info, dataset, scene)
+        for lens_id in lens_ids:
+            lens = get_for_org(models.Lens, info, id=lens_id)
+            lens_mutations.nominate_lens_default_scene(info, lens, scene)
 
 
 def create_scene(
@@ -127,7 +127,7 @@ class CreateSceneFromCoordinateSystemInput:
     coordinate_system: strawberry.ID = strawberry.field(description="The coordinate system to build the scene over: a shared space (its registered sources become the layers) or an owned system such as a dataset's intrinsic grid or physical space (its container's data becomes the layer). It becomes the scene's world as it is. Derived pixel grids are refused")
     name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the coordinate system's name")
     policy: ScenePolicyInput = strawberry.field(default_factory=ScenePolicyInput, description="How the scene is materialized: at most nchildren sources, filtered by kind (transform_tables, include_meshes)")
-    default_for: list[strawberry.ID] | None = strawberry.field(default=None, description="The datasets that should open this scene by default, and take their thumbnail from it. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must own each dataset named")
+    default_for: list[strawberry.ID] | None = strawberry.field(default=None, description="The lenses that should open this scene by default, and take their thumbnail from it -- a container's whole lens (`fullLens`) to nominate for the container. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must be the maker of each lens named or own its container")
 
 
 def create_scene_from_coordinate_system(info: Info, input: CreateSceneFromCoordinateSystemInput) -> types.Scene:
@@ -182,8 +182,8 @@ class CreateSceneFromLensInput:
     nominate: bool = strawberry.field(
         default=True,
         description=(
-            "Whether the new scene becomes the one to open for this lens when nothing is nominated yet: its dataset's for a whole array lens, the lens' own `defaultScene` for every other. "
-            "Never replaces an existing nomination, and is skipped silently when the caller may not write one"
+            "Whether the new scene becomes the one to open for this lens when it nominates nothing yet (for a whole lens, that is the container's nomination). Never replaces an existing "
+            "nomination, and is skipped silently when the caller may not write one"
         ),
     )
 
@@ -205,10 +205,8 @@ def create_scene_from_lens(info: Info, input: CreateSceneFromLensInput) -> types
     with transaction.atomic():
         scene = scene_logic.bootstrap_scene_from_lens(lens, ctx, name=model.name, kind=model.kind, world=world)
         # Asked of the column that would be written, not of `nominated_scene_id`: a crop that
-        # is only *borrowing* its dataset's picture has nominated nothing yet. A whole lens
-        # writes its container's nomination, and only an array dataset has one to write.
-        nominated = lens.container.default_scene_id if lens.is_whole and lens.container_nominates else lens.default_scene_id
-        if model.nominate and nominated is None:
+        # is only *borrowing* its container's picture has nominated nothing yet.
+        if model.nominate and lens.default_scene_id is None:
             try:
                 lens_mutations.nominate_lens_default_scene(info, lens, scene)
             except PermissionError:

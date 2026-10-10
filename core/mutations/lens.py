@@ -20,7 +20,6 @@ from core import base_models, inputs
 from core.creation import CreationContext
 from core.logic import coordinate_system as coordinate_system_logic
 from core.scoping import get_for_org
-from core.mutations import array_dataset as array_dataset_mutations
 from core.mutations._generic import assert_can_delete, make_delete
 from core.mutations._sources import resolve_source_lens
 
@@ -260,25 +259,17 @@ class SetLensDefaultSceneInput:
     """Input for nominating a lens' default scene."""
 
     lens: strawberry.ID = strawberry.field(description="The lens to nominate a scene for")
-    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to nominate. Null clears the nomination, and a crop then falls back to its dataset's. A whole array lens nominates for its dataset; every other lens for itself")
+    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to nominate. Null clears the nomination, and a crop or a window then falls back to its container's whole lens'. On a whole lens this is the container's nomination")
 
 
 def nominate_lens_default_scene(info: Info, lens: "models.Lens", scene: "models.Scene | None") -> "models.Lens":
     """Write the nomination a lens answers `defaultScene` with, having checked the caller may.
 
-    **A whole array lens writes its dataset's nomination.** It selects everything, so the scene
-    to open for it is the scene to open for the dataset; a column on the lens would be a second
-    copy of one answer, free to disagree with the first. No other container nominates a scene
-    of its own, so a whole lens over a table, a mesh, a network, an annotation collection or a
-    sparse dataset holds the nomination itself.
-
-    Guarded by `lens_owner` either way -- the lens' maker or the container's owner -- and for a
-    whole lens by `nominate_default_scene`'s own guard, since it is the container's cards this
-    changes.
+    The lens' own column, for every kind and whether or not it is whole: a container's
+    nomination *is* its whole lens', so `setDefaultScene` on a dataset and this on its whole
+    lens are one write. Guarded by `lens_owner` -- the lens' maker or the container's owner --
+    since it is the container's cards this changes.
     """
-    if lens.is_whole and lens.container_nominates:
-        array_dataset_mutations.nominate_default_scene(info, lens.container, scene)
-        return lens
     assert_can_delete(info, lens, lens_owner)
     lens.default_scene = scene
     lens.save(update_fields=["default_scene"])

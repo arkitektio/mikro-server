@@ -228,7 +228,7 @@ async def test_a_crop_borrows_its_datasets_picture_until_it_has_one(authenticate
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_unsliced_lens_answers_as_its_dataset(authenticated_context: HttpContext):
-    """Nominating through a whole-array lens is nominating the dataset: one write, whichever door."""
+    """Nominating through a whole-array lens is nominating the dataset: one column, whichever door."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
     first = await seed.create_lens(ctx, dataset)
@@ -239,7 +239,7 @@ async def test_an_unsliced_lens_answers_as_its_dataset(authenticated_context: Ht
     assert not result.errors, result.errors
 
     assert (await _dataset(ctx, dataset))["defaultScene"]["id"] == str(scene.pk)
-    assert (await models.Lens.objects.aget(pk=first.pk)).default_scene_id is None, "nothing is stored on the lens: a copy could only disagree"
+    assert (await models.Lens.objects.aget(pk=first.pk)).default_scene_id == scene.pk, "the whole lens is where the dataset's nomination lives"
     assert (await _lens(ctx, second))["defaultScene"]["id"] == str(scene.pk), "so its interchangeable sibling answers alike"
 
 

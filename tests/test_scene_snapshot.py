@@ -293,12 +293,12 @@ async def test_one_scene_is_the_default_for_many_datasets(db, authenticated_cont
         await _nominate(ctx, dataset, scene)
 
     result = await schema.execute(
-        "query S($id: ID!) { scene(id: $id) { defaultFor { name } } }",
+        "query S($id: ID!) { scene(id: $id) { defaultFor { ... on ArrayLens { dataset { name } } } } }",
         context_value=ctx,
         variable_values={"id": str(scene.pk)},
     )
     assert not result.errors, result.errors
-    assert {row["name"] for row in result.data["scene"]["defaultFor"]} == {"Well0", "Well1", "Well2"}
+    assert {row["dataset"]["name"] for row in result.data["scene"]["defaultFor"]} == {"Well0", "Well1", "Well2"}, "nominated through their whole lenses"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -325,8 +325,7 @@ async def test_deleting_the_latest_falls_back_to_the_previous(db, authenticated_
 async def test_a_dataset_nominating_nothing_has_no_latest_snapshot(db, authenticated_context: HttpContext):
     """No nomination, no tile -- even for a scene the dataset is registered into.
 
-    This is the deliberate regression the `backfill_default_scenes` command exists to absorb:
-    before, registration alone was enough.
+    Before nominations existed, registration alone was enough; it no longer is.
     """
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Unnominated")
@@ -373,8 +372,8 @@ async def test_deleting_the_scene_clears_the_nomination(db, authenticated_contex
     )
     assert not result.errors, result.errors
 
-    refreshed = await models.ArrayDataset.objects.aget(pk=dataset.pk)
-    assert refreshed.default_scene_id is None, "the pointer clears"
+    whole = await models.ArrayLens.objects.aget(dataset_id=dataset.pk, slices=[])
+    assert whole.default_scene_id is None, "the pointer clears"
     assert await models.ArrayDataset.objects.filter(pk=dataset.pk).aexists(), "and the dataset survives"
 
 
@@ -398,24 +397,26 @@ async def test_set_default_scene_clears_with_null(db, authenticated_context: Htt
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_default_for_at_scene_creation(db, authenticated_context: HttpContext):
-    """The reverse setup: stage a space and point its data back at the result in one call."""
+    """The reverse setup: stage a space and point its data back at the result in one call -- through the dataset's whole lens, where its nomination lives."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
-
+    whole = await seed.create_lens(ctx, dataset)
     result = await schema.execute(
         """
         mutation C($input: CreateSceneInput!) {
-          createScene(input: $input) { id defaultFor { name } }
+          createScene(input: $input) { id defaultFor { id ... on ArrayLens { dataset { name } } } }
         }
         """,
         context_value=ctx,
-        variable_values={"input": {"name": "Staged", "defaultFor": [str(dataset.pk)]}},
+        variable_values={"input": {"name": "Staged", "defaultFor": [str(whole.pk)]}},
     )
     assert not result.errors, result.errors
-    assert [row["name"] for row in result.data["createScene"]["defaultFor"]] == ["DS"]
-
-    refreshed = await models.ArrayDataset.objects.aget(pk=dataset.pk)
-    assert str(refreshed.default_scene_id) == result.data["createScene"]["id"]
+    assert [(row["id"], row["dataset"]["name"]) for row in result.data["createScene"]["defaultFor"]] == [(str(whole.pk), "DS")]
+    refreshed = await models.ArrayLens.objects.aget(pk=whole.pk)
+    assert str(refreshed.default_scene_id) == result.data["createScene"]["id"], "the whole lens holds the dataset's nomination"
+    read = await schema.execute("query D($id: ID!) { arrayDataset(id: $id) { defaultScene { id } } }", context_value=ctx, variable_values={"id": str(dataset.pk)})
+    assert not read.errors, read.errors
+    assert read.data["arrayDataset"]["defaultScene"]["id"] == result.data["createScene"]["id"], "and the dataset answers through it"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -458,7 +459,7 @@ async def test_datasets_can_be_filtered_by_whether_they_have_a_default(db, authe
     result = await schema.execute(
         "query S($filters: SceneFilter) { scenes(filters: $filters) { name } }",
         context_value=ctx,
-        variable_values={"filters": {"defaultForDataset": str(nominated.pk)}},
+        variable_values={"filters": {"defaultForLens": str((await models.ArrayLens.objects.aget(dataset_id=nominated.pk, slices=[])).pk)}},
     )
     assert not result.errors, result.errors
     assert [row["name"] for row in result.data["scenes"]] == ["Composition"]
@@ -530,51 +531,3 @@ async def test_latest_snapshot_does_not_cross_organizations(db, authenticated_co
     assert await _latest(ctx, dataset, lens, scene) == (None, None, None)
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_backfill_seeds_defaults_from_the_old_sole_occupancy_rule(db, authenticated_context: HttpContext):
-    """The command that stops every existing thumbnail vanishing on deploy.
-
-    It reproduces the derivation `latestSnapshot` used to do -- sole occupancy -- once, into
-    the new column. A dataset sharing its scene with another was never given a tile by that
-    rule, so it gets none here either; it is exactly the set the old field could answer for.
-    """
-    from io import StringIO
-
-    from django.core.management import call_command
-
-    ctx = authenticated_context
-    sole = await seed.create_array_dataset(ctx, "Sole")
-    lens = await seed.create_lens(ctx, sole, slices=[])
-    scene = await seed.create_scene(ctx, "Composition")
-    await seed.register_into_scene(ctx, scene, sole)
-    await _snapshot(ctx, scene, "sole.png", name="Sole")
-
-    # Shares a scene with another dataset: sole occupancy never answered for these.
-    shared_a = await seed.create_array_dataset(ctx, "SharedA")
-    shared_b = await seed.create_array_dataset(ctx, "SharedB")
-    shared_scene = await seed.create_scene(ctx, "Shared")
-    await seed.register_into_scene(ctx, shared_scene, shared_a)
-    await seed.register_into_scene(ctx, shared_scene, shared_b)
-
-    # Already nominated by hand: the backfill must not overwrite a deliberate choice.
-    chosen = await seed.create_array_dataset(ctx, "Chosen")
-    chosen_scene = await seed.create_scene(ctx, "Chosen")
-    await seed.register_into_scene(ctx, chosen_scene, chosen)
-    await _nominate(ctx, chosen, shared_scene)
-
-    assert await _latest(ctx, sole, lens, scene) == (None, None, "Sole"), "no default yet"
-
-    out = StringIO()
-    await sync_to_async(call_command)("backfill_default_scenes", stdout=out, stderr=out)
-
-    assert await _latest(ctx, sole, lens, scene) == ("Sole", "Sole", "Sole"), "the old answer, now stored"
-
-    refreshed_chosen = await models.ArrayDataset.objects.aget(pk=chosen.pk)
-    assert refreshed_chosen.default_scene_id == shared_scene.pk, "a hand-set nomination outranks the backfill"
-
-    for dataset in (shared_a, shared_b):
-        refreshed = await models.ArrayDataset.objects.aget(pk=dataset.pk)
-        assert refreshed.default_scene_id is None, "sole occupancy never answered for a shared scene"
-
-    assert "still have no default scene" in out.getvalue(), "the finish line must be reported"

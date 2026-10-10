@@ -64,6 +64,17 @@ _LATEST_SNAPSHOT_KEY = "latest_snapshot_by_scene"
 # oldest first. Its own attribute rather than the `lenses` relation, so the prefetch cannot
 # narrow what `ArrayDataset.lenses` reads on the same row.
 _FULL_LENSES_ATTR = "_prefetched_full_lenses"
+#: The whole lens with its nomination, for the dataset's `defaultScene`/`latestSnapshot`: a second prefetch of the same row, under its own name so the two hints never collide.
+_NOMINATING_LENS_ATTR = "_prefetched_nominating_lens"
+_NOMINATING_LENS_PREFETCH = lambda info: Prefetch("lenses", queryset=models.ArrayLens.objects.filter(slices=[]).select_related("default_scene").order_by("pk"), to_attr=_NOMINATING_LENS_ATTR)  # noqa: E731
+
+
+def _nominating_lens(dataset) -> "models.ArrayLens | None":  # noqa: ANN001 - the ArrayDataset row
+    """The dataset's whole lens, which holds its nomination; prefetched on a page, one query otherwise."""
+    prefetched = getattr(dataset, _NOMINATING_LENS_ATTR, None)
+    if prefetched is not None:
+        return prefetched[0] if prefetched else None
+    return models.ArrayLens.objects.filter(dataset=dataset, slices=[]).select_related("default_scene").order_by("pk").first()
 
 
 def _latest_snapshot_map(info: Info) -> "dict[int, models.SceneSnapshot] | None":
@@ -117,7 +128,8 @@ def _default_scene_snapshot(info: Info, dataset) -> "SceneSnapshot | None":
     else. A nominated scene may blend several. That is the trade, and the field description
     says so.
     """
-    return _scene_snapshot(info, dataset.default_scene_id)
+    whole = _nominating_lens(dataset)
+    return _scene_snapshot(info, whole.default_scene_id if whole is not None else None)
 
 
 def _scene_snapshot(info: Info, scene_id: "int | None") -> "SceneSnapshot | None":
@@ -298,18 +310,21 @@ class ArrayDataset(OrgScoped):
         return self.lenses.filter(slices=[]).order_by("pk").first()
 
     @kante.django_field(
-        select_related=["default_scene"],
+        prefetch_related=[_NOMINATING_LENS_PREFETCH],
         description=(
-            "The scene to open for this dataset, and where `latestSnapshot` comes from. A nomination, not a derivation: it says nothing about where the data sits and is **not** the "
-            "answer to which scenes show this dataset -- that is `scenes`, which the coordinate graph answers and which no stored column could contradict. Null until something sets "
-            "it, with `setDefaultScene` or `defaultFor` on either scene-creating mutation"
+            "The scene to open for this dataset, and where `latestSnapshot` comes from: the nomination its whole lens holds (`fullLens.defaultScene`), so `setDefaultScene` here and "
+            "`setLensDefaultScene` on that lens are one write. A nomination, not a derivation: it says nothing about where the data sits and is **not** the answer to which scenes show "
+            "this dataset -- that is `scenes`, which the coordinate graph answers and which no stored column could contradict. Null until something sets it, with `setDefaultScene`, "
+            "`setLensDefaultScene`, or `defaultFor` on either scene-creating mutation"
         ),
     )
     def default_scene(self, info: Info) -> Optional["Scene"]:
-        """The scene this dataset nominates as its own."""
-        return self.default_scene
+        """The scene this dataset nominates, through its whole lens."""
+        whole = _nominating_lens(self)
+        return whole.default_scene if whole is not None else None
 
     @kante.django_field(
+        prefetch_related=[_NOMINATING_LENS_PREFETCH],
         description=(
             "The most recent picture of this dataset's `defaultScene`, for previewing it without loading the array. Null when no default scene is set. **A picture of the scene, not "
             "of the dataset**: snapshots are taken of compositions, so if the nominated scene stages other data too, the tile shows that data as well. This used to answer instead "
@@ -560,15 +575,16 @@ class Scene(OrgScoped, Visualization):
     )
     preferred_view: enums.PreferredView = kante.django_field(description="How a viewer should open this scene: flat, volumetric, or its own choice. A preference, not a constraint -- nothing server-side reads it, and a viewer that cannot render volumes is not wrong to show the slice view")
     background_color: list[float] | None = kante.django_field(description="The viewer background, as RGBA. Null lets the viewer use its own")
-    default_for: List["ArrayDataset"] = kante.django_field(
-        filters=filters.ArrayDatasetFilter,
-        ordering=order.ArrayDatasetOrder,
-        pagination=True,
+    @kante.django_field(
         description=(
-            "The datasets that nominate this scene as the one to open for them, and take their thumbnail from it. Several may: a scene staging a plate is a reasonable landing "
-            "place for every dataset in it. Not the datasets this scene *shows* -- for that, ask each dataset's `scenes`, which the coordinate graph derives"
-        ),
+            "The lenses that nominate this scene as the one to open for them, and take their thumbnail from it -- a container's whole lens where the container was nominated for. Several "
+            "may: a scene staging a plate is a reasonable landing place for every well in it. Not the lenses this scene *shows* -- for that, ask each lens' `scenes`, which the "
+            "coordinate graph derives"
+        )
     )
+    def default_for(self, info: Info) -> List["Lens"]:
+        """The lenses nominating this scene."""
+        return list(self.default_for_lenses.all())
     @kante.django_field(description="The most recent picture of this composition -- the tile to put on the scene. Null until something snapshots it")
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
         """The newest picture of this scene."""
@@ -664,9 +680,8 @@ class Lens:
 
     @kante.django_field(
         description=(
-            "The scene to open for this lens: its own nomination (`setLensDefaultScene`, or `createSceneFromLens`), falling back to its container's while it has none. A whole array lens "
-            "answers with its dataset's, because it *is* the dataset looked at whole and a second nomination could only disagree; no other container nominates a scene, so a whole lens "
-            "over one holds the nomination itself. A nomination, not a derivation"
+            "The scene to open for this lens: its own nomination (`setLensDefaultScene`, or `createSceneFromLens`), falling back to its container's whole lens' while it has none. A "
+            "container's nomination is its whole lens', so a whole lens answers for the container. A nomination, not a derivation"
         ),
     )
     def default_scene(self, info: Info) -> Optional["Scene"]:
@@ -706,8 +721,8 @@ class ArrayLens(Lens, OrgScoped):
     @kante.django_field(
         select_related=["dataset"],
         description=(
-            "The most recent picture of this lens' `defaultScene` -- the tile to put on this lens. A sliced lens that nominates a scene shows that one; one that nominates nothing, and every "
-            "unsliced lens, shows the dataset's, so a crop nobody has staged yet still has a picture. Null when neither nominates a scene"
+            "The most recent picture of this lens' `defaultScene` -- the tile to put on this lens. A lens that nominates a scene shows that one; a crop that nominates nothing shows its "
+            "dataset's (its whole lens'), so a crop nobody has staged yet still has a picture. Null when neither nominates a scene"
         ),
     )
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
@@ -927,7 +942,7 @@ class Animation:
     filters=filters.SceneSnapshotFilter,
     ordering=order.SceneSnapshotOrder,
     pagination=True,
-    description="A pre-rendered picture of a composition: every layer of the scene, blended. Clients use snapshots to preview without compositing the layers themselves. A picture of the scene, not of any one dataset in it -- though `ArrayDataset.latestSnapshot` will offer one of these where the scene's only anchored dataset is that dataset, since then the picture shows it and nothing else",
+    description="A pre-rendered picture of a composition: every layer of the scene, blended. Clients use snapshots to preview without compositing the layers themselves. A picture of the scene, not of any one lens in it -- `Lens.latestSnapshot` and `ArrayDataset.latestSnapshot` offer the newest picture of the scene the lens nominates, which may stage other data too",
 )
 class SceneSnapshot:
     """A pre-rendered picture of a composition: every layer of the scene, blended."""
