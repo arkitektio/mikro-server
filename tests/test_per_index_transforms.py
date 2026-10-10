@@ -371,7 +371,7 @@ async def test_a_layer_can_be_created_over_a_scoped_only_registration(db, authen
     made = await schema.execute(
         MAKE_LAYER,
         context_value=_fresh_request(ctx),
-        variable_values={"input": {"scene": str(scene.id), "lens": str(lens.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": str(scene.id), "lens": str((await seed.channel_lens(ctx, lens)).pk)}},
     )
     assert not made.errors, str(made.errors and made.errors[0])
 

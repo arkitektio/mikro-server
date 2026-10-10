@@ -118,9 +118,18 @@ async def _scene_over(ctx: HttpContext, system_id: str, name: str = "Scene") -> 
     return result.data["createScene"]
 
 
-async def _intensity_layer(ctx: HttpContext, scene_id: str, lens_id: str) -> None:
-    result = await schema.execute(CREATE_INTENSITY, context_value=_fresh_request(ctx), variable_values={"input": {"scene": scene_id, "lens": lens_id, "intensityAxis": "c"}})
+async def _intensity_layer(ctx: HttpContext, scene_id: str, lens_id: str) -> dict:
+    """An intensity layer over channel 0 of the lens, and the channel lens it draws through.
+
+    A layer draws one channel, so the lens it reads is the channel cut from the one given --
+    the dataset's lens for the composed selection, with its own edge straight into the grid.
+    Channel 0 adds no offset, so the geometry the oracle checks is the given lens'.
+    """
+    channel = await schema.execute(CREATE_LENS, context_value=_fresh_request(ctx), variable_values={"input": {"lens": lens_id, "slices": [{"axis": "c", "start": 0, "stop": 1}]}})
+    assert not channel.errors, channel.errors
+    result = await schema.execute(CREATE_INTENSITY, context_value=_fresh_request(ctx), variable_values={"input": {"scene": scene_id, "lens": channel.data["createLens"]["id"]}})
     assert not result.errors, result.errors
+    return channel.data["createLens"]
 
 
 async def _only_layer(ctx: HttpContext, scene_id: str, query: str = AS_AFFINE) -> dict:
@@ -204,11 +213,11 @@ async def test_a_cropped_layer_in_the_datasets_own_grid_composes_the_crop_forwar
     lens = await _lens(ctx, dataset, slices)
 
     scene = await _scene_over(ctx, str(intrinsic.pk))
-    await _intensity_layer(ctx, scene["id"], lens["id"])
+    channel = await _intensity_layer(ctx, scene["id"], lens["id"])
     layer = await _only_layer(ctx, scene["id"])
 
     assert layer["placement"] == "PLACED"
-    assert [(step["inverted"], step["transformation"]["id"]) for step in layer["pathToWorld"]] == [(False, lens["toParent"]["id"])]
+    assert [(step["inverted"], step["transformation"]["id"]) for step in layer["pathToWorld"]] == [(False, channel["toParent"]["id"])], "one hop: the channel lens' own edge, which composes the crop and the channel into the grid"
     assert layer["asAffine"]["inputAxes"] == layer["asAffine"]["outputAxes"] == ["c", "y", "x"]
     assert layer["asAffine"]["total"] is True
     _assert_maps_every_voxel(layer["asAffine"]["matrix"], arr, view)
@@ -226,10 +235,10 @@ async def test_a_scene_rooted_at_the_crop_inverts_the_edge_for_the_whole_dataset
     whole = await _lens(ctx, dataset, [])
 
     scene = await _scene_over(ctx, crop["coordinateSystem"]["id"], name="Crop view")
-    await _intensity_layer(ctx, scene["id"], whole["id"])
+    channel = await _intensity_layer(ctx, scene["id"], whole["id"])
     layer = await _only_layer(ctx, scene["id"])
 
-    assert [(step["inverted"], step["transformation"]["id"]) for step in layer["pathToWorld"]] == [(True, crop["toParent"]["id"])]
+    assert [(step["inverted"], step["transformation"]["id"]) for step in layer["pathToWorld"]] == [(False, channel["toParent"]["id"]), (True, crop["toParent"]["id"])], "into the grid through the channel's own edge, then the crop's edge walked backwards"
     matrix = layer["asAffine"]["matrix"]
     # The inverse map: every dataset voxel inside the crop lands on the lens voxel holding its value.
     for c in range(SHAPE[0]):
@@ -598,14 +607,14 @@ async def test_a_cropped_layer_walks_its_pyramid_from_the_whole_array(authentica
     crop = await _lens(ctx, dataset, [{"axis": "y", "start": 1, "stop": 5}, {"axis": "x", "start": 2, "stop": 7}])
 
     scene = await _scene_over(ctx, str(intrinsic.pk))
-    await _intensity_layer(ctx, scene["id"], crop["id"])
+    channel = await _intensity_layer(ctx, scene["id"], crop["id"])
     layer = await _only_layer(ctx, scene["id"], LEVEL_PATHS)
 
-    assert [step["transformation"]["input"]["id"] for step in layer["pathToWorld"]] == [crop["coordinateSystem"]["id"]]
+    assert [step["transformation"]["input"]["id"] for step in layer["pathToWorld"]] == [channel["coordinateSystem"]["id"]], "the channel lens' own space, cut from the crop, is where the path starts"
     by_level = {entry["dataArray"]["level"]: entry["path"] for entry in layer["levelPaths"]}
     assert by_level[0] == [], "level 0 is the world"
     assert [(step["inverted"], step["transformation"]["kind"]) for step in by_level[1]] == [(False, "SEQUENCE")], "level 1 -> intrinsic, and no lens edge"
-    assert all(step["transformation"]["input"]["id"] != crop["coordinateSystem"]["id"] for path in by_level.values() for step in path)
+    assert all(step["transformation"]["input"]["id"] not in (crop["coordinateSystem"]["id"], channel["coordinateSystem"]["id"]) for path in by_level.values() for step in path)
 
 
 # --- 8. a repaired legacy edge ------------------------------------------------------------------

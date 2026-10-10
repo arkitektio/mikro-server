@@ -139,11 +139,12 @@ async def test_a_space_places_every_registered_dataset_in_the_scene(authenticate
         assert layer["pathToWorld"][-1]["transformation"]["kind"] == "BY_DIMENSION"
 
     # The space holds exactly the two source registrations: the world IS the space, so
-    # nothing was authored on the way in, and each path is the one hop the space already held.
+    # nothing was authored on the way in, and each path is the channel lens' own hop into its
+    # grid followed by the one registration the space already held.
     assert len(scene["worldCoordinateSystem"]["registrations"]) == 2
     assert scene["worldCoordinateSystem"]["id"] == space["id"], "the scene adopts the space as its world"
     for layer in scene["layers"]:
-        assert len(layer["pathToWorld"]) == 1
+        assert len(layer["pathToWorld"]) == 2, "the channel crop into the grid, then the registration"
 
 
 @pytest.mark.django_db(transaction=True)

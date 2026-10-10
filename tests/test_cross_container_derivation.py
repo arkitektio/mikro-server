@@ -120,7 +120,7 @@ async def test_a_measurement_table_says_which_image_it_was_measured_from(authent
     edge = table["derivedFrom"][0]
     assert edge["kind"] == "UNMAPPABLE", "an omitted transform records the lineage and claims no geometry"
     assert edge["valueRelation"] == "TRANSFORMED"
-    assert [r["__typename"] for r in edge["output"]["residents"]] == ["ArrayDataset", "DataArray", "ArrayLens"], "the far end is the image the rows were measured from"
+    assert [r["__typename"] for r in edge["output"]["residents"]] == ["ArrayDataset", "DataArray"], "the far end is the image the rows were measured from; its whole lens is the image's handle, not a second resident"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -142,7 +142,7 @@ async def test_an_image_says_which_table_it_was_reconstructed_from(authenticated
     assert len(parents) == 1, "the table parent must not be dropped"
     assert parents[0]["kind"] == "SCALE"
     residents = parents[0]["output"]["residents"]
-    assert [r["__typename"] for r in residents] == ["TableDataset", "TableLens"] and residents[0]["name"] == "Localizations"
+    assert [r["__typename"] for r in residents] == ["TableDataset"] and residents[0]["name"] == "Localizations", "the table once; its whole lens is its handle, not a second resident"
 
 
 async def _reconstruction(ctx: HttpContext, table: dict, *, transform: dict) -> str:

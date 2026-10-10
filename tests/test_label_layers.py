@@ -30,7 +30,6 @@ mutation Create($input: CreateLabelLayerInput!) {
     id
     kind
     labelRender {
-      intensityAxis
       seed
       background
       contour
@@ -1249,31 +1248,6 @@ async def test_an_omitted_active_entry_still_leaves_the_choice_alone(authenticat
     render = toggled.data["updateLabelLayer"]["labelRender"]
     assert render["contour"] is True
     assert render["activeColorBy"] == 0, "an omitted field keeps its value"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_the_intensity_axis_can_be_cleared(authenticated_context: HttpContext):
-    """`intensityAxis` had the same problem: set it once and it could never be unset.
-
-    Null means "read the pixel value itself as the id", which is what a mask means, and was
-    indistinguishable from "leave it alone".
-    """
-    mask, scene, lens = await _mask_scene_lens(authenticated_context)
-    created = await _create(authenticated_context, scene, lens, {})
-    layer_id = created.data["createLabelLayer"]["id"]
-
-    cleared = await schema.execute(
-        """
-        mutation Update($input: UpdateLabelLayerInput!) {
-          updateLabelLayer(input: $input) { id labelRender { intensityAxis } }
-        }
-        """,
-        context_value=authenticated_context,
-        variable_values={"input": {"id": layer_id, "render": {"intensityAxis": None}}},
-    )
-    assert not cleared.errors, cleared.errors
-    assert cleared.data["updateLabelLayer"]["labelRender"]["intensityAxis"] is None
 
 
 @pytest.mark.django_db(transaction=True)

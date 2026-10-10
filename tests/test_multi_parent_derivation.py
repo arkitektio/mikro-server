@@ -192,7 +192,7 @@ async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_un
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
     assert made.errors, "data no parent can place cannot be composed into a shared scene"
     assert "UNMAPPABLE" in str(made.errors[0]), "the error says nothing can place this, rather than sending someone to author an edge"
     assert "createTransformation" not in str(made.errors[0])
@@ -261,9 +261,10 @@ async def test_an_unregistered_fusion_is_rejected_and_nothing_is_written(authent
     scene_result = await schema.execute(CREATE_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "Sc"}})
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
+    channel = await seed.channel_lens(authenticated_context, lens)
     edge_count = await sync_to_async(models.Transformation.objects.count)()
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(channel.pk)}})
     assert made.errors, "no parent is registered, so the fusion has no path to world"
     assert "createTransformation" in str(made.errors[0])
 
@@ -314,7 +315,7 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
     )
     assert not registered.errors, registered.errors
 
-    placed = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    placed = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
     assert not placed.errors, f"the secondary parent's registration places the fusion too: {placed.errors}"
 
     # And registering the primary as well leaves the fusion placed -- two routes now, which
@@ -327,7 +328,7 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
     )
     assert not registered.errors, registered.errors
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
     assert not made.errors, made.errors
 
     placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})

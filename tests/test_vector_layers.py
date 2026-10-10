@@ -159,9 +159,9 @@ async def test_undrawable_component_counts_are_refused(authenticated_context: Ht
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_intensity_layer_over_a_vector_lens_is_refused_by_default(authenticated_context: HttpContext):
-    """The grey-layer gap, closed. With `intensityAxis` omitted, 'single-valued data' used to
-    resolve and the field drew as one grey layer over its components -- wrong picture, no
-    error, nothing pointing back. The explicit case was already refused by `assert_channel_axis`."""
+    """The grey-layer gap, closed. A lens whose only value axis is a DISPLACEMENT axis used to
+    resolve as 'single-valued data' and draw as one grey layer over its components -- wrong
+    picture, no error, nothing pointing back."""
     lens = await _flow_lens(authenticated_context, components=2)
     scene = await _scene_with(authenticated_context, lens)
 
@@ -169,9 +169,6 @@ async def test_an_intensity_layer_over_a_vector_lens_is_refused_by_default(authe
     assert omitted.errors
     assert "createVectorLayer" in str(omitted.errors[0]), "the refusal names the mutation that reads the axis as geometry"
 
-    explicit = await schema.execute(CREATE_INTENSITY, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(lens.pk), "intensityAxis": "v"}})
-    assert explicit.errors
-    assert "CHANNEL" in str(explicit.errors[0]), "naming the vector axis as intensity keeps its older refusal"
 
 
 @pytest.mark.django_db(transaction=True)

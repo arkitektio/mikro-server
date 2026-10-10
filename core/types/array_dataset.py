@@ -38,6 +38,7 @@ from core.type_gen import create_stats_type
 from kanne_server import scalars as kanne_scalars
 
 from core import order, base_models
+from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
@@ -696,13 +697,14 @@ class Lens:
 
     @kante.django_field(
         description=(
-            "The scenes this lens is rendered in: those with a layer drawing through it, of any kind. Derived, never stored, exactly as `ArrayDataset.scenes` is. One row per selection, "
-            "so a whole lens answers for the whole container and a window or a crop for itself; scenes that show another selection are that selection's to report"
+            "The scenes this lens is rendered in: those with a layer drawing through it or through any selection within it, of any kind. Derived, never stored, exactly as "
+            "`ArrayDataset.scenes` is. A layer over one channel of a crop draws the crop, and a layer over any crop draws the whole lens -- so a whole lens answers for the whole "
+            "container and a window or a crop for what it contains; a scene showing a selection that reaches outside this one is that selection's to report"
         )
     )
     def scenes(self, info: Info) -> List["Scene"]:
-        """The scenes with a layer over this lens, whatever its kind."""
-        return list(models.Scene.objects.filter(layers__lens=self).distinct())
+        """The scenes with a layer over this lens or a selection within it, whatever its kind."""
+        return list(models.Scene.objects.filter(layers__lens_id__in=coordinate_system_logic.lens_ids_within(self)).distinct())
 
 
 @kante.django_type(
@@ -1333,7 +1335,7 @@ class ImageLayer(Layer):
     ordering=order.LayerOrder,
     pagination=True,
     description=(
-        "One channel of a lens through one colormap -- or one solid tint -- with contrast limits and gamma, optionally projected over z. The fluorescence workhorse, and the layer "
+        "A single-channel lens through one colormap -- or one solid tint -- with contrast limits and gamma, optionally projected over z. Which channel is drawn is the lens' selection, not a field here. The fluorescence workhorse, and the layer "
         "a renderer can take straight to a single-channel texture and a LUT without walking a tree. Its settings are fields rather than a render graph because there is nothing "
         "here to composite: the graph form of this was a blend node with a single child, and additively blending one thing is that thing. Anything that *would* need the tree -- "
         "a second channel, an authored transfer curve, per-channel opacity -- is an ImageLayer. A tint is not among them: it names the hue one ramp ends at, which is what "
@@ -1348,8 +1350,6 @@ class IntensityLayer(Layer):
         disable_optimization=True,
         description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
     )
-    intensity_axis: str | None
-    intensity_index: int
     colormap: enums.ColorMap
     color: list[int] | None
     clim_min: float | None
@@ -1378,7 +1378,7 @@ class IntensityLayer(Layer):
     ordering=order.LayerOrder,
     pagination=True,
     description=(
-        "Three channels of a lens as the red, green and blue components of one picture -- a photograph, a brightfield slide -- sharing one pair of contrast limits. A renderer can "
+        "Three single-channel lenses, each a crop of `lens`, as the red, green and blue components of one picture -- a photograph, a brightfield slide -- sharing one pair of contrast limits. A renderer can "
         "upload this as a single RGB texture in one pass. Its own kind rather than a three-child blend because the two are **indistinguishable as graphs**, and a three-marker "
         "fluorescence acquisition coloured red/green/blue is by far the commoner reading of that shape -- so as a graph the authored fact was destroyed at write time. Never "
         "inferred, for the same reason. There is no per-channel colormap here and no per-channel visibility: the channel *is* the colour, and the three are components of one "
@@ -1393,10 +1393,9 @@ class RgbLayer(Layer):
         disable_optimization=True,
         description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
     )
-    intensity_axis: str | None
-    red_index: int
-    green_index: int
-    blue_index: int
+    red_lens: ArrayLens = kante.django_field(description="The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position")
+    green_lens: ArrayLens = kante.django_field(description="The single-channel lens drawn as green: a crop of `lens` with its channel axis at one position")
+    blue_lens: ArrayLens = kante.django_field(description="The single-channel lens drawn as blue: a crop of `lens` with its channel axis at one position")
     clim_min: float | None
     clim_max: float | None
     white_balance: List[float] | None = kante.django_field(

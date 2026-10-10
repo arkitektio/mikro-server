@@ -1271,10 +1271,10 @@ class Layer(models.Model):
 
     # --- intensity / rgb render settings ---
     # Columns, not a graph, because these kinds have a fixed shape -- see the class docstring.
-    # `intensity_axis` and the contrast limits are shared between INTENSITY and RGB the way
-    # `lens` is shared across every array-sourced kind: one fact, one column, whoever asks it.
-    intensity_axis = models.CharField(max_length=100, null=True, blank=True, help_text="(intensity/rgb) The lens axis carrying the channels, or null when the pixel value itself is the intensity (a single-valued volume)")
-    intensity_index = models.IntegerField(null=True, blank=True, help_text="(intensity) The index along the intensity axis to render")
+    # The contrast limits are shared between INTENSITY and RGB the way `lens` is shared across
+    # every array-sourced kind: one fact, one column, whoever asks it. Which channel a layer
+    # draws is not a column at all: it is its lens' selection (a single-channel lens, or for
+    # RGB the three component lenses below).
     clim_min = models.FloatField(null=True, blank=True, help_text="(intensity/rgb/vector) Lower contrast limit, in the data's own units -- not a normalized fraction. For intensity and RGB that means intensity units (RGB shares one pair across all three channels, because they are components of one picture rather than three signals); for a vector layer it means vector MAGNITUDE, in the component axis's unit -- the two readings share this column, so both are stated here rather than left to collide")
     clim_max = models.FloatField(null=True, blank=True, help_text="(intensity/rgb/vector) Upper contrast limit, in the data's own units -- not a normalized fraction. For a vector layer: vector magnitude, in the component axis's unit")
     gamma = models.FloatField(null=True, blank=True, help_text="(intensity) Gamma correction applied to the normalized intensities")
@@ -1307,9 +1307,17 @@ class Layer(models.Model):
         default=None,
         help_text="(intensity) How z is collapsed. Null means draw the plane; set means project over z",
     )
-    red_index = models.IntegerField(null=True, blank=True, help_text="(rgb) The index along the intensity axis carrying the red component")
-    green_index = models.IntegerField(null=True, blank=True, help_text="(rgb) The index along the intensity axis carrying the green component")
-    blue_index = models.IntegerField(null=True, blank=True, help_text="(rgb) The index along the intensity axis carrying the blue component")
+    # An RGB layer composites three channels of one picture, and a channel is a selection: each
+    # component is a single-channel lens cut from `lens`, the extent all three share. Three
+    # columns rather than three indices into an axis, so the layer reads its lenses and nothing
+    # narrower -- the one rule every array layer follows.
+    red_lens = models.ForeignKey("ArrayLens", on_delete=models.CASCADE, null=True, blank=True, related_name="red_layers", help_text="(rgb) The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position")
+    green_lens = models.ForeignKey("ArrayLens", on_delete=models.CASCADE, null=True, blank=True, related_name="green_layers", help_text="(rgb) The single-channel lens drawn as green")
+    blue_lens = models.ForeignKey("ArrayLens", on_delete=models.CASCADE, null=True, blank=True, related_name="blue_layers", help_text="(rgb) The single-channel lens drawn as blue")
+    # The single-channel lenses an image layer's render graph samples: an index of what the JSON
+    # recipe names, kept so a lens a graph draws through is PROTECTed like one a layer draws
+    # through (`assert_lens_deletable`). Written with the graph, never by hand.
+    channel_lenses = models.ManyToManyField("ArrayLens", related_name="channel_layers", blank=True, help_text="(image) The single-channel lenses the render graph's channel and phasor nodes sample, each a crop of `lens`")
     # Gains, not a colour temperature: a temperature is one camera model's opinion of what the
     # three multipliers should be, and the multipliers are what a renderer applies. Applied to
     # each component before the shared contrast window, so a colour cast is corrected without

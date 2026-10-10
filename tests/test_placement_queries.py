@@ -354,7 +354,7 @@ async def test_creating_a_layer_is_flat_in_scene_size(authenticated_context: Htt
         lens = await seed.create_lens(authenticated_context, dataset, slices=[])
         await seed.register_into_scene(authenticated_context, scene, dataset)
 
-        variables = {"input": {"scene": str(scene.pk), "lens": str(lens.pk), "intensityAxis": "c"}}
+        variables = {"input": {"scene": str(scene.pk), "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}}
 
         counted = _fresh_request(authenticated_context)
         with QueryCounter() as counter:

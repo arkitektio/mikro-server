@@ -979,7 +979,7 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     # which asserted the vertices were in exactly that grid and left nowhere to say they
     # were not -- meshes off a half-resolution grid could only be recorded by rewriting
     # every vertex. The IDENTITY stated above is what says the geometry is that grid's.
-    assert [r["__typename"] for r in collection["coordinateSystem"]["residents"]] == ["MeshCollection", "MeshLens"], "the vertices live in the collection's own space"
+    assert [r["__typename"] for r in collection["coordinateSystem"]["residents"]] == ["MeshCollection"], "the vertices live in the collection's own space; its whole lens is the collection's handle, not a second resident"
     assert collection["coordinateSystem"]["id"] != str(system.pk)
     assert [axis["name"] for axis in collection["coordinateSystem"]["axes"]] == ["c", "y", "x"], "the axes it stated, which the IDENTITY then holds to the source's"
 

@@ -17,7 +17,7 @@ caller.
 import datetime
 import math
 from collections.abc import Callable, Iterable, Sequence
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -30,6 +30,9 @@ from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.logic import placement as placement_logic
 from core.scoping import get_for_org
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
 
 
 def create_world_space(
@@ -662,18 +665,49 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
         container = lens.container
         raise ValueError(f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk} and cannot be deleted on its own: it is the container's handle, and goes with the container.")
 
-    layers = list(lens.layers.select_related("scene").order_by("pk")[:5])
+    drawing = layers_drawing_through(lens)
+    layers = list(drawing.select_related("scene").order_by("pk")[:5])
     chart_layers = list(lens.chart_layers.select_related("chart").order_by("pk")[:5])
     if not layers and not chart_layers:
         return
 
-    total = lens.layers.count() + lens.chart_layers.count()
+    total = drawing.count() + lens.chart_layers.count()
     described = [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers] + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
     more = f" (and {total - len(described)} more)" if total > len(described) else ""
     raise ValueError(
         f"Lens {lens.pk} cannot be deleted: {total} layer(s) draw through it -- {', '.join(described)}{more}. Delete those layers first, or leave the lens; it is shared by every "
         "composition over this selection. Deleting the container it selects over is the one thing that takes every layer over it with it."
     )
+
+
+def lens_ids_within(lens: "models.Lens") -> list[int]:
+    """The ids of every lens of the same container whose selection lies inside this one, this one included.
+
+    What "drawn in a scene" means for a lens once a channel is itself a lens: a layer over
+    channel 2 of a crop draws the crop, and a layer over any crop draws the whole lens. Decided
+    on the selections (:func:`core.logic.coords.lens_within`, :func:`core.logic.coords.windows_within`),
+    since a lens is one row per selection and keeps no tree.
+    """
+    lens = lens.get_real_instance()
+    if isinstance(lens, models.ArrayLens):
+        dataset = lens.dataset
+        shape, names = dataset.shape_list, dataset.axis_names
+        return [
+            candidate.pk
+            for candidate in models.ArrayLens.objects.filter(dataset_id=lens.dataset_id).order_by("pk")
+            if coords_logic.lens_within(shape, names, lens.slices_list, candidate.slices_list)
+        ]
+    kind = type(lens)
+    siblings = kind.objects.filter(**{f"{kind.CONTAINER_FIELD}_id": lens.container_id}).order_by("pk")
+    return [candidate.pk for candidate in siblings if coords_logic.windows_within(lens.windows_list, candidate.windows_list)]  # type: ignore[attr-defined]
+
+
+def layers_drawing_through(lens: "models.Lens") -> "QuerySet[models.Layer]":
+    """Every layer whose picture this lens is part of: its own, and -- for an array lens -- those naming it as an RGB component or a render-graph source."""
+    query = Q(lens=lens)
+    if isinstance(lens, models.ArrayLens):
+        query |= Q(red_lens=lens) | Q(green_lens=lens) | Q(blue_lens=lens) | Q(channel_lenses=lens)
+    return models.Layer.objects.filter(query).distinct()
 
 
 def lens_own_edges(lens: "models.ArrayLens") -> "Iterable[models.Transformation]":

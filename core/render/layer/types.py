@@ -64,8 +64,7 @@ class LayerRenderNode:
 @pydantic.type(models.ChannelSourceModel, description="A single intensity channel of the layer's lens, with its own transfer function")
 class ChannelSourceNode(LayerRenderNode):
     kind: str = strawberry.field(description="Always 'channel'")
-    intensity_axis: str | None = strawberry.field(default=None, description="The lens axis carrying the intensity channels, or null when the pixel value itself is the intensity (e.g. a single-valued volume or label map)")
-    intensity_index: int = strawberry.field(description="The index along the intensity axis to render")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="The single-channel lens this node samples: a crop of the layer's lens with its channel axis at one position. Null means the layer's own lens, which then pins one channel itself")
     visible: bool = strawberry.field(description="Whether this channel participates in the layer's composite")
     transfer: TransferFunction = strawberry.field(description="The transfer function mapping this channel to color")
 
@@ -115,8 +114,7 @@ class PhasorNode(LayerRenderNode):
     kind: str = strawberry.field(description="Always 'phasor'")
     visible: bool = strawberry.field(description="Whether this node participates in the layer's composite")
     phasor_axis: str = strawberry.field(description="The lens axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis -- the continuous ones a DFT means anything over")
-    intensity_axis: str | None = strawberry.field(default=None, description="The lens axis carrying the detection channels, or null when the cube has none")
-    intensity_index: int = strawberry.field(description="The index along the intensity axis to reduce")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="The single-channel lens this node samples: a crop of the layer's lens with its channel axis at one position. Null means the layer's own lens, which then pins one channel itself")
     harmonic: int = strawberry.field(description="The harmonic of the transform. 1 is the fundamental; 2 resolves multi-exponential decays a first harmonic cannot separate")
     transfer: PhasorTransfer = strawberry.field(description="How the resulting phasor becomes the pixel's color")
 
@@ -127,8 +125,6 @@ class PhasorNode(LayerRenderNode):
 )
 class PhasorRender:
     phasor_axis: str = strawberry.field(description="The lens axis the phasor is taken over. A MICROTIME or SPECTRUM axis -- the continuous ones a DFT means anything over")
-    intensity_axis: str | None = strawberry.field(default=None, description="The lens axis carrying the detection channels, or null when the cube has none")
-    intensity_index: int = strawberry.field(description="The index along the intensity axis to reduce")
     harmonic: int = strawberry.field(description="The harmonic of the transform. 1 is the fundamental; 2 resolves multi-exponential decays a first harmonic cannot separate")
     transfer: PhasorTransfer = strawberry.field(description="How the resulting phasor becomes the pixel's color")
 
@@ -261,8 +257,6 @@ class NetworkFilterBy:
     description="How a label layer's discrete object ids become color. Not a transfer function and not a node graph: a label map has one source, no compositing tree, and none of an intensity image's vocabulary -- contrast limits, gamma and colormaps are all meaningless over ids",
 )
 class LabelRender:
-    intensity_axis: str | None = strawberry.field(default=None, description="The lens axis to index, or null when the pixel value itself is the id (the common case for masks)")
-    intensity_index: int = strawberry.field(description="The index along that axis to render")
     seed: int = strawberry.field(description="The seed of the hash mapping an id to its color. Changing it repaints every object, which is how two touching objects that happened to hash alike are separated")
     background: int = strawberry.field(description="The id drawn fully transparent -- the 'not an object' value, conventionally 0")
     opacity: float | None = strawberry.field(default=None, description="Opacity applied to the colored ids within the layer (0..1)")

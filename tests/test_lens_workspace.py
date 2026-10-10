@@ -102,7 +102,13 @@ async def _dataset(ctx: HttpContext, dataset: models.ArrayDataset) -> dict:
 
 
 def _layers_over(lens: models.Lens) -> list[models.Layer]:
-    return list(models.Layer.objects.filter(lens=lens).order_by("order"))
+    """The layers a scene from this lens drew: each over a single-channel lens cut from it, so they are found by the dataset."""
+    return list(models.Layer.objects.filter(lens__arraylens__dataset_id=lens.dataset_id).order_by("order"))
+
+
+def _channel_of(layer: models.Layer) -> int:
+    lens = models.ArrayLens.objects.get(pk=layer.lens_id)
+    return next(slice_.start for slice_ in lens.slices_list if slice_.axis == "c")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -122,12 +128,15 @@ async def test_a_scene_from_a_lens_draws_that_lens(authenticated_context: HttpCo
 
     assert scene["name"] == "Tissue", "a lens has no name of its own; the scene takes its dataset's"
     assert len(scene["layers"]) == 3, "one layer per channel, exactly as a whole dataset is drawn"
-    assert {layer["lens"]["id"] for layer in scene["layers"]} == {str(crop.pk)}, "every layer reads the crop"
+    drawn = await sync_to_async(lambda: [models.ArrayLens.objects.get(pk=layer["lens"]["id"]) for layer in scene["layers"]])()
+    assert {lens.dataset_id for lens in drawn} == {dataset.pk} and all(lens.pk != crop.pk for lens in drawn), "every layer reads a lens cut from the crop, not the crop itself: a layer draws one channel"
+    assert {tuple((s.axis, s.start, s.stop) for s in lens.slices_list if s.axis != "c") for lens in drawn} == {tuple((s["axis"], s["start"], s["stop"]) for s in CROP)}, "each keeps exactly the crop's window"
+    assert sorted(next(s.start for s in lens.slices_list if s.axis == "c") for lens in drawn) == [0, 1, 2], "and pins one channel each"
     assert {layer["placement"] for layer in scene["layers"]} == {"PLACED"}, "the lens' own edge into the grid places it; nothing was authored"
 
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk), "the crop sits where it was cut from"
-    assert await models.ArrayLens.objects.filter(dataset=dataset).acount() == 2, "the whole lens the dataset was born with and the crop: nothing was minted to draw it"
+    assert await models.ArrayLens.objects.filter(dataset=dataset).acount() == 5, "the whole lens the dataset was born with, the crop, and the crop's three channels -- one lens per selection drawn"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -135,7 +144,7 @@ async def test_a_scene_from_a_lens_draws_that_lens(authenticated_context: HttpCo
 async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(authenticated_context: HttpContext):
     """Over ``c[1:3]``, layer index 0 is the dataset's channel 1 -- and must be drawn as channel 1.
 
-    A layer's ``intensity_index`` counts along the lens; labels and histograms are recorded
+    A layer draws through a lens pinning one of the dataset's channels; labels and histograms are recorded
     against the dataset. Without the translation the first layer of this scene would carry
     DAPI's name, DAPI's hue and DAPI's contrast limits over GFP's pixels.
     """
@@ -154,7 +163,7 @@ async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(authe
     await _from_lens(ctx, lens)
 
     layers = await sync_to_async(_layers_over)(lens)
-    assert [layer.intensity_index for layer in layers] == [0, 1], "indices count along the lens, which has two channels"
+    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [1, 2], "two single-channel lenses, cut from the crop: the dataset's channels 1 and 2"
     assert [layer.name for layer in layers] == ["GFP", "mCherry"], "named for the channels the lens actually selects"
     assert [(layer.clim_min, layer.clim_max) for layer in layers] == [(20.0, 200.0), (30.0, 300.0)], "and opened at their recorded windows, not at DAPI's"
 

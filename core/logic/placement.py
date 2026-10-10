@@ -243,7 +243,13 @@ class PlacementGraph:
             # the badge away from a gap they could have closed. `graph_logic.reachable_in` is
             # the same traversal `assert_placeable_in` runs over its own universe, so
             # creation-time refusal and this answer cannot drift apart.
-            if graph_logic.reachable_in(self.adjacency(container, admit_scoped=True), source.pk) != {source.pk}:
+            # Reaching the data's own grid through a lens' own edge is construction, not a
+            # registration: a single-channel lens is judged as its grid would be
+            # (:func:`core.logic.graph._blocked_by_unmappable` draws the same line).
+            reached = graph_logic.reachable_in(self.adjacency(container, admit_scoped=True), source.pk)
+            homes = graph_logic.residence_map(reached)
+            own = homes.get(source.pk)
+            if any(system_id != source.pk and (own is None or homes.get(system_id) != own) for system_id in reached):
                 return enums.PlacementState.UNREGISTERED.value
 
             # **Is there a stated non-correspondence to blame?** A collection's data (a feature

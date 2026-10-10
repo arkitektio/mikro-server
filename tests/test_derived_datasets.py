@@ -173,7 +173,7 @@ async def test_a_derived_dataset_walks_to_world_through_its_source(authenticated
     derived_dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived_id)
     derived_lens = await seed.create_lens(authenticated_context, derived_dataset, slices=[])
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(derived_lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, derived_lens)).pk)}})
     assert not made.errors, made.errors
 
     placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
@@ -221,7 +221,7 @@ async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_it
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
 
-    variables = {"input": {"scene": scene_id, "lens": str(derived_lens.pk), "intensityAxis": "c"}}
+    variables = {"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, derived_lens)).pk)}}
     refused = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values=variables)
     assert refused.errors, "nothing places the derived dataset yet, so the layer is refused"
     assert "createTransformation" in str(refused.errors[0])

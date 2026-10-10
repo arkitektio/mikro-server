@@ -236,8 +236,6 @@ class NetworkFilterByInputModel(filter_by_models.NetworkFilterByModel):
 
 
 class LabelRenderInputModel(BaseModel):
-    intensity_axis: str | None = None
-    intensity_index: int | None = None
     seed: int | None = None
     background: int | None = None
     opacity: float | None = None
@@ -276,9 +274,8 @@ class LabelRenderInputModel(BaseModel):
 class LayerNodeInputModel(BaseModel):
     kind: str
     label: str | None = None
-    # channel node fields
-    intensity_axis: str | None = None
-    intensity_index: int | None = None
+    # channel / phasor node fields: the single-channel lens sampled, or None for the layer's lens
+    lens: str | None = None
     visible: bool | None = None
     transfer: TransferFunctionInputModel | None = None
     # blend node fields
@@ -355,13 +352,12 @@ class PhasorTransferInput:
 
 @pydantic.input(
     LayerNodeInputModel,
-    description="A node in a layer's internal render graph. A 'channel' node carries an intensity source and transfer function; a 'phasor' node reduces an axis to a phasor and colors the pixel by it; a 'blend' node composites its children; a 'projection' node projects theirs over z.",
+    description="A node in a layer's internal render graph. A 'channel' node samples one single-channel lens through a transfer function; a 'phasor' node reduces an axis to a phasor and colors the pixel by it; a 'blend' node composites its children; a 'projection' node projects theirs over z.",
 )
 class LayerNodeInput:
     kind: str = strawberry.field(description="The node discriminator: 'channel', 'phasor', 'blend' or 'projection'")
     label: str | None = strawberry.field(default=None, description="An optional human-readable label for the node")
-    intensity_axis: str | None = strawberry.field(default=None, description="(channel/phasor) The lens axis carrying the intensity channels")
-    intensity_index: int | None = strawberry.field(default=None, description="(channel/phasor) The index along the intensity axis to render")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="(channel/phasor) The single-channel lens this node samples: a crop of the layer's lens with its channel axis at one position (createLens(lens:, slices:)). Omit to sample the layer's lens itself, which must then pin one channel")
     visible: bool | None = strawberry.field(default=None, description="(channel/phasor) Whether the node participates in the composite")
     transfer: TransferFunctionInput | None = strawberry.field(default=None, description="(channel) The transfer function mapping this channel to color")
     blending: enums.Blending | None = strawberry.field(default=None, description="(blend) The blend mode used to composite the children")
@@ -799,8 +795,6 @@ class LabelRenderInput:
     `core.mutations.mesh_layer` asked for exactly this convention rather than inventing one for
     a single field; this is that convention, applied everywhere a null carries meaning."""
 
-    intensity_axis: str | None = strawberry.field(default=strawberry.UNSET, description="The lens axis to index. Pass `null` to go back to reading the pixel value itself as the id (the common case for masks); omit to leave it alone")
-    intensity_index: int | None = strawberry.field(default=None, description="The index along that axis to render (default 0)")
     seed: int | None = strawberry.field(default=None, description="The seed of the hash mapping an id to its color. Changing it repaints every object, which is how two touching objects that happened to hash alike are separated (default 0)")
     background: int | None = strawberry.field(default=None, description="The id drawn fully transparent -- the 'not an object' value (default 0)")
     opacity: float | None = strawberry.field(default=None, description="Opacity applied to the colored ids within the layer, from 0 to 1 (default 1.0)")
@@ -817,8 +811,6 @@ class LabelRenderInput:
     def to_pydantic(self) -> LabelRenderInputModel:
         """Drop what the caller did not name, so `model_fields_set` records what it did."""
         supplied = {
-            "intensity_axis": self.intensity_axis,
-            "intensity_index": self.intensity_index,
             "seed": self.seed,
             "background": self.background,
             "opacity": self.opacity,

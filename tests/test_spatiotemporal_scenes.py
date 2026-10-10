@@ -305,7 +305,7 @@ async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(authe
         }
         """,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
     )
     assert not created.errors, created.errors
 
@@ -349,7 +349,7 @@ async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(
       createIntensityLayer(input: $input) { id placementValidity }
     }
     """
-    variables = {"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}}
+    variables = {"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}}
 
     refused = await schema.execute(make, context_value=authenticated_context, variable_values=variables)
     assert refused.errors, "an unplaced source must be refused, not quietly composed"
@@ -407,7 +407,7 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
         }
         """,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "lens": str(lens.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
     )
     assert not created.errors, created.errors
 
@@ -417,45 +417,6 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
 
 
 # --- 6. intensity is a channel, not a clock ---------------------------------
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_a_time_axis_cannot_be_rendered_as_intensity(authenticated_context: HttpContext):
-    """`intensityAxis: "t"` composites every timepoint as a separate channel.
-
-    A 16-frame timelapse becomes sixteen stacked slabs, and the time axis is consumed --
-    so no time slider can appear either. The axis was only ever resolved by name, so this
-    was accepted; nothing about the resulting render points back at the write.
-    """
-    axes = [
-        seed.axis("t", enums.AxisType.TIME),
-        seed.axis("c", enums.AxisType.CHANNEL),
-        seed.axis("y", enums.AxisType.SPACE),
-        seed.axis("x", enums.AxisType.SPACE),
-    ]
-    dataset = await seed.create_array_dataset(authenticated_context, "Timelapse", axes=axes, shapes=[[16, 2, 32, 32]])
-    lens = await seed.create_lens(authenticated_context, dataset, slices=[])
-    scene = await seed.create_scene(authenticated_context, "Sc")
-    await seed.register_into_scene(authenticated_context, scene, dataset)
-
-    async def make(intensity_axis: str):
-        return await schema.execute(
-            """
-            mutation Make($input: CreateIntensityLayerInput!) {
-              createIntensityLayer(input: $input) { id }
-            }
-            """,
-            context_value=authenticated_context,
-            variable_values={"input": {"scene": str(scene.pk), "lens": str(lens.pk), "intensityAxis": intensity_axis}},
-        )
-
-    rejected = await make("t")
-    assert rejected.errors, "a time axis is something you navigate, not something you blend"
-    assert "not a CHANNEL axis" in str(rejected.errors[0])
-
-    accepted = await make("c")
-    assert not accepted.errors, accepted.errors
 
 
 # --- 7. an edge is only walked backwards if it has an inverse ---------------
@@ -574,3 +535,31 @@ async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(authenticate
 
     after = await sync_to_async(graph_logic.compute_intrinsic_bbox)(lens_system, vectors)
     assert after == before, "the ROI's intrinsic box is a fact about the dataset; a scene registration cannot move it"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_time_axis_stays_navigable_under_a_single_channel_lens(authenticated_context: HttpContext):
+    """There is no axis to name as intensity: a layer draws through a lens pinning one channel, and time is left to the slider.
+
+    `intensityAxis: "t"` used to composite every timepoint as a separate channel -- a 16-frame
+    timelapse became sixteen stacked slabs with no time slider. The field is gone; the lens
+    says which channel, and the render axes derived from it keep `t` as time.
+    """
+    axes = [
+        seed.axis("t", enums.AxisType.TIME),
+        seed.axis("c", enums.AxisType.CHANNEL),
+        seed.axis("y", enums.AxisType.SPACE),
+        seed.axis("x", enums.AxisType.SPACE),
+    ]
+    dataset = await seed.create_array_dataset(authenticated_context, "Timelapse", axes=axes, shapes=[[16, 2, 32, 32]])
+    whole = await seed.create_lens(authenticated_context, dataset, slices=[])
+    scene = await seed.create_scene(authenticated_context, "Sc")
+    await seed.register_into_scene(authenticated_context, scene, dataset)
+    make = "mutation Make($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id renderAxes { t intensity } } }"
+    both = await schema.execute(make, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(whole.pk)}})
+    assert both.errors and "pin one channel" in str(both.errors[0]), "two detectors in one lens is not one channel"
+    one = await seed.channel_lens(authenticated_context, whole, 1)
+    accepted = await schema.execute(make, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(one.pk)}})
+    assert not accepted.errors, accepted.errors
+    assert accepted.data["createIntensityLayer"]["renderAxes"] == {"t": "t", "intensity": "c"}, "time stays the slider; the channel axis, one position wide, is the intensity"

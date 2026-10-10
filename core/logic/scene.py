@@ -29,7 +29,7 @@ from collections.abc import Callable
 
 from django.db import transaction
 
-from core import enums, models
+from core import base_models, enums, models
 from core.creation import CreationContext
 from core.inputs.coords import ScenePolicyInputModel
 from core.logic import channels as channels_logic
@@ -160,11 +160,11 @@ def _bootstrap_image_layers(
     lens rather than five indistinguishable ones. Given, the layers read *that* lens, and
     everything below that used to be asked of the dataset is asked of the selection instead:
     its shape decides renderability and the recipe, and its channel axis decides how many
-    layers there are. ``Layer.intensity_index`` indexes the lens (``assert_intensity_index``
-    reads the lens' size), while labels and histograms are recorded against the dataset's
-    channels, so for a lens that cuts the channel axis the two are re-keyed onto each other
-    (:func:`_lens_channels`) -- otherwise ``c[2:4]`` would draw channel 2 with channel 0's
-    name, hue and contrast limits.
+    layers there are. Each layer draws through a lens that pins its channel -- a sub-lens cut
+    from ``lens`` (:func:`core.logic.coordinate_system.create_sub_lens`), or ``lens`` itself
+    when it already keeps one channel -- and the labels and histograms recorded against the
+    dataset's channels are read by the dataset position that sub-lens pins, so ``c[2:4]`` draws
+    channel 2 under channel 2's name, hue and contrast limits.
 
     The array half of :func:`bootstrap_scene_from_system`. It writes no placement edge -- the
     caller must already have made the dataset placeable in the scene -- so it is pure layer
@@ -174,9 +174,8 @@ def _bootstrap_image_layers(
     happen to share a grid, and a viewer's unit of control -- visibility, opacity, the blend into
     the scene, deletion -- is the layer. Packing every channel into one layer's render graph made
     those per-channel choices unreachable, so the channels are peeled apart here: each gets its
-    own layer over the *same* lens (``Layer.lens`` is many-to-one for exactly this), carrying a
-    one-child render graph for its index, its own hue, and its own ``order`` so the stack is
-    deterministic. They composite additively, which is what the single layer's in-layer blend
+    own layer over its own single-channel lens cut from the one being staged, its own hue, and
+    its own ``order`` so the stack is deterministic. They composite additively, which is what the single layer's in-layer blend
     did, so the picture is unchanged -- only now each channel can be touched on its own.
 
     RGB is the one exception, and stays one layer: there the three "channels" are the colour
@@ -205,15 +204,11 @@ def _bootstrap_image_layers(
     edit is an ordinary update.
     """
     render = coords_logic.resolve_render_axes(dataset.axis_specs)
-    # One lens for the whole dataset, whatever it becomes: a lens is a selection over an array,
-    # and every channel layer selects the same thing. Minting one per channel would write a row
-    # per layer saying exactly what its siblings say -- and a *sliced* one would mint a
-    # coordinate system and an edge, which this module does not do. A caller that wants a
-    # sliced one drawn made it already and passes it in.
+    # The lens being staged, whole when the caller named none. Each channel layer then draws
+    # through a sub-lens cut from it (`channel_lens` below): one row per selection, shared by
+    # every layer that ever draws that channel, minted by the path `createLens` itself takes.
     if lens is None:
         lens = coordinate_system_logic.whole_lens(dataset)
-    # A selection never drops or reorders an axis, so the names are the dataset's either way
-    # and only the extents differ.
     axis_names, shape = dataset.axis_names, lens.shape_list
 
     def size(axis: str | None) -> int:
@@ -223,37 +218,40 @@ def _bootstrap_image_layers(
         subject = f"Lens {lens.pk} over dataset {dataset.pk}" if not lens.is_whole else f"Dataset {dataset.pk}"
         raise ValueError(f"{subject} is not renderable: its x axis '{render.x}' ({size(render.x)} px) and y axis '{render.y}' ({size(render.y)} px) must both have more than one pixel")
 
-    # Read once, used three times: to pick the recipe, to name and colour the channel layers,
-    # and to say which channel is red. Each of those used to ask the database itself, or not
-    # ask at all.
-    labels = _lens_channels(_channel_labels(dataset, render.intensity), lens, render.intensity) if render.intensity is not None else {}
-
+    # The channels the lens keeps, as the dataset counts them. Labels and histograms are
+    # recorded against the dataset's channel positions, and the sub-lens that pins one is cut
+    # from the lens, so both are keyed by the dataset's position and translated once here.
+    kept = _kept_channels(dataset, lens, render.intensity)
+    recorded = _channel_labels(dataset, render.intensity) if render.intensity is not None else {}
+    labels = {local: recorded[channel] for local, channel in enumerate(kept) if channel in recorded}
     resolved_kind = kind or _infer_kind(dataset, render, size, labels)
     blending = _LAYER_BLENDING[resolved_kind]
+
+    def channel_lens(channel: int | None) -> "models.ArrayLens":
+        """The lens drawing one of the dataset's channels: the lens itself when it already pins one, else the cut from it."""
+        if channel is None or len(kept) <= 1:
+            return lens
+        local = kept.index(channel)
+        return coordinate_system_logic.create_sub_lens(lens, [base_models.SliceInputModel(axis=render.intensity, start=local, stop=local + 1)], ctx)
 
     if resolved_kind == enums.BootstrapLayerKind.LABEL:
         return [
             models.Layer.objects.create(
                 kind=enums.LayerKind.LABEL,
-                lens=lens,
+                lens=channel_lens(kept[0] if kept else None),
                 scene=scene,
                 blending=blending,
                 order=order,
-                label_render=label_models.LabelRenderModel(intensity_axis=render.intensity).model_dump(mode="json"),
+                label_render=label_models.LabelRenderModel().model_dump(mode="json"),
             )
         ]
 
     if resolved_kind == enums.BootstrapLayerKind.VECTOR:
-        # `_assert_rgb_capacity`'s reason, one branch over: an explicit `policy.kind = VECTOR`
-        # must not materialize a layer `createVectorLayer` would have refused.
         if not _infer_vector(render, size):
             raise ValueError(
                 f"Dataset {dataset.pk} cannot be drawn as a vector layer: it needs a DISPLACEMENT value axis of 2 or 3 positions, no wider than its spatial axes "
                 f"(axes: {[f'{spec.name} ({spec.type})' for spec in dataset.axis_specs]})"
             )
-        # One layer, no channels to peel: the value axis's positions are components of one
-        # offset, not signals to composite. The defaults are `createVectorLayer`'s own, so
-        # every later edit is an ordinary updateVectorLayer.
         return [
             models.Layer.objects.create(
                 kind=enums.LayerKind.VECTOR,
@@ -268,11 +266,8 @@ def _bootstrap_image_layers(
 
     if resolved_kind == enums.BootstrapLayerKind.RGB:
         _assert_rgb_capacity(render, size)
-        # Positional 0, 1, 2 is the fallback, not the rule: a converter that labelled its
-        # components tells us which is which, and several of them write (blue, green, red).
         components = channels_logic.rgb_components(labels, size(render.intensity)) or {"red": 0, "green": 1, "blue": 2}
-        windows = _lens_channels(_value_windows(dataset, render.intensity), lens, render.intensity)
-        clim_min, clim_max = _combined_window(windows, sorted(components.values()))
+        clim_min, clim_max = _combined_window(_value_windows(dataset, render.intensity), sorted(kept[local] for local in components.values()))
         return [
             models.Layer.objects.create(
                 kind=enums.LayerKind.RGB,
@@ -280,10 +275,9 @@ def _bootstrap_image_layers(
                 scene=scene,
                 blending=blending,
                 order=order,
-                intensity_axis=render.intensity,
-                red_index=components["red"],
-                green_index=components["green"],
-                blue_index=components["blue"],
+                red_lens=channel_lens(kept[components["red"]]),
+                green_lens=channel_lens(kept[components["green"]]),
+                blue_lens=channel_lens(kept[components["blue"]]),
                 clim_min=clim_min,
                 clim_max=clim_max,
             )
@@ -293,49 +287,34 @@ def _bootstrap_image_layers(
     return [
         models.Layer.objects.create(
             kind=enums.LayerKind.INTENSITY,
-            lens=lens,
+            lens=channel_lens(channel.channel),
             scene=scene,
             name=channel.name,
             blending=channel.blending or blending,
             order=order + offset,
-            intensity_axis=channel.intensity_axis,
-            intensity_index=channel.intensity_index,
             colormap=channel.colormap,
             clim_min=channel.clim_min,
             clim_max=channel.clim_max,
             gamma=1.0,
             projection_mode=projection_mode,
         )
-        for offset, channel in enumerate(_channel_sources(dataset, render, size, labels, lens=lens))
+        for offset, channel in enumerate(_channel_sources(dataset, render, kept, recorded))
     ]
 
 
-def _lens_channels(by_channel: dict, lens: "models.ArrayLens", axis: str | None) -> dict:
-    """Re-key a per-channel mapping from the dataset's channel indices to a lens' own.
+def _kept_channels(dataset: "models.ArrayDataset", lens: "models.ArrayLens", axis: str | None) -> list[int]:
+    """The dataset's channel positions the lens keeps, in the lens' order; empty when there is no channel axis.
 
-    Ingest records labels and histograms against the dataset -- channel 2 is channel 2 -- but a
-    layer's ``intensity_index`` counts along the *lens*, and a lens that cuts the channel axis
-    starts counting somewhere else: over ``c[2:4]``, index 0 is the dataset's channel 2. This
-    is the translation, done with Python's own slice arithmetic so a step or an open bound
-    resolves exactly as :func:`core.logic.coords.lens_shape` resolved it. A lens that leaves
-    the axis alone gets the mapping back untouched, which is every lens there was before a
-    sliced one could be bootstrapped.
-
-    The ``None`` key -- a histogram taken over the whole array -- is carried across as it is:
-    it names no channel, so there is nothing to translate.
+    Python's own slice arithmetic, so a step or an open bound resolves exactly as
+    :func:`core.logic.coords.lens_shape` resolved it.
     """
     if axis is None:
-        return by_channel
+        return []
+    extent = dataset.shape_list[dataset.axis_names.index(axis)]
     selection = next((slice_ for slice_ in lens.slices_list if slice_.axis == axis), None)
     if selection is None:
-        return by_channel
-    dataset = lens.dataset
-    extent = dataset.shape_list[dataset.axis_names.index(axis)]
-    picked = range(*slice(selection.start, selection.stop, selection.step).indices(extent))
-    local = {index: by_channel[channel] for index, channel in enumerate(picked) if channel in by_channel}
-    if None in by_channel:
-        local[None] = by_channel[None]
-    return local
+        return list(range(extent))
+    return list(range(*slice(selection.start, selection.stop, selection.step).indices(extent)))
 
 
 def bootstrap_scene_from_lens(
@@ -790,79 +769,58 @@ def _combined_window(windows: dict[int | None, tuple[float | None, float | None]
 
 @dataclasses.dataclass(frozen=True)
 class _BootstrapChannel:
-    """One channel of a dataset, and how a bootstrapped layer should draw it."""
+    """One channel of a dataset -- by the dataset's own position along its channel axis -- and how a bootstrapped layer should draw it."""
 
-    intensity_axis: str | None
-    intensity_index: int
+    channel: int | None
     colormap: "enums.ColorMap"
-    #: What the layer is called. From the dataset's ChannelLabel spokes when ingest recorded
-    #: them, so a materialized layer says "DAPI" where the acquisition did.
     name: str | None
-    #: The recorded intensity window, or None where ingest recorded no histogram.
     clim_min: float | None = None
     clim_max: float | None = None
-    #: How this one channel composites, when its name says it does not sum with the others.
-    #: None means "whatever the recipe blends with" -- ADDITIVE for fluorescence.
     blending: "enums.Blending | None" = None
-    #: Whether this is transmitted light: it sorts to the back of the stack, under the
-    #: fluorescence that is drawn over it.
     transmitted: bool = False
 
 
 def _channel_sources(
     dataset: "models.ArrayDataset",
     render: coords_logic.RenderAxes,
-    size: Callable[[str | None], int],
+    kept: list[int],
     labels: dict[int, str],
-    *,
-    lens: "models.ArrayLens | None" = None,
 ) -> "list[_BootstrapChannel]":
     """One channel per layer, drawn the way its recorded name says -- and the index cycle where it says nothing.
 
-    Each of these becomes an INTENSITY layer of its own (:func:`_bootstrap_image_layers`), so
-    the list is the scene's channel stack rather than one layer's children.
-
-    The names come from the dataset's ChannelLabel spokes when ingest recorded them. Where it
-    did not, the index is spelled out rather than left null: a stack of unnamed siblings is
-    exactly the confusion splitting them was meant to end. A lone channel keeps its null --
-    there is nothing to tell it apart from.
+    Each of these becomes an INTENSITY layer of its own over a lens pinning that channel
+    (:func:`_bootstrap_image_layers`), so the list is the scene's channel stack rather than one
+    layer's children. ``kept`` is the dataset's channel positions the lens keeps, and ``labels``
+    is keyed the same way, so a lens over ``c[2:4]`` draws channel 2 under channel 2's name,
+    hue and contrast limits.
 
     **The name is read, not just displayed.** It used to be a string that reached ``Layer.name``
     and nothing else, so a DAPI channel came back green as often as blue and every viewer's
     first act was to fix the hue by hand. :func:`core.logic.channels.colormap_for` turns the
     recorded name into the hue that channel is conventionally drawn in, and only an unrecognized
-    name falls through to the index cycle -- which is what *every* channel used to get. A
-    transmitted-light channel is told apart too, and gets more than a colour: NORMAL blending
-    and the back of the stack, because brightfield summed into fluorescence washes a scene out.
+    name falls through to the index cycle. A transmitted-light channel is told apart too, and
+    gets more than a colour: NORMAL blending and the back of the stack, because brightfield
+    summed into fluorescence washes a scene out.
 
     The contrast limits come from the same place -- the ValueHistogram spoke for that channel
     (:func:`_value_windows`), which ingest recorded so that exactly this would not need the array.
 
     Order is the stack, back to front: transmitted light first, so the fluorescence composites
-    over the picture of the field rather than under it. Within each group the channel index
-    orders, so the stack stays deterministic and an unlabelled dataset is laid out exactly as
-    it was before.
+    over the picture of the field rather than under it. Within each group the channel position
+    orders, so the stack stays deterministic.
     """
-    axis = render.intensity
-    channels = size(axis) if axis is not None else 0
-    # `size` and `labels` already speak the lens' indices; the windows are read off the
-    # dataset here, so they are translated here.
-    windows = _value_windows(dataset, axis)
-    if lens is not None:
-        windows = _lens_channels(windows, lens, axis)
+    windows = _value_windows(dataset, render.intensity)
 
-    def window(index: int | None) -> tuple[float | None, float | None]:
-        return windows.get(index) or windows.get(None) or (None, None)
+    def window(channel: int | None) -> tuple[float | None, float | None]:
+        return windows.get(channel) or windows.get(None) or (None, None)
 
-    if channels <= 1:
-        label = labels.get(0) if channels == 1 else None
-        clim_min, clim_max = window(0 if channels == 1 else None)
+    if len(kept) <= 1:
+        channel = kept[0] if kept else None
+        label = labels.get(channel) if channel is not None else None
+        clim_min, clim_max = window(channel)
         return [
             _BootstrapChannel(
-                intensity_axis=axis if channels == 1 else None,
-                intensity_index=0,
-                # Grey stays the lone channel's default whatever it is called: there is nothing
-                # for a hue to distinguish it from, and grey is the honest rendering of one signal.
+                channel=channel,
                 colormap=enums.ColorMap.GREY,
                 name=None,
                 clim_min=clim_min,
@@ -873,24 +831,22 @@ def _channel_sources(
         ]
 
     sources = []
-    for index in range(channels):
-        label = labels.get(index)
+    for local, channel in enumerate(kept):
+        label = labels.get(channel)
         transmitted = channels_logic.is_transmitted(label)
-        clim_min, clim_max = window(index)
+        clim_min, clim_max = window(channel)
         sources.append(
             _BootstrapChannel(
-                intensity_axis=axis,
-                intensity_index=index,
-                colormap=enums.ColorMap.GREY if transmitted else (channels_logic.colormap_for(label) or _CHANNEL_COLORMAPS[index % len(_CHANNEL_COLORMAPS)]),
-                name=labels.get(index, f"channel {index}"),
+                channel=channel,
+                colormap=enums.ColorMap.GREY if transmitted else (channels_logic.colormap_for(label) or _CHANNEL_COLORMAPS[local % len(_CHANNEL_COLORMAPS)]),
+                name=labels.get(channel, f"channel {channel}"),
                 clim_min=clim_min,
                 clim_max=clim_max,
                 blending=enums.Blending.NORMAL if transmitted else None,
                 transmitted=transmitted,
             )
         )
-
-    return sorted(sources, key=lambda channel: (not channel.transmitted, channel.intensity_index))
+    return sorted(sources, key=lambda source: (not source.transmitted, source.channel))
 
 
 def _assert_rgb_capacity(render: coords_logic.RenderAxes, size: Callable[[str | None], int]) -> None:

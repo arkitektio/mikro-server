@@ -105,7 +105,7 @@ async def test_an_assumed_placement_reads_unknown(authenticated_context: HttpCon
     created = await schema.execute(
         "mutation M($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id } }",
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "lens": str(lens.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
     )
     assert not created.errors, created.errors
 
@@ -149,7 +149,7 @@ async def test_an_authored_registration_reads_manual_and_validating_it_needs_no_
     created = await schema.execute(
         "mutation M($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id } }",
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "lens": str(lens.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": str(scene.pk), "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
     )
     assert not created.errors, created.errors
 
@@ -202,7 +202,7 @@ async def test_the_weakest_edge_on_the_path_wins(authenticated_context: HttpCont
     created = await schema.execute(
         "mutation M($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id } }",
         context_value=authenticated_context,
-        variable_values={"input": {"scene": scene_id, "lens": str(sliced.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, sliced)).pk)}},
     )
     assert not created.errors, created.errors
 

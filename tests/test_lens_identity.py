@@ -184,7 +184,7 @@ async def test_a_selection_that_cannot_be_made_is_refused_in_prose(authenticated
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_two_scenes_over_one_dataset_share_its_lens(authenticated_context: HttpContext):
-    """Bootstrapping twice over one intrinsic system draws both scenes through the one whole lens."""
+    """Bootstrapping twice over one intrinsic system draws both scenes through the same three single-channel lenses, cut once from the whole lens."""
     dataset = await seed.create_array_dataset(authenticated_context, "Owner")
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     (whole_id,) = await _lens_ids(dataset)
@@ -195,9 +195,9 @@ async def test_two_scenes_over_one_dataset_share_its_lens(authenticated_context:
         assert not result.errors, result.errors
         scenes.append(result.data["createSceneFromCoordinateSystem"])
 
-    lens_ids = {layer["lens"]["id"] for scene in scenes for layer in scene["layers"]}
-    assert lens_ids == {str(whole_id)}
-    assert await _lens_ids(dataset) == [whole_id], "no scene minted a lens of its own"
+    per_scene = [{layer["lens"]["id"] for layer in scene["layers"]} for scene in scenes]
+    assert per_scene[0] == per_scene[1] and len(per_scene[0]) == 3 and str(whole_id) not in per_scene[0], "both scenes draw through the same three channel lenses; a channel is a selection, and a selection is one row"
+    assert len(await _lens_ids(dataset)) == 4, "the whole lens and its three channels: the second scene minted nothing of its own"
 
 
 @pytest.mark.django_db(transaction=True)

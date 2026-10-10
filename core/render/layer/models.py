@@ -53,11 +53,16 @@ class TransferFunctionModel(BaseModel):
 
 
 class ChannelSourceModel(BaseModel):
-    """A single intensity channel of the layer's lens, with its own transfer function."""
+    """One channel of the layer's picture, with its own transfer function.
+
+    The channel is a lens: a crop of the layer's lens with its CHANNEL axis at one position
+    (``lens``, by id), or the layer's lens itself when ``lens`` is None -- which must then pin
+    one channel. No index here: which channel is drawn is a selection, and a selection is a
+    lens, so the node names one rather than narrowing one by number.
+    """
 
     kind: Literal["channel"] = "channel"
-    intensity_axis: str | None = None
-    intensity_index: int = 0
+    lens: str | None = None
     label: str | None = None
     visible: bool = True
     transfer: TransferFunctionModel = Field(default_factory=TransferFunctionModel)
@@ -124,7 +129,8 @@ class PhasorTransferModel(BaseModel):
 class PhasorNodeModel(BaseModel):
     """A leaf that reduces one axis of the lens to a phasor and colors the pixel by it.
 
-    The node is the *reduction spec* -- which axis, which harmonic, which detection channel
+    The node is the *reduction spec* -- which axis, which harmonic, through which
+    single-channel lens (``lens``, a crop of the layer's lens; None is the layer's lens itself)
     -- exactly as :class:`ChannelSourceModel` is a sampling spec; how the reduction's output
     becomes a color is its ``transfer``. It is a node rather than a transfer function on a
     channel source because it **consumes an axis**: a transfer function is pointwise, one
@@ -146,8 +152,7 @@ class PhasorNodeModel(BaseModel):
     label: str | None = None
     visible: bool = True
     phasor_axis: str
-    intensity_axis: str | None = None
-    intensity_index: int = 0
+    lens: str | None = None
     harmonic: int = 1
     transfer: PhasorTransferModel = Field(default_factory=PhasorTransferModel)
 
@@ -165,13 +170,12 @@ class PhasorRenderModel(BaseModel):
     other about a layer.
 
     What it drops from the node form is what the layer itself now says: a node's ``label`` is
-    the layer's ``name``, and a node's ``visible`` is the layer's ``visible``. Keeping either
-    here would be a second switch for one decision.
+    the layer's ``name``, a node's ``visible`` is the layer's ``visible``, and a node's ``lens``
+    is the layer's ``lens`` -- which pins the detection channel. Keeping any here would be a
+    second switch for one decision.
     """
 
     phasor_axis: str
-    intensity_axis: str | None = None
-    intensity_index: int = 0
     harmonic: int = 1
     transfer: PhasorTransferModel = Field(default_factory=PhasorTransferModel)
 

@@ -160,6 +160,7 @@ async def test_a_scenes_layers_are_followed(db, authenticated_context: HttpConte
     elsewhere = await seed.create_scene(ctx, "Elsewhere")
     dataset = await seed.create_array_dataset(ctx, "raw")
     lens = await seed.create_lens(ctx, dataset)
+    lens = await seed.channel_lens(ctx, lens)
     await seed.register_into_scene(ctx, scene, dataset)
     await seed.register_into_scene(ctx, elsewhere, dataset)
 

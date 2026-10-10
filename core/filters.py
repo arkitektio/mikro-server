@@ -2,6 +2,7 @@ import datetime
 import strawberry
 from core import enums, models
 from core.inputs.coords import BoundingBoxInput, CoordinateInput
+from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
@@ -822,9 +823,11 @@ class SceneFilter(IdsFilterMixin):
     def search(self, info: Info, value: str, prefix: str) -> Q:
         return Q(**{f"{prefix}name__icontains": value})
 
-    @kante.filter_field(description="Filter to the scenes with a layer drawing through this lens, of any kind: the same set the lens' own `scenes` answers")
+    @kante.filter_field(description="Filter to the scenes with a layer drawing through this lens or any selection within it, of any kind: the same set the lens' own `scenes` answers")
     def lens(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}pk__in": models.Layer.objects.filter(lens_id=value).values("scene_id")})
+        lens = models.Lens.objects.filter(pk=value).first()
+        within = coordinate_system_logic.lens_ids_within(lens) if lens is not None else [int(value)]
+        return Q(**{f"{prefix}pk__in": models.Layer.objects.filter(lens_id__in=within).values("scene_id")})
 
     # Named `defaultForLens`, not `defaultFor`, because the *field* `Scene.defaultFor` is already
     # the list of lenses nominating this scene. One name meaning a list on the type and a single

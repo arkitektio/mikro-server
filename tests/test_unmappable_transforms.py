@@ -120,7 +120,7 @@ async def test_an_unmappable_edge_is_not_a_way_to_world(authenticated_context: H
 
     # The mutation refuses this outright now; the query-time gate is what this test pins,
     # so the layer goes in through the ORM.
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
     assert made.errors and "UNMAPPABLE" in str(made.errors[0])
     await _orm_layer(authenticated_context, scene_id, lens)
 
@@ -173,7 +173,7 @@ async def test_an_unmappable_edge_in_a_scene_is_still_not_a_way_to_world(authent
 
     # The creation-time gate mirrors the search's: it sees only the UNMAPPABLE candidate
     # and refuses. The layer goes in through the ORM so the query-time gate is what's pinned.
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
     assert made.errors and "UNMAPPABLE" in str(made.errors[0])
     await _orm_layer(authenticated_context, scene_id, lens)
 
@@ -209,7 +209,7 @@ async def test_an_unmappable_derivation_is_refused_with_the_impossibility_messag
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
     assert made.errors, "data whose geometry did not survive cannot be composed into a shared scene"
     assert "UNMAPPABLE" in str(made.errors[0])
     assert "createTransformation" not in str(made.errors[0]), "there is no missing registration to send anyone after"
@@ -427,7 +427,7 @@ async def test_placement_distinguishes_a_gap_from_an_impossibility(authenticated
     scene_id = await _scene_with_registered_source(authenticated_context, source)
 
     # PLACED: registered, and the walk finds it.
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(source_lens.pk), "intensityAxis": "c"}})
+    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, source_lens)).pk)}})
     assert not made.errors, made.errors
 
     # UNMAPPABLE: related to the placed data, and by an edge that maps nothing. The
@@ -508,7 +508,7 @@ async def test_a_fusion_with_one_unmappable_parent_is_a_gap_not_an_impossibility
     refused = await schema.execute(
         MAKE_LAYER,
         context_value=ctx,
-        variable_values={"input": {"scene": scene_id, "lens": str(lens.pk), "intensityAxis": "c"}},
+        variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
     )
     assert refused.errors, "nothing places it yet"
     message = str(refused.errors[0])

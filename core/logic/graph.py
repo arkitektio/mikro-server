@@ -2349,7 +2349,14 @@ def _blocked_by_unmappable(
     """
     # The reachability half. `_fact_reachable` starts at the source, so reaching only
     # itself is reaching nowhere.
-    if _fact_reachable(source_system, edges) != {source_system.pk}:
+    # "Anywhere at all" means another dataset's space or a shared one. A lens' own edge into
+    # its container's grid keeps the walk inside one dataset -- that is how a crop is
+    # constructed, not a space a registration could be authored from that the data does not
+    # already stand in -- so a single-channel lens is judged as its grid would be.
+    reached = _fact_reachable(source_system, edges)
+    homes = residence_map(reached)
+    home = homes.get(source_system.pk)
+    if any(system_id != source_system.pk and (home is None or homes.get(system_id) != home) for system_id in reached):
         return False
 
     def owner_dataset_id(system: "models.CoordinateSystem | None") -> int | None:

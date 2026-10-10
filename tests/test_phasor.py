@@ -334,7 +334,7 @@ async def test_a_single_query_is_sufficient_to_compute_a_phasor(db, authenticate
     Not "the fields resolve" -- that the *set* is sufficient. A client holding this response
     and the array can compute (g, s) for every pixel and color it, with no second round trip:
 
-        I_k        the profile      <- node.phasorAxis + intensityAxis/intensityIndex
+        I_k        the profile      <- node.phasorAxis, through the layer's single-channel lens
         N          the bin count    <- context.bins
         t_k        the bin centres  <- context.binWidth
         w          the frequency    <- context.window / context.laserFrequency
@@ -370,8 +370,7 @@ async def test_a_single_query_is_sufficient_to_compute_a_phasor(db, authenticate
         variable_values={
             "input": {
                 "scene": str(scene.id),
-                "lens": str(lens.id),
-                "intensityAxis": "c",
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
                 "transfer": {
                     "mode": "PHASE",
                     "min": "0.5 ns",
@@ -400,8 +399,6 @@ async def test_a_single_query_is_sufficient_to_compute_a_phasor(db, authenticate
                 ... on PhasorLayer {
                     phasorRender {
                         phasorAxis
-                        intensityAxis
-                        intensityIndex
                         harmonic
                         transfer {
                             mode min max colormap weightByIntensity
@@ -429,8 +426,6 @@ async def test_a_single_query_is_sufficient_to_compute_a_phasor(db, authenticate
 
     # I_k -- which profile to transform, and which detection channel it comes from.
     assert node["phasorAxis"] == "tau"
-    assert node["intensityAxis"] == "c"
-    assert node["intensityIndex"] == 0
 
     # N, t_k, w -- the bin count, the bin width, and the period the transform runs over.
     assert context["bins"] == 16

@@ -1490,6 +1490,46 @@ def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
     return composed
 
 
+def lens_within(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], parent_slices: Iterable["SliceLike"], child_slices: Iterable["SliceLike"]) -> bool:
+    """Whether every voxel a child lens keeps is one its parent keeps: a crop of a crop, however spelled.
+
+    Per axis, the child's kept indices are a subset of the parent's. Decided on the index sets,
+    so a stepped parent and a child that lands between its steps is refused, and a child that
+    spells the parent's own selection differently is accepted.
+    """
+    parent_by_axis = {slice_.axis: slice_ for slice_ in parent_slices}
+    child_by_axis = {slice_.axis: slice_ for slice_ in child_slices}
+    for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
+        parent = parent_by_axis.get(axis)
+        child = child_by_axis.get(axis)
+        if child is None and parent is None:
+            continue
+        kept_by_parent = set(range(*slice(parent.start, parent.stop, parent.step).indices(size))) if parent is not None else set(range(size))
+        kept_by_child = set(range(*slice(child.start, child.stop, child.step).indices(size))) if child is not None else set(range(size))
+        if not kept_by_child <= kept_by_parent:
+            return False
+    return True
+
+
+def windows_within(parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]) -> bool:
+    """Whether every row a child window keeps is one its parent keeps: per axis the child's bounds lie inside the parent's, and an axis the parent bounds the child bounds too."""
+    child_by_axis = {window.axis: window for window in child_windows}
+    for parent in parent_windows:
+        child = child_by_axis.get(parent.axis)
+        if child is None:
+            return False
+        if parent.min is not None and (child.min is None or child.min < parent.min):
+            return False
+        if parent.max is not None and (child.max is None or child.max > parent.max):
+            return False
+    return True
+
+
+def channel_extents(axis_specs: Sequence[AxisSpec], shape: Sequence[int]) -> dict[str, int]:
+    """The extent of each CHANNEL axis of a lens, by name: what decides whether the lens pins one channel."""
+    return {spec.name: extent for spec, extent in zip(axis_specs, shape, strict=True) if spec.type == enums.AxisTypeChoices.CHANNEL.value}
+
+
 def intersect_windows(parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]) -> list[dict[str, float | str | None]]:
     """A window of a window: per axis the tighter of the two bounds, an open side staying open, an axis only one names passing through.
 

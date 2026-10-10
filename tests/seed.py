@@ -208,6 +208,15 @@ async def create_lens(ctx: HttpContext, dataset: ArrayDataset, slices: list | No
     return await sync_to_async(_seed_lens_sync)(ctx, dataset, slices)
 
 
+async def channel_lens(ctx: HttpContext, lens: Lens, index: int = 0, axis: str = "c") -> Lens:
+    """The lens pinning one channel of ``lens``: what an intensity, label or phasor layer draws through, and what each RGB component is.
+
+    Cut the way `createLens(lens:, slices:)` cuts, so a channel of a crop is the dataset's lens
+    for the composed selection, and asking twice gets the same row.
+    """
+    return await sync_to_async(lambda: coordinate_system_logic.create_sub_lens(lens, [SliceInputModel(axis=axis, start=index, stop=index + 1)], _creation(ctx)))()
+
+
 async def create_windowed_lens(ctx: HttpContext, container: object, windows: list | None = None) -> Lens:
     """The lens keeping these windows of a container that is not an array: the existing row, or a new one stamped with the context."""
     return await sync_to_async(lambda: coordinate_system_logic.create_windowed_lens(container, [WindowInputModel(**entry) for entry in windows or []], _creation(ctx)))()

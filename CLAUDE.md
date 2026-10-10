@@ -17,7 +17,14 @@ a whole lens carries its container's) and is owned by its maker or its container
 **Every layer and chart layer draws through a lens**, whatever its kind; a layer mutation
 takes the lens or the container (its whole lens), and a point, track or series layer hands
 its lens' windows on as `windowFilters`, a collection layer as `clip` -- derived, never
-stored. Every create-lens mutation composes over a lens (slices compose, windows intersect),
+stored. **A layer narrows nothing outside its lens**: there is no channel index anywhere. An
+intensity, label or phasor layer's lens pins one channel (`createLens(lens:, slices:)` cuts
+it; `assert_single_channel` refuses otherwise), an RGB layer names three single-channel
+component lenses cut from its `lens`, and a channel or phasor node of an image layer's render
+graph names the single-channel lens it samples (`Layer.channel_lenses` indexes them for the
+delete guard). Scene bootstrap cuts one sub-lens per channel (`create_sub_lens`), so the
+lenses a dataset's channels are drawn through are rows shared by every scene; `Lens.scenes`
+therefore answers for every selection within a lens (`lens_ids_within`). Every create-lens mutation composes over a lens (slices compose, windows intersect),
 and `createLens` also cuts from a `box` in any space the dataset reaches or from an
 `annotation`; the result is always the container's row for what is selected. A lens is
 reached across a polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never

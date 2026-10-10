@@ -41,8 +41,6 @@ __all__ = ["LabelColorByModel", "LabelFilterByModel", "LabelRenderModel"]
 class LabelRenderModel(BaseModel):
     """The full render recipe of a label layer."""
 
-    intensity_axis: str | None = None
-    intensity_index: int = 0
     seed: int = 0
     background: int = 0
     opacity: float | None = 1.0
