@@ -204,7 +204,7 @@ def create_annotation_chart_layer(info: Info, input: CreateAnnotationChartLayerI
         if model.annotation_collection is not None or model.lens is not None:
             lens = resolve_source_lens(info, kind=core_models.AnnotationLens, lens=model.lens, container_model=core_models.AnnotationCollection, container=model.annotation_collection, what="annotationCollection")
             if chart.layers.filter(lens=lens).exists():
-                raise ValueError(f"Annotation collection {lens.annotation_collection_id} is already drawn in chart '{chart.name}'. One layer per collection: per-mark styling lives on the annotations.")
+                raise ValueError(f"Lens {lens.pk} over annotation collection {lens.annotation_collection_id} is already drawn in chart '{chart.name}'. One layer per lens: per-mark styling lives on the annotations, and another window over the collection is another lens.")
         else:
             lens = coordinate_system_logic.whole_lens(chart_logic.mint_annotation_collection(chart, name=model.name, ctx=ctx))
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.ANNOTATION.value, source=lens, **settings)

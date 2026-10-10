@@ -142,9 +142,10 @@ in arbitrary units can share a chart; the chart commits only to its axis. Which 
 mark's height is read against is the viewer's binding. A per-layer drawing surface or a
 "which layer's scale" column was not built.
 
-**The collection is held by the layer.** `ChartLayer.annotation_collection` is the only link.
-Nothing was added to `AnnotationCollection`, so core does not know charts draw. One layer per
-collection per chart, by a partial unique constraint.
+**The collection is reached through the layer's lens.** `ChartLayer.lens` (an annotation lens)
+is the only link. Nothing was added to `AnnotationCollection`, so core does not know charts
+draw. One layer per lens per chart, by a partial unique constraint: a window over the
+collection and its whole lens are two selections and may both be drawn.
 
 **Marks are drawn with core's `createAnnotation(collection:)`.** There is no chart-specific
 annotation mutation. `createAnnotationChartLayer` with no collection makes the surface;

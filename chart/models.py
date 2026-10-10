@@ -49,9 +49,9 @@ class Chart(models.Model):
 class ChartLayer(models.Model):
     """One reading of data, drawn in a chart. View state only.
 
-    One table discriminated by ``kind``, and a kind is defined by what it reads: a TRACE
-    reads a lens, a SERIES a table dataset, an ANNOTATION an annotation collection. How a
-    line looks is ``mark``, a setting.
+    One table discriminated by ``kind``, and a kind is defined by what it reads: every layer
+    reads a lens -- a TRACE an array lens, a SERIES a table lens, an ANNOTATION an annotation
+    lens. How a line looks is ``mark``, a setting.
 
     **No column says where the data sits.** There is no axis name, no offset and no scale
     here. Which of the source's axes runs along the chart, and by what scale and shift, is
@@ -86,10 +86,11 @@ class ChartLayer(models.Model):
     class Meta:
         ordering = ["order", "id"]
         constraints = [
-            # One annotation layer per collection in a chart: the marks are drawn once.
+            # One annotation layer per *lens* in a chart: one selection's marks are drawn once.
+            # A window and the whole lens of one collection are two selections, and may both be.
             models.UniqueConstraint(
                 fields=["chart", "lens"],
                 condition=Q(kind="annotation"),
-                name="one_chart_layer_per_annotation_collection",
+                name="one_chart_layer_per_annotation_lens",
             ),
         ]

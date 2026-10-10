@@ -772,3 +772,20 @@ async def test_a_profile_derived_from_an_image_is_charted_in_micrometres_with_a_
 
     annotation = await sync_to_async(lambda: models.Annotation.objects.get(collection_id=surface["annotationCollection"]["id"]))()
     assert annotation.vectors == [[7.4, 812.0]]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_one_annotation_layer_per_lens_not_per_collection(authenticated_context: HttpContext):
+    """A window over a collection and the collection's whole lens are two selections: both may be drawn in one chart; one lens twice may not."""
+    ctx = authenticated_context
+    chart = await _chart(ctx)
+    made = (await _ok(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "name": "Peaks"}))["createAnnotationChartLayer"]
+    collection = await models.AnnotationCollection.objects.aget(pk=made["annotationCollection"]["id"])
+    axis = made["annotationCollection"]["coordinateSystem"]["axes"][0]["name"]
+    window = await seed.create_windowed_lens(ctx, collection, [{"axis": axis, "min": 0.0, "max": 1.0}])
+
+    again = await _ok(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": str(window.pk)})
+    assert again["createAnnotationChartLayer"]["id"] != made["id"], "a second selection of the same collection is a second layer"
+    twice = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": str(window.pk)})
+    assert twice.errors and "One layer per lens" in twice.errors[0].message, twice.errors
