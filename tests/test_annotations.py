@@ -57,7 +57,7 @@ async def test_drawing_on_a_scene_mints_its_collection(db, authenticated_context
     assert not result.errors, result.errors
     first = result.data["createAnnotation"]
     assert first["collection"]["scene"]["id"] == str(scene.id)
-    assert [r["__typename"] for r in first["collection"]["coordinateSystem"]["residents"]] == ["AnnotationCollection", "AnnotationLens"], "the shapes live in the collection's own space"
+    assert [r["__typename"] for r in first["collection"]["coordinateSystem"]["residents"]] == ["AnnotationCollection"], "the shapes live in the collection's own space"
     assert first["strokeWidth"] == 1.0
 
     counts = await sync_to_async(_counts)(scene)

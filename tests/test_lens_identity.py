@@ -225,3 +225,22 @@ async def test_a_lens_cannot_be_written_without_a_space(authenticated_context: H
     dataset = await seed.create_array_dataset(ctx, "Placed", axes=seed.YX_AXES, shapes=[[8, 8]])
     with pytest.raises(IntegrityError):
         await models.ArrayLens.objects.acreate(dataset=dataset, organization=ctx.request.organization, slices=[{"axis": "y", "start": 0, "stop": 4, "step": 1}], coordinate_system=None)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_container_is_one_resident_and_its_crops_are_more(authenticated_context: HttpContext):
+    """The whole lens is the dataset's handle, not a second resident of its grid; a crop lives in a space of its own."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Grid", axes=seed.YX_AXES, shapes=[[8, 8]])
+    await seed.create_lens(ctx, dataset)
+    crop = await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 0, "stop": 4}])
+    grid = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
+
+    async def residents(system_id: int) -> list[str]:
+        result = await schema.execute("query R($id: ID!) { coordinateSystem(id: $id) { residents { __typename } } }", context_value=ctx, variable_values={"id": str(system_id)})
+        assert not result.errors, result.errors
+        return [row["__typename"] for row in result.data["coordinateSystem"]["residents"]]
+
+    assert await residents(grid.pk) == ["ArrayDataset", "DataArray"], "the dataset once, its level, and no whole lens beside them"
+    assert await residents(crop.coordinate_system_id) == ["ArrayLens"], "a crop is the one thing living in the space it owns"

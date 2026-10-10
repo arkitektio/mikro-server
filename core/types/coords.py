@@ -183,13 +183,14 @@ class CoordinateSystem(OrgScoped):
         prefetch_related=list(graph_logic.RESIDENT_RELATIONS),
         description=(
             "The data living in this space. Empty for a pure reference frame -- a world, an atlas -- which is what a space with no residents *is*; there is no separate "
-            "kind to consult. Several residents may share one space: a dataset's own pyramid levels and unsliced lenses live in its grid, and a hundred tiles acquired on "
-            "one stage can be registered into one stage frame"
+            "kind to consult. Several residents may share one space: a dataset's own pyramid levels live in its grid, and a hundred tiles acquired on one stage can be "
+            "registered into one stage frame. A container appears once: its whole lens is the container's handle, not a second resident, so only the lenses that select "
+            "something are listed beside it"
         ),
     )
     def residents(self, info: Info) -> List[Resident]:
-        """Everything whose `coordinateSystem` is this one, outermost container first."""
-        return [resident for relation in graph_logic.RESIDENT_RELATIONS for resident in getattr(self, relation).all()]
+        """Everything whose `coordinateSystem` is this one, outermost container first; a whole lens is its container and is not listed twice."""
+        return [resident for relation in graph_logic.RESIDENT_RELATIONS for resident in getattr(self, relation).all() if not (isinstance(resident, models.Lens) and resident.is_whole)]
 
     # This used to hang off `Scene`, where its own description conceded it was a property of
     # the space rather than of the scene. Unprefetchable: `Transformation.input`/`output` are
