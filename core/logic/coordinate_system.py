@@ -139,12 +139,8 @@ def resolve_source_system(
         return coordinate_system
 
     if lens is not None:
-        # An unsliced lens owns no system -- its space *is* the dataset's intrinsic space --
-        # so a derivation from it is a derivation from intrinsic, one hop shorter.
-        system = graph_logic.lens_source_system(lens)
-        if system is None:
-            raise ValueError(f"Lens {lens.pk} has no coordinate system, so there is no space to derive from.")
-        return system
+        # A whole lens stands in its container's own system, a crop in the space it owns.
+        return lens.coordinate_system
 
     if dataset is not None:
         system = dataset.intrinsic_coordinate_system
@@ -209,19 +205,31 @@ def source_label(model: type, source) -> str:  # noqa: ANN001 - any container ro
     return getattr(source, "name", None) or getattr(source, "version", None) or f"{model.__name__} {source.pk}"
 
 
+#: The lens kinds that are never a named derivation source: a network is a derivation *child*
+#: only, and nothing is computed from a sparse matrix's positions.
+_NEVER_A_SOURCE: tuple[type, ...] = (models.NetworkLens, models.SparseLens)
+
+
 def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, str]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
     """The space a derivation derives *from*, and a label for the edge's name.
 
-    Org-scoped through ``get_for_org`` like every other id a client sends, and returned
-    with a human label because ``f"{child} <- {source}"`` used to read the source's
-    *dataset* name -- which a table, a mesh collection or a bare coordinate system does
-    not have.
+    **One path for every spelling.** A source is a lens or a bare space: an entry naming a
+    container names that container's whole lens, so ``{DATASET: d}`` and ``{LENS: d's whole
+    lens}`` resolve to one and the same thing and are deduplicated as such, and the rule that a
+    network or a sparse dataset is never a named source is applied to the resolved lens,
+    whichever arm named it. Org-scoped through ``get_for_org`` like every other id a client
+    sends, and returned with a human label because ``f"{child} <- {source}"`` used to read
+    the source's *dataset* name -- which a table, a mesh collection or a bare coordinate
+    system does not have.
     """
     model, keyword = _DERIVATION_SOURCES[lowered.source_kind]
     source = get_for_org(model, info, id=lowered.source_id)
-    system = resolve_source_system(**{keyword: source})
-    return system, source_label(model, source)
-
+    if keyword == "coordinate_system":
+        return source, source_label(model, source)
+    lens = source if keyword == "lens" else whole_lens(source)
+    if isinstance(lens, _NEVER_A_SOURCE):
+        raise ValueError(f"Lens {lens.pk} is a {type(lens).KIND.lower()} lens; a {type(lens.container).__name__} is never a named derivation source -- it is derived, not derived from.")
+    return lens.coordinate_system, source_label(type(lens.container), lens.container)
 
 def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSystem", derived_from: Sequence, ctx: CreationContext) -> list["models.Transformation"]:
     """Write one edge per source this data was computed from, child space -> source space.
@@ -247,23 +255,20 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
         return []
 
     lowered = [entry.lower() for entry in derived_from]
-
-    # Keyed on (kind, id), not the id alone: two entries naming different sorts of source
-    # could share a numeric id, and two naming the same table could not collide at all
-    # while the key was the lens field.
-    named = [(low.source_kind, low.source_id) for low in lowered]
-    duplicates = sorted({f"{kind} {source_id}" for kind, source_id in named if named.count((kind, source_id)) > 1})
-    if duplicates:
-        raise ValueError(f"Each derivedFrom entry must name a distinct source, but {', '.join(duplicates)} appear{'s' if len(duplicates) == 1 else ''} more than once. One entry per source: its transform already says everything about how the data maps back")
-
     unmappable = enums.TransformKind.UNMAPPABLE.value
     if lowered[0].transform.kind == unmappable and any(low.transform.kind != unmappable for low in lowered):
         raise ValueError(
             "The first derivedFrom entry is the primary parent -- the one that places this data -- so it cannot be UNMAPPABLE while a mappable entry follows. "
             "An entry with no `transform` *is* UNMAPPABLE: naming a source claims no geometry. Put the mappable source first, or state its transform"
         )
-
     sources = [resolve_derivation_source(info, low) for low in lowered]
+    # Deduplicated on what was *resolved*, not on how it was spelled: `{DATASET: d}` and
+    # `{LENS: d's whole lens}` are one source, and two entries landing in one space would
+    # write two edges into it.
+    systems = [system.pk for system, _ in sources]
+    duplicates = sorted({label for (system, label), pk in zip(sources, systems) if systems.count(pk) > 1})
+    if duplicates:
+        raise ValueError(f"Each derivedFrom entry must name a distinct source, but {', '.join(duplicates)} appear{'s' if len(duplicates) == 1 else ''} more than once (a container and its whole lens are one source). One entry per source: its transform already says everything about how the data maps back")
     fields = [get_for_org(models.CoordinateSystem, info, id=low.transform.field) if low.transform.field else None for low in lowered]
 
     edges: list[models.Transformation] = []

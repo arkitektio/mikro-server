@@ -899,8 +899,8 @@ class DerivationSourceKind(str, Enum):
 
 _describe(
     DerivationSourceKind,
-    LENS="A selection over an array dataset, and the preferred way to name one: a lens' own edge back to its dataset already carries the crop, so pointing at it gets the rest of the chain for free.",
-    DATASET="An array dataset as a whole, through its intrinsic pixel grid. Use it when the source is the entire image and there is no lens worth minting.",
+    LENS="A lens of any kind but a network or sparse lens, and the one path every other arm resolves to: a container arm names the container's whole lens. A crop's own edge back to its dataset already carries the crop, so pointing at it gets the rest of the chain for free.",
+    DATASET="An array dataset as a whole: its whole lens, through its intrinsic pixel grid. The same source as LENS on that lens, and refused beside it.",
     TABLE_DATASET="A table dataset, through the space its coordinate columns declare -- the direction an image reconstructed from a table of SMLM localizations is derived. A table with no coordinate columns enumerates objects rather than places them, and its only honest edge is UNMAPPABLE.",
     MESH_COLLECTION="A mesh collection, through its vertex coordinate system.",
     ANNOTATION_COLLECTION="An annotation collection, through the space its shapes are drawn in.",

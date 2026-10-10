@@ -703,7 +703,7 @@ class DerivedFromInputBase(BaseModel):
 
 
 class LensDerivedFromInputModel(DerivedFromInputBase):
-    """Derived from a selection over an array dataset."""
+    """Derived from a lens: a selection over an array dataset, a table, a mesh or an annotation collection. The one path every other arm resolves to."""
 
     kind: Literal[enums.DerivationSourceKind.LENS] = enums.DerivationSourceKind.LENS
     lens: str
@@ -803,8 +803,8 @@ class DerivedFromInput:
     """
 
     kind: enums.DerivationSourceKind = strawberry.field(description="Which sort of thing the source is. It fixes which id field below is read; any other is rejected")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(LENS) The lens this data was computed from")
-    dataset: strawberry.ID | None = strawberry.field(default=None, description="(DATASET) The array dataset this data was computed from, through its whole pixel grid")
+    lens: strawberry.ID | None = strawberry.field(default=None, description="(LENS) The lens this data was computed from, of any kind but a network or sparse lens -- those are derived, never derived from. Every container arm below is this arm on the container's whole lens")
+    dataset: strawberry.ID | None = strawberry.field(default=None, description="(DATASET) The array dataset this data was computed from: its whole lens, through its whole pixel grid")
     table_dataset: strawberry.ID | None = strawberry.field(default=None, description="(TABLE_DATASET) The table this data was computed from -- an SMLM localization table a reconstruction was rendered from, say")
     mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="(MESH_COLLECTION) The mesh collection this data was computed from")
     annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="(ANNOTATION_COLLECTION) The annotation collection this data was computed from")

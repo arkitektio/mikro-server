@@ -1294,14 +1294,25 @@ def _derived_dataset_ids(source_id: strawberry.ID | None = None):
         "output__lenses__arraylens__dataset_id",
         "output__data_arrays__dataset_id",
     )
+    # The other containers a derivation may land in: a table, a sparse dataset, a mesh, a
+    # network, an annotation collection, each keyed to itself as `container_map` keys it.
+    # Any of them is another container than the child dataset, so no self-exclusion applies.
+    source_collection = Coalesce(
+        "output__table_datasets__id",
+        "output__sparse_datasets__id",
+        "output__mesh_collections__id",
+        "output__network_collections__id",
+        "output__annotation_collections__id",
+    )
     edges = (
         models.Transformation.objects.filter(parent__isnull=True, input__datasets__isnull=False)
-        .annotate(_source_dataset=source_dataset)
-        .filter(_source_dataset__isnull=False)
-        .exclude(_source_dataset=F("input__datasets__id"))
+        .exclude(kind=enums.TransformKindChoices.FIELD.value)  # a FIELD is a lookup, never a derivation (`is_derivation_edge`)
+        .annotate(_source_dataset=source_dataset, _source_collection=source_collection)
     )
     if source_id is not None:
-        edges = edges.filter(_source_dataset=source_id)
+        edges = edges.filter(_source_dataset=source_id).exclude(_source_dataset=F("input__datasets__id"))
+    else:
+        edges = edges.filter((Q(_source_dataset__isnull=False) & ~Q(_source_dataset=F("input__datasets__id"))) | Q(_source_collection__isnull=False))
     return edges.values_list("input__datasets__id", flat=True)
 
 

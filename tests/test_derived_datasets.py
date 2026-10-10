@@ -1101,3 +1101,54 @@ async def test_an_unpyramided_index_axis_dataset_is_accepted(authenticated_conte
         scale_method=None,
     )
     assert not result.errors, result.errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_container_and_its_whole_lens_are_one_source(authenticated_context: HttpContext):
+    """`{DATASET: d}` and `{LENS: d's whole lens}` resolve to one space; named together they are a duplicate, not two edges into one system."""
+    ctx = authenticated_context
+    source = await seed.create_array_dataset(ctx, "raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    whole = await seed.create_lens(ctx, source)
+    both = await _derive(
+        ctx,
+        "twice",
+        axes=seed.YX_AXES,
+        shape=[64, 64],
+        entries=[{"kind": "DATASET", "dataset": str(source.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(whole.pk), "transform": {"kind": "IDENTITY"}}],
+    )
+    assert both.errors and "one source" in both.errors[0].message, both.errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_network_lens_is_never_a_named_derivation_source(authenticated_context: HttpContext):
+    from tests.test_network_layers import _collection as _network_collection
+
+    ctx = authenticated_context
+    network = await _network_collection(ctx)
+    whole = await seed.create_windowed_lens(ctx, network)
+    refused = await _derive(ctx, "from-a-network", axes=seed.YX_AXES, shape=[64, 64], lens=whole)
+    assert refused.errors and "never a named derivation source" in refused.errors[0].message, refused.errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_dataset_derived_from_a_table_is_derived_to_the_filter_too(authenticated_context: HttpContext):
+    """`derivedFrom` on the type and `notDerived` on the filter read the same edges: a reconstruction from a table is derived, whatever its parent's kind."""
+    from tests.test_layer_kinds import _seed_table_dataset
+
+    ctx = authenticated_context
+    table, _ = await _seed_table_dataset(ctx, "localizations")
+    made = await _derive(ctx, "reconstruction", axes=seed.YX_AXES, shape=[64, 64], entries=[{"kind": "TABLE_DATASET", "tableDataset": str(table.pk), "transform": {"kind": "IDENTITY"}}])
+    assert not made.errors, made.errors
+    assert made.data["createArrayDataset"]["derivedFrom"], "the type reports the parent"
+    acquired = await seed.create_array_dataset(ctx, "acquired", axes=seed.YX_AXES, shapes=[[64, 64]])
+
+    async def ids(not_derived: bool) -> set[str]:
+        result = await schema.execute("query D($v: Boolean!) { arrayDatasets(filters: { notDerived: $v }) { id } }", context_value=ctx, variable_values={"v": not_derived})
+        assert not result.errors, result.errors
+        return {row["id"] for row in result.data["arrayDatasets"]}
+
+    assert made.data["createArrayDataset"]["id"] in await ids(False), "derived from a table is derived"
+    assert str(acquired.pk) in await ids(True) and made.data["createArrayDataset"]["id"] not in await ids(True)
