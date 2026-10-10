@@ -1267,11 +1267,11 @@ async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(a
         authenticated_context,
         scene,
         lens,
-        {"colorBys": [{"table": table, "column": "area", "dataset": "1", "colormap": "VIRIDIS"}]},
+        {"colorBys": [{"table": table, "column": "area", "lens": "1", "colormap": "VIRIDIS"}]},
     )
     assert mixed.errors
     message = str(mixed.errors[0])
-    assert "does not read `dataset`" in message
+    assert "does not read `lens`" in message
     assert "it reads" in message, "the message names what the kind DOES read"
 
     missing = await _create(
@@ -1281,4 +1281,4 @@ async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(a
         {"colorBys": [{"kind": "SPARSE", "colormap": "MAGMA"}]},
     )
     assert missing.errors
-    assert "requires `dataset`" in str(missing.errors[0])
+    assert "requires `lens`" in str(missing.errors[0])

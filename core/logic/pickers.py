@@ -105,27 +105,30 @@ def assert_table_not_in_a_picker(table) -> None:
     )
 
 
-def _names_sparse_dataset(dataset_id: str) -> Q:
-    """Every way a stored picker entry can name one sparse dataset.
+def names_sparse_lens(lens_id: str) -> Q:
+    """Every way a stored picker entry can name one sparse lens.
 
-    One way, not two: a sparse colouring names its dataset in ``dataset`` and has no join path,
+    One way, not two: a sparse colouring names its slice as ``lens`` and has no join path,
     because there are no hops -- the position is a row of the table its axis references, and
     that table is reached by ``references`` rather than by anything stored here.
 
     A separate function from :func:`_names_table` rather than a branch inside it, because the
-    two never overlap: an entry names a table *or* a dataset, and the discriminator says which.
+    two never overlap: an entry names a table *or* a lens, and the discriminator says which.
     """
     query = Q()
     for column in _PICKER_COLUMNS:
-        query |= Q(**{f"{column}__contains": [{"dataset": dataset_id}]})
+        query |= Q(**{f"{column}__contains": [{"lens": lens_id}]})
     for key in _LABEL_PICKER_KEYS:
-        query |= Q(**{f"label_render__{key}__contains": [{"dataset": dataset_id}]})
+        query |= Q(**{f"label_render__{key}__contains": [{"lens": lens_id}]})
     return query
 
 
 def layers_naming_sparse_dataset(dataset) -> "QuerySet[models.Layer]":
-    """Every layer whose pickers name this sparse dataset."""
-    return models.Layer.objects.filter(_names_sparse_dataset(str(dataset.pk))).select_related("scene").order_by("pk")
+    """Every layer whose pickers name a slice of this sparse dataset: a lens of it."""
+    query = Q(pk__in=[])
+    for lens_id in models.SparseLens.objects.filter(sparse_dataset=dataset).values_list("pk", flat=True):
+        query |= names_sparse_lens(str(lens_id))
+    return models.Layer.objects.filter(query).select_related("scene").order_by("pk")
 
 
 def assert_sparse_dataset_not_in_a_picker(dataset) -> None:

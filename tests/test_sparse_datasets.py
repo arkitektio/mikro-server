@@ -376,9 +376,9 @@ mutation Create($input: CreateLabelLayerInput!) {
   createLabelLayer(input: $input) {
     id
     labelRender {
-      colorBys { kind table column dataset at { axis value } colormap min max label }
+      colorBys { kind table column lens colormap min max label }
       activeColorBy
-      filterBys { kind table column dataset at { axis value } min max values exclude label }
+      filterBys { kind table column lens min max values exclude label }
       activeFilterBys
     }
   }
@@ -409,6 +409,13 @@ async def _expression(ctx: HttpContext, mask, *, axes: tuple[int, ...] = (0, 1))
     return result.data["createSparseDataset"]["id"]
 
 
+async def _slice(ctx: HttpContext, dataset: str, **positions: int) -> str:
+    """The sparse lens pinning one position per identified axis: what a SPARSE colouring or rule names. The same positions are the same lens."""
+    row = await models.SparseDataset.objects.aget(pk=dataset)
+    lens = await seed.create_windowed_lens(ctx, row, [{"axis": axis, "min": value, "max": value} for axis, value in positions.items()])
+    return str(lens.pk)
+
+
 async def _colour(ctx, lens, scene, entry: dict) -> object:
     return await schema.execute(
         CREATE_LABEL_LAYER,
@@ -431,14 +438,13 @@ async def test_a_label_layer_colours_by_one_slice_of_a_matrix(authenticated_cont
 
     result = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 7}], "colormap": "MAGMA", "min": 0.0, "max": 12.0, "label": "Feature 7"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=7), "colormap": "MAGMA", "min": 0.0, "max": 12.0, "label": "Feature 7"},
     )
     assert not result.errors, result.errors
     entry = result.data["createLabelLayer"]["labelRender"]["colorBys"][0]
 
     assert entry["kind"] == "SPARSE"
-    assert entry["dataset"] == dataset
-    assert entry["at"] == [{"axis": "feature", "value": 7}]
+    assert entry["lens"] == await _slice(authenticated_context, dataset, feature=7), "the slice is a lens of the matrix, and the same position is the same lens"
     assert entry["table"] is None and entry["column"] is None, "the other variant's fields are null, not empty strings"
     assert (entry["colormap"], entry["min"], entry["max"]) == ("MAGMA", 0.0, 12.0)
 
@@ -457,7 +463,7 @@ async def test_a_slice_the_store_would_have_to_scan_for_is_refused(authenticated
 
     result = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 7}], "colormap": "MAGMA"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=7), "colormap": "MAGMA"},
     )
     assert result.errors
     message = str(result.errors[0])
@@ -474,7 +480,7 @@ async def test_a_position_along_the_keyed_axis_is_refused(authenticated_context:
 
     result = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "object", "value": 3}], "colormap": "MAGMA"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, object=3), "colormap": "MAGMA"},
     )
     assert result.errors
     assert "one object's whole profile" in str(result.errors[0])
@@ -489,7 +495,7 @@ async def test_an_out_of_range_position_is_refused(authenticated_context: HttpCo
 
     result = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": SHAPE[0]}], "colormap": "MAGMA"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=SHAPE[0]), "colormap": "MAGMA"},
     )
     assert result.errors
     assert f"runs 0..{SHAPE[0] - 1}" in str(result.errors[0])
@@ -504,7 +510,7 @@ async def test_a_sparse_colouring_is_measured_and_takes_no_qualitative_colormap(
 
     result = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 1}], "colormap": "HUES"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=1), "colormap": "HUES"},
     )
     assert result.errors
     assert "qualitative" in str(result.errors[0])
@@ -520,7 +526,7 @@ async def test_a_matrix_no_field_edge_reaches_is_refused(authenticated_context: 
 
     result = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 1}], "colormap": "MAGMA"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=1), "colormap": "MAGMA"},
     )
     assert result.errors
     assert "not reachable from this mask by a FIELD edge" in str(result.errors[0])
@@ -547,8 +553,8 @@ async def test_two_slices_of_one_matrix_are_two_colourings(authenticated_context
                 "scene": str(scene.id),
                 "render": {
                     "colorBys": [
-                        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 3}], "colormap": "MAGMA", "label": "Feature 3"},
-                        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 9}], "colormap": "MAGMA", "label": "Feature 9"},
+                        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=3), "colormap": "MAGMA", "label": "Feature 3"},
+                        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=9), "colormap": "MAGMA", "label": "Feature 9"},
                     ],
                     "activeColorBy": 1,
                 },
@@ -557,7 +563,7 @@ async def test_two_slices_of_one_matrix_are_two_colourings(authenticated_context
     )
     assert not result.errors, result.errors
     render = result.data["createLabelLayer"]["labelRender"]
-    assert [entry["at"][0]["value"] for entry in render["colorBys"]] == [3, 9]
+    assert [entry["lens"] for entry in render["colorBys"]] == [await _slice(authenticated_context, dataset, feature=3), await _slice(authenticated_context, dataset, feature=9)]
     assert render["activeColorBy"] == 1, "and switching between them is an index, not a re-upload"
 
 
@@ -575,7 +581,7 @@ async def test_a_matrix_a_picker_names_cannot_be_deleted(authenticated_context: 
 
     coloured = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 2}], "colormap": "MAGMA"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=2), "colormap": "MAGMA"},
     )
     assert not coloured.errors, coloured.errors
 
@@ -589,6 +595,10 @@ async def test_a_matrix_a_picker_names_cannot_be_deleted(authenticated_context: 
     assert "colour by a slice of it" in message
     assert "layer" in message and "scene" in message, "name what is holding it, not just that something is"
     assert await sync_to_async(models.SparseDataset.objects.filter(pk=dataset).exists)(), "the refusal left it in place"
+    slice_id = await _slice(authenticated_context, dataset, feature=2)
+    lens_delete = await schema.execute("mutation Delete($input: DeleteLensInput!) { deleteLens(input: $input) }", context_value=authenticated_context, variable_values={"input": {"id": slice_id}})
+    assert lens_delete.errors and "draw through it" in str(lens_delete.errors[0]), "and the slice itself is held by the picker that reads it, the way a layer's lens is held by the layer"
+    assert await models.SparseLens.objects.filter(pk=slice_id).aexists()
 
 
 OPTIONS = """
@@ -750,7 +760,7 @@ async def test_the_two_layouts_answer_the_two_questions(authenticated_context: H
 
     coloured = await _colour(
         authenticated_context, lens, scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 5}], "colormap": "MAGMA"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=5), "colormap": "MAGMA"},
     )
     assert not coloured.errors, coloured.errors
 
@@ -759,7 +769,7 @@ async def test_the_two_layouts_answer_the_two_questions(authenticated_context: H
     plan = next(plan for plan in plans.data["attributePlans"] if plan["hops"][0]["sparseDataset"] is not None)
 
     assert plan["hops"][0]["lookup"]["sparseArray"]["path"] == "layouts/axis1", "hover reads the object-major layout"
-    assert coloured.data["createLabelLayer"]["labelRender"]["colorBys"][0]["at"] == [{"axis": "feature", "value": 5}]
+    assert coloured.data["createLabelLayer"]["labelRender"]["colorBys"][0]["lens"] == await _slice(authenticated_context, dataset, feature=5)
 
 
 # --------------------------------------------------------------------------- #
@@ -885,12 +895,12 @@ async def test_a_rank_three_colouring_names_a_position_along_every_identified_ax
         authenticated_context,
         lens,
         scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 3}, {"axis": "timepoint", "value": 1}], "colormap": "VIRIDIS"},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=3, timepoint=1), "colormap": "VIRIDIS"},
     )
     assert not result.errors, result.errors
     entry = result.data["createLabelLayer"]["labelRender"]["colorBys"][0]
     assert entry["kind"] == "SPARSE"
-    assert [(position["axis"], position["value"]) for position in entry["at"]] == [("feature", 3), ("timepoint", 1)]
+    assert entry["lens"] == await _slice(authenticated_context, dataset, feature=3, timepoint=1)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -912,8 +922,8 @@ async def test_two_rank_three_slices_differing_only_in_one_position_are_two_colo
                 "scene": str(scene.id),
                 "render": {
                     "colorBys": [
-                        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 3}, {"axis": "timepoint", "value": 0}], "colormap": "VIRIDIS"},
-                        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 3}, {"axis": "timepoint", "value": 1}], "colormap": "VIRIDIS"},
+                        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=3, timepoint=0), "colormap": "VIRIDIS"},
+                        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=3, timepoint=1), "colormap": "VIRIDIS"},
                     ],
                     "activeColorBy": 0,
                 },
@@ -936,11 +946,11 @@ async def test_a_rank_three_colouring_needs_a_layout_on_one_named_axis_not_all(a
     mask, lens, scene = await _placed_mask(authenticated_context)
     features = await _features_table(authenticated_context, "features")
     timepoints = await _features_table(authenticated_context, "timepoints")
-    entry = {"kind": "SPARSE", "dataset": None, "at": [{"axis": "feature", "value": 3}, {"axis": "timepoint", "value": 1}], "colormap": "VIRIDIS"}
+    entry = {"kind": "SPARSE", "lens": None, "colormap": "VIRIDIS"}
 
     # Only the keyed axis (`object`, axis 1 of CUBE_AXES) has a layout.
     keyed_only = await _store(authenticated_context, "keyed-only", axes=(1,), shape=CUBE_SHAPE)
-    entry["dataset"] = await _cube_dataset(authenticated_context, mask, features, timepoints, keyed_only)
+    entry["lens"] = await _slice(authenticated_context, await _cube_dataset(authenticated_context, mask, features, timepoints, keyed_only), feature=3, timepoint=1)
     refused = await _colour(authenticated_context, lens, scene, dict(entry))
     assert refused.errors
     message = str(refused.errors[0])
@@ -949,7 +959,7 @@ async def test_a_rank_three_colouring_needs_a_layout_on_one_named_axis_not_all(a
 
     # One of the two named axes is enough.
     one_named = await _store(authenticated_context, "one-named", axes=(2,), shape=CUBE_SHAPE)
-    entry["dataset"] = await _cube_dataset(authenticated_context, mask, features, timepoints, one_named)
+    entry["lens"] = await _slice(authenticated_context, await _cube_dataset(authenticated_context, mask, features, timepoints, one_named), feature=3, timepoint=1)
     accepted = await _colour(authenticated_context, lens, scene, dict(entry))
     assert not accepted.errors, accepted.errors
 
@@ -1001,13 +1011,12 @@ async def test_a_filter_reads_one_slice_of_a_matrix(authenticated_context: HttpC
         authenticated_context,
         lens,
         scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 1}], "min": 5.0},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=1), "min": 5.0},
     )
     assert not result.errors, result.errors
     (rule,) = result.data["createLabelLayer"]["labelRender"]["filterBys"]
     assert rule["kind"] == "SPARSE"
-    assert rule["dataset"] == dataset
-    assert [(p["axis"], p["value"]) for p in rule["at"]] == [("feature", 1)]
+    assert rule["lens"] == await _slice(authenticated_context, dataset, feature=1)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1021,7 +1030,7 @@ async def test_a_sparse_filter_is_measured_and_takes_no_value_set(authenticated_
         authenticated_context,
         lens,
         scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "feature", "value": 1}], "values": ["a"]},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, feature=1), "values": ["a"]},
     )
     assert result.errors
     assert "measured" in str(result.errors[0])
@@ -1042,6 +1051,6 @@ async def test_a_sparse_filter_is_refused_along_an_unindexed_axis(authenticated_
         authenticated_context,
         lens,
         scene,
-        {"kind": "SPARSE", "dataset": dataset, "at": [{"axis": "object", "value": 1}], "min": 1.0},
+        {"kind": "SPARSE", "lens": await _slice(authenticated_context, dataset, object=1), "min": 1.0},
     )
     assert result.errors

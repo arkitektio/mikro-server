@@ -28,19 +28,6 @@ from core import enums
 from core.render.joins import JoinStepModel
 
 
-class AxisPositionModel(BaseModel):
-    """One position along one named axis: which slice of a matrix a colouring reads.
-
-    The same pair `CoordinateAnchorInput` carries, and deliberately the same shape: naming a
-    position along an axis is one idea, whether it is picking a channel of an image or a
-    feature of an expression matrix. Note this *names* a position rather than enumerating them
-    -- a matrix with 19 059 features has 19 059 positions and one of them is stored here.
-    """
-
-    axis: str
-    value: int
-
-
 class ColorByModel(BaseModel):
     """Color objects by a column of the table their source's ``FIELD`` edge keys into.
 
@@ -98,12 +85,12 @@ class ColorByModel(BaseModel):
     table: str | None = None
     column: str | None = None
 
-    # Where the value is read, for `kind="sparse"`. The dataset, and the position along the
-    # axis it does *not* share with the ids -- one slice of the matrix, which is a value per
-    # object and therefore a colouring. A list rather than a single position so a matrix over
-    # more than two axes needs no new shape here, only a longer one.
-    dataset: str | None = None
-    at: list[AxisPositionModel] = Field(default_factory=list)
+    # Where the value is read, for `kind="SPARSE"`: a lens of the matrix whose windows pin one
+    # position on every axis the matrix identifies itself by -- one slice, which is a value per
+    # object and therefore a colouring. A lens rather than a dataset and positions, because a
+    # slice is a selection and a selection is a lens; a matrix over more axes needs no new
+    # shape here, only a lens with more windows.
+    lens: str | None = None
 
     # Where the value is read, for `kind="GRAPH"`: an attribute the network collection's own
     # manifest declares (or `radius`, when its encoding carries one). Per node, not per object,
@@ -152,8 +139,8 @@ class ColorByModel(BaseModel):
             missing = [name for name in ("table", "column") if getattr(self, name) is None]
             if missing:
                 raise ValueError(f"a column colouring reads a column of a table, so it requires {missing}")
-            if self.dataset is not None or self.at:
-                raise ValueError("a column colouring does not read `dataset` or `at`; those name a slice of a sparse matrix. Set `kind: SPARSE` to use them")
+            if self.lens is not None:
+                raise ValueError("a column colouring does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
             return self
 
         if self.kind == "GRAPH":
@@ -161,33 +148,19 @@ class ColorByModel(BaseModel):
                 raise ValueError("a graph colouring reads a per-node value the collection carries, so it requires `attribute`")
             if self.table is not None or self.column is not None or self.join_path:
                 raise ValueError("a graph colouring does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
-            if self.dataset is not None or self.at:
-                raise ValueError("a graph colouring does not read `dataset` or `at`; those name a slice of a sparse matrix. Set `kind: SPARSE` to use them")
+            if self.lens is not None:
+                raise ValueError("a graph colouring does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
             if self.target is None:
                 # NODE is what an omitted target has always meant -- there was nothing else to
                 # target before edges could be addressed -- so old dumps rehydrate unchanged.
                 self.target = "NODE"
             return self
 
-        if self.dataset is None or not self.at:
-            raise ValueError("a sparse colouring reads one slice of a matrix, so it requires `dataset` and the position `at`")
+        if self.lens is None:
+            raise ValueError("a sparse colouring reads one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by")
         if self.table is not None or self.column is not None or self.join_path:
             raise ValueError("a sparse colouring does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
         return self
-
-    @model_validator(mode="after")
-    def _positions_are_a_set(self) -> "ColorByModel":
-        """`at` names a slice, and a slice is not ordered.
-
-        `{gene: 7, adduct: 2}` and `{adduct: 2, gene: 7}` are one position, so they are stored
-        as one -- sorted by axis. Without this the picker's duplicate check keys them apart and
-        stores two entries that render identically, which is the very thing that check exists to
-        prevent. `join_path` is deliberately *not* canonicalised alongside it: a chain of hops is
-        ordered, and reordering one would change where it lands.
-        """
-        self.at = sorted(self.at, key=lambda position: position.axis)
-        return self
-
 
 class PickerColorByModel(ColorByModel):
     """One entry of a layer's colour picker: a joined column, and what to call it in the UI.

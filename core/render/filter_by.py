@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from core.render.color_by import AxisPositionModel
 from core.render.joins import JoinStepModel
 
 if TYPE_CHECKING:
@@ -63,10 +62,9 @@ class FilterByModel(BaseModel):
     # colouring by one. Empty is the direct case. See :mod:`core.render.joins`.
     join_path: list[JoinStepModel] = Field(default_factory=list)
 
-    # (SPARSE) the matrix, and the position along the axes it identifies itself by. One slice,
-    # which is a value per object -- exactly what a rule needs to test.
-    dataset: str | None = None
-    at: list[AxisPositionModel] = Field(default_factory=list)
+    # (SPARSE) a lens of the matrix pinning one position on every axis it identifies itself
+    # by. One slice, which is a value per object -- exactly what a rule needs to test.
+    lens: str | None = None
 
     # (GRAPH) the per-node value the network collection carries, and which row set the rule
     # hides -- a node's visibility takes its segments and glyphs with it, an EDGE rule hides
@@ -111,8 +109,8 @@ class FilterByModel(BaseModel):
             missing = [name for name in ("table", "column") if getattr(self, name) is None]
             if missing:
                 raise ValueError(f"a column rule reads a column of a table, so it requires {missing}")
-            if self.dataset is not None or self.at:
-                raise ValueError("a column rule does not read `dataset` or `at`; those name a slice of a sparse matrix. Set `kind: SPARSE` to use them")
+            if self.lens is not None:
+                raise ValueError("a column rule does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
             return self
 
         if self.kind == "GRAPH":
@@ -120,8 +118,8 @@ class FilterByModel(BaseModel):
                 raise ValueError("a graph rule tests a per-node value the collection carries, so it requires `attribute`")
             if self.table is not None or self.column is not None or self.join_path:
                 raise ValueError("a graph rule does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
-            if self.dataset is not None or self.at:
-                raise ValueError("a graph rule does not read `dataset` or `at`; those name a slice of a sparse matrix. Set `kind: SPARSE` to use them")
+            if self.lens is not None:
+                raise ValueError("a graph rule does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
             if self.values is not None:
                 raise ValueError(
                     "a graph rule is measured -- Strahler order, degree, a radius are ordered values every one -- so it is bounded with `min`/`max`, never matched against a `values` set"
@@ -130,8 +128,8 @@ class FilterByModel(BaseModel):
                 self.target = "NODE"
             return self
 
-        if self.dataset is None or not self.at:
-            raise ValueError("a sparse rule tests one slice of a matrix, so it requires `dataset` and the position `at`")
+        if self.lens is None:
+            raise ValueError("a sparse rule tests one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by")
         if self.table is not None or self.column is not None or self.join_path:
             raise ValueError("a sparse rule does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
         if self.values is not None:
@@ -139,12 +137,6 @@ class FilterByModel(BaseModel):
                 "a sparse rule is measured -- a slice of a matrix is a value per object -- so it is bounded with `min`/`max`, never matched against a `values` set. "
                 "Nothing stores categories sparsely, because the zeros would be a category too"
             )
-        return self
-
-    @model_validator(mode="after")
-    def _positions_are_a_set(self) -> "FilterByModel":
-        """`at` names a slice, and a slice is not ordered. See `ColorByModel`."""
-        self.at = sorted(self.at, key=lambda position: position.axis)
         return self
 
     @model_validator(mode="after")

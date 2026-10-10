@@ -781,58 +781,61 @@ def mesh_reachable_tables(info: Info, collection) -> dict:
     return reachable_tables(info, mesh_collection_system(collection))
 
 
-def _resolve_sparse_slice(info: Info, system, dataset_id, at, *, source: str, reachable: dict | None = None):
-    """Resolve and check one slice: the matrix, and a position along every identified axis.
+def _resolve_sparse_slice(info: Info, system, lens_id: str | None, *, source: str, reachable: dict | None = None) -> "models.SparseLens":
+    """Resolve and check one slice: a sparse lens pinning one position on every axis its matrix identifies itself by.
 
-    Factored out of the colouring because a **rule** asks exactly the same three questions —
-    is the matrix reachable, does `at` name the axes it identifies itself by, is there a
-    layout that makes the read one contiguous range. Sharing it is what keeps "the set
-    offered is the set accepted" true across the two pickers rather than only within each;
-    two copies of these checks would be two chances to drift.
+    Factored out of the colouring because a **rule** asks exactly the same three questions --
+    is the matrix reachable, does the lens pin exactly the axes the matrix identifies itself
+    by, is there a layout that makes the read one contiguous range. Sharing it is what keeps
+    "the set offered is the set accepted" true across the two pickers rather than only within
+    each; two copies of these checks would be two chances to drift.
 
-    Returns the resolved dataset and the positions, sorted by axis so a slice named in two
-    orders stores once.
+    A lens rather than a dataset and positions: a slice is a selection, and a selection is a
+    lens -- one row per slice, shared by every picker that reads it, cut with
+    `createSparseLens(windows:)` where `min == max` pins a position.
     """
+    if lens_id is None:
+        raise ValueError("a sparse colouring reads one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by")
     if reachable is None:
         reachable = attribute_plans_logic.field_reachable_sparse_datasets(system, info.context.request.organization)
-
-    dataset = reachable.get(str(dataset_id))
+    lens = get_for_org(models.SparseLens, info, id=lens_id)
+    dataset = reachable.get(str(lens.sparse_dataset_id))
     if dataset is None:
         known = ", ".join(f"'{candidate.name}' ({pk})" for pk, candidate in reachable.items()) or "none"
         raise ValueError(
-            f"Sparse dataset {dataset_id} is not reachable from {source} by a FIELD edge, so the ids it is indexed by are not the ids this source supplies. "
+            f"Lens {lens.pk} selects over sparse dataset {lens.sparse_dataset_id}, which is not reachable from {source} by a FIELD edge, so the ids it is indexed by are not the ids this source supplies. "
             f"Author the edge with createSparseDataset(keyedBy:) naming this source, or use one that already keys off it: {known}."
         )
-
     names = dataset.axis_names
     indexed = {names[array.indexed_axis] for array in dataset.arrays.all() if 0 <= array.indexed_axis < len(names)}
     identified = {reference.axis for reference in dataset.axis_references.all()}
     shape = dataset.shape
-
-    positions = list(at)
-    named = [position.axis for position in positions]
-    if sorted(named) != sorted(identified):
+    pinned = {window.axis: window for window in lens.windows_list}
+    if sorted(pinned) != sorted(identified):
         raise ValueError(
-            f"`at` names {sorted(named)}, but '{dataset.name}' is selected along {sorted(identified)} -- the axes it identifies itself. "
-            f"The other axis ({sorted(set(names) - identified)}) is the one {source} supplies ids for, and naming a position along it would be asking for one object's whole profile rather than one value per object."
+            f"Lens {lens.pk} windows {sorted(pinned)}, but '{dataset.name}' is selected along {sorted(identified)} -- the axes it identifies itself. "
+            f"The other axis ({sorted(set(names) - identified)}) is the one {source} supplies ids for, and bounding it would be asking for one object's whole profile rather than one value per object. "
+            f"Cut the slice with createSparseLens(sparseDataset: {dataset.pk}, windows: [{{axis, min: v, max: v}}]) over exactly {sorted(identified)}."
         )
-
-    for position in positions:
-        extent = shape[names.index(position.axis)] if position.axis in names and len(shape) == len(names) else None
-        if extent is not None and not 0 <= position.value < extent:
+    for axis, window in pinned.items():
+        if window.min is None or window.max is None or window.min != window.max or window.min != int(window.min):
             raise ValueError(
-                f"`at` names position {position.value} along '{position.axis}', which runs 0..{extent - 1} in '{dataset.name}'. A position is a row of the table that axis references, not an id of its own."
+                f"Lens {lens.pk} keeps {window.min}..{window.max} along '{axis}', but a slice is one position: a window whose min and max are the same whole number. "
+                f"Cut it with createSparseLens(sparseDataset: {dataset.pk}, windows: [{{axis: \"{axis}\", min: v, max: v}}])."
             )
-
-    if not any(position.axis in indexed for position in positions):
+        value = int(window.min)
+        extent = shape[names.index(axis)] if axis in names and len(shape) == len(names) else None
+        if extent is not None and not 0 <= value < extent:
+            raise ValueError(
+                f"Lens {lens.pk} pins position {value} along '{axis}', which runs 0..{extent - 1} in '{dataset.name}'. A position is a row of the table that axis references, not an id of its own."
+            )
+    if not any(axis in indexed for axis in pinned):
         available = ", ".join(sorted(indexed)) or "none"
         raise ValueError(
-            f"'{dataset.name}' holds no layout indexed on any of {sorted(named)}, so there is no contiguous slice to read and answering would mean scanning every byte of the store "
-            f"-- measured at 1 777 ms against 2.2 ms on a 16 um matrix. It is indexed on: {available}. Register a layout compressing one of the axes `at` names."
+            f"'{dataset.name}' holds no layout indexed on any of {sorted(pinned)}, so there is no contiguous slice to read and answering would mean scanning every byte of the store "
+            f"-- measured at 1 777 ms against 2.2 ms on a 16 um matrix. It is indexed on: {available}. Register a layout compressing one of the axes the lens pins."
         )
-
-    resolved = [color_by_models.AxisPositionModel(axis=position.axis, value=position.value) for position in positions]
-    return dataset, sorted(resolved, key=lambda position: position.axis)
+    return lens
 
 
 def _build_sparse_color_by(info: Info, system, color_by, *, source: str, reachable: dict | None = None) -> color_by_models.ColorByModel:
@@ -854,14 +857,11 @@ def _build_sparse_color_by(info: Info, system, color_by, *, source: str, reachab
     1 777 ms against 2.2 ms, measured. A colouring the server knows would do that is one it
     refuses rather than publishes.
     """
-    dataset, positions = _resolve_sparse_slice(
-        info, system, color_by.dataset, color_by.at, source=source, reachable=reachable
-    )
+    lens = _resolve_sparse_slice(info, system, color_by.lens, source=source, reachable=reachable)
 
     return color_by_models.ColorByModel(
         kind="SPARSE",
-        dataset=str(dataset.pk),
-        at=positions,
+        lens=str(lens.pk),
         colormap=color_by.colormap,
         min=color_by.min,
         max=color_by.max,
@@ -1049,12 +1049,12 @@ def build_color_bys(
         key = (
             # The variant is part of what a colouring *is*, so it is part of the key -- and so
             # are the fields only one variant carries, or two slices of one matrix would key
-            # identically and the second be refused as a duplicate of the first. `attribute`
+            # identically and the second be refused as a duplicate of the first. A slice is a
+            # lens, one row per selection, so its id is the whole of that identity. `attribute`
             # and `target` join for the GRAPH member: one metric aimed at nodes and the same
             # metric aimed at edges are two colourings someone might genuinely switch between.
             checked.kind,
-            checked.dataset,
-            tuple((position.axis, position.value) for position in checked.at),
+            checked.lens,
             tuple((step.table, step.column) for step in checked.join_path),
             checked.table,
             checked.column,
@@ -1072,7 +1072,7 @@ def build_color_bys(
             elif checked.kind == "GRAPH":
                 what = f"graph attribute '{checked.attribute}' ({checked.target})"
             else:
-                what = f"{', '.join(f'{position.axis}={position.value}' for position in checked.at)} of sparse dataset {checked.dataset}"
+                what = f"the slice sparse lens {checked.lens} selects"
             raise ValueError(
                 f"colorBys[{index}] colours by {what} exactly as colorBys[{seen[key]}] does -- same source, same colormap, same window. "
                 "Two entries that render identically are one colouring wearing two names; drop one, or give it a different colormap, window or source."
@@ -1231,16 +1231,13 @@ def build_filter_bys(
             # `_resolve_sparse_slice` is what keeps "offered means accepted" true across the
             # two pickers rather than only within each.
             try:
-                dataset, positions = _resolve_sparse_slice(
-                    info, system, filter_by.dataset, filter_by.at, source=source, reachable=reachable_sparse
-                )
+                lens = _resolve_sparse_slice(info, system, filter_by.lens, source=source, reachable=reachable_sparse)
             except ValueError as error:
                 raise ValueError(f"filterBys[{index}]: {error}") from error
             entries.append(
                 entry_model(
                     kind="SPARSE",
-                    dataset=str(dataset.pk),
-                    at=positions,
+                    lens=str(lens.pk),
                     min=filter_by.min,
                     max=filter_by.max,
                     exclude=filter_by.exclude,

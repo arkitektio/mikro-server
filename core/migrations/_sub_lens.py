@@ -38,6 +38,35 @@ def dataset_geometry(apps, dataset_id: int) -> tuple[list[int], list[str], list[
     return (list(level) if isinstance(level, list) else []), [axis.name for axis in axes], [axis.type for axis in axes]
 
 
+@dataclasses.dataclass(frozen=True)
+class _Window:
+    axis: str
+    min: float | None = None
+    max: float | None = None
+
+
+def sparse_slice_lens_id(apps, dataset_id: int, positions: list[dict]) -> int:  # noqa: ANN001 - the migration's app registry
+    """The pk of the sparse dataset's lens pinning these positions -- one window per named axis with min == max: the row that exists, or a new one.
+
+    A windowed lens owns no space of its own: it lives in its container's system and keeps
+    normalized windows, exactly as ``createSparseLens`` makes it.
+    """
+    SparseLens = apps.get_model("core", "SparseLens")
+    SparseDataset = apps.get_model("core", "SparseDataset")
+    Axis = apps.get_model("core", "Axis")
+    ContentType = apps.get_model("contenttypes", "ContentType")
+    dataset = SparseDataset.objects.get(pk=dataset_id)
+    names = [axis.name for axis in Axis.objects.filter(coordinate_system_id=dataset.coordinate_system_id).order_by("order")]
+    normalized = coords.normalize_windows(names, [_Window(axis=entry["axis"], min=float(entry["value"]), max=float(entry["value"])) for entry in positions])
+    existing = SparseLens.objects.filter(sparse_dataset_id=dataset_id, windows=normalized).order_by("pk").values_list("pk", flat=True).first()
+    if existing is not None:
+        return existing
+    ctype, _ = ContentType.objects.get_or_create(app_label="core", model="sparselens")
+    lens = SparseLens(sparse_dataset_id=dataset_id, coordinate_system_id=dataset.coordinate_system_id, organization_id=dataset.organization_id, polymorphic_ctype_id=ctype.pk, windows=normalized)
+    lens.save()
+    return lens.pk
+
+
 def sub_lens_id(apps, parent_lens_id: int, axis: str, local_index: int) -> int:  # noqa: ANN001 - the migration's app registry
     """The pk of the dataset's lens that keeps one position of ``axis`` of the parent lens: the row that exists, or a new one.
 

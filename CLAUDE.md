@@ -24,7 +24,11 @@ component lenses cut from its `lens`, and a channel or phasor node of an image l
 graph names the single-channel lens it samples (`Layer.channel_lenses` indexes them for the
 delete guard). Scene bootstrap cuts one sub-lens per channel (`create_sub_lens`), so the
 lenses a dataset's channels are drawn through are rows shared by every scene; `Lens.scenes`
-therefore answers for every selection within a lens (`lens_ids_within`). Every create-lens mutation composes over a lens (slices compose, windows intersect),
+therefore answers for every selection within a lens (`lens_ids_within`). The same rule holds
+off the array: a SPARSE colour or filter picker entry names a `SparseLens` whose windows pin
+one position on every axis the matrix identifies itself by (`min == max`), never a dataset
+plus positions; `_resolve_sparse_slice` checks the lens, and a lens a picker names is held by
+the delete guard like a lens a layer draws through. Every create-lens mutation composes over a lens (slices compose, windows intersect),
 and `createLens` also cuts from a `box` in any space the dataset reaches or from an
 `annotation`; the result is always the container's row for what is selected. A lens is
 reached across a polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never

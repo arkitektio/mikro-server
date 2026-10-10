@@ -28,6 +28,7 @@ from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
 from core.logic import compositions as compositions_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
+from core.logic import pickers as pickers_logic
 from core.logic import placement as placement_logic
 from core.scoping import get_for_org
 
@@ -703,10 +704,14 @@ def lens_ids_within(lens: "models.Lens") -> list[int]:
 
 
 def layers_drawing_through(lens: "models.Lens") -> "QuerySet[models.Layer]":
-    """Every layer whose picture this lens is part of: its own, and -- for an array lens -- those naming it as an RGB component or a render-graph source."""
+    """Every layer whose picture this lens is part of: its own; for an array lens those naming it as an RGB component or a render-graph source; for a sparse lens those whose pickers read its slice."""
     query = Q(lens=lens)
     if isinstance(lens, models.ArrayLens):
         query |= Q(red_lens=lens) | Q(green_lens=lens) | Q(blue_lens=lens) | Q(channel_lenses=lens)
+    if isinstance(lens, models.SparseLens):
+        # A colour or filter picker names the slice it reads by id inside a JSON document; the
+        # guard is the PROTECT a foreign key would be.
+        query |= pickers_logic.names_sparse_lens(str(lens.pk))
     return models.Layer.objects.filter(query).distinct()
 
 
