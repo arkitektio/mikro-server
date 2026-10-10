@@ -174,35 +174,20 @@ def build_render_graph(info: Info, graph_input: layer_inputs.LayerRenderGraphInp
     return layer_models.LayerRenderGraphModel(root=root).model_dump(mode="json")
 
 
-def assert_renderable(lens) -> coords_logic.RenderAxes:
+def assert_renderable(lens: "models.ArrayLens") -> coords_logic.RenderAxes:
     """Check a lens can be drawn, and return the axes a renderer maps to screen.
 
-    The x/y/z/t/intensity mapping is no longer stored on the layer: it follows from
-    the axis types and names, so two layers over one lens cannot disagree about it.
-    See :func:`core.logic.coords.resolve_render_axes`.
-
-    **These were two bare ``assert`` statements until 2026-08-21.** An ``assert`` is
-    removed by ``python -O``, so the renderability gate vanished entirely in exactly
-    the deployment most likely to run that way -- and where it did fire it surfaced as
-    an ``AssertionError``, which reads as a server fault rather than as something the
-    caller can act on. The same class of bug was deliberately removed from
-    :func:`core.mutations.array_dataset.assert_axes_describe_the_store` a day earlier;
-    this one was missed because it sits behind a helper rather than in the mutation.
-
-    The message matches the one :func:`core.logic.scene.bootstrap_scene_from_system` raises for the
-    identical condition -- the rule is stated in two places and should read the same
-    in both.
+    The x/y/z/t/intensity mapping is not stored on the layer: it follows from the axis types
+    and names (:func:`core.logic.coords.resolve_render_axes`), so two layers over one lens
+    cannot disagree about it. The gate itself is :func:`core.logic.coords.is_renderable`, the
+    one predicate the lens picker and the scene bootstrap apply too; this raises its refusal
+    in prose a caller can act on.
     """
     axes = coords_logic.resolve_render_axes(lens.axis_specs)
-    width, height = lens.get_size_of_axis(axes.x), lens.get_size_of_axis(axes.y)
-    if width <= 1 or height <= 1:
-        raise ValueError(
-            f"Lens {lens.pk} is not renderable: its x axis '{axes.x}' ({width} px) and y axis "
-            f"'{axes.y}' ({height} px) must both have more than one pixel"
-        )
+    if not coords_logic.is_renderable(lens.axis_specs, lens.axis_names, lens.shape_list):
+        width, height = lens.get_size_of_axis(axes.x), lens.get_size_of_axis(axes.y)
+        raise ValueError(f"Lens {lens.pk} is not renderable: its x axis '{axes.x}' ({width} px) and y axis '{axes.y}' ({height} px) must both have more than one pixel")
     return axes
-
-
 def assert_single_channel(lens: "models.ArrayLens", *, role: str) -> None:
     """Refuse a lens that keeps more than one position on a CHANNEL axis, where one channel is drawn.
 
@@ -276,10 +261,10 @@ class CreateLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateLayerInputModel, description="Input type for creating an image from an array-like object")
+@kante.pydantic_input(CreateLayerInputModel, description="Input for creating an image layer: an array lens drawn through a composable render graph")
 class CreateLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of an existing scene to create the layer in. If not provided, a new scene will be created for the layer")
-    lens: strawberry.ID = strawberry.field(description="The ID of an existing lens to create the layer from. If not provided, a new lens will be created for the layer")
+    scene: strawberry.ID = strawberry.field(description="The scene to place the layer in")
+    lens: strawberry.ID = strawberry.field(description="The array lens the layer draws through")
     render_graph: layer_inputs.LayerRenderGraphInput = strawberry.field(
         description="The composable in-layer render graph (channels + transfer functions + in-layer blend). This is the single source of truth for how the image layer is rendered. For a simple single-channel layer use the createIntensityLayer mutation, which builds the graph for you."
     )
@@ -305,7 +290,7 @@ def create_layer(
     # while building it.
     render_graph = build_render_graph(info, model.render_graph, lens)
 
-    graph_logic.assert_placeable_in(scene.world, graph_logic.lens_source_system(lens), destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
     layer = models.Layer.objects.create(
         kind=enums.LayerKind.IMAGE,
@@ -333,11 +318,11 @@ class UpdateLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateLayerInputModel, description="Input type for creating an image from an array-like object")
+@kante.pydantic_input(UpdateLayerInputModel, description="Input for updating an image layer. Every field is a patch: what is not sent keeps its current value")
 class UpdateLayerInput:
     id: strawberry.ID = strawberry.field(description="The ID of the layer to update")
-    scene: strawberry.ID | None = strawberry.field(description="The ID of an existing scene to create the layer in. If not provided, a new scene will be created for the layer")
-    lens: strawberry.ID | None = strawberry.field(description="The ID of an existing lens to create the layer from. If not provided, a new lens will be created for the layer")
+    scene: strawberry.ID | None = strawberry.field(description="The scene to move the layer into; omit to keep it where it is")
+    lens: strawberry.ID | None = strawberry.field(description="The array lens to rebind the layer onto; omit to keep its lens")
     blending: enums.Blending | None = strawberry.field(description="Optional blending mode used to composite this layer over the layers below it.")
     opacity: float | None = strawberry.field(description="Optional layer alpha, from 0 (transparent) to 1 (opaque), for alpha-over compositing")
     visible: bool | None = strawberry.field(description="Optional flag controlling whether the layer participates in compositing.")
@@ -416,7 +401,7 @@ def update_layer(
     # there makes, so it meets the same gate. Only an actual change is checked: a
     # no-op resend of the current ids must not re-litigate an existing layer.
     if (model.lens and lens.pk != layer.lens_id) or (model.scene and scene.pk != layer.scene_id):
-        graph_logic.assert_placeable_in(scene.world, graph_logic.lens_source_system(lens), destination=f"the world of scene '{scene.name}'")
+        graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
     if model.lens:
         layer.lens = lens
@@ -481,7 +466,7 @@ def _create_flat_layer(info: Info, *, lens_id: str, scene_id: str, kind: enums.L
     lens = get_for_org(models.ArrayLens, info, id=lens_id)
     scene = get_for_org(models.Scene, info, id=scene_id)
 
-    graph_logic.assert_placeable_in(scene.world, graph_logic.lens_source_system(lens), destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
     return models.Layer.objects.create(
         kind=kind,
@@ -1408,7 +1393,7 @@ def build_label_render(info: Info, render: layer_inputs.LabelRenderInputModel | 
     # One walk of the FIELD edges for both pickers: they are two questions about the same
     # relation, and the coordinate graph does not need traversing twice to answer them.
     names_a_picker = render.color_bys is not None or render.filter_bys is not None
-    system = column_options_logic.lens_source_system(lens) if names_a_picker else None
+    system = lens.coordinate_system if names_a_picker else None
     reachable = reachable_tables(info, system) if names_a_picker else None
 
     built_color_bys = build_color_bys(
@@ -1506,7 +1491,7 @@ def create_label_layer(info: Info, input: CreateLabelLayerInput) -> types.LabelL
 
     label_render = build_label_render(info, model.render, lens)
 
-    graph_logic.assert_placeable_in(scene.world, graph_logic.lens_source_system(lens), destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
     return models.Layer.objects.create(
         kind=enums.LayerKind.LABEL,

@@ -1915,9 +1915,7 @@ def lens_derived_datasets(lens: "models.ArrayLens") -> list["models.ArrayDataset
     from the whole grid. That is not a leak: the model has one space there, and saying
     otherwise would invent a distinction nothing stored can support.
     """
-    space = lens.space
-    if space is None:
-        return []
+    space = lens.coordinate_system
     return _datasets_derived_into(Q(output=space), exclude_pk=lens.dataset_id)
 
 
@@ -3483,24 +3481,14 @@ def compute_intrinsic_bbox(system: "models.CoordinateSystem", vectors: list[list
     return bbox_along_chain(intrinsic_chain(system), vectors)
 
 
-def lens_source_system(lens: "models.Lens") -> "models.CoordinateSystem | None":
-    """The space a lens' data is expressed in: its own crop space, or its container's system.
+def layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem":
+    """The coordinate system a layer's data is expressed in: its lens' system.
 
-    Only a sliced array lens owns a system; every other lens lives in its container's.
+    Every layer draws through a lens, whatever its kind, and every lens has a system -- its
+    own crop space for a sliced array lens, its container's otherwise -- so the one question
+    has one answer for all of them, read off the lens.
     """
-    return getattr(lens, "coordinate_system", None) or getattr(lens.container, "coordinate_system", None)
-
-
-def layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem | None":
-    """The coordinate system a layer's data is expressed in: its lens' space.
-
-    Every layer draws through a lens, whatever its kind -- an array lens for the array kinds,
-    a table lens for points and tracks, a mesh, network or annotation lens for the collection
-    kinds -- so the one question has one answer for all of them.
-    """
-    if layer.lens_id is None:
-        return None
-    return lens_source_system(layer.lens)
+    return layer.lens.coordinate_system
 
 
 def system_dataset(system: "models.CoordinateSystem") -> "models.ArrayDataset | None":

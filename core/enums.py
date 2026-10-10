@@ -204,18 +204,6 @@ class LayerKindChoices(TextChoices):
     VECTOR = "vector", "Vector (per-voxel vectors drawn as glyphs)"
 
 
-#: The layer kinds whose data comes from a lens -- that is, from an array.
-#:
-#: Written once because it is read as a *group* in three unrelated places: which layers have a
-#: coordinate system to be placed in (`core.logic.graph.layer_source_system`), which have a
-#: pyramid to walk (`core.logic.scene_graph.level_placements`), and which a lens picker can
-#: offer. None of those cares how the layer is drawn, which is the only thing that separates
-#: the members -- so each spelling the list out again is five chances to add a sixth way of
-#: drawing array data and leave a layer with no space to be in and no levels to place. That is
-#: not hypothetical: it is exactly what adding INTENSITY, RGB and PHASOR did to two hand-written
-#: `(IMAGE, LABEL)` tuples, and the layers came back UNREGISTERED rather than erroring.
-LENS_BACKED_KINDS: frozenset[str] = frozenset(kind.value for kind in LayerKindChoices)
-
 #: The kinds that draw an *array* lens: the ones with a pyramid to walk, axes to face the
 #: screen with, and a renderability gate. The other kinds draw a table, mesh, network or
 #: annotation lens.
@@ -584,50 +572,6 @@ _describe(
     VOLUME="One INTENSITY layer per channel as above, each with `projectionMode` set to MIP. Inferred when the dataset has a z axis with more than one plane. The one member with no `LayerKind` of its own: a projection is a setting on one channel, not a kind of layer.",
     LABEL="A single categorical source mapping discrete integer labels to distinct colors. Never inferred from structure -- nothing about an array distinguishes a label map from an image -- so it comes either from a derivation declared CATEGORIZED or from stating it outright.",
     VECTOR="A single VECTOR layer drawing the dataset's vectors as glyphs. Inferred whenever the dataset carries a DISPLACEMENT value axis -- like LABEL's CATEGORIZED edge, that axis type is something an author stated rather than a shape to guess from, so the inference is reading a declaration back. There are no channels to peel: the value axis's positions are components of one offset, not signals to layer separately.",
-)
-
-
-@strawberry.enum(description="The kind of layer a lens could source, for narrowing a picker: the members of `LayerKind` that draw array data. Input-only, and deliberately not `LayerKind` itself -- an annotation, point, track or mesh layer sources from a collection or a table, never from a lens, so four of that enum's members could only ever answer 'no'.")
-class LensLayerKind(str, Enum):
-    """The kind of layer a lens could source.
-
-    An input-only vocabulary for `LensFilter.placeableIn.asLayer` (never a DB column,
-    so a strawberry enum only). It narrows a candidate list, it does not decide
-    anything: the create mutations all take any lens they can draw, and none reads this.
-
-    One member per layer kind a lens can source, because a picker asking "what could I make
-    from this lens?" wants them named. The six array kinds ask something of the lens' axes on
-    top of renderability; the five collection kinds ask which container the lens selects over
-    (and, for a table, what its schema declares). A sparse dataset has no layer kind, so a
-    sparse lens answers `placeableIn` without `asLayer` only.
-    """
-
-    IMAGE = "image"
-    INTENSITY = "intensity"
-    RGB = "rgb"
-    PHASOR = "phasor"
-    LABEL = "label"
-    VECTOR = "vector"
-    POINT = "point"
-    TRACK = "track"
-    MESH = "mesh"
-    NETWORK = "network"
-    ANNOTATION = "annotation"
-
-
-_describe(
-    LensLayerKind,
-    IMAGE="Drawable as a general image layer -- which is every lens with an x and a y axis of more than one pixel. It is the renderability gate alone, and deliberately *not* the complement of the others: a mask drawn through a render graph is a legitimate thing to want, and `createLayer` does not refuse one.",
-    INTENSITY="Drawable as an intensity layer: renderable, which is the whole condition. Every lens an image layer can draw, one channel of it can also be drawn on its own.",
-    RGB="Drawable as an RGB layer: renderable, and carrying a channel axis with at least three positions. Structural capacity only -- whether those three channels *are* red, green and blue is a fact about the acquisition, which a shape cannot carry. `createSceneFromCoordinateSystem` answers it from what ingest recorded (channel labels, a photographic source file) and falls back to one layer per channel; this filter answers the narrower structural question and never guesses.",
-    PHASOR="Drawable as a phasor layer: renderable, and carrying a MICROTIME or SPECTRUM axis -- the continuous ones a phasor transform means anything over.",
-    LABEL="Drawable as a label layer: renderable, and derived by an edge declaring CATEGORIZED -- the values became object ids. The same signal `createSceneFromCoordinateSystem` infers a label layer from, asked of a candidate instead of a source, so a picker and a bootstrapped scene cannot disagree about what a label is.",
-    VECTOR="Drawable as a vector layer: renderable, and carrying a DISPLACEMENT value axis -- the values are components of a per-point offset. The same signal `createSceneFromCoordinateSystem` infers a vector layer from, asked of a candidate instead of a source, for LABEL's stated reason.",
-    POINT="Drawable as a point layer: a lens over a table that declares at least two SPACE coordinate columns -- the gate `createPointLayer` applies.",
-    TRACK="Drawable as a track layer: a point-drawable table lens whose table also declares a TRACK_ID column -- the gate `createTrackLayer` applies.",
-    MESH="Drawable as a mesh layer: any lens over a mesh collection placeable here.",
-    NETWORK="Drawable as a network layer: any lens over a network collection placeable here.",
-    ANNOTATION="Drawable as an annotation layer: any lens over an annotation collection placeable here.",
 )
 
 

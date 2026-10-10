@@ -15,7 +15,7 @@ refuses. The house states the invariant on the other picker already
 drops is too."*
 
 The sources that publish pickers each get a resolver here (:func:`mesh_collection_system`,
-:func:`network_collection_system`, :func:`lens_source_system`) and little else differs between
+:func:`network_collection_system`, and a lens' own `coordinate_system`) and little else differs between
 them: everything past the system is one walk and one answer, which is what lets one options
 query serve them under their several names. The network one differs twice, both stated at
 :func:`build_network_column_options`: it prepends the graph attributes its collection carries,
@@ -77,22 +77,6 @@ def network_collection_system(collection) -> "models.CoordinateSystem":
     system = getattr(collection, "coordinate_system", None)
     if system is None:
         raise ValueError(f"Network collection {collection.pk} has no coordinate system, so there is no FIELD edge out of it and nothing to colour by or filter on.")
-    return system
-
-
-def lens_source_system(lens) -> "models.CoordinateSystem":
-    """The space a mask's pixels are expressed in, or the refusal if it has none.
-
-    :func:`~core.logic.graph.lens_source_system`'s strict twin, and here beside
-    :func:`mesh_collection_system` because the two pickers ask the same question of their two
-    sources: which system do the FIELD edges leave from. Returning ``None`` into a reachability
-    walk would answer "no tables" where the honest answer is "this lens is not placed".
-    """
-    from core.logic import graph as graph_logic
-
-    system = graph_logic.lens_source_system(lens)
-    if system is None:
-        raise ValueError(f"Lens {lens.pk} is in no coordinate system, so there is no FIELD edge out of it and nothing to colour by or filter on.")
     return system
 
 

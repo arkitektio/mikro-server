@@ -524,9 +524,11 @@ def _get_or_create(kind: "type[models.Lens]", *, container: object, selection: l
 def whole_lens(container: object) -> "models.Lens":
     """The lens selecting all of a container: the one row that exists for it, made if it does not.
 
-    Every container has this lens from creation (each `create*` mutation ends with it), so on
-    a container written by this release the lookup always finds one. The create branch is for
-    the containers written before that rule and not yet visited by ``merge_duplicate_lenses``.
+    Every container has this lens from creation (each `create*` mutation ends with it), and
+    every lens mutation reaches its container's row through here, so the lookup is the common
+    path and the create branch the rare one: a container whose row is missing -- a canonical
+    spelling that changed under it, or a row removed by hand -- gets it on first use, as
+    ``merge_duplicate_lenses`` gives it to every such container in one pass.
 
     It takes no creation context because nothing is minted beside the row: a whole lens
     selects everything, so its space *is* the container's, and it points at that node rather

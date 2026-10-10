@@ -5,7 +5,6 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import Q
 from django_choices_field import TextChoicesField
-from koherent.fields import ProvenanceField
 
 from chart import enums
 
@@ -40,7 +39,6 @@ class Chart(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    provenance = ProvenanceField()
 
     class Meta:
         ordering = ["-created_at"]
@@ -81,7 +79,6 @@ class ChartLayer(models.Model):
     line_width = models.FloatField(null=True, blank=True, help_text="(trace/series) Line width in screen pixels. Null to let the viewer choose")
     marker_size = models.FloatField(null=True, blank=True, help_text="(trace/series) Marker size in screen pixels. Null to let the viewer choose")
 
-    provenance = ProvenanceField()
 
     class Meta:
         ordering = ["order", "id"]

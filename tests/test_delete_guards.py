@@ -119,24 +119,6 @@ async def test_delete_array_dataset_denied_for_non_owner(db, authenticated_conte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_data_array(db, authenticated_context: HttpContext):
-    array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)
-    # Level 1, not 0: the seed already created level 0, and (dataset, level) is
-    # unique -- two arrays claiming the same level would make "the level-0 array"
-    # ambiguous everywhere.
-    data_array = await models.DataArray.objects.acreate(
-        level=1, dataset=array_dataset, shape=[1, 32, 32], chunk_shape=[1, 32, 32]
-    )
-
-    mutation = "mutation($id: ID!) { deleteDataArray(input: {id: $id}) }"
-    result = await schema.execute(mutation, variable_values={"id": str(data_array.pk)}, context_value=authenticated_context)
-
-    assert not result.errors, result.errors
-    assert not await models.DataArray.objects.filter(id=data_array.pk).aexists()
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
 async def test_delete_lens(db, authenticated_context: HttpContext):
     """A sliced lens nothing draws through can go."""
     array_dataset = await _seed_array_dataset(authenticated_context, creator=authenticated_context.request.user)

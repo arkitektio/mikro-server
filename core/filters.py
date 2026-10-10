@@ -71,14 +71,16 @@ class LensPlaceableFilter:
             "more: every lens it keeps is one `createLayer` accepts, and every lens it drops is too"
         ),
     )
-    as_layer: enums.LensLayerKind | None = strawberry.field(
+    as_layer: enums.LayerKind | None = strawberry.field(
         default=None,
         description=(
-            "Keep only the lenses that could source a layer of this kind. Every member requires the lens to be drawable at all -- an x and a y axis of more than one pixel, the same "
-            "gate layer creation applies. Three ask something further: `LABEL` a primary derivation declaring CATEGORIZED, `RGB` a channel axis with at least three positions, and "
-            "`PHASOR` a MICROTIME or SPECTRUM axis. `RGB` is capacity only -- whether those three channels *are* red, green and blue is not a question any axis can answer, which is "
-            "why RGB is never inferred. Note that *omitting* this applies no renderability gate, so `IMAGE` is a real narrowing rather than a no-op: the unqualified filter answers "
-            "what is placeable, which is a spatial question, not what is drawable"
+            "Keep only the lenses that could source a layer of this kind, named as `LayerKind` names it. The six array kinds require the lens to be drawable at all -- an x and a y axis "
+            "of more than one pixel, the gate layer creation applies -- and three ask something further: `LABEL` a primary derivation declaring CATEGORIZED, `RGB` a channel axis with at "
+            "least three positions to cut the components from, and `PHASOR` a MICROTIME or SPECTRUM axis. `RGB` is capacity only -- whether those three channels *are* red, green and blue "
+            "is not a question any axis can answer, which is why RGB is never inferred. The five container kinds keep the lenses over the container the kind draws: `POINT` and `TRACK` a "
+            "table with coordinate columns, `MESH` a mesh collection, `NETWORK` a network collection, `ANNOTATION` an annotation collection; a sparse lens answers `placeableIn` without "
+            "`asLayer` only, since nothing draws a matrix. Note that *omitting* this applies no renderability gate, so `IMAGE` is a real narrowing rather than a no-op: the unqualified "
+            "filter answers what is placeable, which is a spatial question, not what is drawable"
         ),
     )
 
@@ -791,7 +793,7 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
             lens_model, container_ids = _COLLECTION_LAYER_KINDS[value.as_layer](placeable)
             return Q(**{f"{prefix}{lens_model.__name__.lower()}__{lens_model.CONTAINER_FIELD}_id__in": container_ids})
 
-        if value.as_layer == enums.LensLayerKind.LABEL:
+        if value.as_layer == enums.LayerKind.LABEL:
             dataset_ids = graph_logic.categorized_dataset_ids(dataset_ids)
         # Renderability is per *lens* -- a slice can crop x to a single column -- so the
         # answer stops being a dataset question and the filter keys on lens ids.
@@ -1153,10 +1155,10 @@ def _requires_vector_axis(axes: "Sequence[coords_logic.AxisSpec]", names: "Seque
 #: IMAGE, INTENSITY and LABEL are absent because they ask nothing extra: any drawable lens
 #: yields a general or a single-channel layer, and LABEL's extra condition is about the
 #: dataset's derivation rather than its axes, so it narrows `dataset_ids` earlier instead.
-_LENS_KIND_REQUIREMENTS: "dict[enums.LensLayerKind, Callable[[Sequence[coords_logic.AxisSpec], Sequence[str], Sequence[int]], bool]]" = {
-    enums.LensLayerKind.RGB: _requires_rgb_capacity,
-    enums.LensLayerKind.PHASOR: _requires_phasor_axis,
-    enums.LensLayerKind.VECTOR: _requires_vector_axis,
+_LENS_KIND_REQUIREMENTS: "dict[enums.LayerKind, Callable[[Sequence[coords_logic.AxisSpec], Sequence[str], Sequence[int]], bool]]" = {
+    enums.LayerKind.RGB: _requires_rgb_capacity,
+    enums.LayerKind.PHASOR: _requires_phasor_axis,
+    enums.LayerKind.VECTOR: _requires_vector_axis,
 }
 
 
@@ -1180,12 +1182,12 @@ def _point_table_ids(table_ids: "set[int]", *, track: bool) -> set[int]:
 
 
 #: The collection layer kinds: which lens model answers, over which of the placeable containers.
-_COLLECTION_LAYER_KINDS: "dict[enums.LensLayerKind, Callable[[dict[type, set[int]]], tuple[type, set[int]]]]" = {
-    enums.LensLayerKind.POINT: lambda placeable: (models.TableLens, _point_table_ids(placeable[models.TableDataset], track=False)),
-    enums.LensLayerKind.TRACK: lambda placeable: (models.TableLens, _point_table_ids(placeable[models.TableDataset], track=True)),
-    enums.LensLayerKind.MESH: lambda placeable: (models.MeshLens, placeable[models.MeshCollection]),
-    enums.LensLayerKind.NETWORK: lambda placeable: (models.NetworkLens, placeable[models.NetworkCollection]),
-    enums.LensLayerKind.ANNOTATION: lambda placeable: (models.AnnotationLens, placeable[models.AnnotationCollection]),
+_COLLECTION_LAYER_KINDS: "dict[enums.LayerKind, Callable[[dict[type, set[int]]], tuple[type, set[int]]]]" = {
+    enums.LayerKind.POINT: lambda placeable: (models.TableLens, _point_table_ids(placeable[models.TableDataset], track=False)),
+    enums.LayerKind.TRACK: lambda placeable: (models.TableLens, _point_table_ids(placeable[models.TableDataset], track=True)),
+    enums.LayerKind.MESH: lambda placeable: (models.MeshLens, placeable[models.MeshCollection]),
+    enums.LayerKind.NETWORK: lambda placeable: (models.NetworkLens, placeable[models.NetworkCollection]),
+    enums.LayerKind.ANNOTATION: lambda placeable: (models.AnnotationLens, placeable[models.AnnotationCollection]),
 }
 
 
@@ -1193,69 +1195,33 @@ def _renderable_lens_ids(dataset_ids: "set[int]", requires: "Callable[[Sequence[
     """Of these datasets' lenses, the ids of the ones that can actually be drawn.
 
     ``requires`` is an optional second gate applied to the same walk, for the kinds that ask
-    something of the axes on top of renderability -- an RGB layer needs three channels, a
-    phasor layer needs an axis to transform over. It is a parameter rather than a second
-    function because the expensive part is the batched axis-and-shape assembly below, and
-    doing that twice to ask two questions about one lens would be the whole cost again.
+    something of the axes on top of renderability -- an RGB layer needs three channels to cut
+    its components from, a phasor layer needs an axis to transform over.
 
     The batched form of the check `core.mutations.layer.assert_renderable` makes one lens at
     a time, so a picker never offers a lens creation would then refuse. Per *lens*, not per
     dataset, because a slice can crop x or y to a single column and that lens is undrawable
-    while its dataset is fine.
-
-    Python-side, and batched by hand, for two reasons. The sizes live in `DataArray.shape`
-    and `Lens.slices` JSON, so there is no honest SQL form of "x has more than one pixel".
-    And the model properties that answer it are per-instance walks -- `Lens.axis_specs`
-    goes through `ArrayDataset.axes` to `coordinate_system.axes`, `ArrayDataset.shape_list` does
-    `data_arrays.order_by("level").first()` -- so a loop over `select_related("dataset")`
-    lenses would be two queries *each*, and the `order_by` defeats a plain
-    `prefetch_related` as well. Three queries total instead, bounded by the placeable set
-    the filter has already computed.
+    while its dataset is fine. Loaded through `ArrayLens.objects.with_sources()`, which fetches
+    every lens' dataset, axes and arrays in one query per relation, so the per-lens properties
+    read nothing further.
     """
     if not dataset_ids:
         return set()
-
-    lenses = list(models.ArrayLens.objects.filter(dataset_id__in=dataset_ids).only("id", "dataset_id", "slices"))
-    if not lenses:
-        return set()
-
-    involved = {lens.dataset_id for lens in lenses}
-
-    # `Axis.Meta.ordering` is `["order"]`, which is what `system.axes.all()` gives
-    # `ArrayDataset.axes`; ordering by the dataset then the axis order reproduces it per group.
-    axes_by_dataset: dict[int, list[coords_logic.AxisSpec]] = {}
-    for dataset_id, name, axis_type in (
-        models.Axis.objects.filter(coordinate_system__datasets__in=involved)
-        .order_by("coordinate_system__datasets__id", "order")
-        .values_list("coordinate_system__datasets__id", "name", "type")
-    ):
-        axes_by_dataset.setdefault(dataset_id, []).append(coords_logic.AxisSpec(name=name, type=axis_type))
-
-    # `ArrayDataset.shape_list` is the lowest level's shape, so the first row of each group wins.
-    shape_by_dataset: dict[int, list[int]] = {}
-    for dataset_id, shape in models.DataArray.objects.filter(dataset_id__in=involved).order_by("dataset_id", "level").values_list("dataset_id", "shape"):
-        shape_by_dataset.setdefault(dataset_id, shape if isinstance(shape, list) else [])
-
     renderable: set[int] = set()
-    for lens in lenses:
-        axes = axes_by_dataset.get(lens.dataset_id, [])
-        names = [axis.name for axis in axes]
-        shape = shape_by_dataset.get(lens.dataset_id, [])
-        # `lens_shape` zips the two `strict=True`, so a dataset whose axes and arrays
-        # disagree (or that has no array at all) would raise rather than answer. Nothing to
-        # draw is the answer here, and a picker is the wrong place to discover the mismatch.
-        if len(names) != len(shape):
+    for lens in models.ArrayLens.objects.with_sources().filter(dataset_id__in=dataset_ids):
+        axes, names = lens.axis_specs, lens.axis_names
+        dataset_shape = lens.dataset.shape_list
+        # A dataset whose axes and arrays disagree, or that has no array at all, has nothing to
+        # draw -- and a picker is the wrong place to discover the mismatch.
+        if len(names) != len(dataset_shape):
             continue
-        lens_shape = coords_logic.lens_shape(shape, names, lens.slices_list)
-        if not coords_logic.is_renderable(axes, names, lens_shape):
+        shape = coords_logic.lens_shape(dataset_shape, names, lens.slices_list)
+        if not coords_logic.is_renderable(axes, names, shape):
             continue
-        if requires is not None and not requires(axes, names, lens_shape):
+        if requires is not None and not requires(axes, names, shape):
             continue
         renderable.add(lens.pk)
-
     return renderable
-
-
 def _annotate_once(queryset: QuerySet, alias: str, expression) -> QuerySet:
     """Add an annotation unless the alias is already taken by an identical one.
 

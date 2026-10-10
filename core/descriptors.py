@@ -128,34 +128,34 @@ def network_descriptors(collection: models.NetworkCollection, *, is_whole: bool 
     }
 
 
-def annotations_in_windows(collection: models.AnnotationCollection, windows: Sequence[coords_logic.WindowLike]) -> int:
-    """How many of a collection's annotations lie in these windows, judged the way the overlap filter judges a shape: by the box of its vertices and pins.
+def annotations_in_windows(collection: models.AnnotationCollection, windows: Sequence[coords_logic.WindowLike]) -> list[models.Annotation]:
+    """A collection's annotations lying in these windows, judged the way the overlap filter judges a shape: by the box of its vertices and pins.
 
-    One COUNT for a whole lens. For a windowed one the shapes are read and each box is compared
-    in the drawing space -- the collection's own units, which is what a window is stated in --
-    so a shape that is drawn is counted, not a shape whose stored bbox says so.
+    Every row for a whole lens. For a windowed one each shape's box is compared in the drawing
+    space -- the collection's own units, which is what a window is stated in -- so a shape
+    that is drawn is kept, not a shape whose stored bbox says so. The one implementation
+    behind `AnnotationLens.annotations` and the `@mikro/n_annotations` descriptor.
     """
+    rows = collection.annotations.order_by("pk")
     if not windows:
-        return collection.annotations.count()
+        return list(rows)
     system = collection.coordinate_system_or_none
     if system is None:
-        return 0
+        return []
     names = [axis.name for axis in system.axes.all()]
     bounds = coords_logic.window_bounds(windows)
-    kept = 0
-    for annotation in collection.annotations.only("coordinates", "vectors"):
+    kept = []
+    for annotation in rows:
         pins = {name: float(value) for name, value in (annotation.coordinates or {}).items()}
         box = coords_logic.annotation_box(names, annotation.vectors or [], pins, padded=False)
         if box is not None and coords_logic.boxes_overlap(box, bounds):
-            kept += 1
+            kept.append(annotation)
     return kept
-
-
 def annotation_descriptors(collection: models.AnnotationCollection, windows: Sequence[coords_logic.WindowLike] = (), *, is_whole: bool = True) -> Descriptors:
     """An annotation collection's descriptors: the axes of its drawing space and how many shapes the selection holds."""
     system = collection.coordinate_system_or_none
     axis_types = [axis.type for axis in system.axes.all()] if system is not None else []
-    return {**axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES), "@mikro/n_annotations": annotations_in_windows(collection, windows), IS_WHOLE: is_whole}
+    return {**axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES), "@mikro/n_annotations": collection.annotations.count() if not windows else len(annotations_in_windows(collection, windows)), IS_WHOLE: is_whole}
 
 
 def lens_descriptors(lens: models.Lens) -> Descriptors:

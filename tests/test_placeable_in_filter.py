@@ -44,7 +44,7 @@ _COORD_COLUMNS = [
 ]
 
 LENSES = """
-query Lenses($space: ID!, $derivedOnly: Boolean, $asLayer: LensLayerKind) {
+query Lenses($space: ID!, $derivedOnly: Boolean, $asLayer: LayerKind) {
   lenses(filters: { placeableIn: { space: $space, derivedOnly: $derivedOnly, asLayer: $asLayer } }) { id }
 }
 """
@@ -118,7 +118,7 @@ async def test_batched_helper_agrees_with_per_candidate_predicate(authenticated_
     def check() -> None:
         dataset_ids = graph_logic.placeable_lens_dataset_ids(scene.world)
         for lens in lenses:
-            source = graph_logic.lens_source_system(lens)
+            source = lens.coordinate_system
             expected = graph_logic.is_placeable_in(scene.world, source)
             assert (lens.dataset_id in dataset_ids) == expected, f"lens {lens.pk} disagrees: batched={lens.dataset_id in dataset_ids}, predicate={expected}"
 
@@ -185,7 +185,7 @@ async def test_unmappable_is_excluded_but_a_mappable_descendant_is_placeable(aut
         assert unmappable.pk not in ids, "the UNMAPPABLE gate refuses a derivation whose geometry did not survive"
         # Consistency with the single-source predicate, again, on the derived sources.
         for lens, dataset_id in ((lens_mappable, mappable.pk), (lens_unmappable, unmappable.pk)):
-            source = graph_logic.lens_source_system(lens)
+            source = lens.coordinate_system
             assert (dataset_id in ids) == graph_logic.is_placeable_in(scene.world, source)
 
     await sync_to_async(check)()
@@ -316,7 +316,7 @@ def _assert_all_placeable(space: models.CoordinateSystem, lens_ids: set[str]) ->
     """
     for lens_id in lens_ids:
         lens = models.Lens.objects.get(pk=lens_id)
-        assert graph_logic.is_placeable_in(space, graph_logic.lens_source_system(lens)), f"lens {lens_id} was offered but is not placeable"
+        assert graph_logic.is_placeable_in(space, lens.coordinate_system), f"lens {lens_id} was offered but is not placeable"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -441,7 +441,8 @@ async def test_the_renderability_pass_does_not_grow_with_the_number_of_lenses(au
 
     `Lens.axis_specs` walks the dataset's coordinate system's axes and `ArrayDataset.shape_list`
     orders the data arrays, so the obvious loop is two queries a lens and no `select_related`
-    fixes it. The helper batches all three fetches instead, and this is what says so.
+    fixes it. The helper loads the lenses through `ArrayLens.objects.with_sources()` -- one
+    query per relation, however many lenses -- and this is what says so.
     """
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -453,13 +454,14 @@ async def test_the_renderability_pass_does_not_grow_with_the_number_of_lenses(au
         for offset in range(3):
             await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 1 + offset, "stop": 64}])
 
-    def measure() -> int:
-        dataset_ids = {dataset.pk for dataset in datasets}
+    def measure(dataset_ids: set[int], expected: int) -> int:
         with CaptureQueriesContext(connection) as captured:
-            assert len(filters._renderable_lens_ids(dataset_ids)) == 8
+            assert len(filters._renderable_lens_ids(dataset_ids)) == expected
         return len(captured)
 
-    assert await sync_to_async(measure)() == 3, "one fetch of the lenses, one of the axes, one of the arrays"
+    one = await sync_to_async(measure)({datasets[0].pk}, 4)
+    both = await sync_to_async(measure)({dataset.pk for dataset in datasets}, 8)
+    assert one == both, f"a constant number of queries whatever the number of lenses, one per relation loaded: {one} for four lenses, {both} for eight"
 
 
 @pytest.mark.django_db(transaction=True)

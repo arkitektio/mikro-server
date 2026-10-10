@@ -483,60 +483,6 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
     assert not ambiguous, f"more than one concrete type claims the same kind: {ambiguous}"
 
 
-def test_every_kind_that_draws_a_lens_is_a_lens_backed_kind() -> None:
-    """`LENS_BACKED_KINDS` is the sixth hand-written registry, and the only one that had no guard.
-
-    Its own docstring records the failure: the frozenset is read as a *group* to answer which
-    layers have a space to be in (`layer_source_system`), which have a pyramid to walk
-    (`level_placements`), and which a lens picker can offer -- and when INTENSITY, RGB and
-    PHASOR were added to two hand-written `(IMAGE, LABEL)` tuples, the layers came back
-    UNREGISTERED rather than erroring. A kind can join the model, the mutations and the SDL
-    completely and still be missing here, and nothing raises.
-
-    Both directions, both derived rather than restated. Which kinds *should* be members is
-    read off the registered GraphQL types: declaring a `lens` field is the type's own claim
-    that the kind sources from a lens, and each type names its kind behaviourally through
-    `is_type_of`, exactly as the exactly-one-claimant test above asks it. Membership is then
-    checked behaviourally against a consumer: a stand-in layer of each lens-claiming kind is
-    handed to `layer_source_system`, which must route it through the lens arm -- the very
-    call that answered None and produced UNREGISTERED for the historical omissions.
-    """
-    import os
-    from types import SimpleNamespace
-
-    import django
-
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mikro_server.settings_test")
-    django.setup()
-
-    from core import enums, models
-    from core.logic import graph as graph_logic
-    from core.types.layers import layer_types
-
-    lens_kinds: set[str] = set()
-    for layer_type in layer_types:
-        if "lens" not in getattr(layer_type, "__annotations__", {}):
-            continue
-        for kind in enums.LayerKind:
-            if layer_type.is_type_of(models.Layer(kind=kind.value), None):
-                lens_kinds.add(kind.value)
-
-    stale = sorted(enums.LENS_BACKED_KINDS - lens_kinds)
-    assert not stale, (
-        f"{', '.join(stale)} are in LENS_BACKED_KINDS but no registered type carrying a `lens` "
-        f"field claims them. Either the kind lost its lens or the set names a kind that never existed."
-    )
-
-    space = object()
-    for kind in sorted(lens_kinds):
-        layer = SimpleNamespace(kind=kind, lens_id=1, lens=SimpleNamespace(coordinate_system=space))
-        assert graph_logic.layer_source_system(layer) is space, (
-            f"a {kind} layer draws a lens but `layer_source_system` does not route it through "
-            f"the lens arm -- it has no space to be in and comes back UNREGISTERED. Add "
-            f"'{kind}' to core.enums.LENS_BACKED_KINDS."
-        )
-
-
 def _query_fields_reading_rows():
     """Every Query field strawberry_django resolves itself, as (name, django type, model).
 

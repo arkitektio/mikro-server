@@ -37,6 +37,7 @@ from core.type_gen import create_stats_type
 
 from kanne_server import scalars as kanne_scalars
 
+from core import descriptors as descriptors_logic
 from core import order, base_models
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
@@ -667,7 +668,7 @@ class Lens:
     @kante.django_field(select_related=["coordinate_system"], description=_LENS_SYSTEM_DESCRIPTION)
     def coordinate_system(self, info: Info) -> CoordinateSystem | None:
         """The system the lens' selection is expressed in: its own, or its container's."""
-        return self.space
+        return self.coordinate_system
 
     name: str | None = kante.django_field(
         description="What someone called this selection, or null when nobody has. A label only: it is no part of what the lens selects, and a client shows the selection -- or 'the whole container' -- in its place"
@@ -866,24 +867,9 @@ class AnnotationLens(Lens, OrgScoped):
         )
     )
     def annotations(self, info: Info) -> List["Annotation"]:
-        """The shapes inside the windows."""
+        """The shapes inside the windows: every one of the collection's for the whole lens."""
         del info
-        collection = self.annotation_collection
-        rows = list(collection.annotations.order_by("pk"))
-        if self.is_whole:
-            return rows
-        system = collection.coordinate_system_or_none
-        if system is None:
-            return []
-        names = [axis.name for axis in system.axes.all()]
-        bounds = coords_logic.window_bounds(self.windows_list)
-        kept = []
-        for annotation in rows:
-            pins = {name: float(value) for name, value in (annotation.coordinates or {}).items()}
-            box = coords_logic.annotation_box(names, annotation.vectors or [], pins, padded=False)
-            if box is not None and coords_logic.boxes_overlap(box, bounds):
-                kept.append(annotation)
-        return kept
+        return descriptors_logic.annotations_in_windows(self.annotation_collection, [] if self.is_whole else self.windows_list)
 
 
 @kante.django_type(
@@ -931,11 +917,7 @@ class Animation:
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
-        """Scope the list to the request's organization.
-
-        A bare list field returns every row in the table, across organizations -- the hole
-        the legacy `snapshots` field still has.
-        """
+        """Scope the list to the request's organization: a bare list field would return every row in the table, across organizations."""
         return build_prescoped_queryset(info, queryset)
 
 
@@ -962,13 +944,7 @@ class SceneSnapshot:
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
-        """Scope the list to the request's organization.
-
-        Not inherited from anywhere: a bare list field returns every row in the table,
-        across organizations. The legacy `snapshots` field has exactly that hole -- only
-        its single-item resolver is scoped -- and it cannot be closed the same way there,
-        because Snapshot has no organization column to filter on. This model does.
-        """
+        """Scope the list to the request's organization: a bare list field would return every row in the table, across organizations, and this is not inherited from anywhere."""
         return build_prescoped_queryset(info, queryset)
 
 
@@ -1134,8 +1110,8 @@ def _resolve_laser_frequency(dataset: "models.ArrayDataset") -> int | None:
         "field here, and every spatial question a layer answers -- `pathToWorld`, `placement`, `placementValidity`, `placementInvariance` -- is derived from the graph on read and "
         "stored nowhere, so refining one edge updates every layer that looks through it. Which columns hold a point layer's coordinates is likewise the table dataset's declaration, "
         "not a per-layer copy. The concrete kind carries its own data source and render settings: IntensityLayer, RgbLayer, PhasorLayer and LabelLayer each state a recipe of fixed "
-        "shape as fields, ImageLayer carries a composable render graph for the layers that genuinely composite, and AnnotationLayer, PointLayer, TrackLayer and MeshLayer draw from a "
-        "collection or a table rather than a lens."
+        "shape as fields, ImageLayer carries a composable render graph for the layers that genuinely composite, and AnnotationLayer, PointLayer, TrackLayer, MeshLayer and NetworkLayer "
+        "draw through a lens over a collection or a table -- every layer, of every kind, draws through a lens of its source's kind."
     ),
 )
 class Layer:
@@ -1811,15 +1787,13 @@ class PointLayer(Layer):
         """The lens' table."""
         return self.lens.table_dataset
     size_column: str | None
-    color_column: str | None
     point_size: float | None
     colormap: enums.ColorMap | None
 
     # The same two pickers a mesh layer publishes, over the same relation and
     # rehydrated by the same models. A point layer's objects have positions and
     # nothing else, so a colouring is the only thing that makes one point differ
-    # from another -- which is why `colorColumn` above, a flat single colouring
-    # that predates the picker and cannot name a sparse matrix, is not enough.
+    # from another, and the picker is the whole of it.
     active_color_by: int | None = kante.django_field(
         description="Which entry of `colorBys` is drawn, as an index into it. Null means every point takes the flat colour -- the distinction between a position and a measurement drawn at one"
     )

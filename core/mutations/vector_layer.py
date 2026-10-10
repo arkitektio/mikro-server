@@ -1,7 +1,7 @@
 """The vector layer: a vector-valued lens drawn as glyphs.
 
 Its own module in the way ``network_layer.py`` and ``mesh_layer.py`` are, but its
-source is a *lens* -- the sixth member of :data:`core.enums.LENS_BACKED_KINDS`.
+source is a *lens*, as every layer's is.
 What earns it a kind rather than a mode on INTENSITY is the value domain: a
 DISPLACEMENT axis's positions are the components of one per-point offset, so the
 axis is read as geometry, and none of the intensity vocabulary (a channel index,

@@ -448,7 +448,6 @@ class Mutation:
         resolver=mutations.create_phasor_calibration,
         description="Attach an instrument-response correction to a dataset, taking a raw phasor to a calibrated one",
     )
-    delete_data_array = mutation(resolver=mutations.delete_data_array, description="Delete an existing data array")
     create_coordinate_anchor = mutation(
         resolver=mutations.create_coordinate_anchor,
         description=(

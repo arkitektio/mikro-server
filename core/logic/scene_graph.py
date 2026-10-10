@@ -109,7 +109,7 @@ class SceneGraph(placement.PlacementGraph):
         for a general image layer. How the level is *drawn* is the only thing that differs,
         and nothing here asks.
         """
-        if layer.kind not in enums.ARRAY_LAYER_KINDS or not layer.lens_id:
+        if layer.kind not in enums.ARRAY_LAYER_KINDS:
             return []
 
         dataset_id = layer.lens.dataset_id

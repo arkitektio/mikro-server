@@ -19,7 +19,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
-from core.mutations._generic import assert_can_delete, make_delete, self_owner, dataset_owner
+from core.mutations._generic import assert_can_delete, make_delete, self_owner
 from core.scoping import get_for_org
 import logging
 from django.db import transaction
@@ -816,16 +816,4 @@ class DeleteArrayDatasetInput:
     id: strawberry.ID = strawberry.field(description="The ID of the array dataset to delete")
 
 
-class DeleteDataArrayInputModel(BaseModel):
-    id: str = Field(description="The ID of the data array to delete")
-
-
-@kante.pydantic_input(DeleteDataArrayInputModel, description="Input for deleting a data array by ID")
-class DeleteDataArrayInput:
-    """Input for deleting a data array by ID"""
-
-    id: strawberry.ID = strawberry.field(description="The ID of the data array to delete")
-
-
 delete_array_dataset = make_delete(models.ArrayDataset, DeleteArrayDatasetInput, owner=self_owner)
-delete_data_array = make_delete(models.DataArray, DeleteDataArrayInput, owner=dataset_owner)

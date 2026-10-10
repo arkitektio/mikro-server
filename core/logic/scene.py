@@ -214,7 +214,7 @@ def _bootstrap_image_layers(
     def size(axis: str | None) -> int:
         return shape[axis_names.index(axis)] if axis is not None and axis in axis_names else 0
 
-    if size(render.x) <= 1 or size(render.y) <= 1:
+    if not coords_logic.is_renderable(dataset.axis_specs, axis_names, shape):
         subject = f"Lens {lens.pk} over dataset {dataset.pk}" if not lens.is_whole else f"Dataset {dataset.pk}"
         raise ValueError(f"{subject} is not renderable: its x axis '{render.x}' ({size(render.x)} px) and y axis '{render.y}' ({size(render.y)} px) must both have more than one pixel")
 
@@ -361,7 +361,7 @@ def bootstrap_scene_from_lens(
             # side would otherwise be two scenes called the same thing.
             default_name = f"{dataset.name} · {lens.name}" if lens.name else dataset.name
             scene = create_scene(name=name or default_name, world=target, ctx=ctx)
-            graph_logic.assert_placeable_in(scene.world, lens.space, destination=f"the world of scene '{scene.name}'")
+            graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
             _bootstrap_image_layers(dataset, scene, ctx, kind=kind, lens=lens)
         return scene
 
@@ -370,9 +370,9 @@ def bootstrap_scene_from_lens(
     label = getattr(container, "name", None) or getattr(container, "version", None) or f"{type(container).__name__} {container.pk}"
     with transaction.atomic():
         default_name = f"{label} · {lens.name}" if lens.name else label
-        scene = create_scene(name=name or default_name, world=world or lens.space, ctx=ctx)
-        graph_logic.assert_placeable_in(scene.world, lens.space, destination=f"the world of scene '{scene.name}'")
-        layers = _materialize_layers(lens.space, scene, ctx, ScenePolicyInputModel(transform_tables=True), lens=lens)
+        scene = create_scene(name=name or default_name, world=world or lens.coordinate_system, ctx=ctx)
+        graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
+        layers = _materialize_layers(lens.coordinate_system, scene, ctx, ScenePolicyInputModel(transform_tables=True), lens=lens)
         if not layers:
             if isinstance(container, models.TableDataset):
                 why = "a table needs at least two SPACE coordinate columns to have a place in a scene"

@@ -239,7 +239,6 @@ class SpaceGraph:
             # only where no dataset of its own is in the set.
             if isinstance(resident, (models.ArrayLens, models.DataArray)) and ("ArrayDataset", dataset_id) in by_container:
                 continue
-            by_container.pop(("ArrayLens", None), None)
             by_container[key] = candidate
 
         # Drop the levels and lenses a dataset in the set already speaks for.
@@ -447,8 +446,7 @@ class SpaceGraph:
 
         No query beyond the ones the graph has made. The residents arrive with their system's
         axes prefetched -- a sliced lens' system carries its dataset's axes, an unsliced one
-        *is* the dataset's -- and :meth:`shapes` holds every level-0 shape. `_resident_box`
-        reads ``Lens.shape_list`` instead, which is two queries a lens.
+        *is* the dataset's -- and :meth:`shapes` holds every level-0 shape.
         """
         extents: dict[int, dict[str, list[float]] | None] = {}
         for resident in self._residents:

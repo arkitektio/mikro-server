@@ -490,7 +490,7 @@ async def test_an_unmappable_derivation_still_composes_over_its_own_space(authen
         graph_logic.write_relation_edge(
             name="Phasorish <- Source",
             input_system=derived.intrinsic_coordinate_system,
-            output_system=source_lens.space,
+            output_system=source_lens.coordinate_system,
             kind=enums.TransformKindChoices.UNMAPPABLE.value,
             reason="the geometry does not survive the reduction",
             ctx=seed._creation(authenticated_context),

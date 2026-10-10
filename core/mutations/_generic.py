@@ -59,11 +59,6 @@ def creator_owner(item):
     return (item.creator_id,)
 
 
-def dataset_owner(item):
-    """Owner ids inherited from the item's parent dataset (lenses, data arrays)."""
-    return (item.dataset.creator_id, item.dataset.created_through_by_id)
-
-
 def make_delete(model, input_type, owner=None, delete=None):
     """Build a delete resolver: fetch org-scoped by id, guard ownership, delete.
 

@@ -13,7 +13,7 @@ background id drawn transparent, contour-or-fill, a selection, and -- the two th
 the coordinate graph -- ``color_bys`` and ``filter_bys``, which dereference the ``FIELD``
 edge keying this mask's pixels to a table of objects (``createTableDataset(keyedBy:)``).
 Colouring instances by a measured column, or a class column, is the same display pick a
-point layer makes with ``color_column``: honestly per-layer view state, and RFC-8 says so.
+point layer makes with ``size_column``: honestly per-layer view state, and RFC-8 says so.
 Filtering by one is the same pick over the same join, deciding whether an object is drawn.
 
 **Both are ordered pickers rather than single settings**, exactly as a mesh layer's are and

@@ -109,19 +109,9 @@ def create_chart(
 # --- placement ----------------------------------------------------------------
 
 
-def source_of(layer: "models.ChartLayer") -> "core_models.Lens":
-    """The lens a layer reads through, whatever its kind."""
-    return layer.lens
-
-
-def source_system_of(source: "core_models.Lens") -> "core_models.CoordinateSystem | None":
-    """The space a lens' data is expressed in: its own crop space for a sliced array lens, its container's otherwise."""
-    return graph_logic.lens_source_system(source)
-
-
-def layer_source_system(layer: "models.ChartLayer") -> "core_models.CoordinateSystem | None":
-    """The space a layer's data is expressed in."""
-    return source_system_of(source_of(layer))
+def layer_source_system(layer: "models.ChartLayer") -> "core_models.CoordinateSystem":
+    """The space a layer's data is expressed in: its lens' system, whatever the kind."""
+    return layer.lens.coordinate_system
 
 
 def along_axis_of(condensed: "graph_logic.CondensedPlacement | None") -> str | None:
@@ -269,7 +259,7 @@ def create_layer(
     chart's last layer unless an order is named.
     """
     what = f"{type(source).__name__} {source.pk}"
-    along = resolve_along_axis(chart, source_system_of(source), what=what)
+    along = resolve_along_axis(chart, source.coordinate_system, what=what)
 
     values: dict[str, object] = {}
     if kind == enums.ChartLayerKindChoices.TRACE.value:

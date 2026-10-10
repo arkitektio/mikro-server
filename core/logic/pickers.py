@@ -171,29 +171,9 @@ def _picker_tables(layer) -> "set[str]":
     return tables
 
 
-def _layer_source_system(layer):
-    """The space this layer's ids dereference from, or None for a kind that publishes no picker.
-
-    A point layer's answer is its table's own system -- and may honestly be None, since a
-    table with no coordinate system still seeds *itself* into its picker's reachable set. The
-    guard then skips the re-walk, which fails safe: the entry over the layer's own table needs
-    no edge to survive, and one over a further table stays unguarded rather than wrongly
-    refused.
-    """
-    from core.logic import column_options as column_options_logic
-
-    if layer.lens_id is None:
-        return None
-    lens = layer.lens
-    if isinstance(lens, models.MeshLens):
-        return column_options_logic.mesh_collection_system(lens.mesh_collection)
-    if isinstance(lens, models.NetworkLens):
-        return column_options_logic.network_collection_system(lens.network_collection)
-    if isinstance(lens, models.TableLens):
-        return lens.table_dataset.coordinate_system_or_none
-    return column_options_logic.lens_source_system(lens)
-
-
+def _layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem":
+    """The space this layer's ids dereference from: its lens' system, whatever the kind."""
+    return layer.lens.coordinate_system
 def assert_edge_not_stranding_a_picker(edge) -> None:
     """Refuse to delete a FIELD edge that some layer's picker is reaching a table through.
 

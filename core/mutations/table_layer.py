@@ -86,7 +86,6 @@ class CreatePointLayerInputModel(BaseModel):
     filter_bys: list[layer_inputs.LabelFilterByInputModel] | None = None
     active_filter_bys: list[int] | None = None
     size_column: str | None = None
-    color_column: str | None = None
     point_size: float | None = None
     colormap: enums.ColorMap | None = None
     blending: enums.Blending | None = None
@@ -106,9 +105,8 @@ class CreatePointLayerInput:
     table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset whose declared coordinate columns provide the points, drawn through its whole lens. Its own coordinate system is the space and its column roles are the mapping -- no per-layer column binding exists. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description="The table lens to draw through: the rows its windows keep. Exactly one of this and `tableDataset`")
     size_column: str | None = strawberry.field(default=None, description="The measure column mapped to per-point size -- a per-layer display choice among the dataset's columns")
-    color_column: str | None = strawberry.field(default=None, description="The measure column mapped to per-point color/intensity (used with colormap)")
     point_size: float | None = strawberry.field(default=None, description="The default point size in scene units (default 3.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap used to color points by their color_column (default 'viridis')")
+    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the active entry of the colour picker maps through (default 'viridis')")
     blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
     opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
     visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
@@ -138,7 +136,6 @@ def create_point_layer(info: Info, input: CreatePointLayerInput) -> types.PointL
         point_filter_bys=filter_bys or [],
         active_filter_bys=model.active_filter_bys or [],
         size_column=model.size_column,
-        color_column=model.color_column,
         point_size=model.point_size if model.point_size is not None else 3.0,
         colormap=model.colormap or enums.ColorMap.VIRIDIS,
         blending=model.blending or enums.Blending.NORMAL,

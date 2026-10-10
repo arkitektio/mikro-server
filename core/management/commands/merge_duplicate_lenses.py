@@ -1,10 +1,10 @@
 """Make the lenses that exist obey the rule new ones are made under: one row per (container, selection).
 
 A lens is a deterministic function of what it selects (`core.logic.coordinate_system`), and
-every container has its whole lens from creation. Rows written before that rule do not: a scene
-bootstrap wrote a fresh unsliced lens each time, `createLens` wrote one per call, slices were
-stored as the caller spelled them, and no container but an array had a lens at all. This
-converges them, container by container:
+every container has its whole lens from creation. What this catches is the row that escaped
+that rule: a selection stored under a spelling the normalizer no longer produces, a container
+of any kind whose whole lens was never written, and the duplicate the database could not refuse
+because it was written around the constraint. It converges them, container by container:
 
 1. **Normalize** the stored selection of every lens to the one spelling
    (`core.logic.coords.normalize_slices` / `normalize_windows`). The selection is unchanged.

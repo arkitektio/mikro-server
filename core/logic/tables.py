@@ -1,17 +1,9 @@
 """What core knows about the parquet behind a table store.
 
-Was shared by the legacy ``Table`` GraphQL type and its virtual row/cell resolvers. Those are
-gone; what remains is the store-level half, and as of the schema-inference work it is thinner
-still: **the DESCRIBE itself moved into the datalayer**, onto ``Datalayer.get_parquet_schema``
-beside ``get_zarr_metadata`` and ``get_sparse_metadata``, so a store reads its own schema at
-``fill_info`` without core in the loop. ``datalayer`` must never import ``core``
-(``tests/test_architecture.py``), and a parquet store asking core how to describe itself would
-have been the one exception -- for no reason, since the DuckDB facade it needed never depended
-on core either.
-
-So these are now two thin readers over what the store already recorded. Nothing here goes to S3
-on the create path any more; by then the file has been described once, at finish, and the answer
-is on the row.
+Two thin readers over what the store recorded about itself. The DESCRIBE lives in the
+datalayer (``Datalayer.get_parquet_schema``, beside ``get_zarr_metadata`` and
+``get_sparse_metadata``) and runs once, at finish, so the answer is on the row and nothing here
+goes to S3. ``datalayer`` must never import ``core`` (``tests/test_architecture.py``).
 
 That line was briefly crossed the other way too, for a picker that wanted a class column's
 distinct values and a measure column's range. It was put back: the client already holds an

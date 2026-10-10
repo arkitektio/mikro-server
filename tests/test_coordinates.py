@@ -534,7 +534,7 @@ async def test_a_simple_dataset_owns_exactly_one_pixel_system(authenticated_cont
         level_zero = dataset.data_arrays.get(level=0)
         assert level_zero.space.pk == intrinsic.pk
         assert level_zero.to_parent is None
-        assert lens.space.pk == intrinsic.pk
+        assert lens.coordinate_system.pk == intrinsic.pk
         assert lens.to_parent is None
 
     await sync_to_async(check)()

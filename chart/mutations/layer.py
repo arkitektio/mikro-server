@@ -89,7 +89,7 @@ class CreateTraceChartLayerInput:
 
     chart: strawberry.ID = strawberry.field(description="The chart to draw in")
     lens: strawberry.ID | None = strawberry.field(default=None, description="The lens to read. Exactly one of `lens` and `dataset`")
-    dataset: strawberry.ID | None = strawberry.field(default=None, description="An array dataset to read whole: its unsliced lens is used, and made if it has none. Exactly one of `lens` and `dataset`")
+    dataset: strawberry.ID | None = strawberry.field(default=None, description="An array dataset to read whole, through its whole lens. Exactly one of `lens` and `dataset`")
     name: str | None = strawberry.field(default=None, description=_NAME)
     visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
     order: int | None = strawberry.field(default=None, description=_ORDER)
@@ -106,10 +106,7 @@ def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> t
     chart = get_for_org(models.Chart, info, id=model.chart)
 
     with transaction.atomic():
-        if model.lens is not None:
-            lens = get_for_org(core_models.ArrayLens, info, id=model.lens)
-        else:
-            lens = coordinate_system_logic.whole_lens(get_for_org(core_models.ArrayDataset, info, id=model.dataset))
+        lens = resolve_source_lens(info, kind=core_models.ArrayLens, lens=model.lens, container_model=core_models.ArrayDataset, container=model.dataset, what="dataset")
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.TRACE.value, source=lens, **_settings(model))
 
 

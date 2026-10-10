@@ -715,11 +715,6 @@ class Lens(PolymorphicModel):
         return not self.selection
 
     @property
-    def space(self) -> CoordinateSystem:
-        """The coordinate system this lens' selection is expressed in: its own, or its container's."""
-        return self.coordinate_system
-
-    @property
     def active_anchors(self):
         """The coordinate anchors this selection keeps. Empty for a container kind that carries none."""
         return CoordinateAnchor.objects.none()
@@ -1358,7 +1353,6 @@ class Layer(models.Model):
     # These pick among the remaining measure columns for display, which is honestly
     # per-layer view state.
     size_column = models.CharField(max_length=100, null=True, blank=True, help_text="(point) The table column mapped to per-point size")
-    color_column = models.CharField(max_length=100, null=True, blank=True, help_text="(point) The table column mapped to per-point color/intensity (used with colormap)")
     point_size = models.FloatField(null=True, blank=True, help_text="(point) The default point size, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
     color_by_column = models.CharField(max_length=100, null=True, blank=True, help_text="(track) The table column used to color tracks (used with colormap)")
     line_width = models.FloatField(null=True, blank=True, help_text="(track) The width of the track lines, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
@@ -1467,8 +1461,8 @@ class Layer(models.Model):
     #
     # A point layer needs these for the reason a mesh layer does and more sharply: its objects
     # have positions and nothing else, so a colouring is the only thing that makes one point
-    # differ from another. The flat `color_column` it shipped with predates the picker and cannot
-    # name a sparse matrix at all -- which is most of what there is to colour a point cloud by.
+    # differ from another. A picker names tables and sparse slices alike, which is most of what
+    # there is to colour a point cloud by; the flat colour column that predated it is gone.
     point_color_bys = models.JSONField(default=list, blank=True, help_text="(point) The colourings this layer offers, in the order a picker should show them. Each colours points by a column of a table this layer's ids key into, or by one slice of a sparse matrix they index. Empty means every point takes the flat colour")
     point_filter_bys = models.JSONField(default=list, blank=True, help_text="(point) The filters this layer offers, in the order a picker should show them. Each keeps or drops points by a column of a table this layer's ids key into. Empty means nothing is offered and every point draws")
 
@@ -1507,4 +1501,3 @@ class Layer(models.Model):
         help_text="(vector) How a magnitude becomes a drawn length: scene units per unit of the component axis. Null auto-normalizes to the sampled maximum. In scene units, so like `point_size` it is well defined for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)",
     )
 
-    provenance = ProvenanceField()

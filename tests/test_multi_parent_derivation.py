@@ -94,8 +94,8 @@ async def test_a_fusion_records_every_parent_in_declared_order(authenticated_con
     fused_id = await fuse("Fused", left_lens, right_lens)
     swapped_id = await fuse("Swapped", right_lens, left_lens)
 
-    left_space = str((await sync_to_async(lambda: left_lens.space)()).pk)
-    right_space = str((await sync_to_async(lambda: right_lens.space)()).pk)
+    left_space = str((await sync_to_async(lambda: left_lens.coordinate_system)()).pk)
+    right_space = str((await sync_to_async(lambda: right_lens.coordinate_system)()).pk)
 
     for dataset_id, expected in ((fused_id, [left_space, right_space]), (swapped_id, [right_space, left_space])):
         result = await schema.execute(DERIVED, context_value=authenticated_context, variable_values={"id": dataset_id})
