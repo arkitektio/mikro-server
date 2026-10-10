@@ -78,6 +78,7 @@ def test_a_window_of_a_window_is_the_tighter_bounds_and_an_open_side_stays_open(
     assert {entry["axis"]: (entry["min"], entry["max"]) for entry in got} == {"t": (5.0, 8.0), "x": (None, 10.0), "y": (1.0, None)}
     with pytest.raises(ValueError, match="keeps nothing"):
         coords.normalize_windows(["t"], [_Window(**entry) for entry in coords.intersect_windows([_Window("t", 2.0, 8.0)], [_Window("t", 9.0, 20.0)])])
+    assert coords.normalize_windows(["t"], [_Window(**entry) for entry in coords.intersect_windows([_Window("t", 2.0, 8.0)], [_Window("t", 8.0, 20.0)])]) == [{"axis": "t", "min": 8.0, "max": 8.0}], "two windows meeting at one position keep that position"
 
 
 # --- a window as a box -------------------------------------------------------------------

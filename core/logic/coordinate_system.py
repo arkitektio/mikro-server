@@ -785,17 +785,8 @@ def _box_to_dataset_slices(dataset: "models.ArrayDataset", system: "models.Coord
 
 def create_lens_from_box(dataset: "models.ArrayDataset", system: "models.CoordinateSystem", windows: list, ctx: CreationContext) -> "models.ArrayLens":
     """The dataset's lens for the voxels under a box stated in another coordinate system -- micrometres in a physical space, a sibling's grid through a shared world."""
-    # Not `normalize_windows`: a box may be a plane (`z` from 2 to 2), which a lens window may
-    # not be, and an axis it leaves out is simply unbounded.
-    bounds: dict[str, list[float]] = {}
-    for window in windows:
-        if window.axis in bounds:
-            raise ValueError(f"Axis '{window.axis}' is bounded twice; one window per axis")
-        if window.min is None and window.max is None:
-            continue
-        if window.min is not None and window.max is not None and window.min > window.max:
-            raise ValueError(f"The box runs from {window.min} to {window.max} along '{window.axis}' and covers nothing; its min must not exceed its max")
-        bounds[window.axis] = [-math.inf if window.min is None else float(window.min), math.inf if window.max is None else float(window.max)]
+    normalized = coords_logic.normalize_windows([axis.name for axis in system.axes.all()], windows)
+    bounds = coords_logic.window_bounds([base_models.WindowInputModel(**entry) for entry in normalized])
     slices = _box_to_dataset_slices(dataset, system, bounds)
     return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
 

@@ -163,7 +163,6 @@ async def test_a_window_that_cannot_be_made_is_refused_in_prose(authenticated_co
     for windows, message in [
         ([{"axis": "z", "min": 0, "max": 1}], "does not have"),
         ([{"axis": "t", "min": 0, "max": 1}, {"axis": "t", "min": 1, "max": 2}], "windowed twice"),
-        ([{"axis": "t", "min": 5, "max": 5}], "keeps nothing"),
         ([{"axis": "t", "min": 9, "max": 1}], "keeps nothing"),
     ]:
         errors = await _create(ctx, mutation, field, table_id, windows)
@@ -197,7 +196,7 @@ async def test_a_windowed_lens_is_a_resident_of_its_containers_space_that_the_co
 
     result = await schema.execute("query S($id: ID!) { coordinateSystem(id: $id) { residents { __typename } } }", context_value=ctx, variable_values={"id": str(whole.coordinate_system_id)})
     assert not result.errors, result.errors
-    assert sorted(r["__typename"] for r in result.data["coordinateSystem"]["residents"]) == ["TableDataset", "TableLens", "TableLens"]
+    assert sorted(r["__typename"] for r in result.data["coordinateSystem"]["residents"]) == ["TableDataset", "TableLens"], "the table once, and the window beside it; the whole lens is the table's handle, not a second resident"
 
     mutation_text = "mutation($id: ID!) { deleteLens(input: {id: $id}) }"
     refused = await schema.execute(mutation_text, variable_values={"id": str(whole.pk)}, context_value=ctx)
@@ -291,3 +290,16 @@ async def test_a_whole_lens_over_a_table_nominates_a_scene_of_its_own_and_lists_
     cleared = await schema.execute("mutation S($input: SetLensDefaultSceneInput!) { setLensDefaultScene(input: $input) { defaultScene { id } } }", context_value=ctx, variable_values={"input": {"lens": str(whole.pk), "scene": None}})
     assert not cleared.errors, cleared.errors
     assert cleared.data["setLensDefaultScene"]["defaultScene"] is None, "nothing to fall back on: a table nominates no scene"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_window_may_be_a_single_position(authenticated_context: HttpContext):
+    """Inclusive on both sides, `[5, 5]` keeps the positions at 5 -- one timepoint, one feature, one channel -- and is a lens like any other."""
+    ctx = authenticated_context
+    table_id, mutation, field = await _a_table(ctx)
+    plane = await _create(ctx, mutation, field, table_id, [{"axis": "t", "min": 5, "max": 5}])
+    assert isinstance(plane, dict), plane
+    read = await _read(ctx, plane["id"])
+    assert read["windows"] == [{"axis": "t", "min": 5.0, "max": 5.0}]
+    assert (await _create(ctx, mutation, field, table_id, [{"axis": "t", "min": 5.0, "max": 5.0}]))["id"] == plane["id"], "and the same position is the same lens"

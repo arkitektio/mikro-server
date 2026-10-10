@@ -632,8 +632,10 @@ def normalize_windows(axis_names: Sequence[str], windows: Iterable["WindowLike"]
         high = None if window.max is None else float(window.max)
         if low is None and high is None:
             continue
-        if low is not None and high is not None and not low < high:
-            raise ValueError(f"Window over axis '{axis}' runs from {low} to {high} and keeps nothing; its min must be below its max")
+        # A window is inclusive on both sides, so `[v, v]` keeps the positions at `v`: one
+        # channel, one feature, one timepoint. Only a window whose min lies above its max is empty.
+        if low is not None and high is not None and low > high:
+            raise ValueError(f"Window over axis '{axis}' runs from {low} to {high} and keeps nothing; its min must not exceed its max")
         normalized.append({"axis": axis, "min": low, "max": high})
 
     return normalized
