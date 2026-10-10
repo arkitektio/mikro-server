@@ -72,6 +72,7 @@ def build_point_pickers(info: Info, table_dataset, color_bys, filter_bys):
         source="this point cloud",
         entry_model=filter_by_models.LabelFilterByModel,
         reachable=reachable,
+        own_table_id=str(table_dataset.pk),
     )
     return built_color_bys, built_filter_bys
 

@@ -1185,8 +1185,13 @@ def build_filter_bys(
     reachable_sparse: dict | None = None,
     collection=None,
     node_targets: dict | None = None,
+    own_table_id: str | None = None,
 ) -> list[dict] | None:
     """Validate a layer's filter picker and return what the JSON column stores.
+
+    ``own_table_id`` is the table whose rows *are* the layer's objects (a point or track
+    layer's): a bounded rule on one of its COORDINATE columns is a window, which is the lens'
+    to state, and is refused here rather than stored twice.
 
     The colour picker's sibling, checked against the same FIELD edges by the same code: a rule
     naming a table nothing reaches, or a column that table does not declare, is a predicate a
@@ -1270,6 +1275,11 @@ def build_filter_bys(
         try:
             table, column, steps = _resolve_joined_column(reachable, filter_by.join_path, filter_by.table, filter_by.column, source=source)
 
+            if own_table_id is not None and not steps and str(table.pk) == own_table_id and column.role == enums.ColumnRoleChoices.COORDINATE.value:
+                raise ValueError(
+                    f"'{column.name}' is a coordinate column of this layer's own table: a range over it is a window, which is the lens' selection and not a picker rule. "
+                    "Cut the lens instead (`createTableLens` with `windows`, or `lens:` on it) and draw through that; the layer hands it on as `windowFilters`"
+                )
             is_measure = column.role in _MEASURE_ROLES
             if is_measure and filter_by.values is not None:
                 raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are measured, so they are filtered by a `min`/`max` range over them, not by a `values` list naming each one.")

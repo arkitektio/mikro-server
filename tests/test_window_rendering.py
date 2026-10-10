@@ -102,3 +102,28 @@ async def test_an_annotation_lens_names_the_shapes_in_its_windows(authenticated_
 
     assert await names(window) == {inside["id"]}
     assert await names(whole) == {inside["id"], outside["id"]}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_range_over_the_layers_own_coordinate_column_is_a_window_and_not_a_picker_rule(authenticated_context: HttpContext):
+    """A bounded rule on the point layer's own coordinate column would store a window twice; the lens is where a selection lives."""
+    ctx = authenticated_context
+    scene = await _seed_scene(ctx)
+    table, system = await _seed_table_dataset(ctx, "points")
+    await seed.register_into_scene(ctx, scene, system=system)
+    whole = await seed.create_windowed_lens(ctx, table)
+
+    refused = await schema.execute(
+        "mutation C($input: CreatePointLayerInput!) { createPointLayer(input: $input) { id } }",
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.pk), "lens": str(whole.pk), "filterBys": [{"table": str(table.pk), "column": "x", "min": 0.0, "max": 5.0}]}},
+    )
+    assert refused.errors and "createTableLens" in refused.errors[0].message, refused.errors
+    allowed = await schema.execute(
+        "mutation C($input: CreatePointLayerInput!) { createPointLayer(input: $input) { id filterBys { column } } }",
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.pk), "lens": str(whole.pk), "filterBys": [{"table": str(table.pk), "column": "photons", "min": 100.0}]}},
+    )
+    assert not allowed.errors, allowed.errors
+    assert allowed.data["createPointLayer"]["filterBys"] == [{"column": "photons"}], "a measurement is a picker's to filter by"
