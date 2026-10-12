@@ -1,7 +1,7 @@
 """Mutations for network collections.
 
-A collection is immutable and versioned: refining a tracing produces a new version, it does not
-edit an old one. It *is* a konnektion store -- one uploaded prefix holding its manifest, both
+A collection is immutable: refining a tracing produces a new collection over a new store, it
+does not edit an old one. It *is* a konnektion store -- one uploaded prefix holding its manifest, both
 catalogs and every octree level -- so registering one is naming that store and the space its
 node positions are in, and nothing else. There is deliberately no mutation here that writes
 nodes or edges one by one, and no field that reads them back that way.
@@ -32,7 +32,7 @@ from core.scoping import get_for_org
 
 
 class CreateNetworkCollectionInputModel(BaseModel):
-    version: str
+    name: str | None = None
     store: str
     axes: list[AxisInputModel]
     folder: str | None = None
@@ -43,11 +43,11 @@ class CreateNetworkCollectionInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateNetworkCollectionInputModel, description="Input for registering an immutable, versioned network collection. The collection gets a coordinate system of its own, and an edge relates it to the space the network was traced in")
+@kante.pydantic_input(CreateNetworkCollectionInputModel, description="Input for registering an immutable network collection. The collection gets a coordinate system of its own, and an edge relates it to the space the network was traced in")
 class CreateNetworkCollectionInput:
     """Input for registering a network collection."""
 
-    version: str = strawberry.field(description="The immutable version of this collection, e.g. 'v20260713-a3f9'. A refined tracing is a new version, never an edit to an old one")
+    name: str | None = strawberry.field(default=None, description="What to call this collection. Optional: it is identified by its store and labelled by this or, failing that, by the store's key. A refined tracing is a new collection over a new store, never an edit to an old one")
     store: scalars.KonnektionLike = strawberry.field(
         description=(
             "The uploaded **konnektion store** holding this collection: one prefix with `konnektion.json`, both catalogs and every octree level. Request it with `requestKonnektionUpload`, write the "
@@ -126,7 +126,6 @@ def _write_collection(
     model: CreateNetworkCollectionInputModel,
     ctx: CreationContext,
     *,
-    spec_version: str,
     grid: dict,
     encoding: dict,
     store: "models.KonnektionStore",
@@ -140,8 +139,7 @@ def _write_collection(
     """
     with transaction.atomic():
         collection = models.NetworkCollection.objects.create(
-            version=model.version,
-            spec_version=spec_version,
+            name=model.name,
             store=store,
             grid=grid,
             encoding=encoding,
@@ -152,14 +150,14 @@ def _write_collection(
         )
 
         system = graph_logic.create_collection_system(
-            name=f"{collection.version}/network",
+            name=f"{collection.label}/network",
             axes=model.axes,
             owner=collection,
             ctx=ctx,
         )
 
         # Optional on purpose: a network in some absolute space is derived from nothing.
-        coordinate_system_logic.write_derivation_edges(info, name=collection.version, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
+        coordinate_system_logic.write_derivation_edges(info, name=collection.label, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
         file_link_logic.write_file_links(info, container=collection, source_files=model.source_files or [], ctx=ctx)
         # The lens selecting all of it, from the start: the handle an action is handed for the collection.
         coordinate_system_logic.whole_lens(collection)
@@ -168,7 +166,7 @@ def _write_collection(
 
 
 def create_network_collection(info: Info, input: CreateNetworkCollectionInput) -> types.NetworkCollection:
-    """Register an immutable, versioned network collection, in a coordinate system of its own.
+    """Register an immutable network collection, in a coordinate system of its own.
 
     The bytes arrive the way every other store's do: the client requests an upload grant,
     writes the tree, and finishes the upload -- which is where ``fill_info`` reads
@@ -195,16 +193,15 @@ def create_network_collection(info: Info, input: CreateNetworkCollectionInput) -
     ctx = CreationContext.from_info(info)
     store = _resolve_konnektion_store(info, model)
 
-    # Read, never declared. `fill_info` already fetched `konnektion.json`, so these are what the
-    # writer actually wrote rather than what a caller retyped. `spec_version` is namespaced
-    # because a bare "1" says nothing about *which* format's version one it is -- and this
-    # server now reads two, whose version counters are independent.
+    # Read, never declared. `fill_info` already fetched the manifest, so these are what the
+    # writer actually wrote rather than what a caller retyped; the format version stays on the
+    # store and the collection answers it from there, namespaced because this server reads two
+    # formats whose version counters are independent.
     _assert_axes_agree(model.axes, store.axes)
     return _write_collection(
         info,
         model,
         ctx,
-        spec_version=f"konnektion/{store.spec_version}",
         grid=store.grid or {},
         encoding=store.encoding or {},
         store=store,

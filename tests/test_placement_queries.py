@@ -179,7 +179,7 @@ async def _seed_scene(ctx: HttpContext, *, layer_count: int) -> models.Scene:
         models.Layer.objects.create(kind=enums.LayerKindChoices.ANNOTATION.value, scene=scene, lens=coordinate_system_logic.whole_lens(annotation_collection))
 
         store = seed._seed_fabriks_store_sync(ctx, axes=None, populated=True)
-        collection = models.MeshCollection.objects.create(version="v1", spec_version="fabriks/1", store=store, organization=ctx.request.organization)
+        collection = models.MeshCollection.objects.create(name="v1", store=store, organization=ctx.request.organization)
         mesh_system = models.CoordinateSystem.objects.create(name="v1/mesh", organization=ctx.request.organization)
         collection.coordinate_system = mesh_system
         collection.save(update_fields=["coordinate_system"])

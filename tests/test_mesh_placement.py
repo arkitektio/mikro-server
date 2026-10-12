@@ -63,7 +63,7 @@ async def _mesh_collection(ctx: HttpContext, dataset: models.ArrayDataset) -> mo
                 # which is what the IDENTITY below says.
                 "axes": axes,
                 "derivedFrom": [{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "IDENTITY"}}],
-                "version": "v1",
+                "name": "v1",
                 "store": str(store.pk),
             }
         },

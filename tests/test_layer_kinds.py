@@ -59,13 +59,12 @@ async def _seed_table_dataset(ctx: HttpContext, key: str, *, with_track: bool = 
 
 def _seed_mesh_collection_sync(ctx: HttpContext) -> models.MeshCollection:
     collection = models.MeshCollection.objects.create(
-        version="v1",
-        spec_version="fabriks/1",
+        name="v1",
         store=seed._seed_fabriks_store_sync(ctx, axes=None, populated=True),
         organization=ctx.request.organization,
     )
     graph_logic.create_collection_system(
-        name=f"{collection.version}/mesh",
+        name=f"{collection.label}/mesh",
         axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
         owner=collection,
         ctx=seed._creation(ctx),

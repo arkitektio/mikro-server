@@ -631,7 +631,7 @@ async def _mesh_collection(ctx: HttpContext, source_system: models.CoordinateSys
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { coordinateSystem { id } } }",
         context_value=ctx,
-        variable_values={"input": {"version": "v1", "store": str(store.pk), "axes": axes, "derivedFrom": [entry]}},
+        variable_values={"input": {"name": "v1", "store": str(store.pk), "axes": axes, "derivedFrom": [entry]}},
     )
     assert not result.errors, result.errors
     return result.data["createMeshCollection"]["coordinateSystem"]["id"]

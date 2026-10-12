@@ -81,7 +81,7 @@ async def _collection(ctx: HttpContext) -> models.MeshCollection:
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"version": "v1", "store": str(store.pk), "axes": ZYX_MESH_AXES}},
+        variable_values={"input": {"name": "v1", "store": str(store.pk), "axes": ZYX_MESH_AXES}},
     )
     assert not result.errors, result.errors
     return await sync_to_async(models.MeshCollection.objects.get)(id=result.data["createMeshCollection"]["id"])

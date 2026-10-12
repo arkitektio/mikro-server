@@ -367,7 +367,7 @@ def bootstrap_scene_from_lens(
 
     if isinstance(container, models.SparseDataset):
         raise ValueError(f"Lens {lens.pk} over SparseDataset {container.pk} cannot be staged: a sparse dataset has no layer kind, nothing draws a matrix.")
-    label = getattr(container, "name", None) or getattr(container, "version", None) or f"{type(container).__name__} {container.pk}"
+    label = getattr(container, "name", None) or getattr(container, "label", None) or f"{type(container).__name__} {container.pk}"
     with transaction.atomic():
         default_name = f"{label} · {lens.name}" if lens.name else label
         scene = create_scene(name=name or default_name, world=world or lens.coordinate_system, ctx=ctx)

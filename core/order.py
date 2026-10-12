@@ -109,7 +109,7 @@ class TransformationOrder:
 
 @strawberry_django.order_type(models.MeshCollection)
 class MeshCollectionOrder:
-    version: auto
+    name: auto
     created_at: auto
     id: auto
 

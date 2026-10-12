@@ -254,7 +254,7 @@ async def test_include_meshes_gates_mesh_layers(authenticated_context: HttpConte
                 "input": {
                     "axes": axes,
                     "derivedFrom": [{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "IDENTITY"}}],
-                    "version": "v1",
+                    "name": "v1",
                     "store": str(store.pk),
                 }
             },

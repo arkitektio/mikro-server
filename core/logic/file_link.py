@@ -72,10 +72,10 @@ def column_for_kind(kind: "enums.FileLinkContainerKind | str") -> str:
 def container_label(container) -> str:  # noqa: ANN001 - one of the four container models
     """A container as it should read in a message.
 
-    Not ``container.name``: a ``MeshCollection`` carries ``version`` instead, so reading the
-    name directly turns a refusal that was about to explain itself into an ``AttributeError``.
+    Not ``container.name``: a collection may have none and answers ``label`` (its name or its
+    store's key) instead, and reading ``name`` directly would turn a refusal into an AttributeError.
     """
-    return getattr(container, "name", None) or getattr(container, "version", None) or f"{type(container).__name__} {container.pk}"
+    return getattr(container, "name", None) or getattr(container, "label", None) or f"{type(container).__name__} {container.pk}"
 
 
 def _refuse_duplicates(pairs: Sequence[tuple], *, subject: str) -> None:

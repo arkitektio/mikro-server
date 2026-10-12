@@ -128,7 +128,7 @@ async def test_a_mesh_collection_states_its_own_axis_descriptions(authenticated_
                     {"name": "y", "type": "SPACE", "longName": "slow axis", "description": "distance from the coverslip"},
                     {"name": "x", "type": "SPACE"},
                 ],
-                "version": "v1",
+                "name": "v1",
                                 "store": str(store.pk),
             }
         },

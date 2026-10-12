@@ -108,9 +108,9 @@ async def _create_table(ctx: HttpContext, name: str, folder=None, derived_from=N
     return result.data["createTableDataset"]
 
 
-async def _create_mesh(ctx: HttpContext, version: str, folder=None, derived_from=None) -> dict[str, Any]:
+async def _create_mesh(ctx: HttpContext, name: str, folder=None, derived_from=None) -> dict[str, Any]:
     store = await seed.create_fabriks_store(ctx)
-    payload = {"axes": _YX, "version": version, "store": str(store.pk)}
+    payload = {"axes": _YX, "name": name, "store": str(store.pk)}
     if folder is not None:
         payload["folder"] = str(folder.pk)
     if derived_from is not None:
@@ -184,7 +184,7 @@ async def test_a_folder_lists_every_kind_of_container_it_holds(authenticated_con
           folder(id: $id) {
             arrayDatasets { name }
             tableDatasets { name }
-            meshCollections { version }
+            meshCollections { name }
             annotationCollections { name }
           }
         }
@@ -198,7 +198,7 @@ async def test_a_folder_lists_every_kind_of_container_it_holds(authenticated_con
     contents = result.data["folder"]
     assert [d["name"] for d in contents["arrayDatasets"]] == ["Acquired"]
     assert [t["name"] for t in contents["tableDatasets"]] == ["Measurements"]
-    assert [m["version"] for m in contents["meshCollections"]] == ["v1"]
+    assert [m["name"] for m in contents["meshCollections"]] == ["v1"]
     assert [a["name"] for a in contents["annotationCollections"]] == ["Drawn"]
 
 
@@ -241,9 +241,9 @@ async def test_children_orders_and_searches_across_every_source(authenticated_co
 
     Worth its own test because `children` builds its querysets from a table now, and both
     branches ask each source a question it has to be able to answer. `MeshCollection` is the
-    one that cannot answer `name` -- it has no such column, it is identified by `version` --
-    so it is ordered and searched by that instead. Without this test the rewrite was only
-    ever exercised on the branch where neither runs.
+    one whose name is optional -- it is labelled by its store's key when it has none -- so it
+    is ordered and searched by that label instead of a column. Without this test the rewrite
+    was only ever exercised on the branch where neither runs.
     """
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Sortable")
@@ -263,7 +263,7 @@ async def test_children_orders_and_searches_across_every_source(authenticated_co
     )
     assert not ordered.errors, ordered.errors
     assert ordered.data
-    assert len(ordered.data["children"]) == 4, "ordering by name must not drop the source that has no name column"
+    assert len(ordered.data["children"]) == 4, "ordering by name must not drop the source whose name is an annotation"
 
     by_created = await schema.execute(
         """

@@ -794,7 +794,7 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     @kante.filter_field(
         description=(
             "Search by the lens' own name or, since most lenses have none and are known by their container's, by its container's label: the name of a dataset, table, sparse dataset or "
-            "annotation collection, the version of a mesh or network collection (case-insensitive substring)"
+            "annotation collection, the name or store key of a mesh or network collection (case-insensitive substring)"
         )
     )
     def search(self, info: Info, value: str, prefix: str) -> Q:
@@ -803,8 +803,10 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
             | Q(**{f"{prefix}arraylens__dataset__name__icontains": value})
             | Q(**{f"{prefix}tablelens__table_dataset__name__icontains": value})
             | Q(**{f"{prefix}sparselens__sparse_dataset__name__icontains": value})
-            | Q(**{f"{prefix}meshlens__mesh_collection__version__icontains": value})
-            | Q(**{f"{prefix}networklens__network_collection__version__icontains": value})
+            | Q(**{f"{prefix}meshlens__mesh_collection__name__icontains": value})
+            | Q(**{f"{prefix}meshlens__mesh_collection__store__key__icontains": value})
+            | Q(**{f"{prefix}networklens__network_collection__name__icontains": value})
+            | Q(**{f"{prefix}networklens__network_collection__store__key__icontains": value})
             | Q(**{f"{prefix}annotationlens__annotation_collection__name__icontains": value})
         )
 
@@ -1055,7 +1057,12 @@ class TransformationFilter(IdsFilterMixin, OwnedFilterMixin):
 @kante.filter_type(models.MeshCollection)
 class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
     id: auto
-    version: Optional[FilterLookup[str]]
+    name: Optional[FilterLookup[str]]
+
+    @kante.filter_field(description="Search by the collection's label: its name, or its store's key (case-insensitive substring)")
+    def search(self, info: Info, value: str, prefix: str) -> Q:
+        """Match the collection by its name or, when it has none, by its store's key."""
+        return Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}store__key__icontains": value})
 
     @kante.filter_field(description="Filter by the folder this mesh collection is filed in")
     def folder(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
@@ -1076,11 +1083,15 @@ class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
         return Q(**{f"{prefix}coordinate_system__in": _systems_derived_from_dataset(value)})
 
 
-@kante.filter_type(models.SparseDataset)
-
+@kante.filter_type(models.NetworkCollection)
 class NetworkCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
     id: auto
-    version: Optional[FilterLookup[str]]
+    name: Optional[FilterLookup[str]]
+
+    @kante.filter_field(description="Search by the collection's label: its name, or its store's key (case-insensitive substring)")
+    def search(self, info: Info, value: str, prefix: str) -> Q:
+        """Match the collection by its name or, when it has none, by its store's key."""
+        return Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}store__key__icontains": value})
 
     @kante.filter_field(description="Filter by the folder this network collection is filed in")
     def folder(self, info: Info, value: strawberry.ID, prefix: str) -> Q:

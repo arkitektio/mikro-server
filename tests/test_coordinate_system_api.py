@@ -53,7 +53,7 @@ query System($id: ID!) {
       ... on ArrayDataset { id name }
       ... on Lens { id }
       ... on DataArray { id level }
-      ... on MeshCollection { id version }
+      ... on MeshCollection { id label }
       ... on TableDataset { id name }
     }
   }
@@ -181,7 +181,7 @@ async def test_a_collection_lives_in_its_own_space(authenticated_context: HttpCo
     mesh_system = await sync_to_async(lambda: collection.coordinate_system)()
     mesh = (await _system(authenticated_context, mesh_system.pk))["residents"]
     assert [resident["__typename"] for resident in mesh] == ["MeshCollection"]
-    assert mesh[0]["version"] == "v1"
+    assert mesh[0]["label"] == "v1"
 
     table = await sync_to_async(_seed_table_dataset_sync)(authenticated_context, "localizations")
     table_system = await sync_to_async(lambda: table.coordinate_system)()

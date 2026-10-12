@@ -19,7 +19,8 @@ CREATE = """
 mutation Create($input: CreateMeshCollectionInput!) {
   createMeshCollection(input: $input) {
     id
-    version
+    name
+    label
     specVersion
     grid
     encoding
@@ -41,14 +42,14 @@ async def _create(ctx: HttpContext, payload: dict):
 async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(authenticated_context: HttpContext):
     """The whole point of a self-describing artifact, end to end.
 
-    The call names a store and its axes. It does not name a grid, an encoding, a version, a
+    The call names a store and its axes. It does not name a grid, an encoding, a format version, a
     catalog or a level -- all of which the manifest already stated and the server already read.
     They come back off the API anyway, because a renderer configures its decoder from what it
     queries, so what is stored is what the writer wrote rather than what nobody typed.
     """
     store = await seed.create_fabriks_store(authenticated_context)
 
-    result = await _create(authenticated_context, {"version": "v20260814-fabriks", "axes": AXES, "store": str(store.pk)})
+    result = await _create(authenticated_context, {"name": "v20260814-fabriks", "axes": AXES, "store": str(store.pk)})
     assert not result.errors, result.errors
 
     collection = result.data["createMeshCollection"]
@@ -88,7 +89,7 @@ async def test_an_unfinished_store_is_refused(authenticated_context: HttpContext
     """
     store = await seed.create_fabriks_store(authenticated_context, populated=False)
 
-    result = await _create(authenticated_context, {"version": "v1", "axes": AXES, "store": str(store.pk)})
+    result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)})
     assert result.errors
     assert "has not been finished" in str(result.errors[0])
 
@@ -106,15 +107,15 @@ async def test_declared_axes_are_checked_against_the_manifest(authenticated_cont
     through them, so a writer that never claimed an order is simply not answering the question.
     """
     disagreeing = await seed.create_fabriks_store(authenticated_context, axes=["x", "y", "z"])
-    result = await _create(authenticated_context, {"version": "v1", "axes": AXES, "store": str(disagreeing.pk)})
+    result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(disagreeing.pk)})
     assert result.errors
     assert "draw transposed" in str(result.errors[0])
 
     agreeing = await seed.create_fabriks_store(authenticated_context, axes=["z", "y", "x"])
-    assert not (await _create(authenticated_context, {"version": "v2", "axes": AXES, "store": str(agreeing.pk)})).errors
+    assert not (await _create(authenticated_context, {"name": "v2", "axes": AXES, "store": str(agreeing.pk)})).errors
 
     silent = await seed.create_fabriks_store(authenticated_context, axes=None)
-    assert not (await _create(authenticated_context, {"version": "v3", "axes": AXES, "store": str(silent.pk)})).errors, "a manifest that claims no axis order does not contradict one"
+    assert not (await _create(authenticated_context, {"name": "v3", "axes": AXES, "store": str(silent.pk)})).errors, "a manifest that claims no axis order does not contradict one"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -128,7 +129,7 @@ async def test_a_store_from_another_organization_is_not_registerable(authenticat
     """
     foreign = await seed.create_fabriks_store(other_org_context)
 
-    result = await _create(authenticated_context, {"version": "v1", "axes": AXES, "store": str(foreign.pk)})
+    result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(foreign.pk)})
     assert result.errors
 
 
@@ -137,7 +138,7 @@ async def test_a_store_from_another_organization_is_not_registerable(authenticat
 async def test_deleting_a_collection_leaves_its_store_collectable(authenticated_context: HttpContext):
     """One collection, one prefix -- and the sweep needs no special case for it."""
     store = await seed.create_fabriks_store(authenticated_context)
-    created = await _create(authenticated_context, {"version": "v1", "axes": AXES, "store": str(store.pk)})
+    created = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)})
     assert not created.errors, created.errors
 
     result = await schema.execute(
@@ -172,3 +173,58 @@ async def test_organization_wide_read_access_covers_the_fabriks_bucket(authentic
     assert grant["bucket"], "the grant names the bucket it is for"
     assert grant["accessKey"] and grant["secretKey"]
     assert grant["status"] == "granted"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticated_context: HttpContext) -> None:
+    """A collection is identified by its store, so its store's key is the label it falls back to.
+
+    `name` is optional and `specVersion` is read off the store rather than stored again; both
+    collections follow the same rule. The label is what the server writes wherever it used to
+    write a typed version: the collection's own system, the derivation edge, the refusal prose.
+    """
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Source", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    store = await seed.create_fabriks_store(ctx)
+
+    result = await schema.execute(
+        """
+        mutation Create($input: CreateMeshCollectionInput!) {
+          createMeshCollection(input: $input) {
+            id name label specVersion
+            coordinateSystem { id name }
+          }
+        }
+        """,
+        context_value=ctx,
+        variable_values={"input": {"axes": AXES, "store": str(store.pk), "derivedFrom": [{"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}}]}},
+    )
+    assert not result.errors, result.errors
+    collection = result.data["createMeshCollection"]
+    assert collection["name"] is None
+    assert collection["label"] == store.key, "no name: the store's key is the label"
+    assert collection["specVersion"] == "fabriks/1", "read off the store, not stored again"
+    assert collection["coordinateSystem"]["name"] == f"{store.key}/mesh"
+    derivation = await models.Transformation.objects.aget(input_id=collection["coordinateSystem"]["id"], output_id=await sync_to_async(lambda: dataset.coordinate_system_id)())
+    assert derivation.name == f"{store.key} <- Source", "the derivation edge is named by the label too"
+
+    konnektion = await seed.create_konnektion_store(ctx)
+    network = await schema.execute(
+        "mutation Create($input: CreateNetworkCollectionInput!) { createNetworkCollection(input: $input) { name label specVersion coordinateSystem { name } } }",
+        context_value=ctx,
+        variable_values={"input": {"axes": [{"name": "x", "type": "SPACE"}, {"name": "y", "type": "SPACE"}, {"name": "z", "type": "SPACE"}], "store": str(konnektion.pk)}},
+    )
+    assert not network.errors, network.errors
+    assert network.data["createNetworkCollection"]["name"] is None
+    assert network.data["createNetworkCollection"]["label"] == konnektion.key
+    assert network.data["createNetworkCollection"]["specVersion"] == "konnektion/1"
+    assert network.data["createNetworkCollection"]["coordinateSystem"]["name"] == f"{konnektion.key}/network"
+
+    searched = await schema.execute(
+        "query S($search: String!) { meshCollections(filters: { search: $search }) { id } }",
+        context_value=ctx,
+        variable_values={"search": store.key[:12]},
+    )
+    assert not searched.errors, searched.errors
+    assert [row["id"] for row in searched.data["meshCollections"]] == [collection["id"]], "an unnamed collection is found by its key"

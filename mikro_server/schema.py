@@ -231,9 +231,9 @@ class Query:
         ),
     )
 
-    mesh_collections: list[types.MeshCollection] = field(description="List mesh collections (immutable, versioned Parquet-backed mesh sets, each in a coordinate system of its own)")
+    mesh_collections: list[types.MeshCollection] = field(description="List mesh collections (immutable Parquet-backed mesh sets, each in a coordinate system of its own)")
     mesh_collection: types.MeshCollection = field(description="Get a single mesh collection by ID")
-    network_collections: list[types.NetworkCollection] = field(description="List network collections (immutable, versioned Parquet-backed node/edge networks, each in a coordinate system of its own)")
+    network_collections: list[types.NetworkCollection] = field(description="List network collections (immutable Parquet-backed node/edge networks, each in a coordinate system of its own)")
     network_collection: types.NetworkCollection = field(description="Get a single network collection by ID")
 
     sparse_datasets: list[types.SparseDataset] = field(description="List sparse datasets (matrices over two enumerated axes, stored as anndata-spelled zarr groups)")
@@ -597,12 +597,12 @@ class Mutation:
 
     create_mesh_collection = mutation(
         resolver=mutations.create_mesh_collection,
-        description="Register an immutable, versioned mesh collection against a coordinate system",
+        description="Register an immutable mesh collection against a coordinate system",
     )
     delete_mesh_collection = mutation(resolver=mutations.delete_mesh_collection, description="Delete an existing mesh collection")
     create_network_collection = mutation(
         resolver=mutations.create_network_collection,
-        description="Register an immutable, versioned network collection from an uploaded konnektion store, in a coordinate system of its own",
+        description="Register an immutable network collection from an uploaded konnektion store, in a coordinate system of its own",
     )
     delete_network_collection = mutation(resolver=mutations.delete_network_collection, description="Delete an existing network collection")
     create_sparse_dataset = mutation(

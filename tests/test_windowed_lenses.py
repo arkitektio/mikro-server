@@ -209,7 +209,7 @@ async def test_a_windowed_lens_is_a_resident_of_its_containers_space_that_the_co
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_lens_is_found_by_its_containers_label_whatever_the_container(authenticated_context: HttpContext):
-    """A sparse dataset by its name; a mesh and a network collection by their version, which is the label they have."""
+    """A sparse dataset by its name; a mesh and a network collection by their name, or by their store's key when they have none."""
     ctx = authenticated_context
     sparse_id, _, _ = await _a_sparse(ctx)
     mesh_id, _, _ = await _a_mesh(ctx)

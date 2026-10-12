@@ -937,7 +937,8 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     mutation Create($input: CreateMeshCollectionInput!) {
       createMeshCollection(input: $input) {
         id
-        version
+        name
+        label
         specVersion
         grid
         encoding
@@ -957,7 +958,7 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
                 # source's grid as-is -- which the rank check then holds this to.
                 "axes": [{"name": "c", "type": "CHANNEL"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
                 "derivedFrom": [{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "IDENTITY"}}],
-                "version": "v20260713-a3f9",
+                "name": "v20260713-a3f9",
                 # The store, and nothing about the geometry: its manifest already stated the
                 # grid, the encoding and the format version, and the server read them.
                 "store": str(store.pk),
@@ -967,7 +968,7 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     assert not result.errors, result.errors
 
     collection = result.data["createMeshCollection"]
-    assert collection["version"] == "v20260713-a3f9"
+    assert collection["name"] == "v20260713-a3f9"
     # Read off the store's manifest, never declared through this API -- and anisotropic, which
     # is what distinguishes a correct component order from a reversed one.
     assert collection["specVersion"] == "fabriks/1"

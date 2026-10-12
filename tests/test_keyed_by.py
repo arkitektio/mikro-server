@@ -432,13 +432,13 @@ async def test_a_second_object_space_is_a_reference_not_an_axis(authenticated_co
 # somewhere in the source's space yields an id. See `docs/field-vs-references.md`.
 
 
-async def _mesh_collection(ctx: HttpContext, axes: list[dict], *, version: str = "v1") -> models.MeshCollection:
+async def _mesh_collection(ctx: HttpContext, axes: list[dict], *, name: str = "v1") -> models.MeshCollection:
     """A mesh collection in a space of its own, derived from nothing."""
     store = await seed.create_fabriks_store(ctx)
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id coordinateSystem { id } } }",
         context_value=ctx,
-        variable_values={"input": {"version": version, "store": str(store.pk), "axes": axes}},
+        variable_values={"input": {"name": name, "store": str(store.pk), "axes": axes}},
     )
     assert not result.errors, result.errors
     return await sync_to_async(models.MeshCollection.objects.get)(id=result.data["createMeshCollection"]["id"])
@@ -492,7 +492,7 @@ async def test_a_mesh_collection_keys_a_table(authenticated_context: HttpContext
     assert edge["kind"] == "FIELD"
     assert edge["input"]["id"] == str(system.pk), "the edge runs collection -> table"
     assert edge["output"]["id"] == table["coordinateSystem"]["id"]
-    assert edge["name"] == "v1 -> shape stats", "a collection has a version where a dataset has a name"
+    assert edge["name"] == "v1 -> shape stats", "a collection is named by its label, as a dataset is by its name"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -503,7 +503,7 @@ async def test_a_per_frame_collection_passes_time_through(authenticated_context:
     Worth its own test because it is the case that proves the axis split was not special-cased
     for collections: `(t,y,x)` against `(t,object)` can only mean consume `(y,x)`.
     """
-    collection = await _mesh_collection(authenticated_context, TYX_MESH_AXES, version="v2")
+    collection = await _mesh_collection(authenticated_context, TYX_MESH_AXES, name="v2")
     system = await sync_to_async(lambda: collection.coordinate_system)()
 
     columns = [
@@ -526,14 +526,15 @@ async def test_a_per_frame_collection_passes_time_through(authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_collection_is_named_by_its_version_in_refusals(authenticated_context: HttpContext):
-    """Every refusal used to read `dataset.name`, which a MeshCollection has not got.
+async def test_a_collection_is_named_by_its_label_in_refusals(authenticated_context: HttpContext):
+    """Every refusal used to read `dataset.name`, which a MeshCollection may not have.
 
-    A collection carries `version` instead, so the message raised an AttributeError -- a
-    500 rather than a sentence -- on every path this change makes reachable. Pinned here
-    because the failure is invisible until a caller gets something wrong.
+    A collection answers `label` (its name, or its store's key), and reading the wrong
+    attribute raised an AttributeError -- a 500 rather than a sentence -- on every path this
+    change makes reachable. Pinned here because the failure is invisible until a caller gets
+    something wrong.
     """
-    collection = await _mesh_collection(authenticated_context, ZYX_MESH_AXES, version="v20260713-a3f9")
+    collection = await _mesh_collection(authenticated_context, ZYX_MESH_AXES, name="v20260713-a3f9")
 
     # The collection's axes are all axes of the table too, so the edge would consume
     # nothing: there is no map, because nothing is collapsed into an id.
@@ -551,7 +552,7 @@ async def test_a_collection_is_named_by_its_version_in_refusals(authenticated_co
 
     assert result.errors
     message = str(result.errors[0])
-    assert "v20260713-a3f9" in message, "the collection is named by its version"
+    assert "v20260713-a3f9" in message, "the collection is named by its label"
     assert "consume nothing" in message
     assert not await sync_to_async(models.TableDataset.objects.filter(name="vertices").exists)()
 
@@ -595,7 +596,7 @@ async def test_a_collection_keyed_to_its_own_table_still_reaches_its_masks(authe
         context_value=authenticated_context,
         variable_values={
             "input": {
-                "version": "v3",
+                "name": "v3",
                 "store": str(store.pk),
                 "axes": TYX_MESH_AXES,
                 "derivedFrom": [{"kind": "DATASET", "dataset": str(mask.pk), "transform": {"kind": "IDENTITY"}}],

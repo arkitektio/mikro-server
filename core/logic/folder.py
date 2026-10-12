@@ -135,7 +135,7 @@ def derivation_parent(container: Container) -> Container | None:
 
 def _label(container: Container) -> str:
     """A container in an error message: its kind and the name a user would recognise."""
-    name = getattr(container, "name", None) or getattr(container, "version", None) or container.pk
+    name = getattr(container, "name", None) or getattr(container, "label", None) or container.pk
     return f"{type(container).__name__} '{name}'"
 
 

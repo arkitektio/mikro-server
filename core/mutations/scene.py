@@ -167,7 +167,7 @@ class CreateSceneFromLensInput:
     """Input for bootstrapping a scene over one lens."""
 
     lens: strawberry.ID = strawberry.field(description="The lens to show, of any kind. Its layer(s) read this lens: a crop or the whole array as image layers per channel, a window over a table as a point or track layer, over a mesh, network or annotation collection as that layer")
-    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the container's name (a collection's version), with the lens' name when it has one")
+    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the container's label (a collection's name, or its store's key), with the lens' name when it has one")
     kind: enums.BootstrapLayerKind | None = strawberry.field(
         default=None,
         description="(array lenses) The render recipe for the layers, overriding what would be inferred from the lens' axes and from what ingest recorded -- the same choice as `ScenePolicyInput.kind`",

@@ -81,7 +81,7 @@ async def _collection(ctx: HttpContext) -> models.NetworkCollection:
     result = await schema.execute(
         "mutation Create($input: CreateNetworkCollectionInput!) { createNetworkCollection(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"version": "v1", "store": str(store.pk), "axes": XYZ_AXES}},
+        variable_values={"input": {"name": "v1", "store": str(store.pk), "axes": XYZ_AXES}},
     )
     assert not result.errors, result.errors
     return await sync_to_async(models.NetworkCollection.objects.select_related("store", "coordinate_system").get)(id=result.data["createNetworkCollection"]["id"])

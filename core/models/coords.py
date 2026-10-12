@@ -175,7 +175,9 @@ class Axis(models.Model):
         blank=True,
         help_text="The physical unit of the axis, e.g. 'micrometer'. A pint unit (the kanne `Unit` scalar), validated on write; 'a.u.' for arbitrary units. Set on unit-carrying axes (a physical space, a world), always null on pixel-grid axes",
     )
-    long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the axis")  # TODO: think if we still need them or if descriptions should encapsulate it?
+    # Kept beside `description` on purpose: this is the short label a picker searches and a
+    # UI prints, that one is prose about what the axis measures. Folding them would cost the label.
+    long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the axis")
     description = models.CharField(max_length=1000, null=True, blank=True, help_text="A free-form description of what the axis measures, e.g. 'distance from the coverslip'")
 
     class Meta:
@@ -401,7 +403,7 @@ class Transformation(models.Model):
 
 
 class MeshCollection(models.Model):
-    """An immutable, versioned collection of meshes, addressed by store rather than by row.
+    """An immutable collection of meshes, addressed by store rather than by row.
 
     The collection resolves to a **Parquet store** and a schema; the client asks the
     datalayer for temporary read credentials and queries the Parquet directly (e.g.
@@ -428,14 +430,12 @@ class MeshCollection(models.Model):
     some absolute space, belonging to no dataset, simply has none.
     """
 
-    # TODO: remove the version flag as mesh colelctions are immutable and versioned through the "provenance field"
-    version = models.CharField(max_length=64, help_text="The immutable version of this collection, e.g. 'v20260713-a3f9'")
+    # No `version`: a collection is immutable, and its identity is its store; what changed between
+    # two extractions is their provenance. No `spec_version` either: the store read it from the
+    # manifest, and a second copy here could only disagree with the bytes (see `spec_version`).
+    name = models.CharField(max_length=255, null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
 
-    # TODO: probably we should have the frabikstore have that spec version?
-    spec_version = models.CharField(max_length=64, help_text="The version of the mesh encoding specification this collection conforms to")
-
-    # Filing, not placement -- see the note on `ArrayDataset.folder`. A versioned collection is
-    # still one filed thing: each version is its own row, so each is filed on its own.
+    # Filing, not placement -- see the note on `ArrayDataset.folder`.
     folder = models.ForeignKey(
         "Folder",
         on_delete=models.SET_NULL,
@@ -491,13 +491,23 @@ class MeshCollection(models.Model):
         # uniqueness on edges anywhere else either.
         ordering = ["-created_at"]
 
+    @property
+    def label(self) -> str:
+        """What to call this collection in prose: its name, or its store's key."""
+        return self.name or self.store.key
+
+    @property
+    def spec_version(self) -> str | None:
+        """The mesh format version, read off the store's manifest and namespaced -- never stated twice."""
+        return f"fabriks/{self.store.spec_version}" if self.store.spec_version else None
+
     def __str__(self) -> str:
-        """The collection's version."""
-        return f"MeshCollection {self.version}"
+        """The collection's label."""
+        return f"MeshCollection {self.label}"
 
 
 class NetworkCollection(models.Model):
-    """An immutable, versioned collection of node/edge networks, addressed by store.
+    """An immutable collection of node/edge networks, addressed by store.
 
     The graph sibling of :class:`MeshCollection`: traced neurons, vessel trees, skeletons,
     connectomes, tracking graphs with divisions. Everything :class:`MeshCollection`'s docstring
@@ -520,9 +530,8 @@ class NetworkCollection(models.Model):
     and it is a statement rather than a silence.
     """
 
-    # TODO: Same HERE
-    version = models.CharField(max_length=64, help_text="The immutable version of this collection, e.g. 'v20260713-a3f9'")
-    spec_version = models.CharField(max_length=64, help_text="The version of the network encoding specification this collection conforms to")
+    # As on `MeshCollection`: no `version`, no `spec_version`; a name, optionally.
+    name = models.CharField(max_length=255, null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
 
     folder = models.ForeignKey(
         "Folder",
@@ -565,6 +574,16 @@ class NetworkCollection(models.Model):
 
         ordering = ["-created_at"]
 
+    @property
+    def label(self) -> str:
+        """What to call this collection in prose: its name, or its store's key."""
+        return self.name or self.store.key
+
+    @property
+    def spec_version(self) -> str | None:
+        """The network format version, read off the store's manifest and namespaced -- never stated twice."""
+        return f"konnektion/{self.store.spec_version}" if self.store.spec_version else None
+
     def __str__(self) -> str:
-        """The collection's version."""
-        return f"NetworkCollection {self.version}"
+        """The collection's label."""
+        return f"NetworkCollection {self.label}"

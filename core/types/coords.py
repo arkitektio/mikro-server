@@ -804,10 +804,10 @@ class LineageGraph:
     models.MeshCollection,
     filters=filters.MeshCollectionFilter,
     pagination=True,
-    description="An immutable, versioned collection of meshes, stored as one fabriks prefix. Ask its `store` for an access grant and query the Parquet directly (e.g. with DuckDB) rather than paginating meshes through GraphQL",
+    description="An immutable collection of meshes, stored as one fabriks prefix. Ask its `store` for an access grant and query the Parquet directly (e.g. with DuckDB) rather than paginating meshes through GraphQL",
 )
 class MeshCollection(OrgScoped):
-    """An immutable, versioned collection of meshes, backed by Parquet stores rather than rows."""
+    """An immutable collection of meshes, backed by Parquet stores rather than rows."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
@@ -849,8 +849,17 @@ class MeshCollection(OrgScoped):
         return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
 
     id: auto
-    version: str
-    spec_version: str
+    name: str | None
+
+    @kante.django_field(select_related=["store"], description="What to call this collection: its name, or its store's key when it has none")
+    def label(self, info: Info) -> str:
+        """The collection's label."""
+        return self.label
+
+    @kante.django_field(select_related=["store"], description="The format version this collection's store conforms to, read off the store's manifest and namespaced (`fabriks/1`). Null while the store has not been read")
+    def spec_version(self, info: Info) -> str | None:
+        """The store's format version, namespaced."""
+        return self.spec_version
     # The collection's OWN system, not the dataset's. It used to borrow the source's,
     # which forced the vertices to be exactly in that pixel grid; `derivedFrom` is where
     # the relation now lives, and it can say something a borrowed system could not.
@@ -902,10 +911,10 @@ class MeshCollection(OrgScoped):
     models.NetworkCollection,
     filters=filters.NetworkCollectionFilter,
     pagination=True,
-    description="An immutable, versioned collection of networks, stored as one konnektion prefix. Ask its `store` for an access grant and query the Parquet directly (e.g. with DuckDB) rather than paginating nodes through GraphQL",
+    description="An immutable collection of networks, stored as one konnektion prefix. Ask its `store` for an access grant and query the Parquet directly (e.g. with DuckDB) rather than paginating nodes through GraphQL",
 )
 class NetworkCollection(OrgScoped):
-    """An immutable, versioned collection of node/edge networks, backed by Parquet stores rather than rows."""
+    """An immutable collection of node/edge networks, backed by Parquet stores rather than rows."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
 
@@ -947,8 +956,17 @@ class NetworkCollection(OrgScoped):
         return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
 
     id: auto
-    version: str
-    spec_version: str
+    name: str | None
+
+    @kante.django_field(select_related=["store"], description="What to call this collection: its name, or its store's key when it has none")
+    def label(self, info: Info) -> str:
+        """The collection's label."""
+        return self.label
+
+    @kante.django_field(select_related=["store"], description="The format version this collection's store conforms to, read off the store's manifest and namespaced (`konnektion/1`). Null while the store has not been read")
+    def spec_version(self, info: Info) -> str | None:
+        """The store's format version, namespaced."""
+        return self.spec_version
     # The collection's OWN system, not the dataset's. It used to borrow the source's,
     # which forced the node positions to be exactly in that pixel grid; `derivedFrom` is where
     # the relation now lives, and it can say something a borrowed system could not.

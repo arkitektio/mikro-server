@@ -2,6 +2,7 @@ from core import enums, models, types, filters as f, pagination as p
 from core.utils import paginate_querysets
 import strawberry
 from typing import Annotated, Union
+from django.db.models.functions import Coalesce
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from enum import Enum
 from core.scoping import get_for_org, scope_queryset
@@ -46,9 +47,10 @@ FolderChild = Annotated[
 
 
 #: Everything filed in a folder, in the order the union lists them. `MeshCollection` is the
-#: odd one out and the reason this is a table rather than a list of names: it has no `name`
-#: column (it is identified by `version`), so both the search vector and the ordering have
-#: to ask it a different question than the rest.
+#: odd one out and the reason this is a table rather than a list of names: its name is
+#: optional and it is labelled by its store's key when it has none, so both the search vector
+#: and the ordering read a `sort_label` annotation rather than a column (named apart from the
+#: model's `label` property, which an annotation of that name would try to assign).
 #: The last column is whether the source is a container, i.e. whether a `FileLink` can point
 #: at it: sub-folders and files have no `file_links` to be hidden by.
 _CHILD_SOURCES = [
@@ -56,7 +58,7 @@ _CHILD_SOURCES = [
     ("files", "name", None, False),
     ("array_datasets", "name", "description", True),
     ("table_datasets", "name", "description", True),
-    ("mesh_collections", "version", None, True),
+    ("mesh_collections", "sort_label", None, True),
     ("annotation_collections", "name", "description", True),
 ]
 
@@ -83,6 +85,10 @@ def children(
         # Scoped again per accessor: the folder is ours, but a row filed into it from another
         # organization (possible before `createFolder` scoped its parent) must not ride along.
         queryset = scope_queryset(getattr(folder, accessor).all(), info)
+        if name_field == "sort_label":
+            # A collection's label is its name or, failing that, its store's key: an annotation,
+            # so an unnamed collection is searchable and sorts by what identifies it.
+            queryset = queryset.annotate(sort_label=Coalesce("name", "store__key"))
 
         # A container converted from a file is that file again in another form, and the file is
         # already in the listing. Only a SOURCE link says so: a RENDITION is a file written
@@ -97,8 +103,8 @@ def children(
 
         if order:
             order_prefix = "" if order.direction == ChildrenOrderDirection.ASC else "-"
-            # `name` is the only order field a mesh collection cannot answer; it orders by
-            # the thing that identifies it instead. `createdAt` and `updatedAt` are shared.
+            # `name` is the one order field a mesh collection answers through its label
+            # annotation rather than a column. `createdAt` and `updatedAt` are shared.
             order_field = name_field if order.field is ChildrenOrderField.NAME else order.field.value
             queryset = queryset.order_by(f"{order_prefix}{order_field}")
 

@@ -48,8 +48,9 @@ query InView($id: ID!, $region: BoundingBoxInput!) {
       system { id }
       path { inverted transformation { id kind } }
       source {
+        __typename
         ... on ArrayDataset { id name }
-        ... on MeshCollection { id version }
+        ... on MeshCollection { id label }
         ... on AnnotationCollection { id name }
       }
       anchors { id coordinates }
@@ -172,7 +173,7 @@ async def test_a_mesh_collection_is_returned_unbounded(authenticated_context: Ht
     world_id = await sync_to_async(lambda: scene.world.pk)()
 
     hits = await _in_view(authenticated_context, world_id, [900.0, 900.0, 900.0], [910.0, 910.0, 910.0])
-    meshes = [hit for hit in hits if hit["source"].get("version")]
+    meshes = [hit for hit in hits if hit["source"]["__typename"] == "MeshCollection"]
     assert len(meshes) == 1, "a source the server cannot bound is not a source it knows to be out of view"
     assert meshes[0]["extentState"] == "UNREADABLE"
     assert meshes[0]["extent"] == []

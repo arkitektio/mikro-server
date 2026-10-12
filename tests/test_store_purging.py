@@ -310,8 +310,7 @@ async def test_referrers_of_sees_a_store_a_collection_points_at(db, authenticate
     assert await sync(storage.referrers_of)(store) == [], "a fresh store is referenced by nothing"
 
     await models.MeshCollection.objects.acreate(
-        version="v1",
-        spec_version="fabriks/1",
+        name="v1",
         store=store,
         creator=ctx.request.user,
         organization=ctx.request.organization,
@@ -333,8 +332,7 @@ async def test_deleting_a_mesh_collection_flags_its_fabriks_store(db, authentica
     store = await sync(seed._seed_fabriks_store_sync)(ctx, axes=None, populated=True)
 
     collection = await models.MeshCollection.objects.acreate(
-        version="v1",
-        spec_version="fabriks/1",
+        name="v1",
         store=store,
         creator=ctx.request.user,
         organization=ctx.request.organization,

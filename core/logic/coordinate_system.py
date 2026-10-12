@@ -167,14 +167,12 @@ def resolve_source_system(
     if network_collection is not None:
         system = getattr(network_collection, "coordinate_system", None)
         if system is None:
-            raise ValueError(f"Network collection '{network_collection.version}' has no coordinate system to register.")
+            raise ValueError(f"Network collection '{network_collection.label}' has no coordinate system to register.")
         return system
 
     system = getattr(mesh_collection, "coordinate_system", None)
     if system is None:
-        # `version`, not `name`: a MeshCollection has no name field, and reading one here
-        # raised an AttributeError -- a 500 -- instead of this sentence.
-        raise ValueError(f"Mesh collection '{mesh_collection.version}' has no coordinate system to register.")
+        raise ValueError(f"Mesh collection '{mesh_collection.label}' has no coordinate system to register.")
     return system
 
 
@@ -202,11 +200,11 @@ def source_label(model: type, source) -> str:  # noqa: ANN001 - any container ro
     """What to call a source in an edge name or an error, whatever kind it is.
 
     ``f"{child} <- {source}"`` used to read the source's *dataset* name -- which a table, a
-    mesh collection or a bare coordinate system does not have. A ``MeshCollection`` carries
-    ``version`` instead of ``name``, and reading the wrong one is an AttributeError rather
+    mesh collection or a bare coordinate system does not have. A collection answers ``label``
+    (its name, or its store's key), and reading the wrong attribute is an AttributeError rather
     than a sentence, so the fallback chain lives here and every caller shares it.
     """
-    return getattr(source, "name", None) or getattr(source, "version", None) or f"{model.__name__} {source.pk}"
+    return getattr(source, "name", None) or getattr(source, "label", None) or f"{model.__name__} {source.pk}"
 
 
 #: The lens kinds that are never a named derivation source: a network is a derivation *child*

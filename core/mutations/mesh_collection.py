@@ -1,7 +1,7 @@
 """Mutations for mesh collections.
 
-A collection is immutable and versioned: refining an extraction produces a new
-version, it does not edit an old one. It *is* a fabriks store -- one uploaded prefix
+A collection is immutable: refining an extraction produces a new collection over a new
+store, it does not edit an old one. It *is* a fabriks store -- one uploaded prefix
 holding its manifest, both catalogs and every octree level -- so registering one is
 naming that store and the space its vertices are in, and nothing else. There is
 deliberately no mutation here that writes meshes one by one, and no field that reads
@@ -28,7 +28,7 @@ from core.scoping import get_for_org
 
 
 class CreateMeshCollectionInputModel(BaseModel):
-    version: str
+    name: str | None = None
     store: str
     axes: list[AxisInputModel]
     folder: str | None = None
@@ -39,11 +39,11 @@ class CreateMeshCollectionInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateMeshCollectionInputModel, description="Input for registering an immutable, versioned mesh collection. The collection gets a coordinate system of its own, and an edge relates it to the space the meshes were extracted from")
+@kante.pydantic_input(CreateMeshCollectionInputModel, description="Input for registering an immutable mesh collection. The collection gets a coordinate system of its own, and an edge relates it to the space the meshes were extracted from")
 class CreateMeshCollectionInput:
     """Input for registering a mesh collection."""
 
-    version: str = strawberry.field(description="The immutable version of this collection, e.g. 'v20260713-a3f9'. A refined extraction is a new version, never an edit to an old one")
+    name: str | None = strawberry.field(default=None, description="What to call this collection. Optional: it is identified by its store and labelled by this or, failing that, by the store's key. A refined extraction is a new collection over a new store, never an edit to an old one")
     store: scalars.FabriksLike = strawberry.field(
         description=(
             "The uploaded **fabriks store** holding this collection: one prefix with `fabriks.json`, both catalogs and every octree level. Request it with `requestFabriksUpload`, write the "
@@ -122,7 +122,6 @@ def _write_collection(
     model: CreateMeshCollectionInputModel,
     ctx: CreationContext,
     *,
-    spec_version: str,
     grid: dict,
     encoding: dict,
     store: "models.FabriksStore",
@@ -136,8 +135,7 @@ def _write_collection(
     """
     with transaction.atomic():
         collection = models.MeshCollection.objects.create(
-            version=model.version,
-            spec_version=spec_version,
+            name=model.name,
             store=store,
             grid=grid,
             encoding=encoding,
@@ -148,14 +146,14 @@ def _write_collection(
         )
 
         system = graph_logic.create_collection_system(
-            name=f"{collection.version}/mesh",
+            name=f"{collection.label}/mesh",
             axes=model.axes,
             owner=collection,
             ctx=ctx,
         )
 
         # Optional on purpose: a mesh in some absolute space is derived from nothing.
-        coordinate_system_logic.write_derivation_edges(info, name=collection.version, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
+        coordinate_system_logic.write_derivation_edges(info, name=collection.label, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
         file_link_logic.write_file_links(info, container=collection, source_files=model.source_files or [], ctx=ctx)
         # The lens selecting all of it, from the start: the handle an action is handed for the collection.
         coordinate_system_logic.whole_lens(collection)
@@ -164,7 +162,7 @@ def _write_collection(
 
 
 def create_mesh_collection(info: Info, input: CreateMeshCollectionInput) -> types.MeshCollection:
-    """Register an immutable, versioned mesh collection, in a coordinate system of its own.
+    """Register an immutable mesh collection, in a coordinate system of its own.
 
     The bytes arrive the way every other store's do: the client requests an upload grant,
     writes the tree, and finishes the upload -- which is where ``fill_info`` reads
@@ -189,16 +187,14 @@ def create_mesh_collection(info: Info, input: CreateMeshCollectionInput) -> type
     ctx = CreationContext.from_info(info)
     store = _resolve_fabriks_store(info, model)
 
-    # Read, never declared. `fill_info` already fetched `fabriks.json`, so these are what the
-    # writer actually wrote rather than what a caller retyped. `spec_version` is namespaced
-    # because a bare "1" would collide with the first version of the contract this replaced
-    # while meaning something entirely unrelated.
+    # Read, never declared. `fill_info` already fetched the manifest, so these are what the
+    # writer actually wrote rather than what a caller retyped; the format version stays on the
+    # store and the collection answers it from there.
     _assert_axes_agree(model.axes, store.axes)
     return _write_collection(
         info,
         model,
         ctx,
-        spec_version=f"fabriks/{store.spec_version}",
         grid=store.grid or {},
         encoding=store.encoding or {},
         store=store,

@@ -1955,7 +1955,7 @@ class MeshLayer(Layer):
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The versioned, coordinate-system-anchored mesh collection this layer renders: the container of the lens. Its geometry is fetched from the collection's Parquet catalog, not through this API")
+    @kante.django_field(description="The immutable, coordinate-system-anchored mesh collection this layer renders: the container of the lens. Its geometry is fetched from the collection's Parquet catalog, not through this API")
     def collection(self, info: Info) -> MeshCollection | None:
         """The lens' collection."""
         return self.lens.mesh_collection
@@ -2023,7 +2023,7 @@ class NetworkLayer(Layer):
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The versioned, coordinate-system-anchored network collection this layer renders: the container of the lens. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API")
+    @kante.django_field(description="The immutable, coordinate-system-anchored network collection this layer renders: the container of the lens. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API")
     def collection(self, info: Info) -> NetworkCollection | None:
         """The lens' collection."""
         return self.lens.network_collection
