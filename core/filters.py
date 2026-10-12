@@ -518,7 +518,6 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
         # united axis.
         physical_space = models.Transformation.objects.filter(
             input_id=OuterRef(f"{prefix}coordinate_system_id"),
-            parent__isnull=True,
             output__axes__unit__isnull=False,
         ).exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
         queryset = _annotate_once(queryset, "_has_physical_space", Exists(physical_space))
@@ -1049,10 +1048,6 @@ class TransformationFilter(IdsFilterMixin, OwnedFilterMixin):
     # composition. An edge *into a space* is `output: <systemId>` above, and the field form
     # of that same question is `CoordinateSystem.registrations`.
 
-    @kante.filter_field(description="Show only top-level edges, excluding the children of SEQUENCE / BY_DIMENSION wrappers")
-    def roots_only(self, info: Info, value: bool, prefix: str) -> Q:
-        return Q(**{f"{prefix}parent__isnull": True}) if value else Q()
-
 
 @kante.filter_type(models.MeshCollection)
 class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
@@ -1338,7 +1333,7 @@ def _derived_dataset_ids(source_id: strawberry.ID | None = None):
         "output__annotation_collections__id",
     )
     edges = (
-        models.Transformation.objects.filter(parent__isnull=True, input__datasets__isnull=False)
+        models.Transformation.objects.filter(input__datasets__isnull=False)
         .exclude(kind=enums.TransformKindChoices.FIELD.value)  # a FIELD is a lookup, never a derivation (`is_derivation_edge`)
         .annotate(_source_dataset=source_dataset, _source_collection=source_collection)
     )
@@ -1378,7 +1373,6 @@ def _systems_derived_from_dataset(dataset_id: strawberry.ID):
     duplicating it onto the collection is the copy this whole graph exists to avoid.
     """
     return models.Transformation.objects.filter(
-        parent__isnull=True,
         input__isnull=False,
     ).filter(
         Q(output__datasets__id=dataset_id) | Q(output__lenses__arraylens__dataset_id=dataset_id) | Q(output__data_arrays__dataset_id=dataset_id)

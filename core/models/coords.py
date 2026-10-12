@@ -234,9 +234,15 @@ class Transformation(models.Model):
     two systems are related, and no point of either corresponds to a point of the
     other. It takes no parameters, is bound by no rank, and
     :func:`core.logic.graph.is_traversable` refuses it to every placement search --
-    in both directions. It may not be a wrapper child: a SEQUENCE one of whose
+    in both directions. It may not be a step of a SEQUENCE: a sequence one of whose
     steps maps nothing maps nothing, and would be better written as the one edge
     it is.
+
+    **A composite edge is one row.** A SEQUENCE carries its ordered steps in ``steps``
+    (each a ``kind`` and its ``params``, applied first to last) and a BY_DIMENSION
+    carries its map in its own ``params``; neither is a tree of rows. A step is not an
+    edge -- it has no endpoints, no identity and no history of its own -- so every row
+    of this table joins two systems, and a refinement writes the row a client reads.
 
     Two limits worth naming, because a reader will assume they were handled.
     Whether an edge can be walked *backwards* is decided by kind and rank
@@ -257,14 +263,8 @@ class Transformation(models.Model):
     )
     name = models.CharField(max_length=255, null=True, blank=True, help_text="The name of the transformation")
 
-    # Null only for a child of a SEQUENCE / BY_DIMENSION wrapper --
-    # RFC-5 permits omitting them there, because the wrapper supplies them.
-    input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, null=True, blank=True, related_name="+", help_text="The coordinate system this transformation maps from")
-    output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, null=True, blank=True, related_name="+", help_text="The coordinate system this transformation maps to")
-
-    # TODO: Should we really have child transformations, maybe just params?
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="The wrapping SEQUENCE / BY_DIMENSION transformation, if this is a child")
-    order = models.PositiveSmallIntegerField(default=0, help_text="The position of this child within its wrapping SEQUENCE, applied first to last")
+    input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps from")
+    output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps to")
 
     # BY_DIMENSION only: which axes this child acts on, by NAME. RFC-5's
     # transformation table says List[str] while its byDimension prose says
@@ -275,7 +275,16 @@ class Transformation(models.Model):
 
     params = models.JSONField(
         default=dict,
-        help_text="The transformation's parameters, keyed by kind: SCALE {'scale': [...]}, TRANSLATION {'translation': [...]}, AFFINE {'affine': [[...], ...]} (M x (N+1), rows outermost), UNMAPPABLE {'reason': '...'} (optional, purely descriptive)",
+        help_text="The transformation's parameters, keyed by kind: SCALE {'scale': [...]}, TRANSLATION {'translation': [...]}, AFFINE {'affine': [[...], ...]} (M x (N+1), rows outermost), BY_DIMENSION any of 'scale', 'translation', 'affine' over the axes it names (none: the identity on them), UNMAPPABLE {'reason': '...'} (optional, purely descriptive)",
+    )
+    # SEQUENCE only. The ingest writes a stepped lens and a downsampled pyramid level as a
+    # scale then a translation; nothing nested ever arrives from a client. A step may name a
+    # `field` (a system pk) when its kind is FIELD, which is the one thing a step reads off a
+    # row other than its kind and params.
+    steps = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(SEQUENCE) The ordered steps, applied first to last, each {'kind': ..., 'params': {...}} and, for a FIELD step, 'field': the pk of the array's system. Empty for every other kind",
     )
 
     # An edge fact, deliberately: it used to be a column on the layer, where two layers
@@ -344,6 +353,11 @@ class Transformation(models.Model):
             return None
         return self.field or self.input
 
+    @property
+    def step_pairs(self) -> tuple[tuple[str, dict], ...]:
+        """The steps as the ``(kind, params)`` pairs every composer reads; empty off a SEQUENCE."""
+        return tuple((str(step["kind"]), dict(step.get("params") or {})) for step in self.steps or [])
+
     # **Where along an axis this edge applies.** Null -- and almost always null -- for an edge
     # that holds everywhere, which is every edge the model had before this column.
     #
@@ -384,8 +398,7 @@ class Transformation(models.Model):
     # one edge and `core.logic.graph.transform_version` counts them along a chain; both
     # answer what the column answered, and neither can be forgotten.
 
-    # See CoordinateSystem.organization: a wrapper child has input, output and
-    # every non-self FK null, so there is no path to an organization without it.
+    # See CoordinateSystem.organization.
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this transformation belongs to")
     creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this transformation")
     created_at = models.DateTimeField(auto_now_add=True, help_text="The time this transformation was created")
@@ -395,7 +408,7 @@ class Transformation(models.Model):
     class Meta:
         """Meta options for the transformation."""
 
-        ordering = ["order", "id"]
+        ordering = ["id"]
 
     def __str__(self) -> str:
         """The transformation's kind and endpoints."""

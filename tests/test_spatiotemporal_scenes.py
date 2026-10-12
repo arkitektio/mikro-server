@@ -411,7 +411,7 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
     )
     assert not created.errors, created.errors
 
-    edges = await sync_to_async(lambda: list(models.Transformation.objects.filter(output=world, parent__isnull=True)))()
+    edges = await sync_to_async(lambda: list(models.Transformation.objects.filter(output=world)))()
     assert len(edges) == 1, "creating a layer must not add a registration of its own"
     assert edges[0].kind == enums.TransformKindChoices.AFFINE.value
 
@@ -476,10 +476,11 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_contex
     assert path is None, "a rank-changing edge has no inverse, so it is not a way back to world"
 
     def rank_verdicts() -> tuple[bool, bool]:
-        # The pyramid's level-to-intrinsic SCALE is equal-rank, so it still inverts fine --
-        # which is why this rule changes no path that resolved before BY_DIMENSION existed
-        # (see test_inverted_step_is_flagged). The backwards registration does not.
-        equal_rank = models.Transformation.objects.filter(kind=enums.TransformKindChoices.SCALE.value).first()
+        # The pyramid's level-to-intrinsic edge (a SCALE, or a scale-then-translate SEQUENCE)
+        # is equal-rank, so it still inverts fine -- which is why this rule changes no path that
+        # resolved before BY_DIMENSION existed (see test_inverted_step_is_flagged). The
+        # backwards registration does not.
+        equal_rank = models.Transformation.objects.filter(kind__in=[enums.TransformKindChoices.SCALE.value, enums.TransformKindChoices.SEQUENCE.value]).first()
         rank_changing = models.Transformation.objects.get(pk=backwards.data["createTransformation"]["id"])
         return graph_logic.is_reverse_traversable(equal_rank), graph_logic.is_reverse_traversable(rank_changing)
 

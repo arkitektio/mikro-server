@@ -102,7 +102,6 @@ class CoordinateSystemOrder:
 
 @strawberry_django.order_type(models.Transformation)
 class TransformationOrder:
-    order: auto
     created_at: auto
     id: auto
 

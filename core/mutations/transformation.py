@@ -119,48 +119,6 @@ class UpdateTransformationInputModel(BaseModel):
     validity: enums.PlacementValidity | None = None
 
 
-def _rank_endpoints(transformation: "models.Transformation") -> tuple | None:
-    """The systems and axis lists a refinement's rank must answer to, or None if there are none.
-
-    An edge normally answers to its own endpoints. A **wrapper child** has none -- `_sequence`
-    says so itself: *"The children omit input and output: the wrapping sequence supplies them"*
-    -- so until this existed the guard below simply skipped, and `assert_edge_rank` never ran
-    for any of them. Every stepped lens and every downsampled pyramid level has such a child,
-    its id is exposed through `SequenceTransformation.transformations`, and `updatable_params`
-    reads the *child's* kind, so a SCALE child accepted a vector of any length. `to_matrix`
-    then wrote a two-entry scale's last number into `matrix[1][1]` on a four-axis dataset and
-    left the rest unscaled -- silently, which is the failure `assert_edge_rank`'s own docstring
-    says it exists to prevent.
-
-    **The parent's kind decides what the child answers to, and getting this wrong manufactures
-    a regression.** A SEQUENCE applies each child to the whole space, so a child answers to the
-    wrapper's full rank and full axis names. A BY_DIMENSION applies its children to the axes it
-    *names*: `_sub_matrix` composes them at ``len(acts_on_input)`` and `_by_dimension_forms`
-    labels the rows by ``acts_on_output``. Inheriting the endpoints without that distinction
-    would check a BY_DIMENSION child against the full system -- rejecting a two-entry scale
-    acting on ``["y", "x"]`` inside a ``(t, z, y, x)`` wrapper for its rank, and rejecting one
-    inside a ``(c,y,x) -> (t,z,y,x)`` wrapper for names it does not touch. Relating two spaces
-    of different rank and different names is what BY_DIMENSION is *for*, so that is not an
-    exotic shape to protect: it is the ordinary one.
-    """
-    if transformation.input and transformation.output:
-        return (transformation.input, transformation.output, None)
-
-    parent = transformation.parent
-    if parent is None or not (parent.input and parent.output):
-        # An orphan child, or a wrapper that is itself endpoint-less. Nothing fixes the rank,
-        # so there is nothing to check it against -- the same answer as before, now said out
-        # loud rather than falling out of a truthiness test.
-        return None
-
-    if parent.kind == enums.TransformKind.BY_DIMENSION.value:
-        # The subset has to be handed over explicitly: `assert_edge_rank` reads the axis lists
-        # off the edge only for its own axis-carrying kinds, and this child's kind is SCALE or
-        # TRANSLATION. Passed as the two ordered *name lists* rather than a pair of counts,
-        # because the checks that would otherwise misfire include two that compare names.
-        return (parent.input, parent.output, (list(parent.input_axes or ()), list(parent.output_axes or ())))
-    return (parent.input, parent.output, None)
-
 
 @kante.pydantic_input(UpdateTransformationInputModel, description="Input for refining an edge's parameters. The refinement is recorded in the edge's provenance, which is what tells an ROI its chain has moved")
 class UpdateTransformationInput:
@@ -205,7 +163,7 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     offending = [field for field in supplied if field not in allowed]
     if offending:
         if transformation.kind == enums.TransformKind.SEQUENCE.value:
-            raise ValueError(f"A {transformation.kind} transformation is a wrapper: its parameters live on its children, so there is no `{offending[0]}` here to refine. Refine the child edge instead.")
+            raise ValueError(f"A {transformation.kind} transformation carries its map as `steps`, written by the ingest from the data's own shapes and slices, so there is no `{offending[0]}` here to refine.")
         reads_clause = "it reads " + ", ".join(f"`{param}`" for param in allowed) if allowed else "it takes no parameters at all"
         raise ValueError(f"A {transformation.kind} transformation does not read `{offending[0]}`: {reads_clause}, so refining it would write a number nothing reads.")
 
@@ -225,20 +183,14 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
 
     # The rank it lands on is the rank the endpoints already fix, and an update that
     # silently changed it would be a back door around the check `create_transformation` makes.
-    # A wrapper child has no endpoints of its own and answers to its parent's -- see
-    # `_rank_endpoints`, which is where that lookup and its one subtlety live.
-    endpoints = _rank_endpoints(transformation)
-    if endpoints is not None:
-        input_system, output_system, subset_axes = endpoints
-        graph_logic.assert_edge_rank(
-            kind=transformation.kind,
-            params=params,
-            input_axes=transformation.input_axes,
-            output_axes=transformation.output_axes,
-            input_system=input_system,
-            output_system=output_system,
-            subset_axes=subset_axes,
-        )
+    graph_logic.assert_edge_rank(
+        kind=transformation.kind,
+        params=params,
+        input_axes=transformation.input_axes,
+        output_axes=transformation.output_axes,
+        input_system=transformation.input,
+        output_system=transformation.output,
+    )
 
     if model.name is not None:
         transformation.name = model.name
@@ -252,10 +204,6 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     # there is no counter here to bump, and so none to forget.
     transformation.save(update_fields=["params", "name", "validity"])
 
-    # A BY_DIMENSION publishes its map to clients as child rows, which this refinement has just
-    # made stale. Composition here does not read them -- `_sub_matrix` takes the params it was
-    # given -- so this is the client's copy catching up, not the server's answer changing.
-    graph_logic._project_by_dimension_children(transformation, CreationContext.from_info(info))
 
     return transformation
 
@@ -345,7 +293,7 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
         }
 
     edges = list(
-        models.Transformation.objects.filter(output=world, input_id__in=inputs, parent__isnull=True)
+        models.Transformation.objects.filter(output=world, input_id__in=inputs)
         .exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
         .select_related("input")
         .order_by("pk")

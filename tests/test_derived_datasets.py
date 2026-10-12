@@ -191,7 +191,7 @@ async def test_a_derived_dataset_walks_to_world_through_its_source(authenticated
     # And no assumed registration was fabricated for the derived dataset.
     def claim_names() -> list[str]:
         world_id = models.Scene.objects.get(pk=scene_id).world_id
-        return [edge.name or "" for edge in models.Transformation.objects.filter(parent__isnull=True, output_id=world_id)]
+        return [edge.name or "" for edge in models.Transformation.objects.filter(output_id=world_id)]
 
     names = await sync_to_async(claim_names)()
     assert not any("assumed" in name for name in names), f"the derived dataset must inherit, not be pinned: {names}"
@@ -235,7 +235,7 @@ async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_it
 
     def registrations() -> list[models.Transformation]:
         world_id = models.Scene.objects.get(pk=scene_id).world_id
-        return list(models.Transformation.objects.filter(parent__isnull=True, output_id=world_id).select_related("input"))
+        return list(models.Transformation.objects.filter(output_id=world_id).select_related("input"))
 
     edges = await sync_to_async(registrations)()
     assert len(edges) == 1, f"the layer mutation wrote no edge of its own: {edges}"
@@ -514,7 +514,7 @@ async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registratio
     assert affine["total"] is False, "the mask says nothing about the world's third axis, and the map does not pretend it does"
 
     def edges_into_world() -> list[int]:
-        return list(models.Transformation.objects.filter(parent__isnull=True, output_id=scene.world_id).values_list("input_id", flat=True))
+        return list(models.Transformation.objects.filter(output_id=scene.world_id).values_list("input_id", flat=True))
 
     assert await sync_to_async(edges_into_world)() == [movie_system.pk], "the mask was never registered"
 

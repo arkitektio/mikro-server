@@ -365,13 +365,21 @@ async def test_a_sequence_is_invertible_only_if_its_children_are(authenticated_c
         field = models.CoordinateSystem.objects.create(name="Warp field", organization=authenticated_context.request.organization)
         models.Axis.objects.create(coordinate_system=field, order=0, name="d", type=enums.AxisTypeChoices.DISPLACEMENT.value)
 
-        honest = models.Transformation.objects.create(kind=enums.TransformKindChoices.SEQUENCE.value, input=intrinsic, output=target, organization=authenticated_context.request.organization)
-        models.Transformation.objects.create(kind=enums.TransformKindChoices.SCALE.value, parent=honest, order=0, params={"scale": [1.0, 2.0, 2.0]}, organization=authenticated_context.request.organization)
-        models.Transformation.objects.create(kind=enums.TransformKindChoices.TRANSLATION.value, parent=honest, order=1, params={"translation": [0.0, 1.0, 1.0]}, organization=authenticated_context.request.organization)
-
-        warped = models.Transformation.objects.create(kind=enums.TransformKindChoices.SEQUENCE.value, input=intrinsic, output=target, organization=authenticated_context.request.organization)
-        models.Transformation.objects.create(kind=enums.TransformKindChoices.SCALE.value, parent=warped, order=0, params={"scale": [1.0, 2.0, 2.0]}, organization=authenticated_context.request.organization)
-        models.Transformation.objects.create(kind=enums.TransformKindChoices.FIELD.value, parent=warped, order=1, field=field, organization=authenticated_context.request.organization)
+        scale = {"kind": enums.TransformKindChoices.SCALE.value, "params": {"scale": [1.0, 2.0, 2.0]}}
+        honest = models.Transformation.objects.create(
+            kind=enums.TransformKindChoices.SEQUENCE.value,
+            input=intrinsic,
+            output=target,
+            steps=[scale, {"kind": enums.TransformKindChoices.TRANSLATION.value, "params": {"translation": [0.0, 1.0, 1.0]}}],
+            organization=authenticated_context.request.organization,
+        )
+        warped = models.Transformation.objects.create(
+            kind=enums.TransformKindChoices.SEQUENCE.value,
+            input=intrinsic,
+            output=target,
+            steps=[scale, {"kind": enums.TransformKindChoices.FIELD.value, "params": {}, "field": field.pk}],
+            organization=authenticated_context.request.organization,
+        )
 
         return honest, warped
 

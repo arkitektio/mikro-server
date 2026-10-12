@@ -58,7 +58,7 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
     layer_third = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=third)
     elsewhere = await models.CoordinateSystem.objects.acreate(name="elsewhere", organization=ctx.request.organization)
     await models.Transformation.objects.acreate(kind=enums.TransformKindChoices.TRANSLATION.value, input_id=third.coordinate_system_id, output=elsewhere, params={"translation": [0.0, 0.0, 0.0]}, organization=ctx.request.organization)
-    first_edge = await models.Transformation.objects.aget(input_id=first.coordinate_system_id, output=intrinsic, parent__isnull=True)
+    first_edge = await models.Transformation.objects.aget(input_id=first.coordinate_system_id, output=intrinsic)
     assert first_edge.params["translation"] == [0.0, -56.0, 0.0], "the old edge recorded the spelling, not the crop"
 
     # A dataset that never got a whole lens.
@@ -86,7 +86,7 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
     assert await models.CoordinateSystem.objects.filter(pk=third.coordinate_system_id).aexists(), "the crop something else is registered from stays"
     assert f"lens {third.pk} duplicates lens {first.pk} but is left in place" in report
     assert "repaired edge" in report and f"of lens {first.pk}" in report
-    first_edge = await models.Transformation.objects.aget(input_id=first.coordinate_system_id, output=intrinsic, parent__isnull=True)
+    first_edge = await models.Transformation.objects.aget(input_id=first.coordinate_system_id, output=intrinsic)
     assert first_edge.params["translation"] == [0.0, 8.0, 0.0], "the edge now says where the crop is"
 
     backfilled = await _lens_ids(bare)

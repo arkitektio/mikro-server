@@ -184,6 +184,7 @@ def test_polymorphic_transformation_subtypes_exist():
         "type MapAxisTransformation implements Transformation",
         "type SequenceTransformation implements Transformation",
         "type ByDimensionTransformation implements Transformation",
+        "type TransformationStep",
         "type FieldTransformation implements Transformation",
     ]:
         assert token in sdl, f"{token} missing from schema"

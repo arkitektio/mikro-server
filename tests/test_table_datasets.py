@@ -520,7 +520,7 @@ async def test_an_unregistered_derived_table_layer_is_rejected(authenticated_con
     assert not made.errors, made.errors
     assert made.data["createPointLayer"]["placementValidity"] == "MANUAL", "the weakest edge is the authored registration"
     # The layer mutation itself wrote nothing to the graph: only the explicit registration did.
-    assert await sync_to_async(models.Transformation.objects.count)() == edge_count + 2  # wrapper + IDENTITY child
+    assert await sync_to_async(models.Transformation.objects.count)() == edge_count + 1  # the one registration edge, carrying its identity map as empty params
 
     placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
     assert not placement.errors, placement.errors

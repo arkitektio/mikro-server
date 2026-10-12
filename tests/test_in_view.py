@@ -133,10 +133,8 @@ async def test_refining_a_registration_moves_the_extent(authenticated_context: H
     assert _extent(before[0])["x"] == [-0.5, 63.5]
 
     def refine() -> None:
-        child = edge.children.first()
-        child.kind = enums.TransformKindChoices.SCALE.value
-        child.params = {"scale": [2.0, 2.0, 2.0]}
-        child.save(update_fields=["kind", "params"])
+        edge.params = {"scale": [2.0, 2.0, 2.0]}
+        edge.save(update_fields=["params"])
 
     await sync_to_async(refine)()
 

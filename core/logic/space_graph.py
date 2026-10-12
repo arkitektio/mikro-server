@@ -519,9 +519,9 @@ def _meeting_spaces(system: "models.CoordinateSystem", organization: Organizatio
     while frontier:
         depth += 1
         edges = (
-            models.Transformation.objects.filter(parent__isnull=True, input_id__in=frontier, output__isnull=False, organization=organization)
+            models.Transformation.objects.filter(input_id__in=frontier, output__isnull=False, organization=organization)
             .select_related("output")
-            .prefetch_related("children", "output__axes")
+            .prefetch_related("output__axes")
         )
         frontier = []
         for edge in edges:
@@ -575,7 +575,7 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
         # A drawing space nothing is registered into holds no lens but the collection's own,
         # and that is nearly every one of them; asking first saves the whole graph. A window
         # over the collection itself lives there, and is the one lens that makes it worth it.
-        if depth == 0 and not models.Transformation.objects.filter(parent__isnull=True, output=space).exists() and not models.AnnotationLens.objects.filter(coordinate_system=space).exclude(windows=[]).exists():
+        if depth == 0 and not models.Transformation.objects.filter(output=space).exists() and not models.AnnotationLens.objects.filter(coordinate_system=space).exclude(windows=[]).exists():
             continue
 
         graph = for_request(info, space)

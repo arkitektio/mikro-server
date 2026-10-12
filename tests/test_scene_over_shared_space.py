@@ -356,6 +356,6 @@ async def test_builder_over_a_space_of_unrenderable_sources_makes_no_layers(auth
     assert scene["layers"] == []
 
     def claims_into_space() -> int:
-        return models.Transformation.objects.filter(parent__isnull=True, output=space).count()
+        return models.Transformation.objects.filter(output=space).count()
 
     assert await sync_to_async(claims_into_space)() == 1, "the claim is the space's fact; a skipped layer does not unmake it"

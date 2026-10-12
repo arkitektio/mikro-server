@@ -1110,7 +1110,9 @@ class AxedStep:
     output_axes: tuple[str, ...]
     acts_on_input: tuple[str, ...] | None = None
     acts_on_output: tuple[str, ...] | None = None
-    children: tuple[tuple[str, dict], ...] = ()
+    #: A SEQUENCE's steps as ``(kind, params)`` pairs, applied first to last; empty for every
+    #: other kind, a BY_DIMENSION's map being its ``params``.
+    steps: tuple[tuple[str, dict], ...] = ()
     #: Each endpoint's units, positionally parallel to its axis names. Empty means "not
     #: supplied", which is what every in-memory step that predates units says, and it reads as
     #: "no conversion" -- the behaviour before there were units here at all. Carried on the
@@ -1195,7 +1197,7 @@ def _by_dimension_forms(step: AxedStep) -> dict[str, AxedForm]:
     """A BY_DIMENSION edge's functionals: its named axes mapped, the rest passed through by name.
 
     Three populations, and the third is the one that matters. The axes it *names* are mapped
-    by its parameters (or by its children). The axes it does not name but both systems have
+    by its parameters. The axes it does not name but both systems have
     pass through unchanged -- that is the rule `edge_axis_names` and `assert_edge_rank`
     already state. Everything else -- an output axis the edge never mentions and the input
     does not have -- gets **no form at all**, because the edge genuinely says nothing about
@@ -1235,10 +1237,10 @@ def _by_dimension_forms(step: AxedStep) -> dict[str, AxedForm]:
 
 
 def _params_matrix(params: dict, rank_in: int, rank_out: int) -> list[list[float]]:
-    """The sub-matrix a childless composite carries in its own parameters.
+    """The sub-matrix a BY_DIMENSION carries in its own parameters.
 
     Scale then translation, the order `to_matrix` already uses for a SEQUENCE, because a
-    childless BY_DIMENSION is what `build_registration_edge` writes and
+    BY_DIMENSION is what `build_registration_edge` writes and
     ``_OPTIONAL_PARAMS_BY_KIND`` lets it carry both.
     """
     if "affine" in params:
@@ -1319,23 +1321,18 @@ _WHOLE_MATRIX_KINDS = frozenset(
 
 
 def _step_matrix(step: AxedStep, rank: int) -> list[list[float]]:
-    """The homogeneous matrix of a step whose axes do not change: its children's, or its own.
+    """The homogeneous matrix of a step whose axes do not change: its steps' composed, or its own.
 
-    **A wrapper keeps its map on its children, and `to_matrix` only ever sees params.** A
-    SEQUENCE written by `graph._sequence` carries `params={}` with the scale on child 0 and
-    the translation on child 1, so calling `to_matrix(SEQUENCE, {}, rank)` returns the
-    *identity* -- silently, because that branch simply finds neither key. Every stepped lens
-    (`lens_to_parent`) and every pyramid level with a half-voxel offset (`create_level_edge`)
-    is such an edge, so the first hop to world of an ordinary multiscale image layer was
-    composing as though the crop and the subsample were not there.
-
-    `_by_dimension_forms` already reads children for its own kind (see the `sub` branch), and
-    `graph._edge_params` flattens a SEQUENCE's children into one params dict for exactly this
-    reason; this is that rule for the general branch, so no composite is left reading a
-    wrapper row's empty params.
+    **A SEQUENCE keeps its map on its steps, and `to_matrix` only ever sees params.** One written
+    by `graph._sequence` carries `params={}` with the scale on step 0 and the translation on
+    step 1, so calling `to_matrix(SEQUENCE, {}, rank)` returns the *identity* -- silently,
+    because that branch simply finds neither key. Every stepped lens (`lens_to_parent`) and
+    every pyramid level with a half-voxel offset (`create_level_edge`) is such an edge, so the
+    steps are composed here, and `graph._edge_params` flattens them into one params dict for
+    the callers that go through `to_matrix`.
     """
-    if step.children:
-        return compose(list(step.children), rank)
+    if step.steps:
+        return compose(list(step.steps), rank)
     return to_matrix(step.kind, step.params, rank)
 
 
@@ -1386,22 +1383,10 @@ def _sub_matrix(step: AxedStep) -> list[list[float]]:
     inverse below cannot compose the forward map differently from the way it is read.
     """
     rank = len(step.acts_on_input or ())
-    # Params first, children second, and the order is what keeps one answer. A BY_DIMENSION
-    # carrying its own map also carries a projection of it as child rows, so that a client can
-    # read numbers this type publishes nowhere else (`graph._project_by_dimension_children`).
-    # Reading those children back would make them a rival source: `updateTransformation` refines
-    # `params`, and a stale projection would then out-vote the refinement -- silently, since both
-    # are the same shape. So the projection is never read here, and a childless edge and a
-    # projected one compose identically by construction. Children remain the map itself for the
-    # one wrapper that carries no params of its own: `graph.world_edge`'s IDENTITY child.
-    if _carries_map(step.params) or not step.children:
-        return _params_matrix(step.params, rank, len(step.acts_on_output or ()))
-    return compose(list(step.children), rank)
+    # The map is the params and nothing else: an `affine`, or a `scale` and a `translation`,
+    # or none of them, which is the identity on the named axes (`_params_matrix`).
+    return _params_matrix(step.params, rank, len(step.acts_on_output or ()))
 
-
-def _carries_map(params: dict) -> bool:
-    """Whether these params state a map themselves, rather than delegating to children."""
-    return any(name in (params or {}) for name in ("affine", "scale", "translation"))
 
 
 def _matrix_step(step: AxedStep, matrix: list[list[float]], *, kind: str | None = None) -> AxedStep:
@@ -1418,7 +1403,7 @@ def _matrix_step(step: AxedStep, matrix: list[list[float]], *, kind: str | None 
         output_axes=step.input_axes,
         acts_on_input=step.acts_on_output,
         acts_on_output=step.acts_on_input,
-        children=(),
+        steps=(),
     )
 
 

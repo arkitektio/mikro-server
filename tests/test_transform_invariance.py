@@ -56,15 +56,19 @@ query PathToWorld($id: ID!) {
 
 
 def _edge(ctx: HttpContext, kind: str, params: dict | None = None, **kwargs) -> models.Transformation:
-    """One bare edge, endpoints and all, built through the ORM.
+    """One bare edge, built through the ORM, over a space of its own when none is given.
 
     Directly, not through `createTransformation`: one of the kinds under test (SEQUENCE) is
-    refused by that mutation on purpose -- the ingest writes it with its children -- and the
-    classifier has to answer for it all the same.
+    refused by that mutation on purpose -- the ingest writes it with its steps -- and the
+    classifier has to answer for it all the same. The classifier reads kind, params and
+    steps only, so a self-edge over a bare space is all the endpoints it needs.
     """
+    space = models.CoordinateSystem.objects.create(name=f"{kind} space", organization=ctx.request.organization)
     return models.Transformation.objects.create(
         kind=kind,
         params=params or {},
+        input=kwargs.pop("input", space),
+        output=kwargs.pop("output", space),
         creator=ctx.request.user,
         organization=ctx.request.organization,
         **kwargs,
@@ -188,9 +192,7 @@ async def test_a_sequence_is_the_weakest_of_its_steps(authenticated_context: Htt
     """A scale-then-translate sequence takes its class from the scale; the translation is rigid."""
 
     def build() -> str:
-        sequence = _edge(authenticated_context, "SEQUENCE")
-        _edge(authenticated_context, "SCALE", {"scale": scale}, parent=sequence, order=0)
-        _edge(authenticated_context, "TRANSLATION", {"translation": [1.0, 1.0, 1.0]}, parent=sequence, order=1)
+        sequence = _edge(authenticated_context, "SEQUENCE", steps=[{"kind": "SCALE", "params": {"scale": scale}}, {"kind": "TRANSLATION", "params": {"translation": [1.0, 1.0, 1.0]}}])
         return graph_logic.invariance_of(sequence)
 
     assert await sync_to_async(build)() == expected

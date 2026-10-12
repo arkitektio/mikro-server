@@ -94,8 +94,8 @@ def _derivation_target(edge: "models.Transformation", keys: dict[int, tuple]) ->
 
 def fetch_container_edges(container_keys: set[tuple]) -> list["models.Transformation"]:
     """Every top-level edge whose input system belongs to one of these containers."""
-    edges = models.Transformation.objects.filter(parent__isnull=True).filter(graph_logic.container_q(container_keys, field="input"))
-    return list(edges.select_related("input", "output").prefetch_related("children", *EDGE_AXIS_PREFETCH))
+    edges = models.Transformation.objects.filter(graph_logic.container_q(container_keys, field="input"))
+    return list(edges.select_related("input", "output").prefetch_related(*EDGE_AXIS_PREFETCH))
 
 
 def container_buckets(seed_keys: set[tuple]) -> tuple[dict[tuple, list["models.Transformation"]], dict[tuple, set[tuple]], set[tuple]]:
@@ -183,10 +183,10 @@ def root_edges_of(space: "models.CoordinateSystem | None", *, organization=None,
     if memo is not None and key in memo:
         return memo[key]
 
-    query = models.Transformation.objects.filter(Q(output=space) | Q(input=space), parent__isnull=True)
+    query = models.Transformation.objects.filter(Q(output=space) | Q(input=space))
     if organization is not None:
         query = query.filter(organization=organization)
-    edges = list(query.select_related("input", "output").prefetch_related("children", *EDGE_AXIS_PREFETCH))
+    edges = list(query.select_related("input", "output").prefetch_related(*EDGE_AXIS_PREFETCH))
 
     if memo is not None:
         memo[key] = edges

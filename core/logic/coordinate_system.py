@@ -735,7 +735,7 @@ def lens_own_edges(lens: "models.ArrayLens") -> "Iterable[models.Transformation]
     """The top-level edge(s) from a sliced array lens' own system into its dataset's intrinsic system; none for a whole lens."""
     if lens.coordinate_system_id == lens.dataset.coordinate_system_id:
         return ()
-    return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id, parent__isnull=True)
+    return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id)
 
 
 def lens_space_is_shared_because(lens: "models.ArrayLens") -> str | None:
@@ -761,7 +761,7 @@ def lens_space_is_shared_because(lens: "models.ArrayLens") -> str | None:
     except ValueError:
         return "a scene or chart is laid out over its system"
     own = [edge.pk for edge in lens_own_edges(lens)]
-    if models.Transformation.objects.filter(Q(input=system) | Q(output=system), parent__isnull=True).exclude(pk__in=own).exists():
+    if models.Transformation.objects.filter(Q(input=system) | Q(output=system)).exclude(pk__in=own).exists():
         return "its system has registration edges besides its own"
     if system.fields_of.exists():
         return "its system is the field of a transformation"

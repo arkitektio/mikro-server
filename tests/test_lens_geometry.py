@@ -39,7 +39,7 @@ mutation CreateLens($input: CreateLensInput!) {
   createLens(input: $input) {
     id shape axisNames
     coordinateSystem { id }
-    toParent { ...Edge ... on SequenceTransformation { transformations { ...Edge } } }
+    toParent { ...Edge ... on SequenceTransformation { steps { kind scale translation } } }
   }
 }
 """
@@ -89,10 +89,10 @@ def _assert_maps_every_voxel(matrix: list[list[float]], arr: np.ndarray, view: n
 
 def _edge_params(edge: dict) -> list[tuple[str, dict]]:
     """A fetched `toParent` as the (kind, params) steps `coords.compose` takes."""
-    if "transformations" in edge:
-        steps = edge["transformations"]
-        scale = next(step["scale"] for step in steps if "scale" in step)
-        translation = next(step["translation"] for step in steps if "translation" in step)
+    if "steps" in edge:
+        steps = edge["steps"]
+        scale = next(step["scale"] for step in steps if step["scale"])
+        translation = next(step["translation"] for step in steps if step["translation"])
         return [(enums.TransformKindChoices.SEQUENCE.value, {"scale": scale, "translation": translation})]
     return [(enums.TransformKindChoices.TRANSLATION.value, {"translation": edge["translation"]})]
 
@@ -630,7 +630,7 @@ async def test_a_legacy_negative_start_edge_is_true_once_repaired(authenticated_
     arr, view = _oracle(SHAPE, ["c", "y", "x"], [{"axis": "y", "start": 1}])
 
     def edge_matrix() -> list[list[float]]:
-        edge = models.Transformation.objects.get(input_id=legacy.coordinate_system_id, output=dataset.coordinate_system, parent__isnull=True)
+        edge = models.Transformation.objects.get(input_id=legacy.coordinate_system_id, output=dataset.coordinate_system)
         return _matrix({"translation": edge.params["translation"]}, 3)
 
     with pytest.raises(AssertionError):

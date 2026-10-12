@@ -38,7 +38,7 @@ def _counts(scene: "models.Scene") -> dict:
         "collections": models.AnnotationCollection.objects.count(),
         "systems": models.CoordinateSystem.objects.filter(annotation_collections__isnull=False).count(),
         "layers": models.Layer.objects.filter(scene=scene, kind=enums.LayerKindChoices.ANNOTATION.value).count(),
-        "registrations": models.Transformation.objects.filter(parent__isnull=True, output=scene.world).count(),
+        "registrations": models.Transformation.objects.filter(output=scene.world).count(),
     }
 
 
@@ -64,7 +64,7 @@ async def test_drawing_on_a_scene_mints_its_collection(db, authenticated_context
     assert counts == {"collections": 1, "systems": 1, "layers": 1, "registrations": 1}
 
     def registration():
-        edge = models.Transformation.objects.get(parent__isnull=True, output=scene.world)
+        edge = models.Transformation.objects.get(output=scene.world)
         system = models.CoordinateSystem.objects.get(annotation_collections__isnull=False)
         world_axes = [axis.name for axis in scene.world.axes.all().order_by("order")]
         drawing_axes = [axis.name for axis in system.axes.all().order_by("order")]
@@ -171,7 +171,7 @@ async def test_the_chain_version_is_readable_so_staleness_is_detectable(db, auth
     assert not before.errors, before.errors
     assert before.data["coordinateSystem"]["transformVersion"] == drawn_against, "nothing has moved, so the shape is not stale"
 
-    edge = await sync_to_async(models.Transformation.objects.get)(parent__isnull=True, input_id=int(system_id))
+    edge = await sync_to_async(models.Transformation.objects.get)(input_id=int(system_id))
     refined = await schema.execute(
         "mutation R($input: UpdateTransformationInput!) { updateTransformation(input: $input) { id version } }",
         context_value=ctx,
@@ -205,7 +205,7 @@ async def test_a_scene_drawing_space_has_no_chain_to_be_stale_against(db, authen
     assert result.data["createAnnotation"]["createdWithTransforms"] == 0
     system_id = result.data["createAnnotation"]["collection"]["coordinateSystem"]["id"]
 
-    edge = await sync_to_async(models.Transformation.objects.get)(parent__isnull=True, output=scene.world)
+    edge = await sync_to_async(models.Transformation.objects.get)(output=scene.world)
     refined = await schema.execute(
         "mutation R($input: UpdateTransformationInput!) { updateTransformation(input: $input) { id version } }",
         context_value=ctx,

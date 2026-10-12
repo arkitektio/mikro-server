@@ -68,8 +68,8 @@ def test_axis_scale_reads_the_diagonal_of_a_scale_edge():
     assert phasor_logic.axis_scale(edges, 1, 4) == _TAU_BIN_WIDTH
 
 
-def test_axis_scale_of_a_sequence_uses_its_children():
-    """A SEQUENCE keeps its parameters on its children, not in its own params.
+def test_axis_scale_of_a_sequence_uses_its_steps() -> None:
+    """A SEQUENCE keeps its parameters on its steps, not in its own params.
 
     Composing it from its own (empty) params yields the identity -- a bin width of exactly
     1.0, which reads as an uncalibrated axis rather than as a bug. This is the case that
@@ -551,20 +551,17 @@ async def test_a_bin_width_is_not_read_off_whatever_axis_sits_at_the_same_positi
              ("y", enums.AxisTypeChoices.SPACE, "micrometer"), ("x", enums.AxisTypeChoices.SPACE, "micrometer")]
         ):
             models.Axis.objects.create(coordinate_system=physical, order=order, name=name, type=kind.value, unit=unit)
-        # A SEQUENCE with a SCALE child -- the shape `create_physical_space` writes, and the
+        # A SEQUENCE with a SCALE step -- the shape `create_physical_space` writes, and the
         # only one `axis_scale` can read (`compose` refuses a BY_DIMENSION outright, so that
         # shape would make this test pass for the wrong reason). Written through the ORM
         # rather than the mutation because the neighbouring fix now refuses a per-axis edge
         # between differently-named systems at the boundary; this is the row as it would
         # already exist in a database.
-        wrapper = models.Transformation.objects.create(
+        models.Transformation.objects.create(
             kind=enums.TransformKindChoices.SEQUENCE.value,
             input=intrinsic, output=physical, params={},
+            steps=[{"kind": enums.TransformKindChoices.SCALE.value, "params": {"scale": _FLIM_SCALE}}],
             creator=creation.user, organization=creation.organization,
-        )
-        models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.SCALE.value, parent=wrapper, order=0,
-            params={"scale": _FLIM_SCALE}, creator=creation.user, organization=creation.organization,
         )
 
     await sync_to_async(attach_mismatched_physical)()

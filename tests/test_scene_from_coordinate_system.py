@@ -120,7 +120,7 @@ async def test_a_space_places_every_registered_dataset_in_the_scene(authenticate
     assert space["residents"] == [], "a space built to be registered into holds nothing of its own"
 
     # Two registration edges land in the space, one per dataset.
-    registered = await sync_to_async(models.Transformation.objects.filter(output__pk=space["id"], parent__isnull=True).count)()
+    registered = await sync_to_async(models.Transformation.objects.filter(output__pk=space["id"]).count)()
     assert registered == 2
 
     scene = await _scene_from(authenticated_context, space["id"])
@@ -314,7 +314,7 @@ async def test_rerun_makes_a_second_scene_and_leaves_the_space_untouched(authent
 
     # The space's own registration edges are untouched -- still exactly one, shared, not
     # copied per scene. Nothing is authored per run: the scene composes over the space itself.
-    registered = await sync_to_async(models.Transformation.objects.filter(output__pk=space["id"], parent__isnull=True).count)()
+    registered = await sync_to_async(models.Transformation.objects.filter(output__pk=space["id"]).count)()
     assert registered == 1
     for scene in (first, second):
         assert len(scene["layers"]) == 3, "the one source, one layer per channel"

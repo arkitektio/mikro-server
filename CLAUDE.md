@@ -52,6 +52,26 @@ The pure arithmetic -- normalizing, composing, boxing,
 cutting -- lives in `core/logic/coords.py` and is oracle-tested in `tests/test_selection_math.py`
 and `tests/test_lens_geometry.py`.
 
+## Edges and collections
+
+**A composite edge is one row.** A SEQUENCE (what the ingest writes for a stepped lens and a
+downsampled pyramid level) carries its ordered steps in `Transformation.steps` as
+`{kind, params[, field]}` dicts, read everywhere as `step_pairs`; a BY_DIMENSION carries its map
+in its own `params` (`affine`, or `scale`/`translation`, or nothing, which is the identity on the
+axes it names). There are no child rows, no `parent`, and every row joins two systems. A step
+is not an edge: it has no id and no history, `SequenceTransformation.steps` reads it and nothing
+refines it; a BY_DIMENSION publishes `scale`/`translation`/`affine` directly and is refined like
+any edge, so `version` and `transformVersion` move on the row a client reads. A BY_DIMENSION is
+not a metric kind: its map over an INDEX axis is a relabelling the product writes (`cell_id =
+cell + 1`). `tests/test_composite_edges.py` holds this.
+
+**A collection has a name, optionally, and a label always.** `MeshCollection` and
+`NetworkCollection` are identified by their store and labelled by `name` or, failing that, the
+store's key (`label`); the server writes the label wherever it names a collection (its own
+system, a derivation edge, a refusal). `specVersion` is read off the store's manifest, never
+stored on the collection. `Axis.long_name` stays beside `description` on purpose: a label and
+a prose field.
+
 ## Migrations and jobs
 
 A container of this image only serves. An installer (konstruktor) prepares the database with

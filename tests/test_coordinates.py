@@ -460,14 +460,12 @@ async def test_stored_edges_are_forward_and_absolute(authenticated_context: Http
             assert edge.output_id == intrinsic.pk
 
             assert edge.kind == enums.TransformKindChoices.SEQUENCE.value
-            children = list(edge.children.order_by("order"))
-            assert [child.kind for child in children] == [
+            steps = edge.step_pairs
+            assert [kind for kind, _ in steps] == [
                 enums.TransformKindChoices.SCALE.value,
                 enums.TransformKindChoices.TRANSLATION.value,
             ]
-            # RFC-5 permits a wrapper's children to omit their endpoints.
-            assert all(child.input_id is None and child.output_id is None for child in children)
-            scale = children[0].params["scale"]
+            scale = steps[0][1]["scale"]
 
             # The absolute scale, read back from the row: dimensionless, so every
             # level covers the level-0 pixel extent exactly.
@@ -475,7 +473,7 @@ async def test_stored_edges_are_forward_and_absolute(authenticated_context: Http
 
         # Level 3's z factor is 9, not the nominal 8.
         level_3 = arrays[3].to_parent
-        assert level_3.children.get(order=0).params["scale"][z] == approx(9.0)
+        assert level_3.step_pairs[0][1]["scale"][z] == approx(9.0)
 
     await sync_to_async(check)()
 
@@ -638,7 +636,7 @@ async def test_every_stored_edge_is_forward(authenticated_context: HttpContext):
     await seed.create_array_dataset(authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES)
 
     def check():
-        for edge in Transformation.objects.filter(parent__isnull=True):
+        for edge in Transformation.objects.all():
             assert edge.input_id is not None and edge.output_id is not None, "a top-level edge must join two systems"
             # A level's own space is the input, never the output: the pyramid maps up into
             # the dataset's grid, not down out of it. "Is a level's space" is now a question
@@ -1767,7 +1765,7 @@ def test_singularity_is_judged_relative_to_the_matrix_own_scale():
             params={},
             input_axes=("y", "x"),
             output_axes=("y", "x"),
-            children=((enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}), (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]})),
+            steps=((enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}), (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]})),
         ),
         coords.AxedStep(
             kind=enums.TransformKindChoices.MAP_AXIS.value,
@@ -1840,7 +1838,7 @@ def test_a_sequence_composes_its_children_rather_than_its_own_empty_params():
         params={},
         input_axes=("y", "x"),
         output_axes=("y", "x"),
-        children=((enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}), (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]})),
+        steps=((enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}), (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]})),
     )
     forms = coords.compose_forms([step], ["y", "x"])
     assert _apply_forms(forms, ("y", "x"), [10.0, 20.0]) == approx({"y": 20.5, "x": 40.5})

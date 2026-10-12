@@ -230,13 +230,12 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
 
     edges = (
         models.Transformation.objects.filter(
-            parent__isnull=True,
             output_id__in=index_columns.keys(),
             kind=enums.TransformKindChoices.BY_DIMENSION.value,
             organization=organization,
         )
         .select_related("input", "output")
-        .prefetch_related("children", "input__axes", "output__axes", "input__datasets__data_arrays__store")
+        .prefetch_related("input__axes", "output__axes", "input__datasets__data_arrays__store")
         .order_by("pk")
     )
 

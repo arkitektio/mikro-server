@@ -870,7 +870,7 @@ _describe(
 )
 
 
-@strawberry.enum(description="The kind of a transformation a client can author directly: the discriminator of `TransformInput`. SEQUENCE is absent on purpose -- it is a wrapper the ingest builds together with its children (pyramid levels, stepped lenses), never authored empty.")
+@strawberry.enum(description="The kind of a transformation a client can author directly: the discriminator of `TransformInput`. SEQUENCE is absent on purpose -- it is the edge the ingest writes with its steps (pyramid levels, stepped lenses), never authored.")
 class CreatableTransformKind(str, Enum):
     """The directly-creatable subset of :class:`TransformKind`, used only by inputs."""
 

@@ -181,7 +181,7 @@ def _primary_children(container: Container) -> list[Container]:
     if key is None:
         return []
 
-    edges = list(models.Transformation.objects.filter(graph_logic.container_q([key], field="output"), parent__isnull=True).select_related("input", "output").order_by("pk"))
+    edges = list(models.Transformation.objects.filter(graph_logic.container_q([key], field="output")).select_related("input", "output").order_by("pk"))
     if not edges:
         return []
 

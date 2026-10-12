@@ -199,7 +199,7 @@ async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_un
 
     def claims_into_world() -> int:
         world_id = models.Scene.objects.get(pk=scene_id).world_id
-        return models.Transformation.objects.filter(parent__isnull=True, output_id=world_id).count()
+        return models.Transformation.objects.filter(output_id=world_id).count()
 
     assert await sync_to_async(claims_into_world)() == 0, "and nothing was fabricated on the way out"
 
@@ -351,9 +351,9 @@ def _best_path(source_pk: int, target_pk: int):
     the async test and fail.
     """
     edges = list(
-        models.Transformation.objects.filter(parent__isnull=True)
+        models.Transformation.objects.all()
         .select_related("input", "output")
-        .prefetch_related("children", "input__axes", "output__axes")
+        .prefetch_related("input__axes", "output__axes")
     )
     return graph_logic._bfs_path(graph_logic.adjacency_of(edges), source_pk, target_pk)
 

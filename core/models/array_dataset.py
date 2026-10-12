@@ -302,14 +302,13 @@ class DataArray(models.Model):
         and every registration also leaves that space, so an input-only filter returned whichever
         of them sorted first under ``Meta.ordering`` -- a registration into a world, presented as
         the pyramid edge, exactly where this docstring promises ``None``. Naming the output pins
-        it to the one edge `core.logic.graph.create_level_edge` wrote, and ``parent__isnull``
-        keeps a SEQUENCE's child from standing in for its wrapper.
+        it to the one edge `core.logic.graph.create_level_edge` wrote.
         """
         system = getattr(self, "coordinate_system", None)
         intrinsic = self.dataset.intrinsic_coordinate_system
         if system is None or intrinsic is None or system.pk == intrinsic.pk:
             return None
-        return Transformation.objects.filter(input=system, output=intrinsic, parent__isnull=True).first()
+        return Transformation.objects.filter(input=system, output=intrinsic).first()
 
 
 # ==========================================
@@ -900,7 +899,7 @@ class ArrayLens(Lens):
         intrinsic = self.dataset.intrinsic_coordinate_system
         if system is None or intrinsic is None or system.pk == intrinsic.pk:
             return None
-        return Transformation.objects.filter(input=system, output=intrinsic, parent__isnull=True).first()
+        return Transformation.objects.filter(input=system, output=intrinsic).first()
 
     def get_size_of_axis(self, axis_name: str) -> int:
         """Get the size of an axis by its name."""

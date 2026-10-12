@@ -189,7 +189,7 @@ def delete_coordinate_system(info: Info, input: DeleteCoordinateSystemInput) -> 
     # Both directions: an edge *into* the space is a registration of some data-tree, and one
     # *out of* it registers the space itself into a wider one. Transformation.input and
     # .output are both CASCADE, so either would vanish silently.
-    edges = models.Transformation.objects.filter(Q(input=system) | Q(output=system), parent__isnull=True).count()
+    edges = models.Transformation.objects.filter(Q(input=system) | Q(output=system)).count()
     if edges:
         raise ValueError(f"Coordinate system {system.pk} has {edges} transformation edge(s) and cannot be deleted: deleting it would delete them, and each is a registration someone authored. Delete them with deleteTransformation first.")
 
@@ -231,7 +231,7 @@ def clear_coordinate_system(info: Info, input: ClearCoordinateSystemInput) -> li
     _assert_shared(system, "cleared")
     assert_can_delete(info, system, creator_owner)
 
-    edges = models.Transformation.objects.filter(output=system, parent__isnull=True)
+    edges = models.Transformation.objects.filter(output=system)
     deleted = [strawberry.ID(str(pk)) for pk in edges.values_list("pk", flat=True)]
     edges.delete()
     return deleted
@@ -251,7 +251,7 @@ def delete_orphaned_coordinate_systems(info: Info) -> list[strawberry.ID]:
     nothing to fail on. Returns a list (possibly empty), unlike the single-ID deletes:
     the caller did not know the ids going in.
     """
-    touched = models.Transformation.objects.filter(Q(input=OuterRef("pk")) | Q(output=OuterRef("pk")), parent__isnull=True)
+    touched = models.Transformation.objects.filter(Q(input=OuterRef("pk")) | Q(output=OuterRef("pk")))
     orphans = (
         for_org(models.CoordinateSystem, info)
         # Derived from `CONTAINERS` rather than listed, for the reason `graph._UNINHABITED`

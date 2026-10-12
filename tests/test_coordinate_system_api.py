@@ -299,7 +299,7 @@ async def test_a_space_in_use_is_refused_rather_than_cascaded_away(bot_context: 
     assert result.errors and "transformation edge" in str(result.errors[0])
 
     # Remove the registration, and the same space goes.
-    edge = await sync_to_async(models.Transformation.objects.get)(output__pk=space["id"], parent__isnull=True)
+    edge = await sync_to_async(models.Transformation.objects.get)(output__pk=space["id"])
     await sync_to_async(edge.delete)()
     result = await schema.execute(DELETE_CS, context_value=bot_context, variable_values={"input": {"id": space["id"]}})
     assert not result.errors, result.errors

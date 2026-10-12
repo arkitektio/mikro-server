@@ -1,8 +1,7 @@
 """Reading a pyramid's level edges must not trip Django's prefetch bookkeeping.
 
-A level edge is a SEQUENCE (scale, then the half-voxel translation). Its children are read
-through `SequenceTransformation.transformations`, and each child is asked for both its
-`input` system and its `inputAxes`. Since `CoordinateSystem` became org-scoped, the optimizer
+A level edge is a SEQUENCE (scale, then the half-voxel translation). Its steps are read
+through `SequenceTransformation.steps` beside the edge's `input` system and its `inputAxes`. Since `CoordinateSystem` became org-scoped, the optimizer
 prefetches `input` with a *filtered* queryset, while the axis hints asked for a plain
 `input__axes` -- and Django refuses one lookup seen with two querysets:
 
@@ -44,8 +43,8 @@ query Dataset($id: ID!) {
       level
       toParent {
         ...Edge
-        ... on SequenceTransformation { transformations { ...Edge } }
-        ... on ByDimensionTransformation { transformations { ...Edge } }
+        ... on SequenceTransformation { steps { kind scale translation } }
+        ... on ByDimensionTransformation { scale translation affine }
       }
     }
   }
@@ -55,7 +54,7 @@ query Dataset($id: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_level_edges_resolve_with_their_children(authenticated_context: HttpContext):
+async def test_level_edges_resolve_with_their_steps(authenticated_context: HttpContext) -> None:
     dataset = await seed.create_array_dataset(authenticated_context, "Pyramid", shapes=[[3, 64, 64], [3, 32, 32], [3, 16, 16]])
 
     result = await schema.execute(QUERY, variable_values={"id": str(dataset.pk)}, context_value=authenticated_context)
@@ -68,8 +67,5 @@ async def test_level_edges_resolve_with_their_children(authenticated_context: Ht
         assert edge is not None
         assert edge["input"]["axes"] and edge["output"]["axes"]
         assert edge["__typename"] == "SequenceTransformation", "a level edge is scale-then-translate"
-        assert [child["kind"] for child in edge["transformations"]] == ["SCALE", "TRANSLATION"]
-        for child in edge["transformations"]:
-            # A child omits its endpoints (the wrapper supplies them) but still states its axes.
-            assert child["input"] is None
-            assert child["inputAxes"] == [axis["name"] for axis in edge["input"]["axes"]]
+        assert [step["kind"] for step in edge["steps"]] == ["SCALE", "TRANSLATION"]
+        assert edge["steps"][0]["scale"] and edge["steps"][1]["translation"], "each step carries its own numbers"

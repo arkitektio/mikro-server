@@ -30,7 +30,7 @@ query Graph($id: ID!, $maxDepth: Int) {
       id kind inputAxes outputAxes
       input { id  }
       output { id  }
-      ... on SequenceTransformation { transformations { id kind } }
+      ... on SequenceTransformation { steps { kind } }
     }
   }
 }

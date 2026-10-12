@@ -316,7 +316,6 @@ def field_edges_from(
     edges = (
         models.Transformation.objects.filter(
             input_id__in=paths.keys(),
-            parent__isnull=True,
             kind=enums.TransformKindChoices.FIELD.value,
             organization=organization,
         )

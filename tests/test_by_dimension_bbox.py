@@ -268,7 +268,7 @@ async def test_a_scene_collections_walk_does_not_cross_its_registration(db, auth
     def walk():
         collection = models.AnnotationCollection.objects.get(scene=scene)
         system = collection.coordinate_system
-        registration = models.Transformation.objects.get(parent__isnull=True, input=system)
+        registration = models.Transformation.objects.get(input=system)
         return graph_logic.intrinsic_chain(system), graph_logic.intrinsic_frame(system).pk, system.pk, registration.kind, graph_logic.transform_version(system)
 
     chain, walked, own, kind, version = await sync_to_async(walk)()

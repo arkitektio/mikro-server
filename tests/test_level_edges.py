@@ -59,7 +59,7 @@ async def test_a_downsampled_level_returns_its_own_edge(db, authenticated_contex
     assert edge is not None
     assert edge.input_id == level_one.coordinate_system_id, "the edge leaves this level's own space"
     assert edge.output_id == dataset.coordinate_system_id, "and lands in the dataset's intrinsic grid"
-    assert edge.parent_id is None, "a wrapper's child is a step within an edge, never the edge"
+    assert [kind for kind, _ in edge.step_pairs] == ["SCALE", "TRANSLATION"], "a level edge is one row carrying its steps"
 
 
 @pytest.mark.django_db(transaction=True)

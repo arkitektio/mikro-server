@@ -331,34 +331,20 @@ def _sequence(
     ctx: CreationContext,
     validity: str | None = None,
 ) -> "models.Transformation":
-    """A SEQUENCE edge of a scale then a translation, with the children RFC-5 permits to omit their endpoints."""
-    sequence = models.Transformation.objects.create(
+    """A SEQUENCE edge of a scale then a translation, carried as the edge's two steps."""
+    return models.Transformation.objects.create(
         kind=enums.TransformKindChoices.SEQUENCE.value,
         input=input_system,
         output=output_system,
         params={},
+        steps=[
+            {"kind": enums.TransformKindChoices.SCALE.value, "params": {"scale": scale}},
+            {"kind": enums.TransformKindChoices.TRANSLATION.value, "params": {"translation": translation}},
+        ],
         validity=validity or enums.PlacementValidityChoices.VALIDATED.value,
         creator=ctx.user,
         organization=ctx.organization,
     )
-    # The children omit input and output: the wrapping sequence supplies them.
-    models.Transformation.objects.create(
-        kind=enums.TransformKindChoices.SCALE.value,
-        parent=sequence,
-        order=0,
-        params={"scale": scale},
-        creator=ctx.user,
-        organization=ctx.organization,
-    )
-    models.Transformation.objects.create(
-        kind=enums.TransformKindChoices.TRANSLATION.value,
-        parent=sequence,
-        order=1,
-        params={"translation": translation},
-        creator=ctx.user,
-        organization=ctx.organization,
-    )
-    return sequence
 
 
 def create_level_edge(
@@ -448,17 +434,12 @@ def edge_axis_names(edge: "models.Transformation", side: str) -> list[str]:
     -- and that stored list is authoritative. Every other kind acts on all of them, in
     order.
 
-    A SEQUENCE's children omit their own endpoints on purpose (the wrapper supplies
-    them), so they inherit the wrapper's.
     """
     stored = edge.input_axes if side == "input" else edge.output_axes
     if stored:
         return list(stored)
 
     system = edge.input if side == "input" else edge.output
-    if system is None and edge.parent_id:
-        parent = edge.parent
-        system = parent.input if side == "input" else parent.output
 
     return [axis.name for axis in system.axes.all()] if system else []
 
@@ -484,7 +465,7 @@ _INVERTIBLE_KINDS = frozenset(
     }
 )
 
-#: Kinds that are invertible exactly when every one of their children is.
+#: Kinds that are invertible exactly when every one of their steps is (a BY_DIMENSION has none).
 _WRAPPER_KINDS = frozenset(
     {
         enums.TransformKindChoices.SEQUENCE.value,
@@ -513,9 +494,10 @@ def is_invertible(edge: "models.Transformation") -> bool:
     inverse at all; rank alone would happily offer it for inversion and hand the client
     an `inverted: true` step it cannot honour.
 
-    A wrapper is invertible exactly when all of its children are -- a SEQUENCE whose
-    second step is a warp field is not invertible because its first step is a scale. That
-    recursion is the reason this is a function and not a set membership test.
+    A SEQUENCE is invertible exactly when every one of its steps is -- one whose second
+    step is a warp field is not invertible because its first step is a scale. That is the
+    reason this is a function and not a set membership test. A BY_DIMENSION carries its map
+    in its params and is invertible by kind.
 
     Not caught here, and worth knowing: a **singular** square AFFINE (a projection written
     as a matrix) passes both the kind gate and the rank gate and still has no inverse. This
@@ -525,8 +507,7 @@ def is_invertible(edge: "models.Transformation") -> bool:
     before any walk can be offered it. The gap is closed one altitude down, not here.
     """
     if edge.kind in _WRAPPER_KINDS:
-        children = list(edge.children.all())
-        return all(is_invertible(child) for child in children) if children else True
+        return all(kind in _INVERTIBLE_KINDS for kind, _ in edge.step_pairs)
     return edge.kind in _INVERTIBLE_KINDS
 
 
@@ -553,7 +534,7 @@ _INVARIANCE_BY_KIND: dict[str, str] = {
     enums.TransformKindChoices.UNMAPPABLE.value: enums.TransformInvariance.NONE.value,
 }
 
-#: Kinds whose invariance is the weakest of their children's. Equal to `_WRAPPER_KINDS` now
+#: Kinds whose invariance is the weakest of their steps' (a BY_DIMENSION's being the map in its params). Equal to `_WRAPPER_KINDS` now
 #: that BIJECTION is gone; it used to be wider by exactly that kind, because invertibility is
 #: a property a BIJECTION *had* by construction so `is_invertible` never looked inside one --
 #: but a pair of warp fields does not become a rigid map by carrying its own inverse, so
@@ -621,7 +602,7 @@ def _scale_invariance(scale: list[float]) -> str:
 
 
 def _params_invariance(params: dict) -> str:
-    """The class of the map a childless composite carries in its own parameters.
+    """The class of the map a BY_DIMENSION carries in its own parameters.
 
     A min, not a first match: `build_registration_edge` admits `scale`, `translation` and
     `affine` on one BY_DIMENSION, so an anisotropic scale riding beside a translation must
@@ -645,23 +626,27 @@ def invariance_of(edge: "models.Transformation") -> str:
     needs an SVD, and that is exactly where :func:`is_invertible` stops too, declining to
     catch a singular affine.
 
-    A composite is the weakest of its children. A *childless* composite is the one place this
-    must NOT mirror `is_invertible`, which answers True there because invertibility does not
-    depend on which parameters ride along; invariance is nothing but that, and a childless
-    BY_DIMENSION carrying an `affine` is the ordinary shape of a registration crossing a rank
-    boundary. Its parameters ARE its children, and are read as such.
+    A SEQUENCE is the weakest of its steps. A BY_DIMENSION carries its map in its own params
+    and is read from them -- the one place this must NOT mirror `is_invertible`, which answers
+    True there because invertibility does not depend on which parameters ride along;
+    invariance is nothing but that, and a BY_DIMENSION carrying an `affine` is the ordinary
+    shape of a registration crossing a rank boundary.
 
     An unrecognised kind is NONE -- the bottom -- so a future kind fails safe rather than
     claiming rigidity.
     """
-    if edge.kind in _COMPOSITE_KINDS:
-        children = list(edge.children.all())
-        if children:
-            return weakest_invariance(invariance_of(child) for child in children)
-        return _params_invariance(edge.params or {})
-    if edge.kind == enums.TransformKindChoices.SCALE.value:
-        return _scale_invariance((edge.params or {}).get("scale") or [])
-    return _INVARIANCE_BY_KIND.get(edge.kind, enums.TransformInvariance.NONE.value)
+    return _kind_invariance(edge.kind, edge.params or {}, edge.step_pairs)
+
+
+def _kind_invariance(kind: str, params: dict, steps: tuple[tuple[str, dict], ...] = ()) -> str:
+    """The invariance of one ``(kind, params)`` -- an edge or a step -- a SEQUENCE's read off its steps."""
+    if kind in _COMPOSITE_KINDS:
+        if steps:
+            return weakest_invariance(_kind_invariance(step_kind, step_params) for step_kind, step_params in steps)
+        return _params_invariance(params)
+    if kind == enums.TransformKindChoices.SCALE.value:
+        return _scale_invariance(params.get("scale") or [])
+    return _INVARIANCE_BY_KIND.get(kind, enums.TransformInvariance.NONE.value)
 
 
 def is_reverse_traversable(edge: "models.Transformation") -> bool:
@@ -714,7 +699,7 @@ def is_condensable(edge: "models.Transformation") -> bool:
     array, and an UNMAPPABLE, which denies the correspondence outright. In the lattice RFC-8
     writes down those are exactly DIFFEOMORPHIC and NONE, so AFFINE-and-stronger *is* the
     condensable set, and :func:`invariance_of` already does every hard part -- it recurses into
-    a composite's children, reads a childless composite's params as its children, and falls
+    a SEQUENCE's steps, reads a BY_DIMENSION's params as its map, and falls
     back to NONE for a kind it does not know, which fails safe in this direction too. A third
     copy of that recursion would be a third chance to disagree with it. **The line to revisit
     when a kind is added** is therefore this one: a new kind is condensable exactly when
@@ -1104,7 +1089,7 @@ _OFFSET_KINDS = frozenset({"TRANSLATION", "AFFINE", "ROTATION", "BY_DIMENSION", 
 def _states_an_offset(kind: str | None, params: dict) -> bool:
     """Whether an edge of this kind, with these parameters, says where one zero sits on the other.
 
-    A FIELD (a lookup, whose values are the instants) and a SEQUENCE (whose children are checked
+    A FIELD (a lookup, whose values are the instants) and a SEQUENCE (whose steps are checked
     as they are written) count; a BY_DIMENSION counts only when it carries a translation or an
     affine, since a scale-only one pins zero to zero exactly as a SCALE does.
     """
@@ -1124,7 +1109,6 @@ def assert_edge_rank(
     output_axes: list[str] | None,
     input_system: "models.CoordinateSystem",
     output_system: "models.CoordinateSystem",
-    subset_axes: tuple[list[str], list[str]] | None = None,
 ) -> None:
     """Enforce that an edge's parameters have the rank its endpoints imply.
 
@@ -1138,19 +1122,6 @@ def assert_edge_rank(
     is nothing for a rank to be the rank *of*, and relating a (c,y,x) image to a
     one-axis table of objects is not an error to be caught but the entire point.
 
-    ``subset_axes`` exists for one caller: a **wrapper child**. A child of a
-    BY_DIMENSION carries parameters over the axes its *parent* names -- `_sub_matrix`
-    composes them at ``len(acts_on_input)`` and `_by_dimension_forms` labels the rows by
-    ``acts_on_output`` -- but the child's own kind is SCALE or TRANSLATION, so every check
-    below would otherwise answer to the whole system. It is given the parent's two ordered
-    axis lists rather than a pair of counts, because *three* of those checks read the names
-    and not just how many there are: the equal-rank rule, the ROTATION square rule and the
-    same-names rule. Held to the full systems, a two-entry scale over ``["y", "x"]`` inside
-    a BY_DIMENSION relating ``(c,y,x)`` to ``(t,z,y,x)`` would be refused three times over --
-    for a rank it does not answer to, and for names it does not touch -- which is a
-    regression manufactured by the fix, on the exact shape BY_DIMENSION exists to express.
-    The child cannot state the subset itself: only its parent's axis lists can, and they
-    are not its own. See `core.mutations.transformation._rank_endpoints`.
     """
     if kind == enums.TransformKindChoices.UNMAPPABLE.value:
         return
@@ -1158,33 +1129,19 @@ def assert_edge_rank(
     input_names = [axis.name for axis in input_system.axes.all()]
     output_names = [axis.name for axis in output_system.axes.all()]
 
-    # A wrapper child answers to its parent's named subset, not to the endpoints it borrowed
-    # from that parent -- so the names every check below compares are the subset's, in the
-    # parent's order. Rebound here, once, rather than at each of the four call sites that
-    # would otherwise have to remember which of the two lists it meant.
-    if subset_axes is not None:
-        input_names, output_names = list(subset_axes[0]), list(subset_axes[1])
-
     # Two clocks anchored to different instants cannot be related by an edge that says nothing
     # about the offset. Checked for every kind, before the per-kind branches: it is a fact about
     # the two *spaces*, not about the map, so no kind is exempt from it.
-    if subset_axes is None:
-        # A wrapper child's offset may live in a sibling (a SCALE beside a TRANSLATION under one
-        # BY_DIMENSION), so the rule is the wrapper's to answer, not each child's.
-        _assert_epochs_agree(input_system, output_system, kind=kind, params=params)
+    _assert_epochs_agree(input_system, output_system, kind=kind, params=params)
 
     # An INDEX axis has no metric -- that is its definition, not an omission -- so the kinds
     # that do arithmetic on a coordinate mean nothing over it. Checked here rather than left
     # to the rank check below, which would happily accept `scale: [2.0]` on a space of object
     # ids and write "object 3 x 2 = object 6" without complaint.
     if kind in _METRIC_KINDS:
-        # Scanned against `input_names`/`output_names` rather than the systems' whole axis
-        # lists, which is the same subset rule the checks below follow and matters for the
-        # same reason: a SCALE child under a BY_DIMENSION naming ["y", "x"] does no
-        # arithmetic on the `object_id` axis its parent left alone, and refusing it for one
-        # would refuse the ordinary product-space registration -- an INDEX axis of objects
-        # plus two SPACE axes, placed into a purely spatial physical space. Where there is no
-        # subset the two lists *are* the systems' axes, so this is a no-op.
+        # Not BY_DIMENSION, whose map over a named INDEX axis is a relabelling the product
+        # writes on purpose: a derivation keying a table by `cell_id = cell + 1` is a
+        # BY_DIMENSION translating one index axis onto another (`tests/test_plan_array_hops.py`).
         indexed = [
             f"'{axis.name}' on '{system.name}'"
             for system, names in ((input_system, input_names), (output_system, output_names))
@@ -1550,7 +1507,7 @@ def updatable_params(kind: str) -> tuple[str, ...]:
 
     Derived from the same tables creation reads, so the two gates cannot drift. A kind
     that is not directly creatable (a SEQUENCE wrapper) refines nothing
-    here: its parameters live on its children.
+    here: its parameters live on its steps.
     """
     return tuple(
         param
@@ -1639,7 +1596,7 @@ def build_registration_edge(
     kind = kind.value if hasattr(kind, "value") else kind
 
     if kind not in _PARAMS_BY_KIND:
-        raise ValueError(f"{kind} cannot be created directly. A SEQUENCE wrapper is built by the ingest, which writes its children with it")
+        raise ValueError(f"{kind} cannot be created directly. A SEQUENCE is written by the ingest, with its steps")
 
     supplied = {"scale": scale, "translation": translation, "affine": affine, "input_axes": input_axes, "output_axes": output_axes}
 
@@ -1709,76 +1666,8 @@ def build_registration_edge(
         creator=ctx.user,
         organization=ctx.organization,
     )
-    _project_by_dimension_children(edge, ctx)
     return edge
 
-
-def _project_by_dimension_children(edge: "models.Transformation", ctx: CreationContext) -> None:
-    """Write a BY_DIMENSION's own parameters out as child rows as well as into ``params``.
-
-    **The problem this solves is that the numbers were unreadable.** A BY_DIMENSION carrying an
-    ``affine`` used to be one childless row: the matrix went into ``params``, was composed
-    server-side by `_sub_matrix`, and reached no client at all -- `ByDimensionTransformation`
-    publishes ``transformations`` and no ``affine``/``scale``/``translation`` field, unlike
-    `AffineTransformation`, which resolves the very same ``params['affine']``. Every consumer
-    that composes a path client-side folds over that empty child list and gets an identity back:
-    the viewer's own `transformGraph.ts` (placement) and `axisPath.ts` (attribute probes) both do.
-    So a rotated, scaled lattice registered into an image rendered unrotated and unscaled at the
-    origin, and nothing anywhere reported an error. Filed as item 9 of MIKRO_BACKEND_PROPOSALS.md
-    and measured against the Visium HD ingest, where a 412x400 bin lattice that should span
-    24 073 x 23 372 px was drawn 412 x 400 px -- 58x too small.
-
-    **``params`` stays the only source of truth; these rows are a projection of it.** `_sub_matrix`
-    reads a params-carried map *in preference to* children precisely so that this cannot become a
-    second answer -- a refinement through `updateTransformation` rewrites ``params``, and the
-    server's composition follows it whether or not anything remembered to re-project. What the
-    projection buys is a client that can read the map at all, so it is regenerated on every params
-    write rather than left to drift.
-
-    **The split follows `_params_matrix` exactly, including its precedence.** An ``affine``
-    silently wins over ``scale``/``translation`` there, so it wins here too -- projecting all three
-    would publish a map the server never had. Otherwise scale comes before translation, the order
-    that function applies them in and the order `_sequence` already writes them in.
-
-    **A BY_DIMENSION with no map of its own is left alone entirely.** `world_edge` writes one with
-    ``params={}`` and a single IDENTITY child, and there the child is not a projection but the map
-    itself -- deleting it would erase the edge's whole content.
-
-    Children omit their endpoints and their axis lists, exactly as a SEQUENCE's do: the wrapper
-    supplies both, and a child answers to its parent's named subset (see `_rank_endpoints`).
-    """
-    if edge.kind != enums.TransformKind.BY_DIMENSION.value:
-        return
-
-    params = edge.params or {}
-    if "affine" in params:
-        projected = [(enums.TransformKindChoices.AFFINE.value, {"affine": params["affine"]})]
-    else:
-        projected = [
-            (child_kind, {name: params[name]})
-            for child_kind, name in (
-                (enums.TransformKindChoices.SCALE.value, "scale"),
-                (enums.TransformKindChoices.TRANSLATION.value, "translation"),
-            )
-            if name in params
-        ]
-
-    if not projected:
-        return
-
-    # Regenerated rather than reconciled: these rows carry no identity of their own -- no name,
-    # no endpoints, nothing an author chose -- so there is nothing in them worth preserving
-    # across a refinement, and a diff would be more code with more ways to be wrong.
-    edge.children.all().delete()
-    for order, (child_kind, child_params) in enumerate(projected):
-        models.Transformation.objects.create(
-            kind=child_kind,
-            parent=edge,
-            order=order,
-            params=child_params,
-            creator=ctx.user,
-            organization=ctx.organization,
-        )
 
 
 def derivation_edges(dataset: "models.ArrayDataset") -> list["models.Transformation"]:
@@ -1821,7 +1710,7 @@ def derivation_edges(dataset: "models.ArrayDataset") -> list["models.Transformat
     if intrinsic is None:
         return []
 
-    candidates = list(models.Transformation.objects.filter(input=intrinsic, parent__isnull=True).select_related("output").order_by("pk"))
+    candidates = list(models.Transformation.objects.filter(input=intrinsic).select_related("output").order_by("pk"))
     # One batched key lookup for every candidate's output, rather than a `system_dataset`
     # per edge -- which was a handful of queries each and grew with the dataset's fan-out.
     keys = container_map({edge.output_id for edge in candidates if edge.output_id})
@@ -1842,7 +1731,7 @@ def _datasets_derived_into(output_filter: "Q", exclude_pk: int) -> list["models.
     reports; neither is a path any placement walk crosses.
     """
     edges = (
-        models.Transformation.objects.filter(output_filter, parent__isnull=True, input__datasets__isnull=False)
+        models.Transformation.objects.filter(output_filter, input__datasets__isnull=False)
         .prefetch_related("input__datasets")
         .order_by("pk")
     )
@@ -1881,7 +1770,7 @@ def derived_containers(dataset: "models.ArrayDataset") -> list:
     here, and a fusion that named this source second is still a child.
     """
     spaces = Q(output__datasets=dataset) | Q(output__lenses__arraylens__dataset=dataset) | Q(output__data_arrays__dataset=dataset)
-    edges = list(models.Transformation.objects.filter(spaces, parent__isnull=True).select_related("input", "output").order_by("pk"))
+    edges = list(models.Transformation.objects.filter(spaces).select_related("input", "output").order_by("pk"))
     if not edges:
         return []
 
@@ -2000,7 +1889,7 @@ def _placement_universe(
     lineage_ids = [dataset.pk] + [ancestor.pk for ancestor in lineage_ancestors(dataset)] if dataset else []
 
     edges = list(
-        models.Transformation.objects.filter(parent__isnull=True)
+        models.Transformation.objects
         .filter(
             # The source system itself: a collection-owned (mesh collection / table
             # dataset) system belongs to no dataset, so its derivation edge would not
@@ -2014,7 +1903,7 @@ def _placement_universe(
         )
         .distinct()
         .select_related("input", "output")
-        .prefetch_related("children", "input__axes", "output__axes")
+        .prefetch_related("input__axes", "output__axes")
     )
     return world, lineage_ids, edges
 
@@ -2448,7 +2337,7 @@ def _derivation_descendants(container_keys: set[tuple]) -> set[tuple]:
     seen = set(container_keys)
 
     while frontier:
-        edges = list(models.Transformation.objects.filter(parent__isnull=True).filter(container_q(frontier, field="output")).select_related("input", "output"))
+        edges = list(models.Transformation.objects.filter(container_q(frontier, field="output")).select_related("input", "output"))
         keys = _keys_for(edges)
 
         candidates: set[tuple] = set()
@@ -2465,7 +2354,7 @@ def _derivation_descendants(container_keys: set[tuple]) -> set[tuple]:
         next_frontier: set[tuple] = set()
         if candidates:
             out_edges = list(
-                models.Transformation.objects.filter(parent__isnull=True).filter(container_q(candidates, field="input")).select_related("input", "output").order_by("pk")
+                models.Transformation.objects.filter(container_q(candidates, field="input")).select_related("input", "output").order_by("pk")
             )
             out_keys = _keys_for(out_edges)
             primary: dict[tuple, models.Transformation] = {}
@@ -2499,12 +2388,12 @@ def _placement_seeds(space: "models.CoordinateSystem") -> set[tuple]:
     world = space
 
     registrations = list(
-        models.Transformation.objects.filter(parent__isnull=True, output=world)
+        models.Transformation.objects.filter(output=world)
         # Both endpoints, because `system_dataset` reads each side's residence to bucket the
         # edge; unselected, that reverse walk is a query per registration, which made this grow
         # one query per source in the space.
         .select_related("input", "output")
-        .prefetch_related("children", "input__axes", "output__axes")
+        .prefetch_related("input__axes", "output__axes")
     )
 
     # The containers the space's registrations anchor. One batched container map rather than
@@ -2588,11 +2477,11 @@ def placeable_system_ids_in(space: "models.CoordinateSystem", *, derived_only: b
     # descendants'; the in-edges carry a collection's derivation (a mesh or table system ->
     # the image's intrinsic), the one edge a registered image's own bucket would otherwise miss.
     edges = list(
-        models.Transformation.objects.filter(parent__isnull=True)
+        models.Transformation.objects
         .filter(container_q(container_keys, field="input") | container_q(container_keys, field="output") | Q(input=world) | Q(output=world))
         .distinct()
         .select_related("input", "output")
-        .prefetch_related("children", "input__axes", "output__axes")
+        .prefetch_related("input__axes", "output__axes")
     )
 
     # The walkable universe: the fact tree, plus this world's own claims. A claim into
@@ -2692,7 +2581,7 @@ def categorized_dataset_ids(dataset_ids: "Iterable[int]") -> set[int]:
         return set()
 
     edges = list(
-        models.Transformation.objects.filter(parent__isnull=True, input__datasets__in=dataset_ids)
+        models.Transformation.objects.filter(input__datasets__in=dataset_ids)
         .annotate(_source_dataset=F("input__datasets__id"))
         .select_related("input", "output")
         .order_by("pk")
@@ -2766,8 +2655,8 @@ def create_identity_registration(
 ) -> "models.Transformation":
     """One identity placement edge on the named shared axes.
 
-    A BY_DIMENSION wrapper around an IDENTITY child, because that is the only shape that
-    can say "these axes correspond one-to-one, and I claim nothing about the rest" -- a
+    A BY_DIMENSION carrying no map -- the identity on the axes it names -- because that is
+    the only shape that can say "these axes correspond one-to-one, and I claim nothing about the rest" -- a
     square edge between systems of different rank cannot.
 
     Its one caller in the product is the minting of a scene's annotation collection, which
@@ -2790,14 +2679,6 @@ def create_identity_registration(
         output_axes=shared,
         params={},
         validity=validity,
-        creator=ctx.user,
-        organization=ctx.organization,
-    )
-    models.Transformation.objects.create(
-        kind=enums.TransformKindChoices.IDENTITY.value,
-        parent=edge,
-        order=0,
-        params={},
         creator=ctx.user,
         organization=ctx.organization,
     )
@@ -2848,7 +2729,7 @@ def lineage_graph(
 
     while frontier and (max_depth is None or depth < max_depth):
         touching = list(
-            models.Transformation.objects.filter(parent__isnull=True, organization=organization)
+            models.Transformation.objects.filter(organization=organization)
             .filter(container_q(frontier, field="input") | container_q(frontier, field="output"))
             .distinct()
             .select_related("input", "output")
@@ -2924,7 +2805,7 @@ def traverse(
     graph of any width costs O(depth) queries, and the two closing queries fetch the systems
     with their axes and the edges with everything a `Transformation` selection can ask for.
     Without those the discovery query would be a per-edge N+1 the moment a client selected
-    `inputAxes` or a SEQUENCE's `children`: this returns a list, and a plain list is invisible
+    `inputAxes`: this returns a list, and a plain list is invisible
     to the optimizer.
     """
     reached: set[int] = {root.pk}
@@ -2933,7 +2814,7 @@ def traverse(
 
     while frontier and (max_depth is None or depth < max_depth):
         # Only the endpoints matter for the walk, so do not drag whole rows through it.
-        endpoints = models.Transformation.objects.filter(parent__isnull=True, organization=organization).filter(Q(input_id__in=frontier) | Q(output_id__in=frontier)).values_list("input_id", "output_id")
+        endpoints = models.Transformation.objects.filter(organization=organization).filter(Q(input_id__in=frontier) | Q(output_id__in=frontier)).values_list("input_id", "output_id")
 
         discovered: set[int] = set()
         for input_id, output_id in endpoints:
@@ -2961,13 +2842,12 @@ def traverse(
     # would.
     edges = list(
         models.Transformation.objects.filter(
-            parent__isnull=True,
             organization=organization,
             input_id__in=reached,
             output_id__in=reached,
         )
-        .select_related("input", "output", "parent")
-        .prefetch_related("children", "input__axes", "output__axes", "parent__input__axes", "parent__output__axes")
+        .select_related("input", "output")
+        .prefetch_related("input__axes", "output__axes")
         .order_by("pk")
     )
 
@@ -3026,7 +2906,7 @@ def fact_paths(
 
     while frontier and (max_depth is None or depth < max_depth):
         endpoints = (
-            models.Transformation.objects.filter(parent__isnull=True, organization=organization)
+            models.Transformation.objects.filter(organization=organization)
             .filter(Q(input_id__in=frontier) | Q(output_id__in=frontier))
             .exclude(kind__in=[enums.TransformKindChoices.UNMAPPABLE.value, enums.TransformKindChoices.FIELD.value])
             .exclude(**{f"input__{lookup}": value for lookup, value in _UNINHABITED.items()})
@@ -3045,10 +2925,10 @@ def fact_paths(
         depth += 1
 
     edges = list(
-        models.Transformation.objects.filter(parent__isnull=True, organization=organization)
+        models.Transformation.objects.filter(organization=organization)
         .filter(Q(input_id__in=reached) | Q(output_id__in=reached))
         .select_related("input", "output")
-        .prefetch_related("children", "input__axes", "output__axes")
+        .prefetch_related("input__axes", "output__axes")
         .order_by("pk")
     )
 
@@ -3182,7 +3062,7 @@ def _edge_towards_intrinsic(system: "models.CoordinateSystem", dataset: "models.
     if dataset is None:
         return next((edge for edge in collection_derivation_edges(system) if edge.output is not None and is_traversable(edge)), None)
 
-    candidates = models.Transformation.objects.filter(input=system, parent__isnull=True).select_related("output").order_by("pk")
+    candidates = models.Transformation.objects.filter(input=system).select_related("output").order_by("pk")
 
     for edge in candidates:
         if edge.output is None or not is_traversable(edge):
@@ -3195,7 +3075,7 @@ def _edge_towards_intrinsic(system: "models.CoordinateSystem", dataset: "models.
 def _edge_params(edge: "models.Transformation") -> tuple[str, dict]:
     """An edge as (kind, params), in the shape :func:`coords.to_matrix` expects.
 
-    A SEQUENCE's children are flattened into one params dict. A MAP_AXIS's permutation is
+    A SEQUENCE's steps are flattened into one params dict. A MAP_AXIS's permutation is
     written out as an `affine`: it lives in the `input_axes` / `output_axes` *columns*,
     which `to_matrix` never sees, so composing it any other way would mean threading two
     more arguments through every caller for the one kind that needs them.
@@ -3208,8 +3088,8 @@ def _edge_params(edge: "models.Transformation") -> tuple[str, dict]:
         return edge.kind, edge.params
 
     params: dict = {}
-    for child in edge.children.order_by("order"):
-        params.update(child.params)
+    for _, step_params in edge.step_pairs:
+        params.update(step_params)
     return edge.kind, params
 
 
@@ -3228,9 +3108,6 @@ def _edge_step(edge: "models.Transformation", *, inverted: bool = False) -> "coo
     flags, `adjacency_of` offering an edge backwards only where `is_reverse_traversable`
     holds, so this is a guard rather than a branch.
     """
-    children: tuple[tuple[str, dict], ...] = ()
-    if edge.kind in _COMPOSITE_KINDS:
-        children = tuple((child.kind, child.params) for child in sorted(edge.children.all(), key=lambda child: (child.order, child.pk)))
 
     # Each endpoint's axes read once. `axes.all()` builds a fresh queryset per call unless a
     # prefetch upstream has filled the cache, and this runs once per edge per placement per
@@ -3252,7 +3129,7 @@ def _edge_step(edge: "models.Transformation", *, inverted: bool = False) -> "coo
         output_units=tuple(axis.unit for axis in output_axes_rows),
         acts_on_input=tuple(edge.input_axes) if edge.input_axes else None,
         acts_on_output=tuple(edge.output_axes) if edge.output_axes else None,
-        children=children,
+        steps=edge.step_pairs,
     )
     return coords_logic.invert_step(step) if inverted else step
 
@@ -3343,7 +3220,7 @@ def dataset_behind(system: "models.CoordinateSystem") -> "models.ArrayDataset | 
         return resident
 
     incoming = (
-        models.Transformation.objects.filter(output=system, parent__isnull=True)
+        models.Transformation.objects.filter(output=system)
         .exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
         .select_related("input")
         .order_by("pk")
@@ -3366,7 +3243,7 @@ def physical_neighbours(system: "models.CoordinateSystem") -> list["models.Coord
     that finds several knows the choice is real rather than arbitrary.
     """
     edges = (
-        models.Transformation.objects.filter(input=system, parent__isnull=True)
+        models.Transformation.objects.filter(input=system)
         .exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
         .select_related("output")
         .prefetch_related("output__axes")
@@ -3519,7 +3396,7 @@ def collection_derivation_edges(system: "models.CoordinateSystem") -> list["mode
     Screened by :func:`is_derivation_edge`, so a registration into a world -- which also
     leaves this system -- is not reported as something the collection came from.
     """
-    candidates = list(models.Transformation.objects.filter(input=system, parent__isnull=True).select_related("output").order_by("pk"))
+    candidates = list(models.Transformation.objects.filter(input=system).select_related("output").order_by("pk"))
     if not candidates:
         return []
 

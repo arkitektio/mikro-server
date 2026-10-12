@@ -422,7 +422,7 @@ def bootstrap_scene_from_system(
         # order the registrations were authored (pk). Bounded and predictable against
         # nchildren -- a multi-hop reachable closure would be a larger, less obvious set.
         edges = (
-            models.Transformation.objects.filter(output=system, parent__isnull=True)
+            models.Transformation.objects.filter(output=system)
             .select_related("input").prefetch_related("input__datasets", "input__table_datasets", "input__mesh_collections", "input__annotation_collections")
             .order_by("pk")
         )

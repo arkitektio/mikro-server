@@ -38,16 +38,16 @@ def phasor_axis(axes: Sequence[coords_logic.AxisSpec]) -> coords_logic.AxisSpec 
     return next((axis for axis in axes if coords_logic.is_phasor_axis(axis.type)), None)
 
 
-def flatten_edge(kind: str, params: dict, children: Sequence[tuple[str, dict]] = ()) -> list[tuple[str, dict]]:
+def flatten_edge(kind: str, params: dict, steps: Sequence[tuple[str, dict]] = ()) -> list[tuple[str, dict]]:
     """One transformation as the (kind, params) pairs :func:`core.logic.coords.compose` wants.
 
-    A SEQUENCE keeps its parameters on its *children* rather than in its own ``params``
+    A SEQUENCE keeps its parameters on its *steps* rather than in its own ``params``
     (see ``core.logic.graph._sequence``), so composing it from its own params alone yields
     the identity -- a bin width of exactly 1.0, which looks like an uncalibrated axis rather
     than like a bug. Flattening here is what stops that.
     """
-    if kind == enums.TransformKindChoices.SEQUENCE.value and children:
-        return list(children)
+    if kind == enums.TransformKindChoices.SEQUENCE.value and steps:
+        return list(steps)
     return [(kind, params)]
 
 

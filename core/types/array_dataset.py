@@ -1092,8 +1092,7 @@ def _resolve_bin_width(dataset: "models.ArrayDataset", axis_name: str, axis_coun
         if edge is None:
             continue
 
-        children = [(child.kind, child.params) for child in edge.children.order_by("order")]
-        scale = phasor_logic.axis_scale(phasor_logic.flatten_edge(edge.kind, edge.params, children), axis_index, axis_count)
+        scale = phasor_logic.axis_scale(phasor_logic.flatten_edge(edge.kind, edge.params, edge.step_pairs), axis_index, axis_count)
         if scale is None:
             continue
 

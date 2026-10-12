@@ -88,12 +88,12 @@ query ScenePlacements {
     id
     layers {
       id
-      pathToWorld { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { transformations { id kind inputAxes outputAxes } } } }
+      pathToWorld { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { steps { kind scale translation } } } }
       asAffine { matrix inputAxes outputAxes total }
       ... on ImageLayer {
         levelPaths {
           dataArray { id level }
-          path { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { transformations { id kind inputAxes outputAxes } } } }
+          path { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { steps { kind scale translation } } } }
         }
       }
     }
@@ -106,12 +106,12 @@ ROOT_LAYERS = """
 query RootLayers {
   layers {
     id
-    pathToWorld { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { transformations { id kind inputAxes outputAxes } } } }
+    pathToWorld { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { steps { kind scale translation } } } }
     asAffine { matrix inputAxes outputAxes total }
     ... on ImageLayer {
       levelPaths {
         dataArray { id level }
-        path { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { transformations { id kind inputAxes outputAxes } } } }
+        path { inverted transformation { id kind inputAxes outputAxes ... on SequenceTransformation { steps { kind scale translation } } } }
       }
     }
   }

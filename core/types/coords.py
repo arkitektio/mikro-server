@@ -40,7 +40,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
 from core.types.auth import ProvenanceEntry, User
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped, OrgScopedOrNested
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 
 
 if TYPE_CHECKING:
@@ -198,7 +198,7 @@ class CoordinateSystem(OrgScoped):
     # systems for their registrations is one query each.
     @kante.django_field(
         description=(
-            "Every top-level edge landing in this space -- the claims that place something here. They belong to the space, so every scene composing over this system sees the same "
+            "Every edge landing in this space -- the claims that place something here. They belong to the space, so every scene composing over this system sees the same "
             "list, each entry unique for its data-tree, and `layers.pathToWorld` searches exactly these plus the datasets' own facts. On a shared world these are the "
             "registrations a client authored; on a container's own grid they are the lens crops and derived children that land in it. Composing the matrices stays the "
             "client's job. Not filtered by kind, so a table's own system also lists the FIELD edge of any mask keying it -- that one places nothing (a FIELD has no "
@@ -206,8 +206,8 @@ class CoordinateSystem(OrgScoped):
         ),
     )
     def registrations(self, info: Info) -> List["Transformation"]:
-        """The top-level edges into this space."""
-        return list(models.Transformation.objects.filter(parent__isnull=True, output=self.pk).order_by("pk"))
+        """The edges into this space."""
+        return list(models.Transformation.objects.filter(output=self.pk).order_by("pk"))
 
     # `Scene.coordinateSystems` used to answer this, from a closure the scene built over its
     # world's edges alone -- which under-reported (a placed dataset's physical space, its
@@ -241,7 +241,7 @@ class CoordinateSystem(OrgScoped):
         # also counts when any of its (non-UNMAPPABLE) edges lands in a placeable space.
         placeable = _placeable_ids(info, self)
         anchored = (
-            models.Transformation.objects.filter(parent__isnull=True, input__annotation_collections__isnull=False, output__in=placeable)
+            models.Transformation.objects.filter(input__annotation_collections__isnull=False, output__in=placeable)
             .exclude(kind=enums.TransformKind.UNMAPPABLE.value)
             .values_list("input_id", flat=True)
         )
@@ -325,7 +325,7 @@ class Selector:
     models.Transformation,
     description="A directed edge of the coordinate graph, mapping `input` to `output`. Direction is always forward. The concrete kind (Scale, Translation, Affine, Sequence, ...) carries the parameters",
 )
-class Transformation(OrgScopedOrNested):
+class Transformation(OrgScoped):
     """A directed edge of the coordinate graph, mapping `input` to `output`."""
 
     id: auto
@@ -343,18 +343,18 @@ class Transformation(OrgScopedOrNested):
     @kante.django_field(
         select_related=["input"],
         prefetch_related=["input__axes"],
-        description="The system this edge maps from. Null for the child of a SEQUENCE or BY_DIMENSION, which takes its endpoints from the wrapper",
+        description="The system this edge maps from",
     )
-    def input(self, info: Info) -> CoordinateSystem | None:
+    def input(self, info: Info) -> CoordinateSystem:
         """The input system."""
         return self.input
 
     @kante.django_field(
         select_related=["output"],
         prefetch_related=["output__axes"],
-        description="The system this edge maps to. Null for the child of a SEQUENCE or BY_DIMENSION, which takes its endpoints from the wrapper",
+        description="The system this edge maps to",
     )
-    def output(self, info: Info) -> CoordinateSystem | None:
+    def output(self, info: Info) -> CoordinateSystem:
         """The output system."""
         return self.output
 
@@ -412,11 +412,11 @@ class Transformation(OrgScopedOrNested):
     # by organization): the axis lists are derived from the
     # endpoints' axes, so those have to ride along with the edge. Passing them as hints
     # lets the optimizer merge them into the queryset it is already building; replacing
-    # the queryset instead would throw away the caller's prefetch (a SEQUENCE's children
+    # the queryset instead would throw away the caller's prefetch (the endpoints' axes
     # arrive prefetched, and re-querying them per edge is the N+1 this whole field is
     # meant to spare the client).
     @kante.django_field(
-        prefetch_related=["input__axes", "output__axes", "parent__input__axes", "parent__output__axes"],
+        prefetch_related=["input__axes", "output__axes"],
         description="The names of the input axes this edge's parameters are ordered by. `scale`, `translation` and the columns of `affine` follow this order -- which is the input system's axis order, NOT the reading layer's axis names, and the two differ often enough that indexing the arrays against them silently misplaces them. A BY_DIMENSION edge names only the subset of axes it acts on; the axes it does not name are the ones it leaves untouched",
     )
     def input_axes(self, info: Info) -> List[str]:
@@ -424,7 +424,7 @@ class Transformation(OrgScopedOrNested):
         return graph_logic.edge_axis_names(self, "input")
 
     @kante.django_field(
-        prefetch_related=["input__axes", "output__axes", "parent__input__axes", "parent__output__axes"],
+        prefetch_related=["input__axes", "output__axes"],
         description="The names of the output axes this edge produces. For a rank-changing BY_DIMENSION edge (placing a (c,y,x) dataset into a (t,z,y,x) world) this is the subset it maps onto; the world's other axes are untouched",
     )
     def output_axes(self, info: Info) -> List[str]:
@@ -433,14 +433,12 @@ class Transformation(OrgScopedOrNested):
 
     # Derived, never stored: a column here would be free to contradict `params`, and `params`
     # would be right -- the same principle that makes `CoordinateSystem.kind` read its owner
-    # FKs. `kind` and `params` are local columns on the row; the prefetch is for a composite,
-    # whose children the classification recurses into.
+    # FKs. `kind`, `params` and `steps` are local columns on the row, so this costs no query.
     @kante.django_field(
-        prefetch_related=["children"],
         description=(
             "Which geometric properties survive this edge's map, derived from `kind`: ISOMETRY (distances, angles and areas all transfer), SIMILARITY (angles and length ratios "
             "transfer, absolute lengths scale by one common factor), AFFINE (parallelism and area ratios transfer, angles and distances do not), DIFFEOMORPHIC (topology at best, "
-            "and only locally -- the Jacobian varies with position), NONE (nothing corresponds). A SEQUENCE or BY_DIMENSION is the weakest of its children. Stated by "
+            "and only locally -- the Jacobian varies with position), NONE (nothing corresponds). A SEQUENCE is the weakest of its steps, a BY_DIMENSION reads the map it carries. Stated by "
             "kind, never by inspecting the numbers: an AFFINE edge reads AFFINE even when its matrix happens to be rigid, because separating those needs an SVD. A layer's "
             "`placementInvariance` is the minimum of this over its whole path to world"
         ),
@@ -572,9 +570,43 @@ class MapAxisTransformation(Transformation):
         return self.output_axes or []
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="An ordered composition of child transformations, applied first to last")
+@kante.type(
+    description=(
+        "One step of a SEQUENCE transformation: a kind and its parameters, in the axis order of the sequence's input. A step is not an edge -- it has no endpoints, no id and no history "
+        "of its own -- so it is read here and refined nowhere: the sequence is the ingest's statement of a crop or a pyramid level, derived from the data's own shapes"
+    )
+)
+class TransformationStep:
+    """One step of a sequence: a kind and the parameters that kind reads."""
+
+    kind: enums.TransformKind = strawberry.field(description="The kind of this step, which fixes which of the parameters below is read")
+    scale: List[float] = strawberry.field(description="(SCALE) The per-axis factors, in the axis order of the sequence's input; empty on any other kind")
+    translation: List[float] = strawberry.field(description="(TRANSLATION) The per-axis offsets, in the axis order of the sequence's input; empty on any other kind")
+    affine: List[List[float]] = strawberry.field(description="(AFFINE / ROTATION) The matrix, M x (N+1), rows outermost; empty on any other kind")
+    reason: str | None = strawberry.field(description="(UNMAPPABLE) Why nothing corresponds, if the author said")
+    field: "CoordinateSystem | None" = strawberry.field(description="(FIELD) The coordinate system of the array whose values are this step's map")
+
+    @classmethod
+    def from_steps(cls, steps: list[dict], info: Info) -> list["TransformationStep"]:
+        """The stored steps (`Transformation.steps`) as this type, their fields read once and scoped as any system read is."""
+        field_ids = [step["field"] for step in steps if step.get("field") is not None]
+        systems = {system.pk: system for system in build_prescoped_queryset(info, models.CoordinateSystem.objects.filter(pk__in=field_ids))} if field_ids else {}
+        return [
+            cls(
+                kind=enums.TransformKind(step["kind"]),
+                scale=(step.get("params") or {}).get("scale") or [],
+                translation=(step.get("params") or {}).get("translation") or [],
+                affine=(step.get("params") or {}).get("affine") or [],
+                reason=(step.get("params") or {}).get("reason"),
+                field=systems.get(step.get("field")),
+            )
+            for step in steps
+        ]
+
+
+@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="An ordered composition of steps, applied first to last: one edge, carrying its map as `steps`. The ingest writes one for a stepped lens and for a downsampled pyramid level (a scale, then the half-voxel translation)")
 class SequenceTransformation(Transformation):
-    """An ordered composition of child transformations, applied first to last."""
+    """An ordered composition of steps, applied first to last: one edge carrying its map."""
 
     id: auto
 
@@ -586,15 +618,24 @@ class SequenceTransformation(Transformation):
         asking every member, so this also sees rows of other models."""
         return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.SEQUENCE.value
 
-    transformations: List[Transformation] = kante.django_field(
-        field_name="children",
-        description="The child transformations, applied first to last. They omit their own input and output: the sequence supplies them",
-    )
+    @kante.django_field(description="The steps, applied first to last, each in the axis order of this edge's input. Composing them is composing the edge")
+    def steps(self, info: Info) -> List[TransformationStep]:
+        """The sequence's steps, read off the row."""
+        return TransformationStep.from_steps(self.steps or [], info)
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A composition of child transformations, each acting on a named subset of the axes")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description=(
+        "A map over a named subset of the axes: `inputAxes` onto `outputAxes`, one for one, by a `scale` and/or a `translation`, or by an `affine` -- or by none of them, which is the "
+        "identity on the named axes. The axes it does not name pass through untouched, which is how a registration crosses a rank boundary: a (c,y,x) dataset placed into a (t,z,y,x) "
+        "world names y and x and says nothing about t and z"
+    ),
+)
 class ByDimensionTransformation(Transformation):
-    """A composition of child transformations, each acting on a named subset of the axes."""
+    """A map over a named subset of the axes, the rest passing through."""
 
     id: auto
 
@@ -606,10 +647,20 @@ class ByDimensionTransformation(Transformation):
         asking every member, so this also sees rows of other models."""
         return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.BY_DIMENSION.value
 
-    transformations: List[Transformation] = kante.django_field(
-        field_name="children",
-        description="The child transformations. Each carries the `inputAxes` and `outputAxes` it acts on",
-    )
+    @kante.django_field(description="The per-axis scale factors over the named axes, in `inputAxes` order. Empty when the map states none -- as `ScaleTransformation.scale` is shaped, so one fragment reads both")
+    def scale(self, info: Info) -> List[float]:
+        """The scale over the named axes, if stated."""
+        return self.params.get("scale") or []
+
+    @kante.django_field(description="The per-axis offsets over the named axes, in `inputAxes` order. Empty when the map states none")
+    def translation(self, info: Info) -> List[float]:
+        """The translation over the named axes, if stated."""
+        return self.params.get("translation") or []
+
+    @kante.django_field(description="The matrix over the named axes, M x (N+1) with rows outermost, in `outputAxes` x `inputAxes` order. Empty when the map is stated per axis or not at all. When present it is the whole map: a `scale` or `translation` beside it is not read")
+    def affine(self, info: Info) -> List[List[float]]:
+        """The affine over the named axes, if stated."""
+        return self.params.get("affine") or []
 
 
 @kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A non-affine map given by the values of an array rather than by a formula. The array is a `field`: a node of this graph, not a payload on this edge, so it keeps its own lineage and its axes say what its numbers mean. It has no closed-form inverse, so a placement path never walks it backwards")
@@ -769,7 +820,7 @@ class CoordinateGraph:
 
     root: CoordinateSystem = strawberry.field(description="The coordinate system the walk started from")
     systems: List[CoordinateSystem] = strawberry.field(description="Every coordinate system reachable from the root, the root included, ordered by ID")
-    transformations: List[Transformation] = strawberry.field(description="Every top-level edge with both endpoints in `systems`, ordered by ID. The children of a SEQUENCE / BY_DIMENSION wrapper are not listed here; they hang off their wrapper")
+    transformations: List[Transformation] = strawberry.field(description="Every edge with both endpoints in `systems`, ordered by ID. A SEQUENCE's steps are part of their edge, not edges of their own")
 
 
 @kante.type(
