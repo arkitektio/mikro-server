@@ -11,7 +11,7 @@ from kante.types import Info
 
 from datalayer.types import SparseStore
 
-from core import filters, models, order, scalars
+from core import enums, filters, models, order, scalars
 from core.logic import file_link as file_link_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
@@ -88,6 +88,14 @@ class SparseDataset(OrgScoped):
     """A sparse matrix dataset."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+
+    @kante.django_field(
+        prefetch_related=["arrays__store", "axis_references"],
+        description="What this matrix structurally is, read off its axes and its store's shape: the one rank member its axes of more than one position denote -- MATRIX, ordinarily. Derived on read, never stored. A lens over it answers the same vocabulary for its selection, which is where VECTOR and SLICE appear",
+    )
+    def spec(self, info: Info) -> List[enums.SparseDatasetSpec]:
+        """Every spec the matrix satisfies."""
+        return self.spec
 
     @kante.django_field(description="The lenses over this sparse dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
     def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]]:

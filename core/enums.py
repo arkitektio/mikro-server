@@ -587,7 +587,7 @@ class LensKind(str, Enum):
     ANNOTATION = "ANNOTATION"
 
 
-@strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds; the others are modifiers: one per non-spatial axis type the dataset has more than one position along, and TRACE for a dataset that is a curve along one measured axis.")
+@strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation; an array lens answers the same vocabulary over the shape its slices cut out, so one plane of a stack is an IMAGE and one row of an image a TRACE. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds; the others are modifiers: one per non-spatial axis type the dataset has more than one position along, and TRACE for a dataset that is a curve along one measured axis.")
 class ArrayDatasetSpec(str, Enum):
     """What a dataset structurally is, materialized from its axes at creation.
 
@@ -635,7 +635,83 @@ _describe(
     DISPLACEMENT_FIELD="Carries a DISPLACEMENT axis of more than one component: the values are per-point offsets -- a flow field, a drift map, a deformation.",
     COORDINATE_FIELD="Carries a COORDINATE axis of more than one component: the values are absolute positions -- a lookup map, the field of a FIELD edge. A scalar-valued array declares no such axis and is not one.",
     INDEXED="Carries an INDEX axis of more than one position: an axis that enumerates -- objects, rows -- rather than measures. A stack of per-object crops, a per-object measurement.",
-    TRACE="A curve: exactly one measured axis (SPACE, TIME, MICROTIME or SPECTRUM) with more than one position, and beside it at most one enumerating axis (CHANNEL or INDEX), one line per position. A line profile, a time trace, a decay, a spectrum -- what a chart draws whole as a TRACE layer. An image is not one, though a row of it is: that is a lens, and a spec describes the whole dataset. Says nothing about placement: whether a given chart can draw it depends on what is registered.",
+    TRACE="A curve: exactly one measured axis (SPACE, TIME, MICROTIME or SPECTRUM) with more than one position, and beside it at most one enumerating axis (CHANNEL or INDEX), one line per position. A line profile, a time trace, a decay, a spectrum -- what a chart draws whole as a TRACE layer. An image is not one, though a row of it is: that row is a lens, and the lens' own spec says so. Says nothing about placement: whether a given chart can draw it depends on what is registered.",
+)
+
+
+@strawberry.enum(description="What a table structurally is, materialized from its declared columns at creation; a table lens answers the same vocabulary over what its windows leave free -- a coordinate column a window pins to one value (min == max) no longer counts, so one frame of a tracking result is not TIMED. Specs stack: a tracking result is POINTS_2D, TIMED and TRACKED at once. Exactly one placement member (RECORDS/POINTS_1D/POINTS_2D/POINTS_3D/POINTS_ND) ever holds; the others are modifiers, one per fact the schema declares, and SERIES for a table that is one value against one measured coordinate. Declared, not measured: where an array's spec counts an axis only when it has more than one position, a table's is read off its schema alone, because the server never scans the rows.")
+class TableDatasetSpec(str, Enum):
+    """What a table structurally is, materialized from its declared columns at creation.
+
+    `ArrayDatasetSpec`'s sibling, and stored the same way: a strawberry enum only, the raw
+    values on `TableDataset.stored_spec`, read back through `TableDataset.spec`. Storing it
+    is safe for the reason it is there -- the columns are written once and never edited.
+    The single source of truth for the derivation is `core.logic.coords.specs_for_columns`.
+
+    **Declaration, not extent.** An array's spec counts an axis only when it has more than
+    one position; nothing here can, because the server never scans a table and so knows no
+    row count and no column's range. TIMED means a TIME coordinate column is declared, not
+    that the rows span more than one instant.
+    """
+
+    RECORDS = "RECORDS"
+    POINTS_1D = "POINTS_1D"
+    POINTS_2D = "POINTS_2D"
+    POINTS_3D = "POINTS_3D"
+    POINTS_ND = "POINTS_ND"
+    TIMED = "TIMED"
+    TRACKED = "TRACKED"
+    GROUPED = "GROUPED"
+    KEYED = "KEYED"
+    NODE_TABLE = "NODE_TABLE"
+    EDGE_TABLE = "EDGE_TABLE"
+    SERIES = "SERIES"
+
+
+_describe(
+    TableDatasetSpec,
+    RECORDS="No SPACE coordinate column: the rows are records rather than positions -- one per object with its measurements. Nothing places them in a scene.",
+    POINTS_1D="One SPACE coordinate column: positions along a line.",
+    POINTS_2D="Two SPACE coordinate columns: points in a plane. The least a point layer draws.",
+    POINTS_3D="Three SPACE coordinate columns: points in a volume.",
+    POINTS_ND="Four or more SPACE coordinate columns.",
+    TIMED="Declares a TIME coordinate column: each row sits at an instant.",
+    TRACKED="Declares a TRACK_ID column: rows group into trajectories. With POINTS_2D or more, what a track layer draws.",
+    GROUPED="Declares a GROUP_ID column: rows group into connected objects that are not trajectories -- the nodes of one arbor, the points of one cluster.",
+    KEYED="A column's values identify rows of another table (`Column.references`): a foreign key out of this table, or the table an INDEX coordinate enumerates.",
+    NODE_TABLE="One INDEX coordinate column holds the node ids of a network collection: one row per node.",
+    EDGE_TABLE="Two INDEX coordinate columns hold node ids of one network collection: one row per edge, (source, target) in column order.",
+    SERIES="Exactly one measured coordinate column (SPACE or TIME) and at least one numeric ATTRIBUTE column: a value against a position, what a chart draws as a SERIES layer with nothing left to choose but the value. Not the only table a chart can draw -- one with several measured coordinates is drawn along whichever the chart's axis is registered to -- and it says nothing about placement: whether a given chart can draw it depends on what is registered.",
+)
+
+
+@strawberry.enum(description="What a sparse matrix structurally is, read off its axes, its shape and the layouts its store holds; a sparse lens answers the same vocabulary over what its windows leave free. Exactly one rank member (SCALAR/VECTOR/MATRIX/TENSOR) ever holds, by how many axes still have more than one position: an axis of a single position does not count, and neither does one a window pins to one position (min == max). SLICE is what the whole amounts to when a picker can read it.")
+class SparseDatasetSpec(str, Enum):
+    """What a sparse matrix, or a selection over one, structurally is.
+
+    Derived on every read and stored nowhere: a sparse dataset's shape is its store's, and a
+    lens' spec follows from its dataset and its windows, so a stored copy could only drift.
+    The single source of truth is `core.logic.coords.specs_for_sparse`.
+
+    Extent-based, like an array's: the store records the shape, so an axis counts only when
+    it has more than one position. A window that bounds without pinning leaves an extent
+    nobody has counted, and the axis still counts.
+    """
+
+    SCALAR = "SCALAR"
+    VECTOR = "VECTOR"
+    MATRIX = "MATRIX"
+    TENSOR = "TENSOR"
+    SLICE = "SLICE"
+
+
+_describe(
+    SparseDatasetSpec,
+    SCALAR="No axis left free: one value.",
+    VECTOR="One axis left free: one value per position along it -- one feature across every object, or one object's whole profile.",
+    MATRIX="Two axes left free. What a whole sparse dataset ordinarily is.",
+    TENSOR="Three or more axes left free.",
+    SLICE="One whole-number position pinned on every axis the matrix identifies itself by and on no other, with a layout that makes the read one contiguous range: one value per object, which is what a SPARSE colour or filter picker entry reads. Never true of a whole dataset.",
 )
 
 

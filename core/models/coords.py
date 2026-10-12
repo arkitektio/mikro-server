@@ -175,7 +175,7 @@ class Axis(models.Model):
         blank=True,
         help_text="The physical unit of the axis, e.g. 'micrometer'. A pint unit (the kanne `Unit` scalar), validated on write; 'a.u.' for arbitrary units. Set on unit-carrying axes (a physical space, a world), always null on pixel-grid axes",
     )
-    long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the axis")
+    long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the axis")  # TODO: think if we still need them or if descriptions should encapsulate it?
     description = models.CharField(max_length=1000, null=True, blank=True, help_text="A free-form description of what the axis measures, e.g. 'distance from the coverslip'")
 
     class Meta:
@@ -260,6 +260,7 @@ class Transformation(models.Model):
     input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, null=True, blank=True, related_name="+", help_text="The coordinate system this transformation maps from")
     output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, null=True, blank=True, related_name="+", help_text="The coordinate system this transformation maps to")
 
+    # TODO: Should we really have child transformations, maybe just params?
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="The wrapping SEQUENCE / BY_DIMENSION transformation, if this is a child")
     order = models.PositiveSmallIntegerField(default=0, help_text="The position of this child within its wrapping SEQUENCE, applied first to last")
 
@@ -427,7 +428,10 @@ class MeshCollection(models.Model):
     some absolute space, belonging to no dataset, simply has none.
     """
 
+    # TODO: remove the version flag as mesh colelctions are immutable and versioned through the "provenance field"
     version = models.CharField(max_length=64, help_text="The immutable version of this collection, e.g. 'v20260713-a3f9'")
+
+    # TODO: probably we should have the frabikstore have that spec version?
     spec_version = models.CharField(max_length=64, help_text="The version of the mesh encoding specification this collection conforms to")
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`. A versioned collection is
@@ -516,6 +520,7 @@ class NetworkCollection(models.Model):
     and it is a statement rather than a silence.
     """
 
+    # TODO: Same HERE
     version = models.CharField(max_length=64, help_text="The immutable version of this collection, e.g. 'v20260713-a3f9'")
     spec_version = models.CharField(max_length=64, help_text="The version of the network encoding specification this collection conforms to")
 

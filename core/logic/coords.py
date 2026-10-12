@@ -337,6 +337,161 @@ def specs_for_axes(axes: Sequence[AxisSpec], shape: Sequence[int]) -> list[enums
     return specs
 
 
+@dataclass(frozen=True)
+class ColumnSpec:
+    """The subset of a declared table column a table's spec is read off, so the derivation never touches the ORM.
+
+    ``Column`` rows and the create path's declaration both coerce into this.
+    """
+
+    name: str
+    role: str
+    axis_type: str | None
+    dtype: str
+    #: Whether the column's values identify rows of another table (`Column.references`).
+    references: bool = False
+    #: The network collection whose node ids the column holds (`Column.node_references`), or None.
+    node_references: int | None = None
+
+
+#: The placement spec each SPACE-coordinate-column count denotes. Any count past the table
+#: collapses to POINTS_ND, as an array's collapses to HYPERVOLUME.
+_PLACEMENT_SPEC_BY_COUNT: dict[int, enums.TableDatasetSpec] = {
+    0: enums.TableDatasetSpec.RECORDS,
+    1: enums.TableDatasetSpec.POINTS_1D,
+    2: enums.TableDatasetSpec.POINTS_2D,
+    3: enums.TableDatasetSpec.POINTS_3D,
+}
+
+#: The placement specs a point or a track layer draws: at least two SPACE coordinate columns.
+POINT_TABLE_SPECS: frozenset[enums.TableDatasetSpec] = frozenset(
+    {enums.TableDatasetSpec.POINTS_2D, enums.TableDatasetSpec.POINTS_3D, enums.TableDatasetSpec.POINTS_ND}
+)
+
+#: The DuckDB type names that are numbers. A DECIMAL carries its precision in the name, so
+#: it is matched by prefix.
+_NUMERIC_DTYPES: frozenset[str] = frozenset(
+    {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT", "FLOAT", "REAL", "DOUBLE"}
+)
+
+
+def is_numeric_dtype(dtype: str) -> bool:
+    """Whether a column's stored type, a DuckDB type name, is a number."""
+    dtype = dtype.upper()
+    return dtype in _NUMERIC_DTYPES or dtype.startswith("DECIMAL")
+
+
+def specs_for_columns(columns: Sequence[ColumnSpec], pinned: Iterable[str] = ()) -> list[enums.TableDatasetSpec]:
+    """Every spec these declared columns satisfy: the one placement member, then a modifier per declared fact, then what the whole amounts to.
+
+    ``pinned`` names the coordinate columns a lens' windows hold to a single value
+    (:func:`pinned_axes`). It is the one way a selection changes what a table is, and it is
+    the window form of an array's rule: a coordinate with one position does not count --
+    toward the placement member, toward TIMED, or toward the one measured coordinate a SERIES
+    is laid along. A window that only bounds changes nothing: the rows it keeps still spread
+    along that axis, as far as anyone has declared. Empty for the table itself.
+
+    **Declared, not measured.** :func:`specs_for_axes` counts an axis only when it has more
+    than one position; this cannot, because the server never scans a table: there is no row
+    count and no column's range to read. A TIME coordinate column makes a table TIMED
+    whether its rows span an hour or a single instant.
+
+    The placement member comes first and the modifiers follow in a fixed order, so the list
+    is deterministic and a client may compare it by equality. New members go at the end of
+    their group.
+
+    This is the single source of truth for a table's spec: ``stored_spec`` is materialized
+    *from* it by ``create_table_dataset``, and the layer gates read what was stored. A table
+    lens' spec is this function over the same columns and its own pins, materialized when the lens is made.
+    """
+    held = set(pinned)
+    coordinates = [column for column in columns if column.role == enums.ColumnRoleChoices.COORDINATE.value and column.name not in held]
+    spatial = sum(1 for column in coordinates if column.axis_type == enums.AxisTypeChoices.SPACE.value)
+    roles = {column.role for column in columns}
+    per_collection: dict[int, int] = {}
+    for column in columns:
+        if column.node_references is not None:
+            per_collection[column.node_references] = per_collection.get(column.node_references, 0) + 1
+    node_columns = set(per_collection.values())
+
+    specs = [_PLACEMENT_SPEC_BY_COUNT.get(spatial, enums.TableDatasetSpec.POINTS_ND)]
+    if any(column.axis_type == enums.AxisTypeChoices.TIME.value for column in coordinates):
+        specs.append(enums.TableDatasetSpec.TIMED)
+    if enums.ColumnRoleChoices.TRACK_ID.value in roles:
+        specs.append(enums.TableDatasetSpec.TRACKED)
+    if enums.ColumnRoleChoices.GROUP_ID.value in roles:
+        specs.append(enums.TableDatasetSpec.GROUPED)
+    if any(column.references for column in columns):
+        specs.append(enums.TableDatasetSpec.KEYED)
+    if 1 in node_columns:
+        specs.append(enums.TableDatasetSpec.NODE_TABLE)
+    if 2 in node_columns:
+        specs.append(enums.TableDatasetSpec.EDGE_TABLE)
+
+    measured = sum(1 for column in coordinates if column.axis_type in METRIC_AXIS_TYPES)
+    has_value = any(column.role == enums.ColumnRoleChoices.ATTRIBUTE.value and is_numeric_dtype(column.dtype) for column in columns)
+    if measured == 1 and has_value:
+        specs.append(enums.TableDatasetSpec.SERIES)
+    return specs
+
+
+def pinned_axes(windows: Iterable["WindowLike"]) -> list[str]:
+    """The axes these windows hold to a single value: ``min == max``. The window form of an extent of one."""
+    return [window.axis for window in windows if window.min is not None and window.min == window.max]
+
+
+#: The rank spec each count of free axes denotes. Any count past the table collapses to TENSOR.
+_SPARSE_SPEC_BY_RANK: dict[int, enums.SparseDatasetSpec] = {
+    0: enums.SparseDatasetSpec.SCALAR,
+    1: enums.SparseDatasetSpec.VECTOR,
+    2: enums.SparseDatasetSpec.MATRIX,
+}
+
+
+def is_sparse_slice(axis_names: Sequence[str], shape: Sequence[int], *, identified: Iterable[str], indexed: Iterable[str], windows: Sequence["WindowLike"]) -> bool:
+    """Whether these windows cut one slice of a sparse matrix: what a SPARSE picker entry reads.
+
+    One whole-number position, inside the axis' extent, on every axis the matrix identifies
+    itself by and on no other -- the remaining axis is the one a source supplies ids for --
+    and a layout indexing one of the pinned axes, so the read is one contiguous range rather
+    than a scan of the store.
+    """
+    windowed = {window.axis: window for window in windows}
+    if not windowed or set(windowed) != set(identified):
+        return False
+    known = len(shape) == len(axis_names)
+    for axis, window in windowed.items():
+        if window.min is None or window.min != window.max or window.min != int(window.min):
+            return False
+        if known and axis in axis_names and not 0 <= int(window.min) < shape[list(axis_names).index(axis)]:
+            return False
+    return bool(set(windowed) & set(indexed))
+
+
+def specs_for_sparse(
+    axis_names: Sequence[str],
+    shape: Sequence[int],
+    *,
+    identified: Iterable[str] = (),
+    indexed: Iterable[str] = (),
+    windows: Sequence["WindowLike"] = (),
+) -> list[enums.SparseDatasetSpec]:
+    """Every spec a sparse matrix, or these windows over it, satisfies: the one rank member, then SLICE when a picker can read it.
+
+    An axis counts when it has more than one position and no window pins it. ``shape`` is the
+    store's own; when it does not match the axes (a store that never recorded one) no extent
+    is known and every unpinned axis counts. ``identified`` are the axes that reference a
+    table, ``indexed`` the ones a stored layout makes contiguous.
+    """
+    known = len(shape) == len(axis_names)
+    held = set(pinned_axes(windows))
+    free = [name for index, name in enumerate(axis_names) if name not in held and (not known or shape[index] > 1)]
+    specs = [_SPARSE_SPEC_BY_RANK.get(len(free), enums.SparseDatasetSpec.TENSOR)]
+    if is_sparse_slice(axis_names, shape, identified=identified, indexed=indexed, windows=windows):
+        specs.append(enums.SparseDatasetSpec.SLICE)
+    return specs
+
+
 def array_to_vertex_order(coords: Sequence[float], axes: Sequence[AxisSpec]) -> list[float]:
     """Permute spatial coordinates from array order (z, y, x) to vertex order (x, y, z).
 

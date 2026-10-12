@@ -20,6 +20,9 @@ because it was written around the constraint. It converges them, container by co
    chart over it, no edge besides its own, nothing that PROTECTs it. Otherwise it is left in
    place and reported. The database refuses a duplicate since the lens tables were split, so
    this step finds work only on rows written around it by hand.
+4. **Materialize** the spec of every lens whose stored one is not what its container and
+   selection denote (`Lens.derive_spec`): the rows written before lenses stated a spec, the
+   ones a rolled-back release wrote without one, and every row after the rule itself changes.
 
 Re-runnable: it finds what is still owed and does nothing when nothing is. Listed in the image's
 setup, so it runs inside `migrate` for every build, before the release serves -- and no row spelled
@@ -62,7 +65,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         """Converge every container's lenses, one transaction per container."""
         self.dry_run = options["dry_run"]
-        self.counts = {"normalized": 0, "edges_repaired": 0, "backfilled": 0, "merged_unsliced": 0, "merged_sliced": 0, "left": 0}
+        self.counts = {"normalized": 0, "edges_repaired": 0, "backfilled": 0, "merged_unsliced": 0, "merged_sliced": 0, "left": 0, "specified": 0}
 
         datasets = models.ArrayDataset.objects.filter(coordinate_system__isnull=False).order_by("pk").select_related("coordinate_system")
         for dataset in datasets.iterator():
@@ -85,16 +88,30 @@ class Command(BaseCommand):
                     if self.dry_run:
                         transaction.set_rollback(True)
 
+        self._specify()
+
         verb = "would " if self.dry_run else ""
         self.stdout.write(
             self.style.SUCCESS(
                 f"{verb}normalized {self.counts['normalized']} lens(es), {verb}repaired {self.counts['edges_repaired']} edge(s), "
                 f"{verb}backfilled {self.counts['backfilled']} whole lens(es), {verb}merged {self.counts['merged_unsliced']} unsliced and "
-                f"{self.counts['merged_sliced']} sliced duplicate(s)"
+                f"{self.counts['merged_sliced']} sliced duplicate(s), {verb}stated the spec of {self.counts['specified']} lens(es)"
             )
         )
         if self.counts["left"]:
             self.stdout.write(f"{self.counts['left']} duplicate sliced lens(es) left in place because something else is attached to their system; each is named above.")
+
+    # --- what every lens is --------------------------------------------------------
+
+    def _specify(self) -> None:
+        """Give every lens the spec its container and selection denote. After the convergence, so it reads the normalized selections."""
+        for lens in models.Lens.objects.with_sources().order_by("pk").iterator(chunk_size=500):
+            spec = [member.value for member in lens.derive_spec()]
+            if spec == lens.stored_spec:
+                continue
+            self.counts["specified"] += 1
+            if not self.dry_run:
+                models.Lens.objects.filter(pk=lens.pk).update(stored_spec=spec)
 
     # --- a container that is not an array ------------------------------------------
 

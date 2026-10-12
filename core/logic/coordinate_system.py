@@ -521,6 +521,18 @@ def _get_or_create(kind: "type[models.Lens]", *, container: object, selection: l
         return kind.objects.get(**lookup)
 
 
+def _mint(kind: "type[models.Lens]", **fields: object) -> "models.Lens":
+    """Write a lens row with the spec of what it selects: one insert, the spec computed from the unsaved row.
+
+    Every lens is made here, so every lens states what it is from its first moment. The
+    spec is a function of the container and the selection, both in hand before the row is.
+    """
+    lens = kind(**fields)
+    lens.stored_spec = [member.value for member in lens.derive_spec()]
+    lens.save()
+    return lens
+
+
 def whole_lens(container: object) -> "models.Lens":
     """The lens selecting all of a container: the one row that exists for it, made if it does not.
 
@@ -546,7 +558,8 @@ def whole_lens(container: object) -> "models.Lens":
             raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
 
     def make() -> "models.Lens":
-        return kind.objects.create(  # type: ignore[attr-defined]
+        return _mint(
+            kind,
             **{kind.CONTAINER_FIELD: container},
             coordinate_system=system,
             organization=container.organization,  # type: ignore[attr-defined]
@@ -585,7 +598,8 @@ def create_windowed_lens(container: object, windows: list, ctx: CreationContext)
         return whole_lens(container)
 
     def make() -> "models.Lens":
-        return kind.objects.create(  # type: ignore[attr-defined]
+        return _mint(
+            kind,
             **{kind.CONTAINER_FIELD: container},
             coordinate_system=system,
             organization=container.organization,  # type: ignore[attr-defined]
@@ -612,7 +626,8 @@ def create_lens(
     that keeps the whole array is :func:`whole_lens`.
 
     The lens' shape and axes are not written: they follow from the dataset and the slices,
-    and a second copy could only drift from the first. A *sliced* lens shifts voxel
+    and a second copy could only drift from the first. Its spec is (`_mint`), because a
+    filter reads it. A *sliced* lens shifts voxel
     coordinates, which is a real fact, so it owns a coordinate system and the derived edge
     recording the shift (:func:`core.logic.graph.create_lens_edge`), both made here with the
     row. Lenses are immutable, so the decision is final at creation.
@@ -629,7 +644,8 @@ def create_lens(
             creator=ctx.user,
             organization=ctx.organization,
         )
-        lens = models.ArrayLens.objects.create(
+        lens = _mint(
+            models.ArrayLens,
             dataset=dataset,
             coordinate_system=lens_system,
             organization=dataset.organization,

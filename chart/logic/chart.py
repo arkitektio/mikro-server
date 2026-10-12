@@ -37,13 +37,6 @@ ENUMERATING_AXIS_TYPES = coords_logic.ENUMERATING_AXIS_TYPES
 #: The name of the value axis in a chart-minted drawing space.
 VALUE_AXIS_NAME = "value"
 
-#: The DuckDB type names a value column may have. A DECIMAL carries its precision in the
-#: name, so it is matched by prefix.
-_NUMERIC_DTYPES: frozenset[str] = frozenset(
-    {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT", "FLOAT", "REAL", "DOUBLE"}
-)
-
-
 # --- the world ----------------------------------------------------------------
 
 
@@ -210,8 +203,7 @@ def assert_trace(lens: "core_models.Lens", along: str) -> None:
 
 def is_numeric(column: "core_models.Column") -> bool:
     """Whether a column's stored type is a number."""
-    dtype = column.dtype.upper()
-    return dtype in _NUMERIC_DTYPES or dtype.startswith("DECIMAL")
+    return coords_logic.is_numeric_dtype(column.dtype)
 
 
 def value_candidates(table: "core_models.TableDataset", along: str) -> list["core_models.Column"]:

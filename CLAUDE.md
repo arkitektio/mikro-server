@@ -35,7 +35,20 @@ reached across a polymorphic foreign key: prefetch it (`Lens.objects.with_source
 `select_related` it, or you get the base row. Every kind is hosted *and announced*
 (`mikro_server/contract.py`, `mikro_server/service.py`), described in its container's
 vocabulary by `core/descriptors.py`; `@mikro/is_whole` tells a crop or a window from the
-whole lens a container is born with. The pure arithmetic -- normalizing, composing, boxing,
+whole lens a container is born with. **A lens states the spec of what it selects**, in its
+container's vocabulary (`ArrayDatasetSpec`, `TableDatasetSpec`, `SparseDatasetSpec`), as `spec`
+and as the `@mikro/spec` descriptor. One rule
+for every kind -- an axis the selection holds to one position does not count -- which for an
+array is the shape its slices cut out and for a windowed lens a window whose `min == max`; a
+window that only bounds changes nothing, because nobody scans the rows. It is
+computed by the kind's `derive_spec` and **materialized on `Lens.stored_spec` when the row is
+made** (`coordinate_system._mint`, the one place a lens is written) -- safe because a lens and
+its container are immutable, and stored because `LensFilter.arraySpec` / `tableSpec` /
+`sparseSpec` read it in SQL. A lens made any other way (a test's ORM row) has no spec until
+`merge_duplicate_lenses` gives it one. `ArrayDataset.stored_spec` and
+`TableDataset.stored_spec` are the same pattern (the point/track gates read the table's); a
+sparse dataset's is derived, having no filter.
+The pure arithmetic -- normalizing, composing, boxing,
 cutting -- lives in `core/logic/coords.py` and is oracle-tested in `tests/test_selection_math.py`
 and `tests/test_lens_geometry.py`.
 
@@ -71,7 +84,8 @@ What this service declares:
 
 - Setup, in order: `ensureadmin`, `merge_duplicate_lenses`. The second normalizes stored lens
   selections, gives every container of every kind (array, table, sparse, mesh, network,
-  annotation collection) its whole lens and folds duplicate array lenses onto one row; the
+  annotation collection) its whole lens, folds duplicate array lenses onto one row and gives
+  every lens the spec its selection denotes (`Lens.stored_spec`); the
   database refuses duplicates since the lens tables were split, so it is a guard for rows
   written by hand. It changes nothing the second time and reports what it leaves in place.
 - Other jobs: `purge_orphaned_stores`, `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe

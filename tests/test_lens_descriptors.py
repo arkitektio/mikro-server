@@ -85,6 +85,7 @@ async def test_a_table_says_what_its_schema_says(authenticated_context: HttpCont
         "@mikro/has_track_ids": False,
         "@mikro/has_group_ids": False,
         "@mikro/has_labels": False,
+        "@mikro/spec": ["POINTS_1D", "TIMED"],
         IS_WHOLE: True,
     }
 

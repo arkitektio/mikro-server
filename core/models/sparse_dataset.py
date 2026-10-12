@@ -44,6 +44,7 @@ stops. A recomputation is a *new dataset*, not an edit of this one -- the same s
 resembles a ``MeshCollection``, which versions on purpose.
 """
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
@@ -52,6 +53,8 @@ from django.db import models
 from authentikate.models import Organization
 from datalayer.models import SparseStore
 from koherent.fields import ProvenanceField
+
+from core.logic import coords as coords_logic
 
 if TYPE_CHECKING:
     from core.models.coords import CoordinateSystem
@@ -141,6 +144,29 @@ class SparseDataset(models.Model):
         """The matrix's shape, read off its store rather than declared."""
         store = self.store
         return list(store.shape or []) if store else []
+
+    @property
+    def identified_axis_names(self) -> list[str]:
+        """The axes that reference a table: the ones the matrix identifies itself by."""
+        return [reference.axis for reference in self.axis_references.all()]
+
+    @property
+    def indexed_axis_names(self) -> list[str]:
+        """The axes a stored layout makes contiguous."""
+        names = self.axis_names
+        return [names[array.indexed_axis] for array in self.arrays.all() if 0 <= array.indexed_axis < len(names)]
+
+    def spec_for(self, windows: "Sequence[coords_logic.WindowLike]" = ()) -> list:
+        """Every spec this matrix satisfies under these windows; with none, what the matrix itself is.
+
+        Derived, never stored: the shape is the store's and a lens' windows are the lens'.
+        """
+        return coords_logic.specs_for_sparse(self.axis_names, self.shape, identified=self.identified_axis_names, indexed=self.indexed_axis_names, windows=windows)
+
+    @property
+    def spec(self) -> list:
+        """What the matrix structurally is."""
+        return self.spec_for()
 
     def array_indexing(self, axis: str) -> "SparseArray | None":
         """The layout whose one contiguous read selects along ``axis``, if this dataset has it.

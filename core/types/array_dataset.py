@@ -722,6 +722,13 @@ class ArrayLens(Lens, OrgScoped):
     dataset: ArrayDataset
 
     @kante.django_field(
+        description="What this selection structurally is: its dataset's `spec` vocabulary, read over the shape its slices cut out. Materialized when the lens is made -- a lens and its dataset are immutable -- and what the `arraySpec` filter reads. An axis counts only when the lens keeps more than one position along it, so one plane of a [VOLUME, MULTICHANNEL] stack is [IMAGE, MULTICHANNEL], one channel of that is [IMAGE], and one row of an image is [PROFILE, TRACE]. The whole lens answers what its dataset does"
+    )
+    def spec(self, info: Info) -> List[enums.ArrayDatasetSpec]:
+        """Every spec the lens' axes satisfy at the shape it selects."""
+        return self.spec
+
+    @kante.django_field(
         select_related=["dataset"],
         description=(
             "The most recent picture of this lens' `defaultScene` -- the tile to put on this lens. A lens that nominates a scene shows that one; a crop that nominates nothing shows its "
@@ -803,6 +810,13 @@ class TableLens(Lens, OrgScoped):
     id: auto
     table_dataset: Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]
 
+    @kante.django_field(
+        description="What this selection structurally is: its table's `spec` vocabulary, read over what its windows leave free. Materialized when the lens is made, and what the `tableSpec` filter reads. A coordinate column a window pins to one value (min == max) no longer counts: one frame of a [POINTS_2D, TIMED, TRACKED] table is [POINTS_2D, TRACKED], and one z-plane of a POINTS_3D table is POINTS_2D. A window that only bounds changes nothing -- the server never scans the rows, so it cannot say they stopped spreading. The whole lens answers what its table does"
+    )
+    def spec(self, info: Info) -> List[enums.TableDatasetSpec]:
+        """Every spec the table's columns satisfy under the lens' pins."""
+        return self.spec
+
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
     def windows(self, info: Info) -> List[Window]:
         """The stored windows."""
@@ -815,6 +829,13 @@ class SparseLens(Lens, OrgScoped):
 
     id: auto
     sparse_dataset: Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")]
+
+    @kante.django_field(
+        description="What this selection structurally is: its matrix's `spec` vocabulary, read over what its windows leave free. Materialized when the lens is made, and what the `sparseSpec` filter reads. An axis a window pins to one position (min == max) no longer counts, so one feature of a MATRIX is a VECTOR -- and a SLICE when it pins exactly the axes the matrix identifies itself by and a layout makes the read contiguous, which is what a SPARSE colour or filter picker entry accepts"
+    )
+    def spec(self, info: Info) -> List[enums.SparseDatasetSpec]:
+        """Every spec the matrix satisfies under the lens' windows."""
+        return self.spec
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
     def windows(self, info: Info) -> List[Window]:

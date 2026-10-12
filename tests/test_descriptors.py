@@ -48,12 +48,14 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
         "@mikro/n_channels": 3,
         "@mikro/n_timepoints": 5,
         "@mikro/value_kind": "intensity",
+        "@mikro/spec": ["IMAGE", "TIMESERIES", "MULTICHANNEL"],
         "@mikro/is_whole": True,
     }
     assert result.data["arrayDataset"]["descriptors"] == whole
     assert {"id": str(dataset.pk), "descriptors": whole} in result.data["arrayDatasets"]
     # The lens keeps every axis of its dataset and narrows the channel axis to one; it is a crop.
-    assert result.data["lens"]["descriptors"] == {**whole, "@mikro/n_channels": 1, "@mikro/is_whole": False}
+    # Its spec is the selection's: one channel is not MULTICHANNEL.
+    assert result.data["lens"]["descriptors"] == {**whole, "@mikro/n_channels": 1, "@mikro/spec": ["IMAGE", "TIMESERIES"], "@mikro/is_whole": False}
     # A structure that declares no descriptors has none.
     assert result.data["folder"]["descriptors"] == {}
 

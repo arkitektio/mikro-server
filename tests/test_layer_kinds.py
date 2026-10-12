@@ -11,6 +11,7 @@ import pytest
 
 from asgiref.sync import sync_to_async
 from core import models, enums
+from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from kante.context import HttpContext
 from mikro_server.schema import schema
@@ -38,6 +39,9 @@ def _seed_table_dataset_sync(ctx: HttpContext, key: str, *, with_track: bool = F
         columns.append({"name": "track", "role": enums.ColumnRoleChoices.TRACK_ID.value, "axis_type": None})
     for order, column in enumerate(columns):
         models.Column.objects.create(table=dataset, order=order, dtype="DOUBLE", **column)
+    # What `createTableDataset` materializes, from the same columns.
+    dataset.stored_spec = [member.value for member in coords_logic.specs_for_columns(dataset.column_specs)]
+    dataset.save(update_fields=["stored_spec"])
     graph_logic.create_collection_system(
         name=f"{key}/table",
         axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],

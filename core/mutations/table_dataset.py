@@ -26,6 +26,7 @@ from core.inputs.file_link import SourceFileInput, SourceFileInputModel
 from core.inputs.coords import AxisInputModel, DerivedFromInput, DerivedFromSpec
 from core.inputs.identification import IdentificationInput, IdentificationSpec
 from core.logic import coordinate_system as coordinate_system_logic
+from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
@@ -446,6 +447,32 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
     )
     _assert_node_axes_are_scoped(model.name, node_reference_targets, keyed)
 
+    # One list of rows, written below and read here for what the table is: the spec is
+    # materialized from exactly what is stored, so the two cannot disagree.
+    columns = [
+        models.Column(
+            order=index,
+            name=column.name,
+            # The declared type where one was declared, the file's where not. They agree by
+            # the check above, so this is the same value by either route.
+            dtype=column.dtype if column.dtype is not None else file_columns[index].type,
+            # An axis-typed column is a COORDINATE by that fact rather than by saying so twice.
+            role=(
+                enums.ColumnRole.COORDINATE.value
+                if column.axis_type is not None
+                else (column.role or enums.ColumnRole.ATTRIBUTE).value
+            ),
+            axis_type=column.axis_type.value if column.axis_type is not None else None,
+            unit=column.unit,
+            long_name=column.long_name,
+            description=column.description,
+            references=reference_targets.get(column.name),
+            node_references=node_reference_targets.get(column.name),
+        )
+        for index, column in enumerate(model.columns)
+    ]
+    spec = coords_logic.specs_for_columns([column.as_spec() for column in columns])
+
     # Atomic, because the table row, its columns and its space are all written before its
     # derivation edges are checked: an edge whose rank the axes refuse -- a SCALE onto an
     # INDEX space, say -- would otherwise leave an orphan table behind and return an error.
@@ -456,39 +483,17 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             description=model.description,
             store=store,
             folder=folder_logic.folder_for_new_container(info, ctx, model.folder, model.derived_from),
+            stored_spec=[member.value for member in spec],
             creator=ctx.user,
             organization=ctx.organization,
             **ctx.provenance_kwargs(),
         )
 
         # One row per declared column, which is one row per column of the file -- the two are
-        # the same list, checked against each other above. An axis-typed column is a
-        # COORDINATE by that fact rather than by saying so twice, and every other fact reads
-        # straight off the one declaration -- the two-doors merge this used to do is gone.
-        models.Column.objects.bulk_create(
-            [
-                models.Column(
-                    table=dataset,
-                    order=index,
-                    name=column.name,
-                    # The declared type where one was declared, the file's where not. They agree by
-                    # the check above, so this is the same value by either route.
-                    dtype=column.dtype if column.dtype is not None else file_columns[index].type,
-                    role=(
-                        enums.ColumnRole.COORDINATE.value
-                        if column.axis_type is not None
-                        else (column.role or enums.ColumnRole.ATTRIBUTE).value
-                    ),
-                    axis_type=column.axis_type.value if column.axis_type is not None else None,
-                    unit=column.unit,
-                    long_name=column.long_name,
-                    description=column.description,
-                    references=reference_targets.get(column.name),
-                    node_references=node_reference_targets.get(column.name),
-                )
-                for index, column in enumerate(model.columns)
-            ]
-        )
+        # the same list, checked against each other above.
+        for column in columns:
+            column.table = dataset
+        models.Column.objects.bulk_create(columns)
 
         system = models.CoordinateSystem.objects.create(
             name=f"{model.name}/table",

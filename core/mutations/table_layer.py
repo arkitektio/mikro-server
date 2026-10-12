@@ -5,6 +5,7 @@ from core import types, models, enums
 import kante
 from pydantic import BaseModel
 from core.logic import attribute_plans as attribute_plans_logic
+from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.mutations import layer as layer_mutations
 from core.render import color_by as color_by_models
@@ -26,9 +27,12 @@ def _resolve_table_lens(info: Info, *, lens: str) -> "models.TableLens":
     """
     resolved = lens_of_kind(info, kind=models.TableLens, lens=lens)
     dataset = resolved.table_dataset
-    spatial = [col for col in dataset.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value) if col.axis_type == enums.AxisTypeChoices.SPACE.value]
-    if len(spatial) < 2:
-        raise ValueError(f"A point/track layer needs a table dataset with at least two SPACE coordinate columns, but '{dataset.name}' has {len(spatial)}.")
+    spec = dataset.spec
+    if not coords_logic.POINT_TABLE_SPECS.intersection(spec):
+        raise ValueError(
+            f"A point/track layer needs a table dataset with at least two SPACE coordinate columns (POINTS_2D or more), but '{dataset.name}' is "
+            f"{spec[0].value if spec else 'of no known spec'}."
+        )
     return resolved
 
 
@@ -249,7 +253,7 @@ def create_track_layer(info: Info, input: CreateTrackLayerInput) -> types.TrackL
     lens = _resolve_table_lens(info, lens=model.lens)
     table_dataset = lens.table_dataset
 
-    if not table_dataset.columns_by_role(enums.ColumnRoleChoices.TRACK_ID.value):
+    if enums.TableDatasetSpec.TRACKED not in table_dataset.spec:
         raise ValueError(f"Table dataset '{table_dataset.name}' has no TRACK_ID column, so it cannot be rendered as tracks.")
 
     graph_logic.assert_placeable_in(scene.world, table_dataset.coordinate_system_or_none, destination=f"the world of scene '{scene.name}'")

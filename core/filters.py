@@ -10,6 +10,7 @@ from core.logic import space_graph
 from core.scoping import for_org
 from koherent.models import Task as KoherentTask
 from strawberry import auto
+from enum import Enum
 from typing import Callable, Optional, Sequence
 from strawberry_django.filters import FilterLookup
 from kante.types import Info
@@ -713,6 +714,13 @@ class AnnotationFilter(IdsFilterMixin):
         return Q(**{f"{prefix}bbox_cube__contains_point": value})
 
 
+def _lens_spec_q(kind: "type[models.Lens]", value: "Sequence[Enum]", prefix: str) -> Q:
+    """The lenses of one kind whose stored spec holds every one of these members. An empty list asks nothing."""
+    if not value:
+        return Q()
+    return Q(**{f"{prefix}polymorphic_ctype": ContentType.objects.get_for_model(kind), f"{prefix}stored_spec__contains": [member.value for member in value]})
+
+
 @kante.filter_type(models.Lens)
 class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     id: auto
@@ -723,6 +731,28 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
         # its FK -- rather than by a join into the kind's table.
         model = next(model for model in models.Lens.KIND_BY_CONTAINER.values() if model.KIND == value.value)
         return Q(**{f"{prefix}polymorphic_ctype": ContentType.objects.get_for_model(model)})
+
+    # One filter per vocabulary, because a GraphQL argument has one type and the three enums
+    # share member names (SCALAR is an array's and a matrix's). Each reads the spec
+    # materialized on the row and keeps only its own kind, so `arraySpec: [IMAGE]` never
+    # answers a table. JSONB containment gives the all-of semantics, as on the datasets.
+    @kante.filter_field(
+        description="Filter to the array lenses whose selection satisfies every one of these specs, e.g. [IMAGE] for every plane, single-channel or not, or [PROFILE, TRACE] for what a chart draws as a trace. The spec is the selection's, not the dataset's: an axis counts only when the lens keeps more than one position along it, so one plane of a stack matches [IMAGE] and its dataset [VOLUME]"
+    )
+    def array_spec(self, info: Info, value: list[enums.ArrayDatasetSpec], prefix: str) -> Q:
+        return _lens_spec_q(models.ArrayLens, value, prefix)
+
+    @kante.filter_field(
+        description="Filter to the table lenses whose selection satisfies every one of these specs, e.g. [POINTS_2D, TRACKED]. The spec is the selection's: a coordinate column a window pins to one value (min == max) does not count, so one frame of a tracking table does not match [TIMED]"
+    )
+    def table_spec(self, info: Info, value: list[enums.TableDatasetSpec], prefix: str) -> Q:
+        return _lens_spec_q(models.TableLens, value, prefix)
+
+    @kante.filter_field(
+        description="Filter to the sparse lenses whose selection satisfies every one of these specs, e.g. [SLICE] for the lenses a SPARSE colour or filter picker entry accepts. An axis a window pins to one position does not count"
+    )
+    def sparse_spec(self, info: Info, value: list[enums.SparseDatasetSpec], prefix: str) -> Q:
+        return _lens_spec_q(models.SparseLens, value, prefix)
 
     @kante.filter_field(description="Filter to the array lenses over this dataset")
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
@@ -1109,6 +1139,17 @@ class TableDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}coordinate_system__in": _systems_derived_from_dataset(value)})
 
+    # Materialized onto `stored_spec` at creation, as an array dataset's is, so JSONB
+    # containment gives the all-of semantics directly: a stored list holds exactly one
+    # placement member, so two of them together match nothing.
+    @kante.filter_field(
+        description="Filter to tables satisfying every one of these specs, e.g. [POINTS_3D, TRACKED] for 3D tracks, or [SERIES] for a value against a single measured coordinate, which a chart draws without an axis to choose. Materialized at creation from the declared columns: one placement member (by how many SPACE coordinate columns the table has) plus a modifier per declared fact. Declared, not measured -- TIMED says a TIME coordinate column exists. Two placement members together match nothing. `hasColumnRole` is the raw form"
+    )
+    def spec(self, info: Info, queryset: QuerySet, value: list[enums.TableDatasetSpec], prefix: str) -> tuple[QuerySet, Q]:
+        if not value:
+            return queryset, Q()
+        return queryset, Q(**{f"{prefix}stored_spec__contains": [spec.value for spec in value]})
+
     @kante.filter_field(description="Filter to tables that declare a column of this role, e.g. TRACK_ID")
     def has_column_role(self, info: Info, value: enums.ColumnRole, prefix: str) -> Q:
         return Q(**{f"{prefix}columns__role": value.value})
@@ -1180,22 +1221,17 @@ _LENS_KIND_REQUIREMENTS: "dict[enums.LayerKind, Callable[[Sequence[coords_logic.
 
 
 def _point_table_ids(table_ids: "set[int]", *, track: bool) -> set[int]:
-    """Of these tables, the ones a point layer draws -- at least two SPACE coordinate columns -- and, for a track layer, the ones that also declare a TRACK_ID column.
+    """Of these tables, the ones a point layer draws -- POINTS_2D or more -- and, for a track layer, the ones that are also TRACKED.
 
-    The batched form of the gates `createPointLayer` and `createTrackLayer` apply, so a
-    picker never offers a table lens a layer mutation would refuse. One query over the columns.
+    The batched form of the gates `createPointLayer` and `createTrackLayer` apply, read off
+    the same stored spec, so a picker never offers a table lens a layer mutation would refuse.
     """
     if not table_ids:
         return set()
-    spatial: dict[int, int] = {}
-    tracked: set[int] = set()
-    for table_id, role, axis_type in models.Column.objects.filter(table_id__in=table_ids).values_list("table_id", "role", "axis_type"):
-        if role == enums.ColumnRoleChoices.COORDINATE.value and axis_type == enums.AxisTypeChoices.SPACE.value:
-            spatial[table_id] = spatial.get(table_id, 0) + 1
-        elif role == enums.ColumnRoleChoices.TRACK_ID.value:
-            tracked.add(table_id)
-    drawable = {table_id for table_id, count in spatial.items() if count >= 2}
-    return drawable & tracked if track else drawable
+    drawable = Q()
+    for spec in coords_logic.POINT_TABLE_SPECS:
+        drawable |= Q(stored_spec__contains=[spec.value, enums.TableDatasetSpec.TRACKED.value] if track else [spec.value])
+    return set(models.TableDataset.objects.filter(drawable, pk__in=table_ids).values_list("pk", flat=True))
 
 
 #: The collection layer kinds: which lens model answers, over which of the placeable containers.

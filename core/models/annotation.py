@@ -177,6 +177,8 @@ class Annotation(models.Model):
     stored world box would be wrong in one of them.
     """
 
+    # lets make this a normal ID (not a natural key) because the UUID is not a good primary key for the database, and we want to be able to use the ID in the API as well
+    # we could still add a "global_id" field that is a UUID, but we want to be able to use the ID in the API as well (make the global_id a unique field, but not the primary key)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     collection = models.ForeignKey(
         AnnotationCollection,

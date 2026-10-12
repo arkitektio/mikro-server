@@ -600,14 +600,14 @@ def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "model
     -- the same minimum the point/track layer mutations require.
     """
     system = table_dataset.coordinate_system_or_none
-    spatial = [col for col in table_dataset.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value) if col.axis_type == enums.AxisTypeChoices.SPACE.value]
-    if system is None or len(spatial) < 2:
+    spec = table_dataset.spec
+    if system is None or not coords_logic.POINT_TABLE_SPECS.intersection(spec):
         return None
 
     if not _gate_placement(system, scene, policy):
         return None
 
-    is_track = bool(table_dataset.columns_by_role(enums.ColumnRoleChoices.TRACK_ID.value))
+    is_track = enums.TableDatasetSpec.TRACKED in spec
     return models.Layer.objects.create(
         kind=enums.LayerKind.TRACK if is_track else enums.LayerKind.POINT,
         scene=scene,

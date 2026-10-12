@@ -7,6 +7,8 @@ from django_choices_field import TextChoicesField
 from authentikate.models import Organization
 from django.db.models import Q
 from datalayer.models import MediaStore, ZarrStore
+from enum import Enum
+
 from django.contrib.postgres.indexes import GinIndex
 from embeddings.models import EmbeddedDescriptionMixin
 from core import base_models
@@ -589,7 +591,10 @@ class Lens(PolymorphicModel):
       system, owns no system and no edge, and nothing spatial is stored for it.
 
     Lenses are immutable. Nothing is derived from them that a second copy could disagree
-    with: an array lens' shape, axes and edge follow from its dataset and its slices.
+    with: an array lens' shape, axes and edge follow from its dataset and its slices. The one
+    materialized exception is ``stored_spec``, kept for the reason ``ArrayDataset.stored_spec``
+    is -- a filter has to read it in SQL -- and safe for the same one: it is computed once
+    from inputs that never change.
     """
 
     objects = PolymorphicManager.from_queryset(LensQuerySet)()
@@ -668,9 +673,55 @@ class Lens(PolymorphicModel):
         help_text="The coordinate system this lens' selection is expressed in: a sliced array lens' own crop space, with a stored edge carrying the shift; otherwise the container's own system",
     )
 
+    stored_spec = models.JSONField(
+        default=list,
+        # Held by the database too: the release before this column inserts lens rows without
+        # naming it, and a rolled-back build must still be able to.
+        db_default=models.Value([], output_field=models.JSONField()),
+        help_text=(
+            "What this selection structurally is: the raw values of its kind's spec enum (ArrayDatasetSpec, TableDatasetSpec or SparseDatasetSpec), "
+            "materialized from `derive_spec` when the row is made. A lens is immutable and so is its container, so the column cannot disagree with "
+            "what it was computed from. Empty for the kinds that have no spec vocabulary (mesh, network, annotation). Read it back as enum members "
+            "through the `spec` property"
+        ),
+    )
+
+    class Meta:
+        indexes = [
+            GinIndex(fields=["stored_spec"], name="lens_spec_gin"),
+        ]
+
     #: The concrete kinds, by the container model each selects over. Filled in as each
     #: subclass is defined below; read by `core.logic.coordinate_system.whole_lens`.
     KIND_BY_CONTAINER: "dict[type, type[Lens]]" = {}
+
+    #: The spec enum a subclass' selection is described in, or None for a kind with no spec
+    #: vocabulary. Set per subclass.
+    SPEC_ENUM: "type[Enum] | None" = None
+
+    def derive_spec(self) -> list:
+        """Every spec the selection satisfies, computed from the container and the selection.
+
+        The single source of ``stored_spec``: the creators in
+        :mod:`core.logic.coordinate_system` materialize it when the row is made, and
+        ``merge_duplicate_lenses`` gives it to rows written before the column existed. One
+        rule for every kind: an axis the selection holds to a single position does not count.
+        """
+        return []
+
+    @property
+    def spec(self) -> list:
+        """The stored spec, as members of the kind's enum.
+
+        A stored value this build has no member for is left out rather than raised on: the
+        enums grow, and a rolled-back release is started on rows a newer one wrote.
+        """
+        real = self._real()
+        enum = type(real).SPEC_ENUM
+        if enum is None:
+            return []
+        known = {member.value for member in enum}
+        return [enum(value) for value in real.stored_spec if value in known]
 
     #: The name of the one container FK a subclass carries. Set per subclass.
     CONTAINER_FIELD: str = ""
@@ -821,6 +872,18 @@ class ArrayLens(Lens):
         """The shape this lens' slices cut out of its dataset."""
         return coords_logic.lens_shape(self.dataset.shape_list, self.dataset.axis_names, self.slices_list)
 
+    SPEC_ENUM = enums.ArrayDatasetSpec
+
+    def derive_spec(self) -> list:
+        """Its dataset's vocabulary over the shape its slices cut out: one plane of a stack is an IMAGE, one row of an image a TRACE.
+
+        Empty for a lens whose dataset's axes and shape disagree.
+        """
+        try:
+            return coords_logic.specs_for_axes(self.axis_specs, self.shape_list)
+        except ValueError:
+            return []
+
     @property
     def to_parent(self):
         """The stored edge from this lens' space back into its dataset's intrinsic space.
@@ -893,6 +956,12 @@ class TableLens(WindowedLens, Lens):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["table_dataset", "windows"], name="one_table_lens_per_selection")]
 
+    SPEC_ENUM = enums.TableDatasetSpec
+
+    def derive_spec(self) -> list:
+        """Its table's columns, less the coordinates its windows pin to one value."""
+        return coords_logic.specs_for_columns(self.table_dataset.column_specs, coords_logic.pinned_axes(self.windows_list))
+
     @property
     def active_anchors(self):
         """The table's anchors inside the windows."""
@@ -909,6 +978,12 @@ class SparseLens(WindowedLens, Lens):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["sparse_dataset", "windows"], name="one_sparse_lens_per_selection")]
+
+    SPEC_ENUM = enums.SparseDatasetSpec
+
+    def derive_spec(self) -> list:
+        """Its matrix's vocabulary over what its windows leave free."""
+        return self.sparse_dataset.spec_for(self.windows_list)
 
     @property
     def active_anchors(self):

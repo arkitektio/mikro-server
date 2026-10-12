@@ -10,7 +10,8 @@ field and the signal cannot disagree.
 
 **A container and its whole lens describe identically**, and a lens that selects something
 describes the selection: a crop's channel extent is the crop's, a windowed annotation lens
-counts the shapes in its windows. ``@mikro/is_whole`` is the one key that tells them apart.
+counts the shapes in its windows, and ``@mikro/spec`` is the spec of what is selected -- one
+plane of a stack is an IMAGE, one frame of a tracking table is not TIMED. ``@mikro/is_whole`` is the one key that tells them apart.
 
 Every describer is total: a half-written row (axes and shape that disagree) answers ``{}``,
 still an object, rather than failing the save that announced it.
@@ -27,9 +28,9 @@ from collections.abc import Sequence
 from core import enums, models
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
-from mikro_server.vocabulary import ARRAY_AXIS_TYPES, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, RECORD_AXIS_TYPES, VALUE_KIND
+from mikro_server.vocabulary import ARRAY_AXIS_TYPES, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, RECORD_AXIS_TYPES, SPEC, VALUE_KIND
 
-Descriptors = dict[str, int | str | bool]
+Descriptors = dict[str, int | str | bool | list[str]]
 
 
 def axis_count_descriptors(axis_types: Sequence[str], counted: Sequence[str]) -> dict[str, int]:
@@ -72,7 +73,10 @@ def dataset_descriptors(dataset: models.ArrayDataset) -> Descriptors:
         counted = array_descriptors([axis.type for axis in dataset.axes], dataset.shape_list)
     except ValueError:  # axes and shape disagree (a half-written dataset): no descriptors, still an object
         return {}
-    return {**counted, VALUE_KIND: array_value_kind(dataset), IS_WHOLE: True}
+    # From the axes rather than `stored_spec`: the same two facts the counts are read off,
+    # so the two agree whenever this is asked.
+    spec = [member.value for member in coords_logic.specs_for_axes(dataset.axis_specs, dataset.shape_list)]
+    return {**counted, VALUE_KIND: array_value_kind(dataset), SPEC: spec, IS_WHOLE: True}
 
 
 def array_lens_descriptors(lens: models.ArrayLens) -> Descriptors:
@@ -86,30 +90,40 @@ def array_lens_descriptors(lens: models.ArrayLens) -> Descriptors:
         counted = array_descriptors([axis.type for axis in lens.dataset.axes], lens.shape_list)
     except ValueError:
         return {}
-    return {**counted, VALUE_KIND: array_value_kind(lens.dataset), IS_WHOLE: lens.is_whole}
+    return {**counted, VALUE_KIND: array_value_kind(lens.dataset), SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
 
 
-def table_descriptors(table: models.TableDataset, *, is_whole: bool = True) -> Descriptors:
-    """A table's descriptors: where its rows sit, and what its schema says the rows carry. No row count: the server never scans a table."""
-    roles = Counter(column.role for column in table.columns.all())
+def table_descriptors(table: models.TableDataset, *, is_whole: bool = True, pinned: Sequence[str] = ()) -> Descriptors:
+    """A table's descriptors: where its rows sit, and what its schema says the rows carry. No row count: the server never scans a table.
+
+    ``pinned`` are the coordinate columns a lens' windows hold to one value: they are what
+    makes a selection's spec differ from its table's. The counts stay the table's -- a
+    window keeps every column, as a crop keeps every axis.
+    """
+    columns = table.column_specs
+    roles = Counter(column.role for column in columns)
+    spec = coords_logic.specs_for_columns(columns, pinned)
     return {
         **axis_count_descriptors([axis.type for axis in table.axes], RECORD_AXIS_TYPES),
         "@mikro/n_coordinate_columns": roles.get(enums.ColumnRoleChoices.COORDINATE.value, 0),
         "@mikro/n_attribute_columns": roles.get(enums.ColumnRoleChoices.ATTRIBUTE.value, 0),
-        "@mikro/has_track_ids": roles.get(enums.ColumnRoleChoices.TRACK_ID.value, 0) > 0,
-        "@mikro/has_group_ids": roles.get(enums.ColumnRoleChoices.GROUP_ID.value, 0) > 0,
+        # Read off the spec, so the two spellings of one fact cannot part ways.
+        "@mikro/has_track_ids": enums.TableDatasetSpec.TRACKED in spec,
+        "@mikro/has_group_ids": enums.TableDatasetSpec.GROUPED in spec,
         "@mikro/has_labels": roles.get(enums.ColumnRoleChoices.LABEL.value, 0) > 0,
+        SPEC: [member.value for member in spec],
         IS_WHOLE: is_whole,
     }
 
 
-def sparse_descriptors(dataset: models.SparseDataset, *, is_whole: bool = True) -> Descriptors:
-    """A sparse matrix's descriptors: its rank, which axes enumerate, and how many of them a contiguous read can select along."""
+def sparse_descriptors(dataset: models.SparseDataset, *, is_whole: bool = True, windows: Sequence[coords_logic.WindowLike] = ()) -> Descriptors:
+    """A sparse matrix's descriptors: its rank, which axes enumerate, how many of them a contiguous read can select along, and what these windows leave of it."""
     axes = dataset.axes
     return {
         **axis_count_descriptors([axis.type for axis in axes], RECORD_AXIS_TYPES),
         "@mikro/n_axes": len(axes),
         "@mikro/n_layouts": len(dataset.arrays.all()),
+        SPEC: [member.value for member in dataset.spec_for(windows)],
         IS_WHOLE: is_whole,
     }
 
@@ -163,9 +177,9 @@ def lens_descriptors(lens: models.Lens) -> Descriptors:
     if isinstance(lens, models.ArrayLens):
         return array_lens_descriptors(lens)
     if isinstance(lens, models.TableLens):
-        return table_descriptors(lens.table_dataset, is_whole=lens.is_whole)
+        return table_descriptors(lens.table_dataset, is_whole=lens.is_whole, pinned=coords_logic.pinned_axes(lens.windows_list))
     if isinstance(lens, models.SparseLens):
-        return sparse_descriptors(lens.sparse_dataset, is_whole=lens.is_whole)
+        return sparse_descriptors(lens.sparse_dataset, is_whole=lens.is_whole, windows=lens.windows_list)
     if isinstance(lens, models.MeshLens):
         return mesh_descriptors(lens.mesh_collection, is_whole=lens.is_whole)
     if isinstance(lens, models.NetworkLens):

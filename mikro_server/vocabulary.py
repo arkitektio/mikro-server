@@ -34,7 +34,7 @@ KEY_BY_AXIS_TYPE = {
     "INDEX": "@mikro/n_index_axes",
 }
 #: The axis types an array counts: the client's five, and no more, so the seven array keys stay
-#: the ones its specs were written against.
+#: the ones its specs were written against. ``@mikro/spec`` is beside them and the server's own.
 ARRAY_AXIS_TYPES: tuple[str, ...] = ("SPACE", "TIME", "CHANNEL", "SPECTRUM", "MICROTIME")
 #: What a record container -- a table, a sparse matrix -- counts: where its rows sit, and how
 #: many of its axes enumerate rather than measure.
@@ -45,6 +45,11 @@ GEOMETRY_AXIS_TYPES: tuple[str, ...] = ("SPACE", "TIME")
 EXTENT_KEYS = {"@mikro/n_channels": "CHANNEL", "@mikro/n_timepoints": "TIME"}
 
 IS_WHOLE = "@mikro/is_whole"
+#: What the object structurally is, as the values of its kind's spec enum
+#: (``core.enums.ArrayDatasetSpec``, ``TableDatasetSpec``, ``SparseDatasetSpec``): the same
+#: list its ``spec`` field answers, so a port can require a member of it. A lens states the
+#: spec of its selection.
+SPEC = "@mikro/spec"
 VALUE_KIND = "@mikro/value_kind"
 #: What an array's values mean, decided from facts its author stated: a derivation declared
 #: CATEGORIZED makes a label map, a DISPLACEMENT value axis a vector field, a COORDINATE value
@@ -58,12 +63,18 @@ def _axis_counts(axis_types: Sequence[str]) -> list[Descriptor]:
 
 _IS_WHOLE = Descriptor(key=IS_WHOLE, type="BOOL", description="Whether this selects everything: true of a container and of its whole lens, false of a crop or a window")
 
+
+def _spec(members: str, selection: str) -> Descriptor:
+    return Descriptor(key=SPEC, type="LIST", description=f"What it structurally is, as the members of its `spec`: {members}. Of a lens, the spec of what it selects: {selection}")
+
+
 #: Every descriptor ``core.descriptors.array_descriptors`` produces, plus the value kind and
 #: whether it is whole -- what mikro declares an array dataset and an array lens carry.
 ARRAY_DESCRIPTORS = [
     *_axis_counts(ARRAY_AXIS_TYPES),
     *(Descriptor(key=key, type="INT", description=f"Its total extent along its {axis_type} axes") for key, axis_type in EXTENT_KEYS.items()),
     Descriptor(key=VALUE_KIND, type="STRING", description="What its values mean: categorical (a label map, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity"),
+    _spec("one spatial member (SCALAR, PROFILE, IMAGE, VOLUME, HYPERVOLUME), a modifier per non-spatial axis it has more than one position along, and TRACE for a curve", "an axis counts only when the lens keeps more than one position along it"),
     _IS_WHOLE,
 ]
 #: A table and a table lens: where its rows sit, and what its schema says the rows carry. No
@@ -75,6 +86,7 @@ TABLE_DESCRIPTORS = [
     Descriptor(key="@mikro/has_track_ids", type="BOOL", description="Whether a column groups rows into trajectories (role TRACK_ID)"),
     Descriptor(key="@mikro/has_group_ids", type="BOOL", description="Whether a column groups rows into connected objects (role GROUP_ID)"),
     Descriptor(key="@mikro/has_labels", type="BOOL", description="Whether a column carries a per-row text label (role LABEL)"),
+    _spec("one placement member (RECORDS, POINTS_1D, POINTS_2D, POINTS_3D, POINTS_ND), a modifier per declared fact (TIMED, TRACKED, GROUPED, KEYED, NODE_TABLE, EDGE_TABLE), and SERIES for what a chart draws whole", "a coordinate column a window pins to one value no longer counts"),
     _IS_WHOLE,
 ]
 #: A sparse matrix and a sparse lens: its rank, which axes enumerate, and how many of them a
@@ -83,6 +95,7 @@ SPARSE_DESCRIPTORS = [
     *_axis_counts(RECORD_AXIS_TYPES),
     Descriptor(key="@mikro/n_axes", type="INT", description="Its rank: how many axes the matrix has"),
     Descriptor(key="@mikro/n_layouts", type="INT", description="How many of its axes a contiguous read can select along: the layouts its store holds"),
+    _spec("one rank member (SCALAR, VECTOR, MATRIX, TENSOR) by how many axes have more than one position, and SLICE for what a picker reads", "an axis a window pins to one position no longer counts"),
     _IS_WHOLE,
 ]
 MESH_DESCRIPTORS = [*_axis_counts(GEOMETRY_AXIS_TYPES), _IS_WHOLE]

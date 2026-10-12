@@ -18,6 +18,7 @@ came from is UNMAPPABLE. That degenerate case is exactly the old FeatureCollecti
 
 from typing import TYPE_CHECKING
 
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.contrib.auth import get_user_model
 
@@ -28,6 +29,7 @@ from embeddings.models import EmbeddedDescriptionMixin
 from django_choices_field import TextChoicesField
 
 from core import enums
+from core.logic import coords as coords_logic
 
 if TYPE_CHECKING:
     from core.models.coords import CoordinateSystem
@@ -107,10 +109,26 @@ class TableDataset(EmbeddedDescriptionMixin, models.Model):
     # The embedding column is storage, not an edit: keep it out of the history rows.
     provenance = ProvenanceField(excluded_fields=["embedding"])
 
+    stored_spec = models.JSONField(
+        default=list,
+        # A default the database holds too: the release before this column inserts table and
+        # history rows without naming it, and a rolled-back build must still be able to.
+        db_default=models.Value([], output_field=models.JSONField()),
+        help_text=(
+            "What this table structurally is: the raw TableDatasetSpec values (one placement member plus a modifier per declared fact, "
+            "and SERIES for a table a chart draws whole) that its declared columns satisfy, materialized at creation from "
+            "core.logic.coords.specs_for_columns. Immutable because the columns are, so it cannot disagree with them. Read it back as "
+            "enum members through the `spec` property."
+        ),
+    )
+
     class Meta:
         """Meta options for the table dataset."""
 
         ordering = ["-created_at"]
+        indexes = [
+            GinIndex(fields=["stored_spec"], name="table_dataset_spec_gin"),
+        ]
 
     def __str__(self) -> str:
         """The table dataset's name."""
@@ -122,6 +140,22 @@ class TableDataset(EmbeddedDescriptionMixin, models.Model):
         # The reverse of CoordinateSystem.table_dataset, which raises rather than
         # returning None when the system has not been created yet.
         return getattr(self, "coordinate_system", None)
+
+    @property
+    def spec(self) -> list:
+        """Every spec this table's declared columns satisfy: what it structurally is.
+
+        Read from ``stored_spec``, materialized at creation -- not re-derived on read. A
+        stored value this build has no member for is left out rather than raised on: the
+        enum grows, and a rolled-back release is started on rows a newer one wrote.
+        """
+        known = {member.value for member in enums.TableDatasetSpec}
+        return [enums.TableDatasetSpec(value) for value in self.stored_spec if value in known]
+
+    @property
+    def column_specs(self) -> list[coords_logic.ColumnSpec]:
+        """The declared columns, coerced for :func:`core.logic.coords.specs_for_columns`."""
+        return [column.as_spec() for column in self.columns.all()]
 
     @property
     def axes(self) -> list:
@@ -205,6 +239,17 @@ class Column(models.Model):
             models.UniqueConstraint(fields=["table", "name"], name="unique_table_column_name"),
             models.UniqueConstraint(fields=["table", "order"], name="unique_table_column_order"),
         ]
+
+    def as_spec(self) -> coords_logic.ColumnSpec:
+        """What a table's spec reads off this column. Works on an unsaved row: the create path asks before it writes."""
+        return coords_logic.ColumnSpec(
+            name=self.name,
+            role=str(self.role),
+            axis_type=None if self.axis_type is None else str(self.axis_type),
+            dtype=self.dtype,
+            references=self.references_id is not None,
+            node_references=self.node_references_id,
+        )
 
     def __str__(self) -> str:
         """The column's name and role."""
