@@ -10,7 +10,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from core import models
+from core import enums, models
 from mikro_server.schema import schema
 from mikro_server.service import service
 from arkitekt_service import trust
@@ -39,6 +39,18 @@ EXPECTED = {
     "@mikro/annotationcollection": ["CREATED", "DELETED"],
     "@mikro/animation": ["CREATED", "DELETED"],
     "@mikro/sparsedataset": ["CREATED", "DELETED"],
+    "@mikro/coordinatesystem": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/transformation": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/coordinateanchor": ["CREATED", "DELETED"],
+    "@mikro/filelink": ["CREATED", "DELETED"],
+    "@mikro/metaschema": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/bigfilestore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/mediastore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/zarrstore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/parquetstore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/fabriksstore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/konnektionstore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/sparsestore": ["CREATED", "UPDATED", "DELETED"],
 }
 
 
@@ -90,6 +102,25 @@ async def test_a_new_scene_is_signalled_with_its_descriptors(intake, authenticat
     await sync_to_async(lambda: models.Scene.objects.get(pk=scene.pk).delete())()
     kinds = [r["json"]["kind"] for r in _of(intake, "@mikro/scene", 2)]
     assert kinds == ["CREATED", "DELETED"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_coordinate_graph_and_the_stores_under_the_data_are_announced(intake, authenticated_context: HttpContext):  # noqa: F811
+    dataset = await seed.create_array_dataset(authenticated_context, "Announced")
+
+    systems = {r["json"]["object"] for r in _of(intake, "@mikro/coordinatesystem") if r["json"]["kind"] == "CREATED"}
+    assert str(dataset.coordinate_system_id) in systems, "the grid the data lives in"
+    store = await seed.create_parquet_store(authenticated_context, key="announced.parquet")
+    stores = {r["json"]["object"]: r["json"]["organization"] for r in _of(intake, "@mikro/parquetstore")}
+    assert stores == {str(store.pk): authenticated_context.request.organization.slug}
+
+    scene = await seed.create_scene(authenticated_context, "Placed")
+    elsewhere = await models.Transformation.objects.acreate(
+        kind=enums.TransformKindChoices.TRANSLATION, input_id=dataset.coordinate_system_id, output_id=scene.world_id, params={"translation": [0.0, 0.0, 0.0]}, organization=authenticated_context.request.organization
+    )
+    (edge,) = [r["json"] for r in _of(intake, "@mikro/transformation") if r["json"]["object"] == str(elsewhere.pk)]
+    assert edge["kind"] == "CREATED"
 
 
 @pytest.mark.django_db(transaction=True)

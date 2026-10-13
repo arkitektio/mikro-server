@@ -19,6 +19,7 @@ from chart.logic import chart as chart_logic
 from core import models
 from core.descriptors import annotation_descriptors, dataset_descriptors, lens_descriptors, mesh_descriptors, network_descriptors, sparse_descriptors, table_descriptors
 from arkitekt_service.service import Service, organization_of
+from datalayer import models as datalayer_models
 
 from mikro_server.contract import contract
 
@@ -59,6 +60,20 @@ folder = service.structure(models.Folder, "@mikro/folder")
 annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection", describe=annotation_descriptors)
 animation = service.structure(models.Animation, "@mikro/animation")
 sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", describe=sparse_descriptors)
+# The coordinate graph, the links and schemas beside the data, and the stores under it. Per
+# concrete store kind, for the reason a lens is: `post_save` never fires for the polymorphic base.
+coordinatesystem = service.structure(models.CoordinateSystem, "@mikro/coordinatesystem")
+transformation = service.structure(models.Transformation, "@mikro/transformation")
+coordinateanchor = service.structure(models.CoordinateAnchor, "@mikro/coordinateanchor")
+filelink = service.structure(models.FileLink, "@mikro/filelink")
+metaschema = service.structure(models.MetaSchema, "@mikro/metaschema")
+bigfilestore = service.structure(datalayer_models.BigFileStore, "@mikro/bigfilestore")
+mediastore = service.structure(datalayer_models.MediaStore, "@mikro/mediastore")
+zarrstore = service.structure(datalayer_models.ZarrStore, "@mikro/zarrstore")
+parquetstore = service.structure(datalayer_models.ParquetStore, "@mikro/parquetstore")
+fabriksstore = service.structure(datalayer_models.FabriksStore, "@mikro/fabriksstore")
+konnektionstore = service.structure(datalayer_models.KonnektionStore, "@mikro/konnektionstore")
+sparsestore = service.structure(datalayer_models.SparseStore, "@mikro/sparsestore")
 
 
 # --- Signals: what mikro announces -----------------------------------------------------
@@ -86,3 +101,15 @@ service.model_signal(folder, organization=org)
 service.model_signal(annotationcollection, organization=org)
 service.model_signal(animation, organization=org)
 service.model_signal(sparsedataset, organization=org)
+service.model_signal(coordinatesystem, organization=org)
+service.model_signal(transformation, organization=org)
+service.model_signal(coordinateanchor, organization=org)
+service.model_signal(filelink, organization=org)
+service.model_signal(metaschema, organization=org)
+service.model_signal(bigfilestore, organization=org)
+service.model_signal(mediastore, organization=org)
+service.model_signal(zarrstore, organization=org)
+service.model_signal(parquetstore, organization=org)
+service.model_signal(fabriksstore, organization=org)
+service.model_signal(konnektionstore, organization=org)
+service.model_signal(sparsestore, organization=org)

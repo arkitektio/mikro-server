@@ -151,6 +151,68 @@ HOSTS = Hosts(
             description="A sparse dataset.",
             descriptors=SPARSE_DESCRIPTORS,
         ),
+        # The coordinate graph, the links and schemas beside the data, and the stores under it:
+        # hosted and announced like everything else, with nothing to describe beyond themselves.
+        Structure(
+            identifier="@mikro/coordinatesystem",
+            label="Coordinate System",
+            description="A coordinate space: a node of the coordinate graph, in which data lives and between which transformations map.",
+        ),
+        Structure(
+            identifier="@mikro/transformation",
+            label="Transformation",
+            description="A directed edge of the coordinate graph: a map from one coordinate system into another.",
+        ),
+        Structure(
+            identifier="@mikro/coordinateanchor",
+            label="Coordinate Anchor",
+            description="A position in a dataset that metadata is pinned to.",
+        ),
+        Structure(
+            identifier="@mikro/filelink",
+            label="File Link",
+            description="A file and a container holding the same data, and which of the two was made from the other.",
+        ),
+        Structure(
+            identifier="@mikro/metaschema",
+            label="Meta Schema",
+            description="A JSON schema that unstructured metadata is written against.",
+        ),
+        Structure(
+            identifier="@mikro/bigfilestore",
+            label="Big File Store",
+            description="The stored bytes of a file in its original format.",
+        ),
+        Structure(
+            identifier="@mikro/mediastore",
+            label="Media Store",
+            description="The stored bytes of a picture or other media object.",
+        ),
+        Structure(
+            identifier="@mikro/zarrstore",
+            label="Zarr Store",
+            description="The stored zarr array behind an array dataset.",
+        ),
+        Structure(
+            identifier="@mikro/parquetstore",
+            label="Parquet Store",
+            description="The stored parquet file behind a table dataset.",
+        ),
+        Structure(
+            identifier="@mikro/fabriksstore",
+            label="Fabriks Store",
+            description="The stored octree of surfaces behind a mesh collection.",
+        ),
+        Structure(
+            identifier="@mikro/konnektionstore",
+            label="Konnektion Store",
+            description="The stored octree of node/edge networks behind a network collection.",
+        ),
+        Structure(
+            identifier="@mikro/sparsestore",
+            label="Sparse Store",
+            description="The stored zarr group behind a sparse dataset.",
+        ),
     ],
     signals=[
         # A lens of every kind is announced: a crop or a window is an event an action may wait
@@ -260,6 +322,66 @@ HOSTS = Hosts(
             kinds=["CREATED", "DELETED"],
             description="A sparse dataset was created or deleted.",
             descriptors=_keys(SPARSE_DESCRIPTORS),
+        ),
+        Signal(
+            identifier="@mikro/coordinatesystem",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A coordinate system was created, changed or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/transformation",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A transformation between two coordinate systems was created, refined or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/coordinateanchor",
+            kinds=["CREATED", "DELETED"],
+            description="A coordinate anchor was pinned into a dataset or removed.",
+        ),
+        Signal(
+            identifier="@mikro/filelink",
+            kinds=["CREATED", "DELETED"],
+            description="A file was linked to the container holding its data, or the link was removed.",
+        ),
+        Signal(
+            identifier="@mikro/metaschema",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A meta schema was created, changed or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/bigfilestore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A big file store was requested, filled or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/mediastore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A media store was requested, filled or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/zarrstore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A zarr store was requested, filled or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/parquetstore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A parquet store was requested, filled or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/fabriksstore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A fabriks store was requested, filled or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/konnektionstore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A konnektion store was requested, filled or deleted.",
+        ),
+        Signal(
+            identifier="@mikro/sparsestore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="A sparse store was requested, filled or deleted.",
         ),
     ],
 )
