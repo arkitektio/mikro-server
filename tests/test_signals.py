@@ -21,7 +21,7 @@ from tests.test_task_provenance import attach_provenance, clear_provenance, make
 from tests.test_windowed_lenses import _CONTAINERS, _create
 
 EXPECTED = {
-    "@mikro/lens": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/arraylens": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/tablelens": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/sparselens": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/meshlens": ["CREATED", "UPDATED", "DELETED"],
@@ -68,7 +68,7 @@ def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
     assert set(hosted) == set(EXPECTED)
     assert hosted["@mikro/folder"]["label"] == "Folder"
     array_keys = [d["key"] for d in hosted["@mikro/arraydataset"]["descriptors"]]
-    assert array_keys == [d["key"] for d in hosted["@mikro/lens"]["descriptors"]]
+    assert array_keys == [d["key"] for d in hosted["@mikro/arraylens"]["descriptors"]]
     assert {"key": "@mikro/n_channels", "type": "INT", "description": "Its total extent along its CHANNEL axes"} in hosted["@mikro/arraydataset"]["descriptors"]
     # A container and the lens kind over it read one vocabulary.
     assert [d["key"] for d in hosted["@mikro/tabledataset"]["descriptors"]] == [d["key"] for d in hosted["@mikro/tablelens"]["descriptors"]] != []
@@ -115,7 +115,7 @@ async def test_a_crop_is_signalled_with_its_descriptors(intake, authenticated_co
     dataset = await seed.create_array_dataset(ctx, "Signalled", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
     crop = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}])
 
-    whole_created, crop_created = [r["json"] for r in _of(intake, "@mikro/lens", 2)]
+    whole_created, crop_created = [r["json"] for r in _of(intake, "@mikro/arraylens", 2)]
     assert (whole_created["kind"], whole_created["descriptors"]["@mikro/is_whole"], whole_created["descriptors"]["@mikro/n_channels"]) == ("CREATED", True, 3)
     assert (crop_created["kind"], crop_created["object"], crop_created["descriptors"]["@mikro/is_whole"], crop_created["descriptors"]["@mikro/n_channels"]) == ("CREATED", str(crop.pk), False, 1)
     row = await models.Lens.objects.with_sources().aget(pk=crop.pk)
@@ -128,7 +128,7 @@ async def test_a_crop_is_signalled_with_its_descriptors(intake, authenticated_co
     result = await schema.execute(delete, context_value=ctx, variable_values={"input": {"id": str(crop.pk)}})
     assert not result.errors, result.errors
 
-    about_crop = [r["json"]["kind"] for r in _of(intake, "@mikro/lens", 4) if r["json"]["object"] == str(crop.pk)]
+    about_crop = [r["json"]["kind"] for r in _of(intake, "@mikro/arraylens", 4) if r["json"]["object"] == str(crop.pk)]
     assert about_crop == ["CREATED", "UPDATED", "DELETED"]
 
 

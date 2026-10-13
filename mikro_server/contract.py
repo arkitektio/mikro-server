@@ -45,7 +45,7 @@ HOSTS = Hosts(
             descriptors=ARRAY_DESCRIPTORS,
         ),
         Structure(
-            identifier="@mikro/lens",
+            identifier="@mikro/arraylens",
             label="Array Lens",
             description="A selection over an array dataset, by index slices: what an action that works on pixels is handed.",
             descriptors=ARRAY_DESCRIPTORS,
@@ -157,7 +157,7 @@ HOSTS = Hosts(
         # for, and the handle it is then given. `@mikro/is_whole` is how a trigger tells a crop
         # from the whole lens a container is born with.
         Signal(
-            identifier="@mikro/lens",
+            identifier="@mikro/arraylens",
             kinds=["CREATED", "UPDATED", "DELETED"],
             descriptors=_keys(ARRAY_DESCRIPTORS),
             description="A selection over an array dataset was made, renamed or deleted, with its axis counts, extents, value kind and whether it selects everything.",

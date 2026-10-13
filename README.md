@@ -47,7 +47,7 @@ Declared in [`mikro_server/contract.py`](mikro_server/contract.py):
 Mikro is known to the hub's rekuest in two separate ways:
 
 - as a **service** (`_rekuest/service`): it hosts structures such as `@mikro/arraydataset`,
-  `@mikro/lens`, `@mikro/scene`, `@mikro/tabledataset` and `@mikro/file`
+  `@mikro/arraylens`, `@mikro/scene`, `@mikro/tabledataset` and `@mikro/file`
   ([`mikro_server/service.py`](mikro_server/service.py));
 - as a **hook agent** (`_rekuest/hook`): the place for actions rekuest may run here
   ([`mikro_server/hook_agent.py`](mikro_server/hook_agent.py)). This release offers none, so

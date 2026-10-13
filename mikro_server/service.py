@@ -30,7 +30,7 @@ service = Service("mikro", hosts=contract.description.hosts, description="Micros
 arraydataset = service.structure(models.ArrayDataset, "@mikro/arraydataset", describe=dataset_descriptors)
 # One structure per lens kind, so a port typed on pixels is never handed rows. Each kind
 # describes itself in its container's vocabulary, over what it selects.
-lens = service.structure(models.ArrayLens, "@mikro/lens", describe=lens_descriptors)
+arraylens = service.structure(models.ArrayLens, "@mikro/arraylens", describe=lens_descriptors)
 tablelens = service.structure(models.TableLens, "@mikro/tablelens", describe=lens_descriptors)
 sparselens = service.structure(models.SparseLens, "@mikro/sparselens", describe=lens_descriptors)
 meshlens = service.structure(models.MeshLens, "@mikro/meshlens", describe=lens_descriptors)
@@ -69,7 +69,7 @@ service.model_signal(arraydataset, organization=org)
 # Per concrete kind: `post_save` never fires for the polymorphic base. A whole lens is
 # announced with its container (it is the handle an action is given for it); a crop or a
 # window on its own, with `@mikro/is_whole` false.
-service.model_signal(lens, organization=org)
+service.model_signal(arraylens, organization=org)
 service.model_signal(tablelens, organization=org)
 service.model_signal(sparselens, organization=org)
 service.model_signal(meshlens, organization=org)

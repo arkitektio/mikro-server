@@ -62,7 +62,7 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
     declared = {s["identifier"]: [d["key"] for d in s["descriptors"]] for s in service.manifest()["structures"]}
     # Every computed key is declared and every declared key is computed: nothing is merely stated.
     assert set(result.data["arrayDataset"]["descriptors"]) == set(declared["@mikro/arraydataset"])
-    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/lens"])
+    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/arraylens"])
 
 
 @pytest.mark.django_db(transaction=True)
