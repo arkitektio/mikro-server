@@ -8,6 +8,9 @@ when ``createScene`` would.
 
 from typing import Literal
 
+from django.db import transaction
+
+from chart import enums as chart_enums
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
 from core import models
@@ -50,3 +53,36 @@ def auto_visualize(system: models.CoordinateSystem, *, name: str | None, ctx: Cr
     if kind_for(system) == "CHART":
         return chart_logic.bootstrap_chart_from_system(system, name=name, policy=chart_logic.Policy(), ctx=ctx)
     return scene_logic.bootstrap_scene_from_system(system, ScenePolicyInputModel(skip_unplaceable=True), ctx, name=name)
+
+
+#: The chart layer a lens of each kind is drawn as. A kind that is not here has none.
+_CHART_LAYER_KIND: dict[type, str] = {
+    models.ArrayLens: chart_enums.ChartLayerKindChoices.TRACE.value,
+    models.TableLens: chart_enums.ChartLayerKindChoices.SERIES.value,
+    models.AnnotationLens: chart_enums.ChartLayerKindChoices.ANNOTATION.value,
+}
+
+
+def auto_visualize_lens(lens: models.Lens, *, name: str | None, ctx: CreationContext) -> models.Scene | chart_models.Chart:
+    """A scene or a chart of one lens: its selection, and nothing else of its container.
+
+    The lens-first twin of :func:`auto_visualize`, for the reason ``bootstrap_scene_from_lens``
+    gives: which lens a layer reads is not a fact of the space, so showing a crop's or a
+    window's space draws its whole container again. The choice between the two compositions is
+    still read off the space the selection lives in, by the same rule. A scene is the one
+    ``createSceneFromLens`` makes with its defaults; a chart is laid along the lens' own space
+    with the lens as its one layer, and a lens no chart layer reads is refused in prose.
+    """
+    system = lens.coordinate_system
+    if kind_for(system) == "SCENE":
+        return scene_logic.bootstrap_scene_from_lens(lens, ctx, name=name)
+
+    kind = next((kind for model, kind in _CHART_LAYER_KIND.items() if isinstance(lens, model)), None)
+    if kind is None:
+        raise ValueError(f"Lens {lens.pk} over {type(lens.container).__name__} {lens.container.pk} cannot be charted: no chart layer reads a {type(lens).__name__}.")
+    container = lens.container
+    label = getattr(container, "name", None) or getattr(container, "label", None) or f"{type(container).__name__} {container.pk}"
+    with transaction.atomic():
+        chart = chart_logic.create_chart(name=name or (f"{label} · {lens.name}" if lens.name else label), world=system, ctx=ctx)
+        chart_logic.create_layer(chart, kind=kind, source=lens, name=lens.name or label)
+    return chart

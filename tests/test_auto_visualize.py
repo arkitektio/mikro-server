@@ -24,8 +24,8 @@ mutation Auto($input: AutoVisualizeInput!) {
     name
     descriptors
     worldCoordinateSystem { id }
-    ... on Chart { axis { name } layers { __typename name } }
-    ... on Scene { layers { __typename } }
+    ... on Chart { axis { name } layers { __typename name ... on SeriesChartLayer { lens { id } } } }
+    ... on Scene { layers { __typename ... on IntensityLayer { lens { id shape } } ... on PointLayer { lens { id } } } }
   }
 }
 """
@@ -196,4 +196,59 @@ async def test_a_space_lists_its_scenes_and_charts_together_as_visualizations(au
     before = await _compositions()
     foreign = await _run(other_org_context, AUTO, {"coordinateSystem": world})
     assert foreign.errors, "the space belongs to another organization"
+    assert await _compositions() == before
+
+
+# --- a lens --------------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_crop_is_staged_as_a_scene_of_the_cut_and_becomes_what_the_lens_opens_on(authenticated_context: HttpContext):
+    """Showing a crop's *space* draws its whole dataset; naming the lens draws the crop."""
+    ctx = authenticated_context
+    image = await seed.create_array_dataset(ctx, "Cells")  # (c, y, x)
+    crop = await seed.create_lens(ctx, image, slices=[{"axis": "y", "start": 4, "stop": 20, "step": None}])
+
+    shown = (await _ok(ctx, AUTO, {"lens": str(crop.pk)}))["autoVisualize"]
+
+    assert shown["__typename"] == "Scene"
+    assert shown["worldCoordinateSystem"]["id"] == str(image.coordinate_system_id), "composed in the dataset's grid, where the crop was cut from"
+    assert shown["layers"], "a layer per channel"
+    assert all(layer["lens"]["shape"][-2] == 16 for layer in shown["layers"]), "every layer reads the cut, not the whole array"
+    assert str((await sync_to_async(models.Lens.objects.get)(pk=crop.pk)).default_scene_id) == shown["id"], "nominated, as createSceneFromLens does"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_window_over_a_table_along_one_metric_column_is_charted_as_that_window(authenticated_context: HttpContext):
+    """The table's own space is one unit-carrying axis: a chart, whose one layer reads the window."""
+    from tests.test_charts import _MEASUREMENTS, _table
+
+    ctx = authenticated_context
+    made = await _table(ctx, "measurements", _MEASUREMENTS)
+    table = await sync_to_async(models.TableDataset.objects.get)(pk=made["id"])
+    window = await seed.create_windowed_lens(ctx, table, [{"axis": "x", "min": 0.0, "max": 10.0}])
+
+    shown = (await _ok(ctx, AUTO, {"lens": str(window.pk)}))["autoVisualize"]
+
+    assert shown["__typename"] == "Chart"
+    assert shown["name"] == "measurements"
+    assert shown["worldCoordinateSystem"]["id"] == made["coordinateSystem"]["id"]
+    assert [(layer["__typename"], layer["lens"]["id"]) for layer in shown["layers"]] == [("SeriesChartLayer", str(window.pk))]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize("both", [True, False], ids=["both", "neither"])
+async def test_a_space_and_a_lens_together_or_neither_is_refused_and_nothing_is_made(authenticated_context: HttpContext, both: bool):
+    """The two inputs are two questions: what resides in a space, or what one lens selects."""
+    ctx = authenticated_context
+    image = await seed.create_array_dataset(ctx, "Cells")
+    lens = await seed.create_lens(ctx, image)
+    before = await _compositions()
+
+    refused = await _run(ctx, AUTO, {"coordinateSystem": str(image.coordinate_system_id), "lens": str(lens.pk)} if both else {})
+
+    assert refused.errors and "exactly one of `coordinateSystem`" in str(refused.errors[0]), refused.errors
     assert await _compositions() == before
