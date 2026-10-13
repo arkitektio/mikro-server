@@ -2,7 +2,7 @@ import strawberry
 import strawberry_django
 from strawberry.scalars import JSON
 from typing import TYPE_CHECKING, Annotated, Optional
-from core import filters, order, scalars
+from core import filters, order
 from kante.types import Info
 import datetime
 from enum import Enum

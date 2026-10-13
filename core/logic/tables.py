@@ -3,7 +3,7 @@
 Two thin readers over what the store recorded about itself. The DESCRIBE lives in the
 datalayer (``Datalayer.get_parquet_schema``, beside ``get_zarr_metadata`` and
 ``get_sparse_metadata``) and runs once, at finish, so the answer is on the row and nothing here
-goes to S3. ``datalayer`` must never import ``core`` (``tests/test_architecture.py``).
+goes to S3. ``datalayer`` must never import ``core``.
 
 That line was briefly crossed the other way too, for a picker that wanted a class column's
 distinct values and a measure column's range. It was put back: the client already holds an

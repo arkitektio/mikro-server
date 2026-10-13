@@ -1781,7 +1781,7 @@ def derived_containers(dataset: "models.ArrayDataset") -> list:
     seen: set[tuple] = {("dataset", dataset.pk)}
     wanted: list[tuple] = []
     for edge in edges:
-        key = keys.get(edge.input_id) if edge.input_id else None
+        key = keys.get(edge.input_id)
         if key is None or key in seen or not is_derivation_edge(edge, of_container=key, keys=keys):
             continue
         seen.add(key)
@@ -1836,7 +1836,7 @@ def lineage_ancestors(dataset: "models.ArrayDataset") -> list["models.ArrayDatas
 
     while True:
         edge = primary_derivation_edge(current)
-        if edge is None or edge.output is None or not is_traversable(edge):
+        if edge is None or not is_traversable(edge):
             return ancestors
         source = system_dataset(edge.output)
         if source is None or source.pk in seen:
@@ -1860,7 +1860,7 @@ def primary_lineage_root(dataset: "models.ArrayDataset") -> "models.ArrayDataset
 
     while True:
         edge = primary_derivation_edge(current)
-        if edge is None or edge.output is None or not is_traversable(edge):
+        if edge is None or not is_traversable(edge):
             return current
         source = system_dataset(edge.output)
         if source is None or source.pk in seen:
@@ -2018,7 +2018,7 @@ def is_derivation_edge(edge: "models.Transformation", *, of_container: tuple | N
     output resolved through the table's own derivation edge back to the mask, compared equal
     and was dropped. Container keys removed the accident, which is what surfaced the rule.
     """
-    if edge.output_id is None or edge.kind == enums.TransformKindChoices.FIELD.value:
+    if edge.kind == enums.TransformKindChoices.FIELD.value:
         return False
     target = keys.get(edge.output_id)
     if target is None or target[0] == "system":
@@ -2342,7 +2342,7 @@ def _derivation_descendants(container_keys: set[tuple]) -> set[tuple]:
 
         candidates: set[tuple] = set()
         for edge in edges:
-            child = keys.get(edge.input_id) if edge.input_id else None
+            child = keys.get(edge.input_id)
             # A same-container edge (a lens, level or physical-space edge) is not a
             # derivation; only a cross-container one carries placement downstream.
             if child is None or child[0] == "system" or child in seen:
@@ -2359,7 +2359,7 @@ def _derivation_descendants(container_keys: set[tuple]) -> set[tuple]:
             out_keys = _keys_for(out_edges)
             primary: dict[tuple, models.Transformation] = {}
             for edge in out_edges:
-                child = out_keys.get(edge.input_id) if edge.input_id else None
+                child = out_keys.get(edge.input_id)
                 if child is None or not is_derivation_edge(edge, of_container=child, keys=out_keys):
                     continue
                 primary.setdefault(child, edge)
@@ -2420,7 +2420,7 @@ def _placement_seeds(space: "models.CoordinateSystem") -> set[tuple]:
         # and reaching a collection's source is the one hop that goes the other way.
         if world_key[0] != "dataset":
             derivation = collection_derivation_edge(world)
-            if derivation is not None and derivation.output_id is not None and is_traversable(derivation):
+            if derivation is not None and is_traversable(derivation):
                 source_key = container_map([derivation.output_id]).get(derivation.output_id)
                 if source_key is not None and source_key[0] != "system":
                     seeds.add(source_key)
@@ -2738,10 +2738,10 @@ def lineage_graph(
 
         discovered: set[tuple] = set()
         for edge in touching:
-            child = keys.get(edge.input_id) if edge.input_id else None
+            child = keys.get(edge.input_id)
             if child is None or not is_derivation_edge(edge, of_container=child, keys=keys):
                 continue
-            parent = keys.get(edge.output_id) if edge.output_id else None
+            parent = keys.get(edge.output_id)
             if parent is None:
                 continue
             edges[edge.pk] = edge
@@ -2986,7 +2986,7 @@ def walk_towards_intrinsic(system: "models.CoordinateSystem") -> tuple[list["mod
         seen.add(current.pk)
 
         edge = _edge_towards_intrinsic(current, dataset)
-        if edge is None or edge.output is None or not coords_logic.has_matrix(edge.kind):
+        if edge is None or not coords_logic.has_matrix(edge.kind):
             break
 
         edges.append(edge)
@@ -3060,12 +3060,12 @@ def _edge_towards_intrinsic(system: "models.CoordinateSystem", dataset: "models.
     so it is a placement, not a lineage, and this walk has no business crossing it.
     """
     if dataset is None:
-        return next((edge for edge in collection_derivation_edges(system) if edge.output is not None and is_traversable(edge)), None)
+        return next((edge for edge in collection_derivation_edges(system) if is_traversable(edge)), None)
 
     candidates = models.Transformation.objects.filter(input=system).select_related("output").order_by("pk")
 
     for edge in candidates:
-        if edge.output is None or not is_traversable(edge):
+        if not is_traversable(edge):
             continue
         if system_dataset(edge.output) == dataset:
             return edge
@@ -3081,7 +3081,7 @@ def _edge_params(edge: "models.Transformation") -> tuple[str, dict]:
     more arguments through every caller for the one kind that needs them.
     """
     if edge.kind == enums.TransformKindChoices.MAP_AXIS.value:
-        axis_order = [axis.name for axis in edge.input.axes.all()] if edge.input else []
+        axis_order = [axis.name for axis in edge.input.axes.all()]
         return edge.kind, {"affine": coords_logic.permutation_matrix(edge.input_axes or [], edge.output_axes or [], axis_order)}
 
     if edge.kind != enums.TransformKindChoices.SEQUENCE.value:
@@ -3112,8 +3112,8 @@ def _edge_step(edge: "models.Transformation", *, inverted: bool = False) -> "coo
     # Each endpoint's axes read once. `axes.all()` builds a fresh queryset per call unless a
     # prefetch upstream has filled the cache, and this runs once per edge per placement per
     # scene -- four queries where two will do is not a rounding error on the extent walk.
-    input_axes_rows = list(edge.input.axes.all()) if edge.input else []
-    output_axes_rows = list(edge.output.axes.all()) if edge.output else []
+    input_axes_rows = list(edge.input.axes.all())
+    output_axes_rows = list(edge.output.axes.all())
 
     step = coords_logic.AxedStep(
         kind=edge.kind,
@@ -3226,7 +3226,7 @@ def dataset_behind(system: "models.CoordinateSystem") -> "models.ArrayDataset | 
         .order_by("pk")
     )
     for edge in incoming:
-        if edge.input is not None and (dataset := system_dataset(edge.input)) is not None:
+        if (dataset := system_dataset(edge.input)) is not None:
             return dataset
     return None
 
@@ -3408,7 +3408,7 @@ def collection_derivation_edges(system: "models.CoordinateSystem") -> list["mode
 def collection_source_dataset(system: "models.CoordinateSystem") -> "models.ArrayDataset | None":
     """The dataset a collection's system was derived from, or None if it is freestanding."""
     edge = collection_derivation_edge(system)
-    if edge is None or edge.output is None:
+    if edge is None:
         return None
     return system_dataset(edge.output)
 

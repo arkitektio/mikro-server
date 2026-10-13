@@ -376,7 +376,6 @@ class DataArray(OrgScoped):
 
 @kante.django_type(
     models.OptikitState,
-    filters=filters.OptikitStateFilter,
     pagination=True,
     description="The hardware truth: the recorded microscope (Optikit) state pinned to a coordinate anchor",
 )
@@ -393,7 +392,6 @@ class OptikitState:
 
 @kante.django_type(
     models.ValueHistogram,
-    filters=filters.ValueHistogramFilter,
     pagination=True,
     description="The distribution of pixel values pinned to a coordinate anchor, including histogram bins, min/max and percentile limits",
 )
@@ -411,7 +409,6 @@ class ValueHistogram:
 
 @kante.django_type(
     models.LightPath,
-    filters=filters.LightPathFilter,
     pagination=True,
     description="The light path truth: the optical light path graph pinned to a coordinate anchor",
 )
@@ -427,7 +424,6 @@ class LightPath:
 
 @kante.django_type(
     models.ChannelLabel,
-    filters=filters.ChannelLabelFilter,
     pagination=True,
     description="The channel truth: a human-readable label for a channel, pinned to a coordinate anchor",
 )
@@ -528,7 +524,6 @@ class CoordinateAnchor:
 
 @kante.django_type(
     models.OmeMetadata,
-    filters=filters.OmeMetadataFilter,
     pagination=True,
     description="The image truth: OME image metadata pinned to a coordinate anchor",
 )
@@ -981,15 +976,6 @@ class RenderAxes:
     phasor: str | None = strawberry.field(description="The axis a phasor may be taken over -- a MICROTIME (FLIM arrival time) or SPECTRUM (wavelength) axis -- if the data has one")
     vector: str | None = strawberry.field(description="The DISPLACEMENT value axis, if the data has one: its positions are the components of a per-point offset, which is what a vector layer draws")
 
-
-
-#: The `at` argument, shared by the two path fields so they cannot drift about its shape.
-_AT_DESCRIPTION = (
-    "Where along the acquisition axes to ask, e.g. `[{name: \"c\", value: 2}]`. Only needed when the path crosses a per-index edge "
-    "(a `Transformation` with a `selector`, such as a per-channel chromatic correction): such an edge is crossed **only** when this "
-    "fixes its axis, because where the data sits genuinely depends on it and there is no single answer to give otherwise. Omit it and "
-    "no scoped edge is crossed -- which is every path in a dataset that has no per-index corrections."
-)
 
 
 @kante.type(

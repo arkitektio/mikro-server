@@ -45,15 +45,6 @@ class LightPortModel(BaseModel):
     spectrum: Optional[SpectrumModel] = None
     max_incoming_edges: Optional[int] = None  # allow merges
 
-    @property
-    def is_input(self) -> bool:
-        return self.role == PortRole.INPUT
-
-    @property
-    def is_output(self) -> bool:
-        return self.role == PortRole.OUTPUT
-
-
 # ---- Optical element base + subtypes (inline fields, no nested params) ----
 class OpticalElementBaseModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -193,8 +193,7 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
     if edge.kind != enums.TransformKindChoices.FIELD.value:
         return
 
-    output = getattr(edge, "output", None)
-    tables = {str(table.pk) for table in output.table_datasets.all()} if output is not None else set()
+    tables = {str(table.pk) for table in edge.output.table_datasets.all()}
     if not tables:
         return
 
@@ -204,8 +203,6 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
         if not named:
             continue
         system = _layer_source_system(layer)
-        if system is None:
-            continue
         still = set(attribute_plans_logic.field_reachable_tables(system, layer.scene.organization, excluding=[edge.pk]))
         lost = named - still
         if lost:

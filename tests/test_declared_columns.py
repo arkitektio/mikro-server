@@ -21,8 +21,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from core import enums, models
-from datalayer.models import ZarrStore
+from core import models
 from mikro_server.schema import schema
 
 CREATE = """

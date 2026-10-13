@@ -5,14 +5,11 @@ core.scoping (see that module); these tests pin the behaviour with a user
 from a second organization (the "othertest" static token).
 """
 
-from types import SimpleNamespace
 
 import pytest
-from django.core.exceptions import PermissionDenied
 from kante.context import HttpContext
 
 from core.models import Folder
-from core import subscriptions
 from mikro_server.schema import schema
 from tests.seed import create_folder
 

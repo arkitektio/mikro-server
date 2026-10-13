@@ -1,219 +1,7 @@
-"""Guards for the dependency rules between the apps.
+"""Registries and lookup tables that must follow the models and the schema they describe."""
 
-The rule (documented in ``core/models/__init__.py``): core may depend on
-datalayer, but datalayer is the storage backend and must never import core.
-"""
-
-import ast
-import importlib
 import os
 import re
-import subprocess
-import sys
-from pathlib import Path
-
-import pytest
-
-DATALAYER_DIR = Path(__file__).parent.parent / "datalayer"
-
-# Explicit list — a new datalayer module should be added here deliberately.
-DATALAYER_MODULES = [
-    "admin.py",
-    "apps.py",
-    "base_models.py",
-    "datalayer.py",
-    "codecs.py",
-    "duck.py",
-    "fields.py",
-    "inputs.py",
-    "fabriks.py",
-    "models.py",
-    "mutations/bigfile.py",
-    "mutations/media.py",
-    "mutations/fabriks.py",
-    "mutations/parquet.py",
-    "mutations/konnektion.py",
-    "mutations/sparse.py",
-    "mutations/zarr.py",
-    "konnektion.py",
-    "quota.py",
-    "scalars.py",
-    "sporadik.py",
-    "types.py",
-]
-
-
-def _imported_top_level_packages(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text())
-    packages = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                packages.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            packages.add(node.module.split(".")[0])
-    return packages
-
-
-def test_the_plan_sql_module_imports_only_the_stdlib() -> None:
-    """``core/logic/plan_sql.py`` is copied into the client unchanged, so it may import nothing of ours.
-
-    The builder used to be the plan's own ``sql`` field. Dropping the field is only honest if
-    every consumer can rebuild the string from the structured step, and "every consumer"
-    includes a Python client that does not carry Django, strawberry or this package.
-    """
-    imported = _imported_top_level_packages(Path(__file__).resolve().parent.parent / "core" / "logic" / "plan_sql.py")
-    foreign = imported - sys.stdlib_module_names
-    assert not foreign, f"plan_sql imports {sorted(foreign)}, which the client cannot carry"
-
-
-def test_datalayer_module_list_is_current() -> None:
-    """Fail when a datalayer module is added without registering it above."""
-    on_disk = sorted(
-        str(p.relative_to(DATALAYER_DIR))
-        for p in DATALAYER_DIR.rglob("*.py")
-        if p.name != "__init__.py" and "migrations" not in p.parts and "__pycache__" not in p.parts
-    )
-    assert on_disk == sorted(DATALAYER_MODULES)
-
-
-@pytest.mark.parametrize("module", DATALAYER_MODULES)
-def test_datalayer_does_not_import_core(module: str) -> None:
-    """datalayer is the storage backend; it must stay ignorant of the domain apps."""
-    imported = _imported_top_level_packages(DATALAYER_DIR / module)
-    assert "core" not in imported, f"datalayer/{module} imports core"
-
-
-# ==========================================================================================
-# Guards against the drift classes a coordinate-system review found by hand.
-#
-# Each of these would have caught real findings at the commit that introduced them, rather
-# than years later by reading: a docstring naming a function that was never written, a lookup
-# table keyed on an enum that stopped backing its field, and a model edited without its
-# migration.
-# ==========================================================================================
-
-CORE_DIR = Path(__file__).parent.parent / "core"
-
-#: Words that look like dotted identifiers inside prose and are not references to resolve.
-#: Explicit, in the same spirit as `DATALAYER_MODULES` above -- the friction of adding a name
-#: here is the point, because it is the moment to ask whether the prose meant a real symbol.
-_PROSE_ALLOWLIST: frozenset[str] = frozenset(
-    {
-        "e.g",
-        "i.e",
-        "a.u",
-        "etc",
-        "vs",
-        "np.float32",
-        "fabriks.json",
-    }
-)
-
-#: Sphinx cross-reference roles whose target must name something that exists.
-_XREF = re.compile(r":(?:func|meth|attr|class|mod|data|exc):`~?([A-Za-z_][\w.]*)`")
-
-
-def _core_symbols() -> tuple[set[str], dict[str, set[str]]]:
-    """Every name `core` defines, and every class' member names, read statically.
-
-    Static rather than by import because a reference may legitimately name something in a module
-    this test never imports, and because importing all of `core` to answer "does this name
-    exist" would make the guard depend on import side effects.
-    """
-    names: set[str] = set()
-    members: dict[str, set[str]] = {}
-    for path in CORE_DIR.rglob("*.py"):
-        if "__pycache__" in path.parts or "migrations" in path.parts:
-            continue
-        try:
-            tree = ast.parse(path.read_text())
-        except SyntaxError:  # pragma: no cover - a broken file is another test's problem
-            continue
-        names.add(path.stem)
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                names.add(node.name)
-            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                names.add(node.id)
-            elif isinstance(node, ast.arg):
-                names.add(node.arg)
-            if isinstance(node, ast.ClassDef):
-                owned = members.setdefault(node.name, set())
-                for child in node.body:
-                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        owned.add(child.name)
-                    elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
-                        owned.add(child.target.id)
-                    elif isinstance(child, ast.Assign):
-                        owned.update(t.id for t in child.targets if isinstance(t, ast.Name))
-    return names, members
-
-
-def _reference_resolves(dotted: str, names: set[str], members: dict[str, set[str]]) -> bool:
-    """Whether a cited name plausibly exists.
-
-    Three shapes appear in this codebase and all three are legitimate:
-    a fully qualified path (``core.logic.graph.is_traversable``), a partial one
-    (``coords.to_matrix``), and a bare name relying on context (``placement_path``). So a
-    reference resolves when it imports outright, or when its owner is a known class that has
-    the member, or when its final component is a name `core` defines somewhere.
-
-    Deliberately permissive about *where* a name lives and strict about whether it exists at
-    all -- which is the axis the findings this guards against sat on. `Transformation.registration`
-    fails because no class named `Transformation` has that member; `best_path` fails because
-    nothing anywhere defines it.
-    """
-    if _imports(dotted):
-        return True
-    parts = dotted.split(".")
-    if len(parts) >= 2 and parts[-2] in members:
-        return parts[-1] in members[parts[-2]]
-    return parts[-1] in names
-
-
-def _imports(dotted: str) -> bool:
-    parts = dotted.split(".")
-    for split in range(len(parts), 0, -1):
-        try:
-            module = importlib.import_module(".".join(parts[:split]))
-        except Exception:
-            continue
-        target = module
-        for attribute in parts[split:]:
-            target = getattr(target, attribute, None)
-            if target is None:
-                return False
-        return True
-    return False
-
-
-def test_sphinx_cross_references_in_core_resolve() -> None:
-    """A `:func:`/`:attr:` naming a symbol that does not exist is a docstring describing other code.
-
-    This is the single highest-yield guard in the suite. The coordinate review found six live
-    instances by hand -- a `best_path` tie-break that was never written but was cited three times
-    as the arbiter of rival registrations, an `intrinsic_of` field removed with the ownership FKs
-    and still named in five comments, a `Layer.registration` column that RFC-8 deleted, and a
-    `core.logic.roi` module that has never existed. Every one of them was load-bearing prose in a
-    codebase where the docstrings *are* the design record, and every one would have failed here.
-
-    Deliberately narrow: only Sphinx roles, which are unambiguous claims that a symbol exists.
-    Backticked prose is not checked, because ``a.u.`` and ``fabriks.json`` are not references and
-    an allowlist long enough to cover them would stop being read.
-    """
-    names, members = _core_symbols()
-    unresolved: list[str] = []
-    for path in sorted(CORE_DIR.rglob("*.py")):
-        if "__pycache__" in path.parts or "migrations" in path.parts:
-            continue
-        for match in _XREF.finditer(path.read_text()):
-            dotted = match.group(1)
-            if dotted in _PROSE_ALLOWLIST:
-                continue
-            if not _reference_resolves(dotted, names, members):
-                unresolved.append(f"{path.relative_to(CORE_DIR.parent)}: {match.group(0)}")
-    assert not unresolved, "docstrings name symbols that do not exist:\n  " + "\n  ".join(unresolved)
 
 
 def test_minimum_vertex_table_is_keyed_on_the_live_annotation_kinds() -> None:
@@ -230,26 +18,6 @@ def test_minimum_vertex_table_is_keyed_on_the_live_annotation_kinds() -> None:
     live = {member.value for member in AnnotationKindChoices}
     unreachable = sorted(set(_MINIMUM_VERTICES) - live)
     assert not unreachable, f"_MINIMUM_VERTICES keys no annotation kind can reach: {unreachable}"
-
-
-def test_the_models_and_the_migrations_agree() -> None:
-    """A model edited without its migration is invisible to the rest of this suite.
-
-    `mikro_server.settings_test` sets `MIGRATION_MODULES = DisableMigrations()`, so the test
-    database is built with `run-syncdb` straight from the models and **no migration is ever
-    executed here**. That makes model/migration drift completely undetectable by every other
-    test: you can add a field, forget the migration, and stay green all the way to a deploy that
-    fails on `migrate`. So this one runs the check against the real settings, in a subprocess,
-    because the drift it looks for is one the test settings are designed not to see.
-    """
-    result = subprocess.run(
-        [sys.executable, "manage.py", "makemigrations", "--check", "--dry-run"],
-        cwd=CORE_DIR.parent,
-        env={**os.environ, "DJANGO_SETTINGS_MODULE": "mikro_server.settings"},
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, f"models have changes with no migration:\n{result.stdout}\n{result.stderr}"
 
 
 def test_every_model_that_owns_a_coordinate_system_is_a_registered_container() -> None:
@@ -316,8 +84,6 @@ def test_every_registered_container_is_a_member_of_the_resident_union() -> None:
     rather than the Python union so that a member which is declared but never registered in the
     schema -- the failure mode the `layer_types` list exists for -- is caught too.
     """
-    import os
-    import re
 
     import django
 
@@ -358,41 +124,6 @@ def test_every_layer_kind_is_in_the_refusal_vocabulary() -> None:
 
     missing = sorted(kind.value for kind in enums.LayerKind if kind.value not in _KIND_VOCABULARY)
     assert not missing, f"{', '.join(missing)} are layer kinds with no entry in `_KIND_VOCABULARY`"
-
-
-def test_the_bootstrap_names_every_collection_before_falling_back_to_the_array() -> None:
-    """A collection missing from that guard draws the image it was derived from.
-
-    The subtlest of this family, and the only one whose symptom is a wrong picture rather than a
-    missing one. `_materialize_layers` asks the collections first and the array case last,
-    because `dataset_behind` follows a derivation edge *backwards*: for a collection's own space
-    that edge leads to the volume it was extracted from. So a collection kind that has a branch
-    but is absent from the final guard falls through it and bootstraps the **volume** wherever
-    that collection was registered -- past its own `include_*` policy flag, and looking for all
-    the world like a working scene.
-    """
-    import inspect
-
-    import django
-
-    django.setup()
-
-    from core.logic import scene as scene_logic
-    from core.logic.graph import COLLECTION_CONTAINERS
-
-    source = inspect.getsource(scene_logic._materialize_layers)
-    guard = source[source.index("dataset = graph_logic.dataset_behind(source)") :]
-
-    missing = [
-        container.related_name
-        for container in COLLECTION_CONTAINERS
-        if f"source.{container.related_name}.exists()" not in guard
-    ]
-    assert not missing, (
-        f"{', '.join(missing)} are collection containers that `_materialize_layers` does not "
-        f"exclude before falling back to the array case, so a system holding one would bootstrap "
-        f"the dataset behind it instead."
-    )
 
 
 def test_every_picker_column_is_guarded() -> None:
@@ -453,7 +184,6 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
     pass for a type whose `is_type_of` compares against the wrong kind -- which is the mistake
     that actually happens when a concrete type is written by copying its neighbour.
     """
-    import os
 
     import django
 

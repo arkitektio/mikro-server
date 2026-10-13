@@ -35,6 +35,6 @@ def request_general_media_access(info: Info, input: inputs.RequestGeneralMediaAc
     """Request temporary S3 read credentials for a media file."""
 
     dl = get_current_datalayer()
-    model = input.to_pydantic()
+    input.to_pydantic()
 
     return types.GeneralMediaAccessGrant.from_pydantic(dl.generate_general_media_access_grant(info.context.request.organization.id, info.context.request.user.id))

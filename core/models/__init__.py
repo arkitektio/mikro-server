@@ -12,7 +12,7 @@ migrations, which reference e.g. ``core.models.create_default_color``).
 # Dependency rule between the apps: core may depend on datalayer models (they
 # are FK targets of Image/File/Table and re-exported here for convenience),
 # but datalayer must never import core — it is the storage backend, agnostic
-# of the domain on top of it (guarded by tests/test_architecture.py). All
+# of the domain on top of it. All
 # runtime storage I/O goes through ``datalayer.datalayer.get_current_datalayer()``,
 # never through boto3/zarr directly.
 from datalayer.models import (

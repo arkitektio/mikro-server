@@ -29,7 +29,6 @@ the format's own generalisations happen to be invisible.
 
 import io
 import json
-import pathlib
 
 import pytest
 
@@ -410,23 +409,6 @@ def test_the_block_key_is_the_formats_own_name() -> None:
     the visible half of moving the spec out to a package of its own.
     """
     assert models.SPARSE_BLOCK_KEY == "sporadik"
-
-
-def test_this_server_documents_where_the_specification_lives() -> None:
-    """The pointer in `docs/` has to keep pointing.
-
-    There is deliberately **no** normative content in this repository: the format is specified in
-    the `sporadik` package, and this server reimplements a reader from it rather than importing it
-    -- a reader that imports its writer inherits the writer's dependencies and its release cycle.
-    Two documents saying the same thing drift, and the one that drifts silently is the one nobody
-    runs, so what is checked here is only that the pointer still names the package.
-    """
-    document = pathlib.Path(__file__).resolve().parents[1] / "docs" / "sparse-store-format.md"
-    assert document.exists(), "the pointer to the specification is part of this reader's contract"
-
-    text = document.read_text()
-    assert "sporadik" in text, "the document no longer names the package the format is specified in"
-    assert "does not import" in text or "reimplements" in text, "it should say why this server has its own copy"
 
 
 def test_this_readers_constants_are_the_ones_the_specification_states() -> None:

@@ -9,7 +9,6 @@ single INDEX axis whose only honest edge is UNMAPPABLE -- the measurement-table 
 the old FeatureCollection served.
 """
 
-from typing import Annotated, ClassVar, Literal
 
 import strawberry
 from django.db import transaction

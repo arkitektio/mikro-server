@@ -10,15 +10,9 @@ from typing import NewType
 import strawberry
 from strawberry.types.scalar import ScalarDefinition
 
-MediaLike = NewType("MediaLike", str)
 #: A count of bytes. Its own scalar because GraphQL's ``Int`` is 32-bit and a store passes
 #: 2 GiB routinely; serialized as a plain JSON number (exact up to 2^53 -- 8 PiB).
 ByteCount = NewType("ByteCount", int)
-
-
-def _identity(v: object) -> object:
-    """Pass-through serialization: the scalar carries its JSON value unchanged."""
-    return v
 
 
 def _parse_byte_count(v: object) -> int:
@@ -32,12 +26,6 @@ def _parse_byte_count(v: object) -> int:
 
 
 SCALAR_MAP: dict[object, ScalarDefinition] = {
-    MediaLike: strawberry.scalar(
-        name="MediaLike",
-        description="A type representing a media store reference, which can be either a string ID or a more complex object.",
-        serialize=_identity,
-        parse_value=_identity,
-    ),
     ByteCount: strawberry.scalar(
         name="ByteCount",
         description="A number of bytes. 64-bit, unlike Int: serialized as a JSON number, and accepted as a number or a numeric string.",

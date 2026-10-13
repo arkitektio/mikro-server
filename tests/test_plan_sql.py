@@ -1,7 +1,7 @@
 """The SQL builder: pure over a lookup step, in every shape a step arrives in, and run for real.
 
 No Django here, deliberately. The module under test imports only the standard library so it can
-be copied into the client unchanged (``tests/test_architecture.py`` pins that), and these tests
+be copied into the client unchanged, and these tests
 feed it dicts and namespaces rather than model rows for the same reason: a builder that needed
 a ``Column`` row to produce a string would be one the client could not carry.
 """

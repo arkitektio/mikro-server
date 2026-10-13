@@ -193,21 +193,6 @@ def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.Ne
     )
 
 
-class UpdateNetworkLayerInputModel(BaseModel):
-    id: str
-    material_color: list[int] | None = None
-    line_width: float | None = None
-    node_size_column: str | None = None
-    edge_width_column: str | None = None
-    directed: bool | None = None
-    show_nodes: bool | None = None
-    max_level: int | None = None
-    blending: enums.Blending | None = None
-    opacity: Alpha | None = None
-    visible: bool | None = None
-    order: int | None = None
-
-
 @strawberry.input(
     description="Retune how a network layer is drawn. A patch: an OMITTED field keeps its current value. The collection and the scene are not editable -- a layer renders what it was created to render",
 )

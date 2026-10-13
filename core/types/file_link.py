@@ -16,7 +16,7 @@ from strawberry import auto
 import kante
 from kante.types import Info
 
-from core import enums, filters, models, order
+from core import enums, filters, models
 from core.types.auth import Organization, ProvenanceEntry, Task, User
 
 if TYPE_CHECKING:
@@ -45,7 +45,6 @@ FileLinkContainer = Annotated[
 @kante.django_type(
     models.FileLink,
     filters=filters.FileLinkFilter,
-    ordering=order.FileLinkOrder,
     pagination=True,
     description=(
         "A file and a container holding the same data, and which of the two was made from the other. **Not a derivation**: `derivedFrom` states how one space maps into another, "

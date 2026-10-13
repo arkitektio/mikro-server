@@ -602,11 +602,6 @@ def is_phasor_axis(axis_type: str) -> bool:
     return axis_type in _PHASOR_TYPES
 
 
-def is_vector_axis(axis_type: str) -> bool:
-    """Whether an axis of this type enumerates the components of a per-point vector."""
-    return axis_type == enums.AxisTypeChoices.DISPLACEMENT.value
-
-
 def pyramid_transform(
     shape_0: Sequence[int],
     shape_level: Sequence[int],

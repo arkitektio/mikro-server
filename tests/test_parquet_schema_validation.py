@@ -7,8 +7,8 @@ declared type could be neither right nor wrong. Now the store DESCRIBEs itself a
 `finishParquetUpload`, which is the one moment the bytes are known to be reachable.
 
 The DESCRIBE lives on `Datalayer`, beside `get_zarr_metadata` and `get_sparse_metadata`, rather
-than in `core.logic.tables` where it started. It had to move: `datalayer` may not import `core`
-(`test_architecture.py`), and a store that has to ask core how to describe itself would be the
+than in `core.logic.tables` where it started. It had to move: `datalayer` may not import `core`,
+and a store that has to ask core how to describe itself would be the
 only exception -- for nothing, since the DuckDB facade it needs never depended on core either.
 
 The tests stay deliberately split, for the reason they always were. The facade runs against a

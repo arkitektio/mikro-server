@@ -51,10 +51,6 @@ IS_WHOLE = "@mikro/is_whole"
 #: spec of its selection.
 SPEC = "@mikro/spec"
 VALUE_KIND = "@mikro/value_kind"
-#: What an array's values mean, decided from facts its author stated: a derivation declared
-#: CATEGORIZED makes a label map, a DISPLACEMENT value axis a vector field, a COORDINATE value
-#: axis a coordinate field; everything else is intensity.
-VALUE_KINDS = ("categorical", "vector", "coordinates", "intensity")
 
 
 def _axis_counts(axis_types: Sequence[str]) -> list[Descriptor]:

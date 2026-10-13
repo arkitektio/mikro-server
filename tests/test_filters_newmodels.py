@@ -10,7 +10,7 @@ from django.core.management import call_command
 
 from core import enums
 from core.creation import CreationContext
-from core.models import ArrayDataset, Annotation, AnnotationCollection, CoordinateSystem, Layer, Lens, Scene, Transformation
+from core.models import ArrayDataset, Annotation, AnnotationCollection, CoordinateSystem, Layer, Scene, Transformation
 from kante.context import HttpContext
 from mikro_server.schema import schema
 

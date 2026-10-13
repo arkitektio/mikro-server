@@ -130,7 +130,7 @@ def _seed_array_dataset_sync(ctx: HttpContext, name: str, axes: list, shapes: li
         array_system = intrinsic
         if level:
             array_system = CoordinateSystem.objects.create(name=f"{name}/{level}", creator=creation.user, organization=creation.organization)
-        data_array = DataArray.objects.create(level=level, dataset=dataset, coordinate_system=array_system, shape=shape, chunk_shape=shape)
+        DataArray.objects.create(level=level, dataset=dataset, coordinate_system=array_system, shape=shape, chunk_shape=shape)
         if level == 0:
             continue
         graph_logic.create_pixel_axes(array_system, axes)

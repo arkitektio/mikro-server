@@ -15,23 +15,10 @@ FILE_QUERY = """
     }
 """
 
-TABLE_QUERY = """
-    query List($filters: TableFilter) {
-        tables(filters: $filters) { id name }
-    }
-"""
-
-
 async def file_names(ctx, filters):
     result = await schema.execute(FILE_QUERY, context_value=ctx, variable_values={"filters": filters})
     assert not result.errors, result.errors
     return {f["name"] for f in result.data["files"]}
-
-
-async def table_names(ctx, filters):
-    result = await schema.execute(TABLE_QUERY, context_value=ctx, variable_values={"filters": filters})
-    assert not result.errors, result.errors
-    return {t["name"] for t in result.data["tables"]}
 
 
 @pytest.mark.django_db(transaction=True)

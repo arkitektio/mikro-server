@@ -27,10 +27,8 @@ from core.types.layers import layer_types
 from core.types.lenses import lens_types
 from core.types.attribute_plans import sample_step_types
 from core.types.coords import transformation_types
-from datalayer.duck import DuckExtension
-from typing import Annotated, Iterable, TypeVar
+from typing import Annotated
 from authentikate.strawberry import AuthExtension, AuthSubscribeExtension
-from strawberry_django.pagination import OffsetPaginationInput
 from authentikate import models as ak_models
 from koherent import models as koherent_models
 import datalayer.mutations as datalayer_mutations
@@ -41,20 +39,14 @@ import kante
 from core import scalars as core_scalars
 from kanne_server import scalars as kanne_scalars
 from strawberry.schema.config import StrawberryConfig
-from core.logic import tables as table_logic
 from core.scoping import get_for_org
 from embeddings.strawberry import scalar_map as embedding_scalars
 
 ID = Annotated[StrawberryID, strawberry.argument(description="The unique identifier of an object")]
-T = TypeVar("T")
 
 
-def field(permission_classes=None, **kwargs):
-    "A wrapper for field that adds default permission classes and extensions."
-    if permission_classes:
-        pass
-    else:
-        permission_classes = []
+def field(**kwargs):
+    "A wrapper for field that adds the auth extension."
     return strawberry_django.field(extensions=[AuthExtension()], **kwargs)
 
 
@@ -90,17 +82,6 @@ def upload_mutation(**kwargs) -> strawberry.mutation:
 def subscription(**kwargs) -> strawberry.subscription:
     """A wrapper for subscription that adds default permission classes and extensions."""
     return strawberry.subscription(extensions=[AuthSubscribeExtension()], **kwargs)
-
-
-def _paginate(items: "Iterable[T]", pagination: OffsetPaginationInput | None) -> "list[T]":
-    """Apply offset/limit pagination to virtual row/cell id sequences (limit defaults to unset = all)."""
-    sliced = list(items)
-    if pagination is None:
-        return sliced
-    sliced = sliced[pagination.offset :]
-    if isinstance(pagination.limit, int) and pagination.limit >= 0:
-        sliced = sliced[: pagination.limit]
-    return sliced
 
 
 @strawberry.type
@@ -262,28 +243,28 @@ class Query:
     )
     array_datasets_stats: types.ArrayDatasetStats = field(resolver=types.ArrayDatasetStatsResolver, description="Get statistics about array datasets: counts and time-bucketed series over the datasets of the current organization")
 
-    @field(permission_classes=[], description="List the memberships of the current organization (excluding bots)")
+    @field(description="List the memberships of the current organization (excluding bots)")
     def members(self, info: Info) -> list[types.Membership]:
         """Return all memberships for the current organization, excluding those with the 'bot' role."""
         return ak_models.Membership.objects.filter(organization=info.context.request.organization).exclude(roles__contains="bot").distinct()
 
-    @field(permission_classes=[], description="Get a single Rekuest task by ID")
+    @field(description="Get a single Rekuest task by ID")
     def task(self, info: Info, id: ID) -> types.Task:
         return get_for_org(koherent_models.Task, info, id=id)
 
-    @field(permission_classes=[], description="Get a single scene snapshot by ID")
+    @field(description="Get a single scene snapshot by ID")
     def scene_snapshot(self, info: Info, id: ID) -> types.SceneSnapshot:
         return get_for_org(models.SceneSnapshot, info, id=id)
 
-    @field(permission_classes=[], description="Get a single animation by ID")
+    @field(description="Get a single animation by ID")
     def animation(self, info: Info, id: ID) -> types.Animation:
         return get_for_org(models.Animation, info, id=id)
 
-    @field(permission_classes=[], description="Get a single file by ID")
+    @field(description="Get a single file by ID")
     def file(self, info: Info, id: ID) -> types.File:
         return get_for_org(models.File, info, id=id)
 
-    @field(permission_classes=[], description="Get a single folder by ID")
+    @field(description="Get a single folder by ID")
     def folder(self, info: Info, id: ID) -> types.Folder:
         return get_for_org(models.Folder, info, id=id)
 
@@ -799,13 +780,6 @@ class Mutation:
 
 
 @strawberry.type
-class ChatRoomMessage:
-    room_name: str
-    current_user: str
-    message: str
-
-
-@strawberry.type
 class Subscription:
     files = subscription(resolver=subscriptions.files, description="Subscribe to real-time file updates")
     annotations = subscription(
@@ -853,7 +827,6 @@ schema = Schema(
         DjangoOptimizerExtension(enable_only_optimization=False),
         AuthentikateExtension,
         KoherentExtension,
-        DuckExtension,
     ],
     types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *lens_types, *chart_types.chart_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
     # The union member inputs above are referenced by no field: they are published for

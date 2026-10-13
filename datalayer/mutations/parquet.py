@@ -33,6 +33,6 @@ def request_general_parquet_access(info: Info, input: inputs.RequestGeneralParqu
     """Request temporary S3 read credentials for a parquet file."""
 
     dl = get_current_datalayer()
-    model = input.to_pydantic()
+    input.to_pydantic()
 
     return types.GeneralParquetAccessGrant.from_pydantic(dl.generate_general_parquet_access_grant(info.context.request.organization.id, info.context.request.user.id))

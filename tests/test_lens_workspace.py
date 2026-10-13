@@ -17,7 +17,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from core import enums, models
+from core import models
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_scene_snapshot import _nominate, _snapshot

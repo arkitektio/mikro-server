@@ -156,11 +156,6 @@ class Manifest:
         """The level-0 cell, one size per component, in the node position component order."""
         return [int(component) for component in self.grid["cellSize"]]
 
-    @property
-    def coarsens(self) -> bool:
-        """Whether this collection claims any level is a reduction of another."""
-        return self.encoding.get("pruning") != "NONE" or self.encoding.get("simplification") != "NONE"
-
     def level_paths(self, level: int) -> list[str] | None:
         """The parts the manifest names for one level, or ``None`` if it names none.
 

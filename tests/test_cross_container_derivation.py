@@ -76,7 +76,7 @@ async def _parquet(ctx: HttpContext, key: str, columns: list[tuple[str, str]] | 
 
 async def _table(ctx: HttpContext, name: str, *, columns: list, derived_from: list | None = None) -> dict:
     """A table dataset through the real mutation."""
-    store = await _parquet(ctx, f"table-{name}", seed.split_declaration(columns)[0])
+    await _parquet(ctx, f"table-{name}", seed.split_declaration(columns)[0])
     result = await schema.execute(
         CREATE_TABLE,
         context_value=ctx,

@@ -217,7 +217,7 @@ async def test_a_table_with_no_axes_cannot_be_keyed_at_all(authenticated_context
     only way to key it is to give it an axis, which is exactly the fix the old message asked
     for -- so the refusal has become the shape of the input.
     """
-    mask = await _mask(authenticated_context)
+    await _mask(authenticated_context)
 
     result = await _create(
         authenticated_context,

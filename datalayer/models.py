@@ -1,8 +1,6 @@
 import logging
 from pathlib import PurePosixPath
-from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar
-from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
@@ -19,33 +17,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_default_upload_token() -> str:
-    """Return the default opaque token used sfor storage keys."""
-    return uuid4().hex
-
-
-def build_opaque_storage_key(original_file_name: str, generator: Callable[[], str] = get_default_upload_token) -> str:
-    """Build a fully opaque storage key without sembsedding filename metadata."""
-    del original_file_name
-    return generator()
-
-
-#: Which axis a sparse encoding's ``indptr`` indexes, which is the whole of what the two
-#: layouts differ in. A dict rather than a pair of constants because it is also the validation:
-#: an ``encoding-type`` outside it is a group nothing here can honestly claim to understand.
-#: The sporadik format's own names and rules, re-exported so the models here read as one thing.
-#:
-#: **Defined in :mod:`datalayer.sporadik`, not here.** That module is this server's independent
-#: implementation of a format specified elsewhere -- in the `sporadik` package's ``README.md`` --
-#: and keeping the constants beside the parser that uses them is what stops the two drifting into
-#: two slightly different readings of the same bytes.
-SPARSE_INDEXED_AXIS = sporadik.INDEXED_AXIS
 SPARSE_BLOCK_KEY = sporadik.BLOCK_KEY
-SPARSE_LAYOUTS_GROUP = sporadik.LAYOUTS_GROUP
-SPARSE_MIN_RANK = sporadik.MIN_RANK
-SPARSE_SPECS = sporadik.SUPPORTED_VERSIONS
 sparse_layout_path = sporadik.layout_path
-sparse_anndata_encoding = sporadik.anndata_encoding
 
 
 class DatalayerStore(PolymorphicModel):
@@ -122,10 +95,6 @@ class DatalayerStore(PolymorphicModel):
         """Return temporary credentials for reading this store."""
         del host
         return datalayer.generate_file_read_url(self.bucket, self.key, store_id=str(self.pk))
-
-    def grant_delete_access(self, datalayer: Datalayer) -> AccessGrant:
-        """Return temporary credentials for deleting this store."""
-        return datalayer.generate_file_delete_url(self.bucket, self.key, store_id=str(self.pk))
 
     def fill_info(self, datalayer: Datalayer | None = None) -> None:
         """Finalize the store after a successful upload."""
@@ -237,11 +206,6 @@ class BigFileStore(DatalayerStore):
         """Return the canonical S3 path for the object."""
         del host
         return self.build_store_path(datalayer)
-
-    def calculate_size(self, datalayer: Datalayer) -> int:
-        """Calculate the size of the big file by querying the datalayer."""
-        return datalayer.get_object_size(self.bucket, self.key)
-
 
 class MediaStore(DatalayerStore):
     """Media objects stored behind the S3-backed datalayer."""
@@ -368,32 +332,6 @@ class ZarrStore(DatalayerStore):
                 "size_bytes",
             ]
         )
-
-    @property
-    def c_size(self) -> int:
-        """Return the regular chunk shape for callers using the legacy field name."""
-        return self.shape[0]
-
-    @property
-    def t_size(self) -> int:
-        """Return the regular chunk shape for callers using the legacy field name."""
-        return self.shape[1]
-
-    @property
-    def z_size(self) -> int:
-        """Return the regular chunk shape for callers using the legacy field name."""
-        return self.shape[2]
-
-    @property
-    def y_size(self) -> int:
-        """Return the regular chunk shape for callers using the legacy field name."""
-        return self.shape[3]
-
-    @property
-    def x_size(self) -> int:
-        """Return the regular chunk shape for callers using the legacy field name."""
-        return self.shape[4]
-
 
 class ParquetStore(DatalayerStore):
     """Parquet objects stored behind the S3-backed datalayer."""
@@ -748,24 +686,3 @@ class SparseStore(DatalayerStore):
             self.size_bytes = measured
         self.populated = True
         self.save(update_fields=["path", "spec", "shape", "layouts", "populated", "size_bytes"])
-
-    @property
-    def encodings(self) -> list[str]:
-        """The encodings this store holds, in the order the block named them."""
-        return [str(layout.get("encoding")) for layout in (self.layouts or [])]
-
-    def layout_indexing(self, axis: int) -> dict | None:
-        """The layout whose one contiguous read selects along ``axis``, if this store has it.
-
-        The question every surface asks before offering itself: a colouring needs the layout
-        indexing the *feature* axis, a per-object lookup the one indexing the *object* axis, and
-        a store holding only one of them offers only one of those capabilities. Asking for the
-        other is not slow, it is a scan of everything.
-
-        The axis is derived from each layout's own encoding and never stored beside it -- two
-        statements of one fact are two things to drift.
-        """
-        for layout in self.layouts or []:
-            if SPARSE_INDEXED_AXIS.get(str(layout.get("encoding"))) == axis:
-                return layout
-        return None

@@ -1,9 +1,7 @@
 """Ordering tests for the new order_type classes (ordering: [XOrder!] argument)."""
 
-from datetime import timedelta
 
 import pytest
-from django.utils import timezone
 
 from kante.context import HttpContext
 from mikro_server.schema import schema

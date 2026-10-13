@@ -128,7 +128,7 @@ def derivation_parent(container: Container) -> Container | None:
     lands in.
     """
     edges = _derivation_edges(container)
-    if not edges or edges[0].output is None:
+    if not edges:
         return None
     return _container_for_system(edges[0].output.pk)
 
@@ -185,12 +185,12 @@ def _primary_children(container: Container) -> list[Container]:
     if not edges:
         return []
 
-    keys = graph_logic.container_map({edge.input.pk for edge in edges if edge.input} | {edge.output.pk for edge in edges if edge.output})
+    keys = graph_logic.container_map({edge.input.pk for edge in edges} | {edge.output.pk for edge in edges})
 
     seen: set[tuple[str, int]] = {key}
     children = []
     for edge in edges:
-        child_key = keys.get(edge.input.pk) if edge.input else None
+        child_key = keys.get(edge.input.pk)
         if child_key is None or child_key in seen or child_key[0] not in _FILEABLE_KEYS:
             continue
         if not graph_logic.is_derivation_edge(edge, of_container=child_key, keys=keys):

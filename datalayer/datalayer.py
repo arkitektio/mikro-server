@@ -886,7 +886,7 @@ class Datalayer:
         """
         from datalayer import models
 
-        conf = self.get_bucket_config("zarr")
+        self.get_bucket_config("zarr")
 
         budget = self._admit_upload("zarr", organization_id, user, None)
         key = self._new_key()
@@ -1218,7 +1218,7 @@ class Datalayer:
         """Create a Zarr store and upload grant."""
         from datalayer import models
 
-        conf = self.get_bucket_config("zarr")
+        self.get_bucket_config("zarr")
 
         budget = self._admit_upload("zarr", organization_id, user, None)
         key = self._new_key()
@@ -1461,43 +1461,6 @@ class Datalayer:
             key=full_key,
             path=self.build_store_path(bucket_key, object_path),
             action="read",
-            expires_in=ttl,
-            datalayer=bucket_key,
-            endpoint=self.config.endpoint_url or "",
-            store=str(store_id) if store_id is not None else None,
-        )
-
-    def generate_file_delete_url(
-        self,
-        bucket_key: str,
-        object_path: str,
-        *,
-        store_id: str | None = None,
-        expires_in: int | None = None,
-    ) -> AccessGrant:
-        """Build a generic delete access grant.
-
-        Args:
-            bucket_key: Logical datalayer store type.
-            object_path: Store-relative object key or prefix.
-            store_id: Optional backing store identifier.
-            expires_in: Optional credential lifetime override in seconds.
-
-        Returns:
-            Temporary credentials scoped to deleting the requested object.
-        """
-        conf = self.get_bucket_config(bucket_key)
-        ttl = self._session_duration(expires_in)
-        access_key, secret_key, session_token = self._issue_temporary_credentials(bucket_key, object_path, "delete", ttl)
-        full_key = self.build_object_key(bucket_key, object_path)
-        return base_models.AccessGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            key=full_key,
-            path=self.build_store_path(bucket_key, object_path),
-            action="delete",
             expires_in=ttl,
             datalayer=bucket_key,
             endpoint=self.config.endpoint_url or "",

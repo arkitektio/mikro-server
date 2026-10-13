@@ -14,7 +14,6 @@ already say something different about.
 """
 
 import pytest
-from asgiref.sync import sync_to_async
 from pytest import approx
 
 from core import enums, models
@@ -33,13 +32,6 @@ mutation Create($input: CreateAnnotationInput!) {
   }
 }
 """
-
-
-# A legacy ROI vector is [c, t, z, y, x]. Centre (z=30, y=20, x=10), radius 5.
-SPHERE_CORNERS = [
-    [0, 0, 25, 15, 5],
-    [0, 0, 35, 25, 15],
-]
 
 
 def test_the_new_kinds_reach_the_graphql_enum():

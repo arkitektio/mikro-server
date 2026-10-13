@@ -80,7 +80,7 @@ async def _collection(ctx: HttpContext) -> models.MeshCollection:
 
 
 async def _table(ctx: HttpContext, name: str, columns: list[dict], **extra: object) -> str:
-    store = await sync_to_async(models.ParquetStore.objects.create)(path=f"s3://parquet/{name}", bucket="parquet", key=name, organization=ctx.request.organization, populated=True)
+    await sync_to_async(models.ParquetStore.objects.create)(path=f"s3://parquet/{name}", bucket="parquet", key=name, organization=ctx.request.organization, populated=True)
     result = await schema.execute(
         CREATE_TABLE,
         context_value=ctx,

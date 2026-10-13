@@ -14,7 +14,7 @@ from kante.context import HttpContext
 from core import models
 from mikro_server.schema import schema
 from tests import seed
-from tests.test_charts import SERIES, _MEASUREMENTS, _chart, _ok, _register, _table
+from tests.test_charts import _MEASUREMENTS, _chart, _ok, _register, _table
 from tests.test_column_options import _collection as _mesh_collection
 from tests.test_layer_kinds import _seed_scene, _seed_table_dataset
 from tests.test_lens_geometry import _collection_on, _draw

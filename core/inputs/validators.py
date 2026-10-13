@@ -139,8 +139,8 @@ def assert_shape_vectors(vectors: list, *, kind: str | None) -> None:
     **Rectangular.** Every vertex must have the same number of components. ``aabb`` takes
     its dimension from the *first* point, so a later vertex that is longer raises an
     ``IndexError`` -- a 500, not an error -- and one that is shorter silently loses its
-    trailing components from the box. The vector scalars (``ThreeDVector``,
-    ``FiveDVector``) are pass-through ``NewType``s and enforce nothing, so this is the
+    trailing components from the box. The vector scalars (``ThreeDVector``)
+    are pass-through ``NewType``s and enforce nothing, so this is the
     only place the shape of the geometry is checked at all.
 
     **Enough vertices for the kind.** Only where the kind's encoding says a number; see

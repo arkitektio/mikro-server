@@ -9,11 +9,9 @@ dataset tests.
 from unittest.mock import patch
 
 import pytest
-from asgiref.sync import sync_to_async
 from datalayer.models import ZarrStore
 from kante.context import HttpContext
 
-from core import models
 from mikro_server.schema import schema
 from tests import seed
 
@@ -112,7 +110,6 @@ async def test_a_mesh_collection_states_its_own_axis_descriptions(authenticated_
     UNMAPPABLE, and so nothing would have caught axes copied off a space just declared
     unrelated. `axes` is required now, and this pins that its metadata survives the trip.
     """
-    key = "mesh-descriptions"
     store = await seed.create_fabriks_store(authenticated_context)
 
     result = await schema.execute(

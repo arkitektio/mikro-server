@@ -20,15 +20,6 @@ class FileOrder:
     id: auto
 
 
-@strawberry_django.order_type(models.FileLink)
-class FileLinkOrder:
-    """Ordering for file links."""
-
-    created_at: auto
-    direction: auto
-    id: auto
-
-
 @strawberry_django.order_type(models.ArrayDataset)
 class ArrayDatasetOrder:
     created_at: auto
@@ -102,13 +93,6 @@ class CoordinateSystemOrder:
 
 @strawberry_django.order_type(models.Transformation)
 class TransformationOrder:
-    created_at: auto
-    id: auto
-
-
-@strawberry_django.order_type(models.MeshCollection)
-class MeshCollectionOrder:
-    name: auto
     created_at: auto
     id: auto
 

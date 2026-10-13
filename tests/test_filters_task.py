@@ -45,7 +45,7 @@ async def _query_task_ids(ctx: HttpContext, filters: dict) -> set[str]:
 async def test_tasks_filter_by_created_window(db, authenticated_context: HttpContext):
     """createdBefore/createdAfter bound the task list by creation time."""
     early = await _seed_task(authenticated_context, "early")
-    late = await _seed_task(authenticated_context, "late")
+    await _seed_task(authenticated_context, "late")
     # created_at is auto_now_add; move one row firmly into the past.
     cutoff = early.created_at - datetime.timedelta(days=1)
     await Task.objects.filter(pk=early.pk).aupdate(created_at=cutoff - datetime.timedelta(days=1))

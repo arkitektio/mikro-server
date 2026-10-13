@@ -31,7 +31,7 @@ from strawberry.scalars import JSON
 from kante.types import Info
 
 from kanne_server import scalars as kanne_scalars
-from datalayer.types import FabriksStore, KonnektionStore, ParquetStore
+from datalayer.types import FabriksStore, KonnektionStore
 
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map

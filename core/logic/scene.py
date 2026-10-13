@@ -435,8 +435,6 @@ def bootstrap_scene_from_system(
         for edge in edges:
             if made >= policy.nchildren:
                 break
-            if edge.input is None:
-                continue
             # The registration into the shared space already places: materializing a layer
             # composes over it, and skipping a source leaves the claim untouched -- it is a
             # fact about the space, not about this scene.

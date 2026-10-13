@@ -20,7 +20,6 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
-from datalayer.models import sparse_layout_path
 from mikro_server.schema import schema
 from tests import seed
 

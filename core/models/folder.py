@@ -4,7 +4,7 @@ from django_choices_field import TextChoicesField
 from koherent.fields import ProvenanceField
 from authentikate.models import Organization, Membership
 from taggit.managers import TaggableManager
-from datalayer.models import BigFileStore, ParquetStore
+from datalayer.models import BigFileStore
 from embeddings.models import EmbeddedDescriptionMixin
 
 from core import enums

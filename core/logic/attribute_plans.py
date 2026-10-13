@@ -355,7 +355,7 @@ def field_reachable_tables(
     candidates: dict[str, "models.TableDataset"] = {}
     for edge in edges:
         output = edge.output
-        table = next(iter(output.table_datasets.all()[:1]), None) if output is not None else None
+        table = next(iter(output.table_datasets.all()[:1]), None)
         if table is not None:
             candidates[str(table.pk)] = table
 
@@ -388,7 +388,7 @@ def field_reachable_sparse_datasets(
     datasets: dict[str, "models.SparseDataset"] = {}
     for edge in edges:
         output = edge.output
-        dataset = next(iter(output.sparse_datasets.all()[:1]), None) if output is not None else None
+        dataset = next(iter(output.sparse_datasets.all()[:1]), None)
         if dataset is not None:
             datasets[str(dataset.pk)] = dataset
     return datasets
@@ -413,14 +413,14 @@ def build_attribute_plans(
     # is a schema fact about its columns, and asking it inside the loop is an N+1 that grows
     # with the graph. See `graph_logic.product_space_tables`.
     product_spaces = graph_logic.product_space_tables(
-        table for edge in edges if edge.output is not None for table in edge.output.table_datasets.all()[:1]
+        table for edge in edges for table in edge.output.table_datasets.all()[:1]
     )
 
     plans: list[AttributePlanSpec] = []
     for edge in edges:
         output = edge.output
-        table = next(iter(output.table_datasets.all()[:1]), None) if output is not None else None
-        matrix = next(iter(output.sparse_datasets.all()[:1]), None) if output is not None else None
+        table = next(iter(output.table_datasets.all()[:1]), None)
+        matrix = next(iter(output.sparse_datasets.all()[:1]), None)
         if table is None and matrix is None:
             continue  # a warp-field target: a pixel grid, and neither record-land nor a matrix
 

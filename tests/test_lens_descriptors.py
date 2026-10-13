@@ -17,7 +17,7 @@ from mikro_server.service import service
 from mikro_server.vocabulary import DESCRIPTORS_BY_KIND, IS_WHOLE, VALUE_KIND
 from tests import seed
 from tests.test_derived_datasets import _derive
-from tests.test_lens_geometry import _collection_on, _draw
+from tests.test_lens_geometry import _draw
 from tests.test_windowed_lenses import _CONTAINERS, _create
 
 CONTAINER_FIELD = {"TABLE": "tableDataset", "SPARSE": "sparseDataset", "MESH": "meshCollection", "NETWORK": "networkCollection", "ANNOTATION": "annotationCollection"}

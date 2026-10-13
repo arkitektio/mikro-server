@@ -34,11 +34,6 @@ class FolderChildrenFilter:
     )
 
 
-@strawberry.input
-class RowFilter:
-    clause: str | None = None
-
-
 @strawberry.input(
     description=(
         "One container a file link points at: `kind` says which sort of thing it is, `id` says which one. Structured rather than a bare ID because a link can name four "
@@ -206,13 +201,6 @@ class ColumnOptionFilter:
 
 
 @strawberry.input
-class SearchFilterMixin:
-    @kante.filter_field(description="Search by name (full-text search)")
-    def search(self, info: Info, value: str, prefix: str) -> Q:
-        return Q(**{f"{prefix}name__search": value})
-
-
-@strawberry.input
 class NameSearchFilterMixin:
     @kante.filter_field(description="Search by name (case-insensitive substring)")
     def search(self, info: Info, value: str, prefix: str) -> Q:
@@ -303,11 +291,6 @@ class CreatedThroughFilterMixin:
 
 
 # Store filters
-
-
-@kante.filter_type(models.ZarrStore)
-class ZarrStoreFilter:
-    shape: Optional[FilterLookup[int]]
 
 
 # Folder filter (needed by ImageFilter/FileFilter as a nested filter)
@@ -911,54 +894,6 @@ class CoordinateAnchorFilter(IdsFilterMixin):
     dataset: Optional[FilterLookup[strawberry.ID]]
     table: Optional[FilterLookup[strawberry.ID]]
     sparse: Optional[FilterLookup[strawberry.ID]]
-
-
-@kante.filter_type(models.OptikitState)
-class OptikitStateFilter(IdsFilterMixin):
-    id: auto
-
-    @kante.filter_field(description="Filter by the coordinate anchor")
-    def anchor(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}anchor_id": value})
-
-
-@kante.filter_type(models.OmeMetadata)
-class OmeMetadataFilter(IdsFilterMixin):
-    id: auto
-
-    @kante.filter_field(description="Filter by the coordinate anchor")
-    def anchor(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}anchor_id": value})
-
-
-@kante.filter_type(models.LightPath)
-class LightPathFilter(IdsFilterMixin):
-    id: auto
-
-    @kante.filter_field(description="Filter by the coordinate anchor")
-    def anchor(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}anchor_id": value})
-
-
-@kante.filter_type(models.ValueHistogram)
-class ValueHistogramFilter(IdsFilterMixin):
-    id: auto
-    min: Optional[FilterLookup[float]]
-    max: Optional[FilterLookup[float]]
-
-    @kante.filter_field(description="Filter by the coordinate anchor")
-    def anchor(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}anchor_id": value})
-
-
-@kante.filter_type(models.ChannelLabel)
-class ChannelLabelFilter(IdsFilterMixin):
-    id: auto
-    label: Optional[FilterLookup[str]]
-
-    @kante.filter_field(description="Filter by the coordinate anchor")
-    def anchor(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        return Q(**{f"{prefix}anchor_id": value})
 
 
 # Task provenance filters

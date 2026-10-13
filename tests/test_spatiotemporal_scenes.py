@@ -221,7 +221,7 @@ async def test_by_dimension_places_a_dataset_of_a_different_rank(authenticated_c
 
     scene_result = await _create_scene(authenticated_context)  # the new default: (t, z, y, x)
     assert not scene_result.errors, scene_result.errors
-    scene_id = scene_result.data["createScene"]["id"]
+    scene_result.data["createScene"]["id"]
     world_id = scene_result.data["createScene"]["worldCoordinateSystem"]["id"]
 
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -447,7 +447,7 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_contex
         models.Layer.objects.create(kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens)
         return scene
 
-    scene = await sync_to_async(place)()  # placed by ORM, so no auto-registration
+    await sync_to_async(place)()  # placed by ORM, so no auto-registration
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
 
     # Authored backwards: world (4 axes) -> intrinsic (3 axes). Reaching world from the

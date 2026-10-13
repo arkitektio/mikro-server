@@ -244,8 +244,6 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
     # same row is not a second thing under the point.
     seen: set[tuple[int, int]] = set()
     for edge in edges:
-        if edge.input is None:
-            continue
         column = index_columns[edge.output_id]
         if list(edge.output_axes or []) != [column.name]:
             continue
