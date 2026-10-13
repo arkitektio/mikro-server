@@ -80,7 +80,7 @@ class ColorByModel(BaseModel):
     # the FIELD edge landed on -- what every colouring written before join paths existed means,
     # and still the common case. With a path, it is the table the last hop points at.
     #
-    # Optional only because the sparse variant reads from a dataset instead; a column colouring
+    # Optional only because the sparse variant reads from a lens instead; a column colouring
     # without them is refused by `_one_source` below, so "optional" never means "absent".
     table: str | None = None
     column: str | None = None

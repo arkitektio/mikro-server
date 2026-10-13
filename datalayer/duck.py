@@ -31,8 +31,7 @@ class DuckLayer:
         # `minio` to `rustfs` and a hardcoded name resolves to nothing, so every parquet read
         # failed the HEAD with a DNS error. `netloc` (not `hostname`) because DuckDB's ENDPOINT
         # wants host:port bare -- no scheme, and dropping the port sends it to :80. USE_SSL is
-        # read off the parsed scheme rather than `settings.AWS_S3_USE_SSL`, which is hardcoded
-        # True while the datalayer speaks plain http.
+        # read off the parsed scheme, since the datalayer may speak plain http.
         parsed = urlparse(settings.AWS_S3_ENDPOINT_URL)
         use_ssl = "true" if parsed.scheme == "https" else "false"
 

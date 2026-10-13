@@ -7,8 +7,7 @@ and the one field a non-duckdb consumer ignored. It lives here now, beside whoev
 it, as one function over the structured step.
 
 **Standard library only, on purpose.** Nothing in here imports Django, strawberry or this
-package: the module is copied unchanged into the ``mikro_next`` client, and a test pins that
-it can be. It reads a lookup step in any of the three shapes it arrives in -- the builder's
+package: the module is copied unchanged into the ``mikro`` client. It reads a lookup step in any of the three shapes it arrives in -- the builder's
 ``LookupSpec`` dataclass, the strawberry ``LookupStep`` object, or the plain camelCase dict a
 GraphQL client holds -- through two accessors that know nothing but attribute and key names.
 

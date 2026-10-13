@@ -19,7 +19,7 @@ coord-bearing query would be one request per pixel and could never compete.
 Why no statement? Because it would be a second copy of `keyColumns` and `attributes`, free
 to drift, and the one field a non-DuckDB consumer ignored. The statement is *derived* from
 the structured step by the worker — `core/logic/plan_sql.py`, a standard-library-only
-module you copy into your client unchanged (the `mikro_next` package carries it).
+module you copy into your client unchanged (the `mikro` package carries it).
 
 ## The cast
 

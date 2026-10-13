@@ -137,7 +137,7 @@ class LookupStep:
         default=None,
         description=(
             "(ARRAY) The held id as a position along `keyAxis`. A matrix axis *is* the row ids; a dense array's positions relate to them by whatever its derivation edge states "
-            "(`cell_id = cell + 1`), and this is that edge already inverted. Do not re-derive it from the edge's children"
+            "(`cell_id = cell + 1`), and this is that edge already inverted. Do not re-derive it from the edge's steps"
         ),
     )
 

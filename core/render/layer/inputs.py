@@ -147,7 +147,7 @@ class ColorByInputModel(BaseModel):
     table: str | None = None
     column: str | None = None
 
-    # (SPARSE) the dataset, and the position along the axis its ids do not index -- one slice,
+    # (SPARSE) the sparse lens that pins the position along the axis its ids do not index -- one slice,
     # which is a value per object and therefore a colouring.
     lens: str | None = None
 

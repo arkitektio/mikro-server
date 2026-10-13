@@ -211,7 +211,7 @@ Each bucket binding is an object:
 datalayer:
   access_key: "REPLACE_ME"
   secret_key: "REPLACE_ME"
-  host: minio
+  host: rustfs
   port: 9000
   protocol: http
   media:
@@ -346,7 +346,7 @@ embeddings:
 datalayer:
   access_key: "REPLACE_ME"
   secret_key: "REPLACE_ME"
-  host: minio
+  host: rustfs
   port: 9000
   protocol: http
   media:

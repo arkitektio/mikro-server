@@ -863,8 +863,8 @@ _describe(
     MAP_AXIS="A permutation of axes, mapping each input axis to an output axis by name.",
     AFFINE="A general affine map, given as an M x (N+1) matrix with rows outermost.",
     ROTATION="A rotation, given as an orthonormal matrix.",
-    SEQUENCE="An ordered composition of child transformations, applied first to last.",
-    BY_DIMENSION="A composition of child transformations, each acting on a named subset of the axes.",
+    SEQUENCE="An ordered composition of steps, applied first to last. The steps are carried on the edge itself.",
+    BY_DIMENSION="A map acting on a named subset of the axes, and the identity on the rest.",
     FIELD="A non-affine map given by the values of an array rather than by a formula. The array is a `field`: a coordinate system, and so a node of this graph, not a payload on this edge. Whether its values are absolute POSITIONS or per-point OFFSETS is read from the value axis of that node -- COORDINATE or DISPLACEMENT -- never restated here. A label mask is the case where the field IS the input: its own pixels are the map. Not invertible in closed form, so a placement path never walks it backwards -- which is also the right semantics for a dereference, an object being a set of pixels.",
     UNMAPPABLE="A declared NON-correspondence: the two systems are related — one was derived from the other — and no point of either maps to a point of the other. It carries no parameters, is constrained by no rank, has no matrix, and is never walked by a placement search, in either direction. Recording an IDENTITY instead would be a lie; recording nothing would lose the lineage.",
 )
@@ -947,7 +947,7 @@ class ColorSourceKind(str, Enum):
 _describe(
     ColorSourceKind,
     COLUMN="A column of a table the source's ids key into, reached by `table`, `column` and any `joinPath`. Every colouring written before sparse datasets existed is one of these, which is why it is the default.",
-    SPARSE="One slice of a sparse matrix the source's ids index, reached by `dataset` and the position `at`. Always measured: a slice is a value per object, so it takes a colormap and never a class map.",
+    SPARSE="One slice of a sparse matrix the source's ids index, reached by `lens`: a sparse lens whose windows pin one position on every axis the matrix identifies itself by. Always measured: a slice is a value per object, so it takes a colormap and never a class map.",
     GRAPH="A per-node value the network collection itself carries, reached by `attribute` -- a name its manifest declares (Strahler order, degree, depth, component, a writer's own column), or `radius` when the encoding carries one. Computed once on the full level-0 graph and only ever subset, so the value is the same at every level a node survives to. Always measured, per node rather than per object; `target` says whether it paints nodes or edges.",
 )
 

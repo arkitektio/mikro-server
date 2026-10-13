@@ -266,12 +266,12 @@ class Transformation(models.Model):
     input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps from")
     output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps to")
 
-    # BY_DIMENSION only: which axes this child acts on, by NAME. RFC-5's
+    # BY_DIMENSION only: which axes this edge acts on, by NAME. RFC-5's
     # transformation table says List[str] while its byDimension prose says
     # integer indices into the axes; the two contradict. Names are
     # self-documenting and survive a reordering, so we use names.
-    input_axes = models.JSONField(null=True, blank=True, help_text="(byDimension) The names of the input axes this child acts on, e.g. ['z', 'y', 'x']")
-    output_axes = models.JSONField(null=True, blank=True, help_text="(byDimension) The names of the output axes this child produces")
+    input_axes = models.JSONField(null=True, blank=True, help_text="(byDimension) The names of the input axes this edge acts on, e.g. ['z', 'y', 'x']")
+    output_axes = models.JSONField(null=True, blank=True, help_text="(byDimension) The names of the output axes this edge produces")
 
     params = models.JSONField(
         default=dict,

@@ -52,7 +52,7 @@ from core.scoping import get_for_org
 #: identified axes.
 #:
 #: **The colouring surface generalises with it, and there is no rank > 2 refusal anywhere.**
-#: `_resolve_sparse_slice` asks that `at` name exactly the identified axes and that some layout
+#: `_resolve_sparse_slice` asks that the lens pin exactly the identified axes and that some layout
 #: index one of them; both statements are rank-agnostic, so a rank-three matrix is coloured by
 #: naming a position along each of its two identified axes. An earlier version of this comment
 #: claimed such a colouring "refuses with its own message" -- it does not, and never did.

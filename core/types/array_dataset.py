@@ -1449,7 +1449,7 @@ class PhasorLayer(Layer):
     description=(
         "A vector-valued lens -- an optical flow, a deformation field, an orientation map -- drawn as glyphs sampled from the grid. The sixth lens-backed kind, and the value "
         "domain is what earns it one, for LabelLayer's reason: the lens carries a DISPLACEMENT axis whose positions are the components of a per-point offset, so the axis is "
-        "read as geometry, and none of the intensity vocabulary (a channel index, a gamma, a projection) survives that. Which axis holds the components is derived "
+        "read as geometry, and none of the intensity vocabulary (a channel, a gamma, a projection) survives that. Which axis holds the components is derived "
         "(`vectorAxis`), never stored -- a per-layer copy could disagree with the axes themselves. What the layer carries is honestly view state: a glyph style, a sampling "
         "stride, a magnitude scale and a magnitude colormap window, and two layers over one field may disagree about all of it -- a coarse overview beside a dense inset."
     ),

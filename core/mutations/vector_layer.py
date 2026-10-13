@@ -4,7 +4,7 @@ Its own module in the way ``network_layer.py`` and ``mesh_layer.py`` are, but it
 source is a *lens*, as every layer's is.
 What earns it a kind rather than a mode on INTENSITY is the value domain: a
 DISPLACEMENT axis's positions are the components of one per-point offset, so the
-axis is read as geometry, and none of the intensity vocabulary (a channel index,
+axis is read as geometry, and none of the intensity vocabulary (a channel,
 a gamma, a projection) survives that change -- exactly LABEL's argument.
 """
 

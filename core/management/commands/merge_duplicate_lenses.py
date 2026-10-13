@@ -197,7 +197,7 @@ class Command(BaseCommand):
         kind, params = coords_logic.lens_to_parent(lens.dataset.axis_names, lens.slices_list)
         for edge in coordinate_system_logic.lens_own_edges(lens):
             if kind != enums.TransformKindChoices.TRANSLATION.value or edge.kind != kind:
-                # A stepped lens is a SEQUENCE of child rows; its spelling never changed the
+                # A stepped lens is a SEQUENCE of steps; its spelling never changed the
                 # scale, and its starts are left to a later pass if one is ever needed.
                 continue
             if edge.params == params:

@@ -813,7 +813,7 @@ class SourcePlacement:
 
 
 @kante.type(
-    description="The connected component of the coordinate graph around one system: every coordinate system it relates to, and every top-level edge between them. Reachability is undirected -- an edge pointing *into* the system you started from (the edge into a physical space, say) relates to it just as much as one pointing out -- but every edge is returned in its true stored direction, so composing a path is still the client's job and still needs the inversions flagged"
+    description="The connected component of the coordinate graph around one system: every coordinate system it relates to, and every edge between them. Reachability is undirected -- an edge pointing *into* the system you started from (the edge into a physical space, say) relates to it just as much as one pointing out -- but every edge is returned in its true stored direction, so composing a path is still the client's job and still needs the inversions flagged"
 )
 class CoordinateGraph:
     """The subgraph reachable from one coordinate system, edges included."""

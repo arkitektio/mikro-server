@@ -54,7 +54,7 @@ class ColorByOption:
         default_factory=list,
         description=(
             "(SPARSE) The axes a position is named along -- the ones the matrix identifies itself, never the one the source's ids index. **Name a position along every one of them**: "
-            "a rank-two matrix has one, a rank-three matrix two, and an `at` that names a different set is refused. **One option per matrix, never per position**: a matrix with "
+            "a rank-two matrix has one, a rank-three matrix two, and a lens that pins a different set is refused. **One option per matrix, never per position**: a matrix with "
             "19 059 features has 19 059 of those, and the picker offers the axes while the client picks the positions out of the tables they reference, which it already holds "
             "access grants for. Offered when at least one of these axes has a stored layout, which is what makes the read one contiguous slice rather than a scan"
         ),
@@ -110,7 +110,7 @@ class FilterByOption:
         default_factory=list,
         description=(
             "(SPARSE) The axes a position is named along -- the ones the matrix identifies itself, never the one the source's ids index. **Name a position along every one of them**: "
-            "a rank-two matrix has one, a rank-three matrix two, and an `at` that names a different set is refused. **One option per matrix, never per position**: a matrix with "
+            "a rank-two matrix has one, a rank-three matrix two, and a lens that pins a different set is refused. **One option per matrix, never per position**: a matrix with "
             "19 059 features has 19 059 of those, and the picker offers the axes while the client picks the positions out of the tables they reference, which it already holds "
             "access grants for. Offered when at least one of these axes has a stored layout, which is what makes the read one contiguous slice rather than a scan"
         ),

@@ -659,7 +659,7 @@ class Datalayer:
             RuntimeError: If no role is configured, or if STS refuses the request.
         """
         if not self.config.role_arn:
-            raise RuntimeError("`DATALAYER.role_arn` is unset, so there is no role to assume and no scoped credentials can be issued. Against MinIO the value is ignored -- any ARN-shaped string will do -- and the session is scoped by the inline policy alone.")
+            raise RuntimeError("`DATALAYER.role_arn` is unset, so there is no role to assume and no scoped credentials can be issued. Against an object store without IAM roles (MinIO, RustFS) the value is ignored -- any ARN-shaped string will do -- and the session is scoped by the inline policy alone.")
 
         assume_role_kwargs: dict[str, object] = {
             "RoleArn": self.config.role_arn,
