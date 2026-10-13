@@ -58,3 +58,22 @@ async def test_pin_folder_toggles_and_is_org_scoped(db, authenticated_context: H
 
     denied = await schema.execute(mutation, variable_values={"id": str(folder.id), "pin": True}, context_value=other_org_context)
     assert denied.errors, "a user from another organization could pin the folder"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_another_organizations_lens_does_not_exist_whatever_kind_it_is(db, authenticated_context: HttpContext, other_org_context: HttpContext):
+    """A layer mutation told a lens of the wrong kind names the kind -- but only of a lens the caller could read."""
+    from core.models import ArrayDataset
+    from tests import seed
+
+    dataset = await seed.create_array_dataset(authenticated_context, "Theirs")
+    foreign = await seed.whole_lens_id(ArrayDataset, dataset.pk)
+    scene = await seed.create_scene(other_org_context, "Mine")
+    create = "mutation Create($input: CreateMeshLayerInput!) { createMeshLayer(input: $input) { id } }"
+
+    own = await schema.execute(create, context_value=authenticated_context, variable_values={"input": {"scene": str((await seed.create_scene(authenticated_context, "Ours")).pk), "lens": foreign}})
+    assert own.errors and "is a array lens" in str(own.errors[0]), own.errors
+
+    refused = await schema.execute(create, context_value=other_org_context, variable_values={"input": {"scene": str(scene.pk), "lens": foreign}})
+    assert refused.errors and "does not exist" in str(refused.errors[0]) and "array" not in str(refused.errors[0]), refused.errors

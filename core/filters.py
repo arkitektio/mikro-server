@@ -875,7 +875,7 @@ class SceneFilter(IdsFilterMixin):
 
     @kante.filter_field(description="Filter to the scenes with a layer drawing through this lens or any selection within it, of any kind: the same set the lens' own `scenes` answers")
     def lens(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
-        lens = models.Lens.objects.filter(pk=value).first()
+        lens = for_org(models.Lens, info).filter(pk=value).first()
         within = coordinate_system_logic.lens_ids_within(lens) if lens is not None else [int(value)]
         return Q(**{f"{prefix}pk__in": models.Layer.objects.filter(lens_id__in=within).values("scene_id")})
 

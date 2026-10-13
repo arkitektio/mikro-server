@@ -12,13 +12,15 @@ from kante.types import Info
 
 from core import models
 from core.logic import coordinate_system as coordinate_system_logic
-from core.scoping import get_for_org
+from core.scoping import for_org, get_for_org
 
 
 def lens_of_kind(info: Info, *, kind: type[models.Lens], lens: str, role: str = "this layer draws through") -> models.Lens:
     """The lens of one kind a layer draws through, refused in prose when the id names a lens of another kind."""
-    if not kind.objects.filter(pk=lens).exists():
-        found = models.Lens.objects.filter(pk=lens).first()
+    # Asked of the caller's organization only: another organization's lens does not exist here,
+    # whatever kind it is.
+    if not for_org(kind, info).filter(pk=lens).exists():
+        found = for_org(models.Lens, info).filter(pk=lens).first()
         if found is None:
             raise ValueError(f"Lens {lens} does not exist.")
         raise ValueError(f"Lens {lens} is a {type(found).KIND.lower()} lens; {role} a {kind.KIND.lower()} lens. Pass a {kind.KIND.lower()} lens -- a container's whole lens is its `fullLens`.")
