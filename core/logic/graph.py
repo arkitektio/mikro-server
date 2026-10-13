@@ -176,7 +176,10 @@ def create_pixel_axes(system: "models.CoordinateSystem", axes: list, *, shape: "
         if shape is None:
             raise ValueError(f"The axes of dataset {dataset.pk}'s own grid were written without its shape, so what it is cannot be said: a spec counts only the axes with more than one position.")
         dataset.stored_spec = [spec.value for spec in coords_logic.specs_for_axes(axis_specs, shape)]
-        dataset.save_without_historical_record(update_fields=["stored_spec"])
+        from core import descriptors as descriptors_logic  # it imports this module
+
+        dataset.stored_descriptors = descriptors_logic.stored_dataset_descriptors([axis.type for axis in axis_specs], shape, dataset.stored_spec)
+        dataset.save_without_historical_record(update_fields=["stored_spec", "stored_descriptors"])
 
     return created
 
@@ -1316,6 +1319,7 @@ def write_relation_edge(
     field: "models.CoordinateSystem | None" = None,
     reason: str | None = None,
     value_relation: "enums.ValueRelation | str | None" = None,
+    annotation: "models.Annotation | None" = None,
     ctx: CreationContext,
 ) -> "models.Transformation":
     """The one place a client-authored "this came from that" edge is written.
@@ -1334,6 +1338,11 @@ def write_relation_edge(
     to the *numbers* (a threshold is spatially IDENTITY with CATEGORIZED values). It
     rides the same row because it is a fact about the same event -- a parallel lineage
     table for it was tried once and deleted (RFC-6).
+
+    ``annotation`` is the shape an ANNOTATION source names: the output is then its
+    collection's drawing space, and the row says which of the shapes there the data was
+    computed along or within. Derivation-only, like the validity: a registration places
+    data and is about no shape.
     """
     return build_registration_edge(
         input_system=input_system,
@@ -1349,6 +1358,7 @@ def write_relation_edge(
         reason=reason,
         validity=None,  # defaults to MANUAL inside: an authored claim, never VALIDATED
         value_relation=value_relation,
+        annotation=annotation,
         ctx=ctx,
     )
 
@@ -1576,6 +1586,7 @@ def build_registration_edge(
     validity: "enums.PlacementValidity | str | None" = None,
     value_relation: "enums.ValueRelation | str | None" = None,
     selector: dict | None = None,
+    annotation: "models.Annotation | None" = None,
     ctx: CreationContext,
 ) -> "models.Transformation":
     """Validate and write one edge of the coordinate graph, input -> output.
@@ -1663,6 +1674,7 @@ def build_registration_edge(
         validity=validity or enums.PlacementValidityChoices.MANUAL.value,
         value_relation=value_relation,
         selector=selector,
+        annotation=annotation,
         creator=ctx.user,
         organization=ctx.organization,
     )
@@ -1771,6 +1783,23 @@ def derived_containers(dataset: "models.ArrayDataset") -> list:
     """
     spaces = Q(output__datasets=dataset) | Q(output__lenses__arraylens__dataset=dataset) | Q(output__data_arrays__dataset=dataset)
     edges = list(models.Transformation.objects.filter(spaces).select_related("input", "output").order_by("pk"))
+    return _containers_derived_through(edges, own=("dataset", dataset.pk))
+
+
+def annotation_derived_containers(annotation: "models.Annotation") -> list:
+    """Everything computed from one shape: the containers whose derivation edges name it.
+
+    The other end of an ANNOTATION source, read off the same edges
+    :func:`derived_containers` reads -- narrowed by ``Transformation.annotation`` instead
+    of by where the edge lands, because every shape of a collection lands in one space.
+    Kind-blind as that one is: the shape is usually named with no transform at all.
+    """
+    edges = list(models.Transformation.objects.filter(annotation=annotation).select_related("input", "output").order_by("pk"))
+    return _containers_derived_through(edges, own=("annotationcollection", annotation.collection_id))
+
+
+def _containers_derived_through(edges: "list[models.Transformation]", *, own: tuple) -> list:
+    """The containers these edges leave from, once each, in the creators' order; ``own`` is the source and never its own child."""
     if not edges:
         return []
 
@@ -1778,7 +1807,7 @@ def derived_containers(dataset: "models.ArrayDataset") -> list:
 
     # One container may have several edges into this dataset -- a fusion of two of its
     # lenses -- and is still one child; pk order makes the answer the creators' order.
-    seen: set[tuple] = {("dataset", dataset.pk)}
+    seen: set[tuple] = {own}
     wanted: list[tuple] = []
     for edge in edges:
         key = keys.get(edge.input_id)

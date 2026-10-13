@@ -742,6 +742,14 @@ class AnnotationCollectionDerivedFromInputModel(DerivedFromInputBase):
     SOURCE_FIELD: ClassVar[str] = "annotation_collection"
 
 
+class AnnotationDerivedFromInputModel(DerivedFromInputBase):
+    """Derived from one shape of an annotation collection: the collection's drawing space, and which shape."""
+
+    kind: Literal[enums.DerivationSourceKind.ANNOTATION] = enums.DerivationSourceKind.ANNOTATION
+    annotation: str
+    SOURCE_FIELD: ClassVar[str] = "annotation"
+
+
 class CoordinateSystemDerivedFromInputModel(DerivedFromInputBase):
     """Derived from a coordinate system directly -- a physical space, a world."""
 
@@ -757,6 +765,7 @@ DERIVED_FROM_MEMBERS: dict[str, type[BaseModel]] = {
     enums.DerivationSourceKind.TABLE_DATASET.value: TableDatasetDerivedFromInputModel,
     enums.DerivationSourceKind.MESH_COLLECTION.value: MeshCollectionDerivedFromInputModel,
     enums.DerivationSourceKind.ANNOTATION_COLLECTION.value: AnnotationCollectionDerivedFromInputModel,
+    enums.DerivationSourceKind.ANNOTATION.value: AnnotationDerivedFromInputModel,
     enums.DerivationSourceKind.COORDINATE_SYSTEM.value: CoordinateSystemDerivedFromInputModel,
 }
 
@@ -767,12 +776,13 @@ DerivedFromSpec = Annotated[
     | TableDatasetDerivedFromInputModel
     | MeshCollectionDerivedFromInputModel
     | AnnotationCollectionDerivedFromInputModel
+    | AnnotationDerivedFromInputModel
     | CoordinateSystemDerivedFromInputModel,
     Field(discriminator="kind"),
 ]
 
 #: The wire fields carrying a source id, one per member.
-_DERIVED_FROM_SOURCE_FIELDS = ("lens", "dataset", "table_dataset", "mesh_collection", "annotation_collection", "coordinate_system")
+_DERIVED_FROM_SOURCE_FIELDS = ("lens", "dataset", "table_dataset", "mesh_collection", "annotation_collection", "annotation", "coordinate_system")
 
 _TRANSFORM_DESCRIPTION = (
     "How this data's own space maps back into the source's -- any creatable kind; the rank check holds you to it. **Omit it and the edge is UNMAPPABLE**: naming a source records "
@@ -808,6 +818,10 @@ class DerivedFromInput:
     table_dataset: strawberry.ID | None = strawberry.field(default=None, description="(TABLE_DATASET) The table this data was computed from -- an SMLM localization table a reconstruction was rendered from, say")
     mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="(MESH_COLLECTION) The mesh collection this data was computed from")
     annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="(ANNOTATION_COLLECTION) The annotation collection this data was computed from")
+    annotation: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(ANNOTATION) The shape this data was computed along or within -- the ROI a crop was cut to, the path an image was straightened along. The edge lands in its collection's drawing space and names the shape",
+    )
     coordinate_system: strawberry.ID | None = strawberry.field(default=None, description="(COORDINATE_SYSTEM) The space this data was computed from, when the source is a space rather than a container")
     transform: TransformInput | None = strawberry.field(default=None, description=_TRANSFORM_DESCRIPTION)
     value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
@@ -882,6 +896,16 @@ class AnnotationCollectionDerivedFromInput:
     value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
 
 
+@_derived_from_member(AnnotationDerivedFromInputModel, enums.DerivationSourceKind.ANNOTATION, "The fields an ANNOTATION derivation reads")
+class AnnotationDerivedFromInput:
+    """The ANNOTATION member of the derivation source union."""
+
+    kind: enums.DerivationSourceKind = strawberry.field(description="The discriminator: which member of DerivedFromInput this is")
+    annotation: strawberry.ID = strawberry.field(description="The shape this data was computed along or within")
+    transform: TransformInput | None = strawberry.field(default=None, description=_TRANSFORM_DESCRIPTION)
+    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+
+
 @_derived_from_member(CoordinateSystemDerivedFromInputModel, enums.DerivationSourceKind.COORDINATE_SYSTEM, "The fields a COORDINATE_SYSTEM derivation reads")
 class CoordinateSystemDerivedFromInput:
     """The COORDINATE_SYSTEM member of the derivation source union."""
@@ -900,6 +924,7 @@ derived_from_union_types: list[type] = [
     TableDatasetDerivedFromInput,
     MeshCollectionDerivedFromInput,
     AnnotationCollectionDerivedFromInput,
+    AnnotationDerivedFromInput,
     CoordinateSystemDerivedFromInput,
 ]
 

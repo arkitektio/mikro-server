@@ -10,7 +10,7 @@ from __future__ import annotations
 from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Scope, Signal, Start, Structure, blocks
 
 from mikro_server.configuration import Settings
-from mikro_server.vocabulary import ANNOTATION_DESCRIPTORS, ARRAY_DESCRIPTORS, MESH_DESCRIPTORS, NETWORK_DESCRIPTORS, SPARSE_DESCRIPTORS, TABLE_DESCRIPTORS
+from mikro_server.vocabulary import ANNOTATION_DESCRIPTORS, ANNOTATION_SHAPE_DESCRIPTORS, ARRAY_DESCRIPTORS, MESH_DESCRIPTORS, NETWORK_DESCRIPTORS, SPARSE_DESCRIPTORS, TABLE_DESCRIPTORS
 
 #: What a token may be allowed to do here: defined at the coordination server when the hub enrols.
 SCOPES = [
@@ -139,6 +139,12 @@ HOSTS = Hosts(
             label="Annotation Collection",
             description="A named set of human-drawn annotations.",
             descriptors=ANNOTATION_DESCRIPTORS,
+        ),
+        Structure(
+            identifier="@mikro/annotation",
+            label="Annotation",
+            description="One human-drawn shape in an annotation collection.",
+            descriptors=ANNOTATION_SHAPE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/animation",
@@ -311,6 +317,12 @@ HOSTS = Hosts(
             kinds=["CREATED", "DELETED"],
             description="An annotation collection was created or deleted.",
             descriptors=_keys(ANNOTATION_DESCRIPTORS),
+        ),
+        Signal(
+            identifier="@mikro/annotation",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(ANNOTATION_SHAPE_DESCRIPTORS),
+            description="An annotation was drawn, changed or deleted, with the shape it is drawn as and the axes of its space.",
         ),
         Signal(
             identifier="@mikro/animation",

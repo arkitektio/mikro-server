@@ -96,31 +96,23 @@ class CreateAnnotationInput:
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
 
 
-# Every name written here lands in a `CharField(max_length=255)`.
-_NAME_MAX = 255
-
-
-def _fit_name(name: str) -> str:
-    """A derived name, cut to what its column holds.
-
-    The names minted on a scene's first draw are built from the scene's name -- the
-    registration's carries it twice -- so a scene whose own name fits can still derive one
-    that does not, and Postgres refuses the whole draw. These are labels, not keys: nothing
-    looks a collection, a system or an edge up by them, so the tail is what gives.
-    """
-    return name if len(name) <= _NAME_MAX else name[: _NAME_MAX - 1] + "…"
-
-
 def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
     """The scene's default drawing surface: collection + system + registration + layer, atomically.
 
-    The world's axes are copied onto the collection's own system, which is exactly the
-    claim the identity registration then makes -- so the edge is exact by construction
-    and wears VALIDATED -- an identity between two spaces with the same axes is exact.
+    The world's navigable axes -- time and space -- are copied onto the collection's own
+    system, which is exactly the claim the identity registration then makes -- so the edge
+    is exact by construction and wears VALIDATED -- an identity over the axes two spaces
+    share is exact.
+
+    Only the navigable ones, because a vertex has a component per axis of its drawing space
+    and a shape is drawn at a place. A world may carry a channel axis (a physical space
+    calibrated straight off a (c, y, x) image does), and copying it would make the first
+    component of every vertex a channel: a rectangle at x = 4405 read as channel 4405. A
+    shape says which channel it is on with a pin, which may name an axis its space lacks.
 
     That copying is also why ``create_identity_registration`` may write its edge without
-    running ``assert_edge_rank``, as every other edge writer does: the two spaces are
-    axis-for-axis the same *by construction here*, so there is nothing for a rank check to
+    running ``assert_edge_rank``, as every other edge writer does: the axes the edge names
+    are the same on both sides *by construction here*, so there is nothing for a rank check to
     disagree with. (This paragraph used to claim the RFC-6 collision guard ran inside that
     function. RFC-9 deleted the guard -- a space may hold rival edges, resolved by the
     stated tie-break rather than refused at write.)
@@ -128,17 +120,19 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     world = scene.world
     if world is None:
         raise ValueError(f"Scene {scene.pk} has no world coordinate system to draw in.")
-    world_axes = list(world.axes.all())
+    world_axes = [axis for axis in world.axes.all() if axis.type in coordinate_system_logic.NAVIGABLE_TYPES]
+    if not world_axes:
+        raise ValueError(f"World '{world.name}' of scene {scene.pk} has no time or space axis to draw along.")
 
     collection = models.AnnotationCollection.objects.create(
-        name=_fit_name(f"{scene.name}/annotations"),
+        name=f"{scene.name}/annotations",
         scene=scene,
         creator=ctx.user,
         organization=ctx.organization,
         **ctx.provenance_kwargs(),
     )
     system = graph_logic.create_collection_system(
-        name=_fit_name(f"{collection.name}/drawing"),
+        name=f"{collection.name}/drawing",
         axes=[AxisInputModel(name=axis.name, type=enums.AxisType(axis.type), long_name=axis.long_name, description=axis.description) for axis in world_axes],
         owner=collection,
         ctx=ctx,
@@ -147,7 +141,7 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
         input_system=system,
         world=world,
         shared=[axis.name for axis in world_axes],
-        name=_fit_name(f"{collection.name} -> {scene.name} (drawn)"),
+        name=f"{collection.name} -> {scene.name} (drawn)",
         validity=enums.PlacementValidityChoices.VALIDATED.value,
         ctx=ctx,
     )
@@ -232,7 +226,7 @@ def create_annotation(
 
     annotation = models.Annotation.objects.create(
         collection=collection,
-        name=model.name or _fit_name(f"Annotation in {collection.name}"),
+        name=model.name or f"Annotation in {collection.name}",
         description=model.description,
         kind=model.kind.value,
         vectors=vectors,
@@ -397,7 +391,7 @@ def create_annotations(
         rows.append(
             models.Annotation(
                 collection=collection,
-                name=spec.name or _fit_name(f"Annotation in {collection.name}"),
+                name=spec.name or f"Annotation in {collection.name}",
                 description=spec.description,
                 kind=spec.kind.value,
                 vectors=vectors,

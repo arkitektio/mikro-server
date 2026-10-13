@@ -6,10 +6,13 @@ paths are never stored. So it is a walk, and the second half of this module is w
 price down: one graph per space the annotation reaches, flat in everything else.
 """
 
+import uuid
+
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
+from core import models
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_placement_queries import QueryCounter, _fresh_request
@@ -265,3 +268,99 @@ async def test_the_cost_is_one_graph_per_space_the_annotation_reaches(authentica
     alone, one_world, two_worlds = costs
     assert alone < one_world < two_worlds, costs
     assert two_worlds - one_world <= one_world - alone, f"a second world cost more than the first did: {costs}"
+
+
+# --- what is reachable at all -----------------------------------------------------
+
+REACHABLE = """
+query Reachable($filters: LensFilter!) {
+  lenses(filters: $filters) { id }
+}
+"""
+
+
+async def _reachable(ctx: HttpContext, annotation_id: str, **filters: object) -> set[str]:
+    result = await schema.execute(REACHABLE, context_value=_fresh_request(ctx), variable_values={"filters": {"reachableFrom": annotation_id, **filters}})
+    assert not result.errors, result.errors
+    return {lens["id"] for lens in result.data["lenses"]}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_every_lens_of_the_annotated_dataset_is_reachable_whether_or_not_the_shape_lies_in_it(authenticated_context: HttpContext):
+    """What a picker offers once a shape is chosen: the data it can be read against, not only the data it happens to cover."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Image")
+    other = await seed.create_array_dataset(ctx, "Elsewhere")
+    whole = await seed.create_lens(ctx, dataset)
+    near = await seed.create_lens(ctx, dataset, slices=NEAR)
+    far = await seed.create_lens(ctx, dataset, slices=FAR)
+    stranger = await seed.create_lens(ctx, other)
+    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
+
+    reachable = await _reachable(ctx, annotation, kind="ARRAY")
+
+    assert reachable == {str(whole.pk), str(near.pk), str(far.pk)}
+    assert str(stranger.pk) not in reachable, "a dataset no edge joins to the drawing space is not co-registered with it"
+    assert await _overlapping(ctx, annotation) < await _reachable(ctx, annotation), "the overlap is the reachable lenses the shape lies in"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_lens_over_another_dataset_is_reachable_through_a_shared_world(authenticated_context: HttpContext):
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "Composition")
+    drawn_on = await seed.create_array_dataset(ctx, "DrawnOn", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    beside = await seed.create_array_dataset(ctx, "Beside", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    apart = await seed.create_array_dataset(ctx, "Apart", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    for dataset in (drawn_on, beside):
+        await seed.register_into_scene(ctx, scene, dataset)
+    meets = await seed.create_lens(ctx, beside, slices=NEAR)
+    misses = await seed.create_lens(ctx, beside, slices=FAR)
+    unregistered = await seed.create_lens(ctx, apart)
+    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, drawn_on))
+
+    reachable = await _reachable(ctx, annotation)
+
+    assert {str(meets.pk), str(misses.pk)} <= reachable
+    assert str(unregistered.pk) not in reachable
+    assert await _overlapping(ctx, annotation) <= reachable
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collection(authenticated_context: HttpContext, other_org_context: HttpContext):
+    """A freestanding tracing reaches the lens over its own collection and no data; an annotation of another organization names nothing here."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Image")
+    await seed.create_lens(ctx, dataset)
+    freestanding = await schema.execute(
+        CREATE_COLLECTION, context_value=ctx, variable_values={"input": {"name": "Loose", "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]}}
+    )
+    assert not freestanding.errors, freestanding.errors
+    loose = await _draw(ctx, SQUARE, collection=freestanding.data["createAnnotationCollection"]["id"])
+    drawn = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
+
+    own = await sync_to_async(lambda: {str(pk) for pk in models.AnnotationLens.objects.filter(annotation_collection_id=freestanding.data["createAnnotationCollection"]["id"]).values_list("pk", flat=True)})()
+    assert await _reachable(ctx, loose) == own != set()
+    assert await _reachable(ctx, loose, kind="ARRAY") == set()
+    assert await _reachable(ctx, drawn, kind="ARRAY") != set()
+    assert await _reachable(other_org_context, drawn) == set()
+    assert await _reachable(ctx, str(uuid.uuid4())) == set()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_reachability_narrows_beside_the_other_filters(authenticated_context: HttpContext):
+    """A picker's query: the kind, what the port requires, and what the chosen shape reaches."""
+    ctx = authenticated_context
+    volume = await seed.create_array_dataset(ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    elsewhere = await seed.create_array_dataset(ctx, "ElsewhereVolume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    whole = await seed.create_lens(ctx, volume)
+    await seed.create_lens(ctx, elsewhere)
+    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, volume))
+    volumes = [{"key": "@mikro/n_space_axes", "operator": "EQUALS", "value": 3}]
+
+    assert await _reachable(ctx, annotation, kind="ARRAY", requires=volumes) == {str(whole.pk)}
+    assert await _reachable(ctx, annotation, kind="ARRAY", requires=[{"key": "@mikro/n_space_axes", "operator": "EQUALS", "value": 2}]) == set()
+    assert await _reachable(ctx, annotation, kind="TABLE") == set()

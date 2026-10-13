@@ -1625,6 +1625,40 @@ def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
     return composed
 
 
+def slices_under(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], kept_slices: Iterable["SliceLike"], box_slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
+    """What a lens selects, narrowed to a box of the same dataset: both stated as slices of the dataset, the box a contiguous range per axis.
+
+    The sibling of :func:`compose_slices`, for the case where the second selection is *not*
+    stated in the first one's index space: a box names its own frame (an annotation's, a
+    physical space's) and lands in the dataset's grid, and the lens it is cut within is
+    already there. So this intersects rather than composes -- per axis, the indices the lens
+    keeps that lie in the box's range. The lens' stride and phase survive: a lens keeping
+    every third voxel from 1 under a box 3:9 keeps 4 and 7, never 3 and 6. An axis only one
+    of them restricts keeps that one's selection; an axis on which they share no voxel is
+    refused, because a selection of nothing is not a lens.
+    """
+    kept_by_axis = {slice_.axis: slice_ for slice_ in kept_slices}
+    box_by_axis = {slice_.axis: slice_ for slice_ in box_slices}
+    narrowed: list[dict[str, int | str]] = []
+    for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
+        kept = kept_by_axis.get(axis)
+        box = box_by_axis.get(axis)
+        if kept is None and box is None:
+            continue
+        start, stop, step = slice(kept.start, kept.stop, kept.step).indices(size) if kept is not None else (0, size, 1)
+        low, high, _ = slice(box.start, box.stop, None).indices(size) if box is not None else (0, size, 1)
+        if low > start:
+            start += -(-(low - start) // step) * step
+        stop = min(stop, high)
+        if start >= stop:
+            raise ValueError(
+                f"The box lies outside the lens along '{axis}': the lens keeps {kept.start}:{kept.stop}{f':{kept.step}' if kept.step not in (None, 1) else ''} "
+                f"and the box covers {low}:{high}, which share no voxel"
+            )
+        narrowed.append({"axis": axis, "start": start, "stop": stop, "step": step})
+    return narrowed
+
+
 def lens_within(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], parent_slices: Iterable["SliceLike"], child_slices: Iterable["SliceLike"]) -> bool:
     """Whether every voxel a child lens keeps is one its parent keeps: a crop of a crop, however spelled.
 

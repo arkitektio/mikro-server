@@ -589,6 +589,53 @@ async def test_a_lens_cut_to_an_annotation_bounds_exactly_the_shape(authenticate
     assert isinstance(both, list) and "one selection" in both[0].message
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_shape_with_fewer_components_than_its_space_is_cut_over_the_axes_it_spans(authenticated_context: HttpContext):
+    """A rectangle on a (c, y, x) image has two components: they are y and x, never c and y. Unpinned it keeps every channel; pinned to one, that plane."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[SHAPE])
+    collection = await _collection_on(ctx, axes=["c", "y", "x"], derived_from={"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}})
+    corners = [[1.0, 2.0], [1.0, 6.0], [4.0, 6.0], [4.0, 2.0]]
+    rectangle = await _draw(ctx, collection["id"], "RECTANGLE", corners)
+
+    cut = await _lens_from(ctx, dataset, annotation=rectangle["id"])
+    assert isinstance(cut, dict), cut
+    planes = [{"axis": "y", "start": 1, "stop": 5}, {"axis": "x", "start": 2, "stop": 7}]
+    assert cut["shape"] == [SHAPE[0], 4, 5]
+    assert (await _lens(ctx, dataset, planes))["id"] == cut["id"], "the channel axis is left whole"
+
+    result = await schema.execute(CREATE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"collection": collection["id"], "kind": "RECTANGLE", "vectors": corners, "coordinates": [{"name": "c", "value": 1}]}})
+    assert not result.errors, result.errors
+    on_one_channel = await _lens_from(ctx, dataset, annotation=result.data["createAnnotation"]["id"])
+    assert isinstance(on_one_channel, dict), on_one_channel
+    assert on_one_channel["shape"] == [1, 4, 5]
+    assert (await _lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}, *planes]))["id"] == on_one_channel["id"]
+
+
+DRAW_ON_SCENE = "mutation Create($input: CreateAnnotationInput!) { createAnnotation(input: $input) { id collection { coordinateSystem { axes { name } } } } }"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_shape_drawn_on_a_scene_whose_world_has_channels_is_drawn_in_space(authenticated_context: HttpContext):
+    """A scene over a (c, y, x) space mints a (y, x) drawing space: a vertex is a place, so a rectangle's first component is y and never a channel, and the lens cut to it keeps every channel."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Slide", shapes=[SHAPE])
+    scene = await _scene_over(ctx, str(dataset.coordinate_system_id))
+    assert [axis["name"] for axis in scene["worldCoordinateSystem"]["axes"]] == ["c", "y", "x"]
+
+    result = await schema.execute(DRAW_ON_SCENE, context_value=_fresh_request(ctx), variable_values={"input": {"scene": scene["id"], "kind": "RECTANGLE", "vectors": [[1.0, 2.0], [4.0, 6.0]]}})
+    assert not result.errors, result.errors
+    drawn = result.data["createAnnotation"]
+    assert [axis["name"] for axis in drawn["collection"]["coordinateSystem"]["axes"]] == ["y", "x"]
+
+    cut = await _lens_from(ctx, dataset, annotation=drawn["id"])
+    assert isinstance(cut, dict), cut
+    assert cut["shape"] == [SHAPE[0], 4, 5]
+    assert (await _lens(ctx, dataset, [{"axis": "y", "start": 1, "stop": 5}, {"axis": "x", "start": 2, "stop": 7}]))["id"] == cut["id"]
+
+
 # --- 7. levels ----------------------------------------------------------------------------------
 
 

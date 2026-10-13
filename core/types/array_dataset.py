@@ -668,6 +668,9 @@ class Lens:
     name: str | None = kante.django_field(
         description="What someone called this selection, or null when nobody has. A label only: it is no part of what the lens selects, and a client shows the selection -- or 'the whole container' -- in its place"
     )
+    label: str = kante.django_field(
+        description="What to call this lens in a list, never empty: its `name` when it has one, else its container's name followed by what it selects of it (`cells.zarr · c[0:1]`); a whole lens is called by its container. What a picker shows for an option"
+    )
     created_at: datetime.datetime = kante.django_field(description="When this selection was first asked for; a whole lens, when its container was made")
     creator: User | None = kante.django_field(
         description="Who made this selection: the first to ask for it. The container's creator for a whole lens, which exists from the container's creation. Asking for a selection that exists hands back the row and changes nothing"
@@ -1656,6 +1659,7 @@ class Annotation:
     fill_color: list[int] | None = kante.django_field(description="The fill color of the geometry, as RGBA, or null for no fill")
     stroke_width: float = kante.django_field(description="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale")
     filled: bool = kante.django_field(description="Whether the geometry is filled with fill_color")
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
     # Nullable: the creator FK is SET_NULL, so a shape outlives the user who drew it.
     creator: User | None = kante.django_field(description="The user that drew this annotation, or null when that user is gone or a client created it without one")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation")
@@ -1684,6 +1688,29 @@ class Annotation:
             return None
         return BoundingBox(min=self.intrinsic_bbox["min"], max=self.intrinsic_bbox["max"])
 
+    @kante.django_field(
+        description=(
+            "The lenses cut to this annotation with `createLens(annotation:)`, oldest cut first. A record of the act, not a relation in space: a lens is immutable and a shape "
+            "is not, so moving the shape afterwards leaves these where they were cut -- `lenses(filters: {overlapsAnnotation})` is the question about where things are now. "
+            "One lens may be listed by several shapes, since a lens is one row per selection. What was *computed* from the shape is `derivedResidents`"
+        )
+    )
+    def derived_lenses(self, info: Info) -> List[ArrayLens]:
+        """The array lenses a `LensCut` row ties to this shape, in the order they were cut."""
+        return list(models.ArrayLens.objects.filter(cuts__annotation=self, organization=info.context.request.organization).order_by("cuts__created_at", "cuts__id"))
+
+    @kante.django_field(
+        description=(
+            "Everything computed from this annotation, whatever kind of container it is: the data whose `derivedFrom` named this shape as an ANNOTATION source -- a crop "
+            "written out as a dataset, an image straightened along a path, a table measured inside an ROI. The other end of those edges, exactly as "
+            "`ArrayDataset.derivedResidents` is, and as kind-blind: the shape is usually named with no transform. A record of the act: editing the shape afterwards changes "
+            "none of it. The edge itself, with the lens the pixels came from beside it, is on each child's own `derivedFrom`"
+        )
+    )
+    def derived_residents(self, info: Info) -> List[Resident]:
+        """Every container with a derivation edge naming this shape."""
+        return graph_logic.annotation_derived_containers(self)
+
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
         """Scope the list to the request's organization, carrying the system along.
@@ -1694,7 +1721,7 @@ class Annotation:
         for the `coordinateSystem` resolver, which walks collection -> system per
         row and would otherwise cost two queries per annotation.
         """
-        return queryset.filter(collection__organization=info.context.request.organization).select_related("collection__coordinate_system")
+        return queryset.filter(collection__organization=info.context.request.organization).select_related("collection__coordinate_system").prefetch_related("collection__coordinate_system__axes")
 
 
 @kante.django_type(

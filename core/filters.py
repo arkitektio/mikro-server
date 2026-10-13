@@ -4,6 +4,8 @@ from core import enums, models
 from core.inputs.coords import BoundingBoxInput, CoordinateInput
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
+from core.logic import descriptor_filter
+from core.logic.descriptor_filter import DescriptorConstraintInput
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
@@ -449,6 +451,15 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]
 
+    @kante.filter_field(
+        description=(
+            "Filter to the datasets satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
+            "Answered in SQL from the descriptors stored at creation, and `@mikro/value_kind` from the dataset's primary derivation. A key datasets do not declare is refused rather than ignored"
+        )
+    )
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.ArrayDataset, queryset, value, prefix)
+
     # Filing, not placement. `dataset` below and `placeableIn` ask where the data *is*;
     # these two ask where a user *keeps* it.
     @kante.filter_field(description="Filter by the folder this dataset is filed in")
@@ -633,6 +644,15 @@ class AnnotationFilter(IdsFilterMixin):
     description: Optional[FilterLookup[str]]
     kind: auto
 
+    @kante.filter_field(
+        description=(
+            "Filter to the annotations satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
+            "Answered in SQL: `@mikro/annotation_kind` is the kind (named as the descriptor names it, e.g. PATH) and the axis counts are those of the collection's drawing space. A key annotations do not declare is refused rather than ignored"
+        )
+    )
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.Annotation, queryset, value, prefix)
+
     @kante.filter_field(description="Filter by the collection this annotation belongs to")
     def collection(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}collection_id": value})
@@ -706,6 +726,15 @@ def _lens_spec_q(kind: "type[models.Lens]", value: "Sequence[Enum]", prefix: str
 @kante.filter_type(models.Lens)
 class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     id: auto
+
+    @kante.filter_field(
+        description=(
+            "Filter to the lenses satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
+            "Answered in SQL from the descriptors stored when the lens was made. `@mikro/value_kind` is asked of array lenses only and `@mikro/n_annotations` of whole annotation lenses only (a windowed one counts by geometry and is left out). A key lenses do not declare is refused rather than ignored"
+        )
+    )
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.Lens, queryset, value, prefix)
 
     @kante.filter_field(description="Filter by the kind of container the lens selects over")
     def kind(self, info: Info, value: enums.LensKind, prefix: str) -> Q:
@@ -844,6 +873,20 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
         if annotation is None:
             return Q(pk__in=[])
         return Q(**{f"{prefix}id__in": space_graph.lenses_overlapping(info, annotation)})
+
+    @kante.filter_field(
+        description=(
+            "Filter to the lenses co-registered with this annotation: lenses over the dataset it was drawn on, and lenses over any other dataset registered into a space its "
+            "collection reaches, walking the transformation edges. The candidates `overlapsAnnotation` compares the shape against, without the comparison -- so a crop the shape "
+            "lies outside of is still returned. What a picker offers once an annotation is chosen. The lenses over the annotation's own collection are always among them; an annotation whose collection has no edge out of its drawing space reaches no other"
+        )
+    )
+    def reachable_from(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        """Match the lenses `space_graph.lenses_reachable_from` finds; an annotation that is not here matches none."""
+        annotation = for_org(models.Annotation, info).filter(pk=value).select_related("collection__coordinate_system").first()
+        if annotation is None:
+            return Q(pk__in=[])
+        return Q(**{f"{prefix}id__in": space_graph.lenses_reachable_from(info, annotation)})
 
 
 @kante.filter_type(models.Scene)

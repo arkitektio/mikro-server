@@ -126,9 +126,19 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
         ),
     )
 
+    stored_descriptors = models.JSONField(
+        default=dict,
+        db_default=models.Value({}, output_field=models.JSONField()),
+        help_text=(
+            "The descriptors of this dataset that cannot change after it is made (every key but `@mikro/value_kind`, which follows its derivation), materialized beside "
+            "`stored_spec` by the axis writer. Stored because a `requires` filter reads it in SQL. Empty while the intrinsic system does not exist yet"
+        ),
+    )
+
     class Meta:
         indexes = [
             GinIndex(fields=["stored_spec"], name="array_dataset_spec_gin"),
+            GinIndex(fields=["stored_descriptors"], name="array_dataset_descriptors_gin", opclasses=["jsonb_path_ops"]),
         ]
 
     @property
@@ -640,8 +650,7 @@ class Lens(PolymorphicModel):
     # already exists (identity is the container and the selection alone) and renaming a lens
     # changes nothing about what it selects. Null for a lens nobody named, which reads as its
     # selection -- or as the whole container when it has none.
-    name = models.CharField(
-        max_length=255,
+    name = models.TextField(
         null=True,
         blank=True,
         help_text="What someone called this selection, e.g. 'nucleus 3'. Optional, editable, and no part of the lens' identity: a lens is its container and its selection",
@@ -685,9 +694,25 @@ class Lens(PolymorphicModel):
         ),
     )
 
+    stored_descriptors = models.JSONField(
+        default=dict,
+        # Held by the database too, for the reason `stored_spec` is: a rolled-back build
+        # inserts lens rows without naming it.
+        db_default=models.Value({}, output_field=models.JSONField()),
+        help_text=(
+            "The descriptors of this selection that cannot change after it is made (every key its kind declares but `@mikro/value_kind` and `@mikro/n_annotations`), "
+            "materialized from `core.descriptors.stored_lens_descriptors` when the row is made. Stored because a `requires` filter reads it in SQL: a picker asking for "
+            "the lenses a port accepts is one indexed query, not a describer run over every row. Empty for a row written before it existed, until `merge_duplicate_lenses` states it"
+        ),
+    )
+
     class Meta:
         indexes = [
             GinIndex(fields=["stored_spec"], name="lens_spec_gin"),
+            # `jsonb_path_ops`: containment is the only operator a `requires` equality compiles to.
+            GinIndex(fields=["stored_descriptors"], name="lens_descriptors_gin", opclasses=["jsonb_path_ops"]),
+            # Where every lens picker starts: one organization's lenses of one kind.
+            models.Index(fields=["organization", "polymorphic_ctype"], name="lens_org_kind_idx"),
         ]
 
     #: The concrete kinds, by the container model each selects over. Filled in as each
@@ -763,6 +788,27 @@ class Lens(PolymorphicModel):
     def is_whole(self) -> bool:
         """Whether this lens selects all of its container."""
         return not self.selection
+
+    @property
+    def label(self) -> str:
+        """What to call this lens in a list: its name, else its container's name and what it selects of it.
+
+        Never empty, which is the point: most lenses are never named, and a picker's row has
+        to say something. One line, the container first because that is what a person
+        recognises; a whole lens is its container.
+        """
+        if self.name and self.name.strip():
+            return self.name.strip()
+        real = self._real()
+        container = getattr(real.container, "name", None) or f"{type(real).__name__} {self.pk}"
+        parts = []
+        for entry in real.selection:
+            if "min" in entry or "max" in entry:
+                parts.append(f"{entry.get('axis')}[{entry.get('min', '')}..{entry.get('max', '')}]")
+            else:
+                start, stop = entry.get("start"), entry.get("stop")
+                parts.append(f"{entry.get('axis')}[{'' if start is None else start}:{'' if stop is None else stop}]")
+        return f"{container} · {', '.join(parts)}" if parts else container
 
     @property
     def active_anchors(self):
@@ -944,6 +990,45 @@ class ArrayLens(Lens):
         return qs.select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
 
 
+class LensCut(models.Model):
+    """That a lens was cut to a shape: ``createLens(annotation:)``, recorded.
+
+    **A row of its own, because nothing else can carry it.** A lens is one row per
+    selection, so the crop two people cut to two shapes with one box -- or one typed its
+    slices and the other drew them -- is the same lens, and a column on it could name one
+    of them. Its edge back into the dataset cannot carry the shape either: that edge is
+    derived from the slices and shared with the row.
+
+    **A record of the act, not a relation in space.** The lens is immutable and the shape
+    is not: move the shape afterwards and the lens still selects what it selected, and
+    this row still says where the box came from. Whether the two *still* meet is
+    ``LensFilter.overlapsAnnotation``, which composes both extents per request.
+
+    The sibling of ``Transformation.annotation``, which says the same for data that was
+    *computed* from a shape. A lens writes no pixels and is derived from nothing, so it has
+    no derivation edge to say it on.
+    """
+
+    annotation = models.ForeignKey("Annotation", on_delete=models.CASCADE, related_name="lens_cuts", help_text="The shape the lens was cut to")
+    lens = models.ForeignKey(ArrayLens, on_delete=models.CASCADE, related_name="cuts", help_text="The lens the cut gave: the dataset's row for the voxels under the shape's box at the time")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When this lens was first cut to this shape")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="lens_cuts", help_text="Who first cut this lens to this shape")
+    created_through = models.ForeignKey("koherent.Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="lens_cuts", help_text="The task the cut was made under, if any")
+    created_through_by = models.ForeignKey(
+        get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_lens_cuts", help_text="The assigner of the cutting task, denormalized for fast filtering"
+    )
+
+    class Meta:
+        """One row per (shape, lens): cutting twice is the same cut."""
+
+        ordering = ["created_at", "id"]
+        constraints = [models.UniqueConstraint(fields=["annotation", "lens"], name="lens_cut_once_per_shape")]
+
+    def __str__(self) -> str:
+        """The lens and the shape it was cut to."""
+        return f"lens {self.lens_id} <- annotation {self.annotation_id}"
+
+
 class TableLens(WindowedLens, Lens):
     """A selection over a table dataset: the rows whose coordinate columns lie in the windows."""
 
@@ -1057,7 +1142,7 @@ class Scene(models.Model):
     ``core.logic.graph._bfs_tree``, not a per-view pointer.
     """
 
-    name = models.CharField(max_length=255)
+    name = models.TextField()
     world = models.ForeignKey(
         "CoordinateSystem",
         on_delete=models.RESTRICT,
@@ -1111,7 +1196,7 @@ class Animation(models.Model):
     """
 
     scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="animations", help_text="The scene this tour flies through")
-    name = models.CharField(max_length=255, help_text="The name of the tour, e.g. 'overview' or 'dive to the mitochondria'")
+    name = models.TextField(help_text="The name of the tour, e.g. 'overview' or 'dive to the mitochondria'")
     description = models.CharField(max_length=1000, null=True, blank=True, help_text="What the tour shows")
 
     created_at = models.DateTimeField(auto_now_add=True, help_text="The time the tour was created")
@@ -1147,7 +1232,7 @@ class AnimationWaypoint(models.Model):
 
     animation = models.ForeignKey(Animation, on_delete=models.CASCADE, related_name="waypoints", help_text="The tour this pose belongs to")
     order = models.PositiveSmallIntegerField(help_text="The pose's index in the tour. Written by enumeration from the authored list, never supplied by a caller")
-    name = models.CharField(max_length=255, blank=True, default="", help_text="What this stop shows, e.g. 'the nucleus'")
+    name = models.TextField(blank=True, default="", help_text="What this stop shows, e.g. 'the nucleus'")
     camera = models.JSONField(help_text="Where the camera is, as a CameraState: a position keyed by the world's axis names, plus the flat and volumetric views of it")
     duration_ms = models.PositiveIntegerField(default=1000, help_text="How long the viewer takes to travel TO this pose, in milliseconds. Ignored for the first pose, which is where the tour starts")
     easing = TextChoicesField(
@@ -1320,7 +1405,7 @@ class Layer(models.Model):
     # so the workaround had nowhere left to stand, and the honest field is this one. On the
     # interface rather than per kind: a heterogeneous `Scene.layers` list wants one name
     # field, not a fragment per kind to read the same string.
-    name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the layer, e.g. the channel it draws ('DAPI'). Null when nobody has named it")
+    name = models.TextField(null=True, blank=True, help_text="A human-readable name for the layer, e.g. the channel it draws ('DAPI'). Null when nobody has named it")
 
     # --- the source: one lens, whatever the kind ---
     # Every layer draws through a lens: an array lens for the six array kinds, a table lens

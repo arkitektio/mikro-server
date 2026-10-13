@@ -1152,3 +1152,30 @@ async def test_a_dataset_derived_from_a_table_is_derived_to_the_filter_too(authe
 
     assert made.data["createArrayDataset"]["id"] in await ids(False), "derived from a table is derived"
     assert str(acquired.pk) in await ids(True) and made.data["createArrayDataset"]["id"] not in await ids(True)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_long_dataset_name_does_not_refuse_the_dataset(authenticated_context: HttpContext):
+    """Every name `createArrayDataset` derives from the dataset's is longer than the dataset's.
+
+    The intrinsic space is `<name>/intrinsic`, each level's `<name>/<level>`, and a derivation
+    edge joins two names as `<name> <- <source>`. Those columns were `varchar(255)` under a
+    dataset name allowed 1000, so a name well inside its own limit was refused by Postgres with
+    "value too long for type character varying(255)". They are text now: a derived name is as
+    long as what it was derived from.
+    """
+    ctx = authenticated_context
+    source = await seed.create_array_dataset(ctx, "r" * 600, axes=seed.YX_AXES, shapes=[[64, 64]])
+    lens = await seed.create_lens(ctx, source, slices=[])
+    name = "d" * 600
+
+    result = await _derive_with_pyramid(ctx, name, lens=lens, value_relation="TRANSFORMED", scale_method="AREA")
+    assert not result.errors, result.errors
+
+    dataset = await sync_to_async(models.ArrayDataset.objects.select_related("coordinate_system").get)(pk=result.data["createArrayDataset"]["id"])
+    assert dataset.coordinate_system.name == f"{name}/intrinsic", "whole, not cut to fit"
+    level_one = await sync_to_async(lambda: models.DataArray.objects.select_related("coordinate_system").get(dataset=dataset, level=1))()
+    assert level_one.coordinate_system.name == f"{name}/1"
+    derivation = await sync_to_async(lambda: models.Transformation.objects.filter(input=dataset.coordinate_system, name__startswith=f"{name} <- ").first())()
+    assert derivation is not None and len(derivation.name) > 1200, "the derivation edge carries both names"

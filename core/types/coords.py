@@ -400,6 +400,20 @@ class Transformation(OrgScoped):
     value_relation: enums.ValueRelation | None = kante.django_field(
         description="(derivation edges) What the operation this edge records did to the *values*, orthogonal to `kind`: IDENTICAL (a crop -- statistics transfer), TRANSFORMED (a deconvolution -- same quantity, new numbers), CATEGORIZED (a threshold -- values became labels, and a bootstrapped scene renders the data as a label map). Null when unstated, and never present on a registration -- values do not cross a claim between spaces"
     )
+    # Resolved and joined, for the reason `input` is: `Annotation` is org-scoped, and a
+    # plain FK to such a type becomes a scoped prefetch per edge.
+    @kante.django_field(
+        select_related=["annotation"],
+        description=(
+            "(derivation edges into an annotation collection's space) The shape this data was computed along or within: the ROI a crop was cut to, the path an image was "
+            "straightened along. Named with the ANNOTATION source of `derivedFrom`. A record of the act and no part of the map -- moving the shape afterwards moves nothing -- "
+            "and null on every other edge, and once that shape is deleted: the edge then still says which collection"
+        ),
+    )
+    def annotation(self, info: Info) -> Optional[Annotated["Annotation", strawberry.lazy("core.types.array_dataset")]]:
+        """The shape an ANNOTATION derivation named."""
+        return self.annotation
+
     # On the interface, so every concrete kind inherits it: an edge is refined in place
     # (`updateTransformation`), which makes this the *only* place the previous states of a
     # placement exist. It is also what `CoordinateSystem.transformVersion` counts, so the

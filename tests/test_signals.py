@@ -37,6 +37,7 @@ EXPECTED = {
     "@mikro/file": ["CREATED", "DELETED"],
     "@mikro/folder": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/annotationcollection": ["CREATED", "DELETED"],
+    "@mikro/annotation": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/animation": ["CREATED", "DELETED"],
     "@mikro/sparsedataset": ["CREATED", "DELETED"],
     "@mikro/coordinatesystem": ["CREATED", "UPDATED", "DELETED"],

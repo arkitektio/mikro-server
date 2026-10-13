@@ -10,6 +10,7 @@ container's whole lens (:func:`core.logic.coordinate_system.assert_lens_deletabl
 """
 
 from kante.types import Info
+from typing import cast
 import strawberry
 
 from core import types, models
@@ -31,7 +32,7 @@ class CreateLensInputModel(BaseModel):
         default=None, description="Slices selecting a window of the dataset (or of the lens), one per axis to restrict. Omit, or pass an empty list, for everything: the dataset's whole lens, or the lens cut from. The same selection, however spelled, is the same lens"
     )
     box: base_models.LensBoxInputModel | None = Field(default=None, description="In place of `slices`: a box in any coordinate system the dataset reaches, cut to the voxels whose cells it meets. With `dataset` only: a box names its own frame, it is not relative to a crop")
-    annotation: str | None = Field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box (crop to the ROI). With `dataset` only")
+    annotation: str | None = Field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box (crop to the ROI). With `dataset`, of the whole dataset; with `lens`, what that lens selects under the box. The cut is recorded: the annotation lists the lens as one of its `derivedLenses`")
     name: str | None = Field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name: finding a selection is not a request to rename it, `updateLens` is")
 
 
@@ -46,7 +47,8 @@ class CreateLensInput:
         default=None, description="Optional slices selecting a window of the dataset (or of the lens), one per axis to restrict. Omit (or pass an empty list) for everything -- the dataset's whole lens, or the lens cut from. The same selection, however spelled, is the same lens"
     )
     box: inputs.LensBoxInput | None = strawberry.field(default=None, description="In place of `slices`: a box in any coordinate system the dataset reaches, cut to the voxels whose cells it meets. With `dataset` only -- a box names its own frame, it is not relative to a crop")
-    annotation: strawberry.ID | None = strawberry.field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box -- crop to the ROI. With `dataset` only")
+    annotation: strawberry.ID | None = strawberry.field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box -- crop to the ROI. With `dataset`, of the whole dataset; with `lens`, what that lens selects under the box: a channel it pins stays pinned, a range it keeps is intersected, a shape that misses it is refused. The cut is recorded: the annotation lists the lens as one of its `derivedLenses`",
+    )
     name: str | None = strawberry.field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name -- finding a selection is not a request to rename it, `updateLens` is")
 
 
@@ -61,16 +63,18 @@ def create_lens(
     selections = [field for field in ("slices", "box", "annotation") if getattr(model, field)]
     if len(selections) > 1:
         raise ValueError(f"A lens makes one selection: give `slices`, `box` or `annotation`, not {' and '.join(f'`{field}`' for field in selections)}.")
-    if selections and selections[0] != "slices":
+    if model.box is not None:
         if model.dataset is None or model.lens is not None:
-            raise ValueError(f"`{selections[0]}` names its own frame and is cut from the whole dataset: give it with `dataset`, not with `lens`.")
+            raise ValueError("`box` names its own frame and is cut from the whole dataset: give it with `dataset`, not with `lens`.")
         dataset = get_for_org(models.ArrayDataset, info, id=model.dataset)
-        if model.box is not None:
-            system = get_for_org(models.CoordinateSystem, info, id=model.box.coordinate_system)
-            lens = coordinate_system_logic.create_lens_from_box(dataset, system, model.box.windows, ctx)
-        else:
-            annotation = get_for_org(models.Annotation, info, id=model.annotation)
-            lens = coordinate_system_logic.create_lens_from_annotation(dataset, annotation, ctx)
+        system = get_for_org(models.CoordinateSystem, info, id=model.box.coordinate_system)
+        lens = coordinate_system_logic.create_lens_from_box(dataset, system, model.box.windows, ctx)
+    elif model.annotation is not None:
+        # The shape's box names its own frame either way; over a lens only the *answer* is
+        # narrowed, to what that lens selects under it.
+        parent = cast(models.ArrayLens, resolve_source_lens(info, kind=models.ArrayLens, lens=model.lens, container_model=models.ArrayDataset, container=model.dataset, what="dataset", role="a crop to an annotation is cut within"))
+        annotation = get_for_org(models.Annotation, info, id=model.annotation)
+        lens = coordinate_system_logic.create_lens_from_annotation(parent.dataset, annotation, ctx, within=parent if model.lens is not None else None)
     else:
         parent = resolve_source_lens(info, kind=models.ArrayLens, lens=model.lens, container_model=models.ArrayDataset, container=model.dataset, what="dataset", role="a selection by slices is cut from")
         lens = coordinate_system_logic.create_sub_lens(parent, model.slices or [], ctx)

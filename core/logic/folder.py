@@ -99,6 +99,11 @@ def parent_from_specs(info: Info, derived_from: list[Any] | None) -> Container |
         lens = get_for_org(models.Lens, info, id=primary.source_id)
         return cast(Container, cast(models.Lens, lens).container)
 
+    if primary.source_kind == "ANNOTATION":
+        # A shape is filed nowhere itself: what was computed from it goes with its collection.
+        annotation = get_for_org(models.Annotation, info, id=primary.source_id)
+        return cast(Container, cast(models.Annotation, annotation).collection)
+
     # COORDINATE_SYSTEM: a bare space may still be owned by a container (a dataset's own
     # grid named the long way round), and it may be owned by nothing at all.
     system = get_for_org(models.CoordinateSystem, info, id=primary.source_id)

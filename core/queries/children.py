@@ -2,6 +2,7 @@ from core import enums, models, types, filters as f, pagination as p
 from core.utils import paginate_querysets
 import strawberry
 from typing import Annotated, Union
+from django.db.models import TextField
 from django.db.models.functions import Coalesce
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from enum import Enum
@@ -88,7 +89,8 @@ def children(
         if name_field == "sort_label":
             # A collection's label is its name or, failing that, its store's key: an annotation,
             # so an unnamed collection is searchable and sorts by what identifies it.
-            queryset = queryset.annotate(sort_label=Coalesce("name", "store__key"))
+            # `output_field`: the name is text and the key a varchar, and Django will not pick between them.
+            queryset = queryset.annotate(sort_label=Coalesce("name", "store__key", output_field=TextField()))
 
         # A container converted from a file is that file again in another form, and the file is
         # already in the listing. Only a SOURCE link says so: a RENDITION is a file written

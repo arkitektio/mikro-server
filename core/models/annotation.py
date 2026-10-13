@@ -46,7 +46,7 @@ class AnnotationCollection(models.Model):
     its own layer for A's collection.
     """
 
-    name = models.CharField(max_length=255, help_text="The name of this annotation collection")
+    name = models.TextField(help_text="The name of this annotation collection")
     description = models.TextField(null=True, blank=True, help_text="A free-form description of this annotation collection")
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`. Distinct from `scene`
@@ -186,7 +186,7 @@ class Annotation(models.Model):
         on_delete=models.CASCADE,
         help_text="The collection this annotation belongs to; its geometry is expressed in the collection's own coordinate system",
     )
-    name = models.CharField(max_length=255)
+    name = models.TextField()
     description = models.TextField(null=True, blank=True)
     kind = TextChoicesField(
         choices_enum=enums.AnnotationKindChoices,
@@ -267,6 +267,8 @@ class Annotation(models.Model):
         indexes = [
             GinIndex(fields=["coordinates"], name="annotation_coords_gin"),
             GistIndex(fields=["bbox_cube"], name="annotation_bbox_gist"),
+            # A picker asking for the paths (or the boxes) of a collection.
+            models.Index(fields=["collection", "kind"], name="annotation_collection_kind_idx"),
         ]
 
     def __str__(self) -> str:

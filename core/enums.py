@@ -914,6 +914,7 @@ class DerivationSourceKind(str, Enum):
     TABLE_DATASET = "TABLE_DATASET"
     MESH_COLLECTION = "MESH_COLLECTION"
     ANNOTATION_COLLECTION = "ANNOTATION_COLLECTION"
+    ANNOTATION = "ANNOTATION"
     COORDINATE_SYSTEM = "COORDINATE_SYSTEM"
 
 
@@ -924,6 +925,11 @@ _describe(
     TABLE_DATASET="A table dataset, through the space its coordinate columns declare -- the direction an image reconstructed from a table of SMLM localizations is derived. A table with no coordinate columns enumerates objects rather than places them, and its only honest edge is UNMAPPABLE.",
     MESH_COLLECTION="A mesh collection, through its vertex coordinate system.",
     ANNOTATION_COLLECTION="An annotation collection, through the space its shapes are drawn in.",
+    ANNOTATION=(
+        "One shape of an annotation collection: the data was computed along it or within it -- a crop to an ROI, an image straightened along a path. The ANNOTATION_COLLECTION "
+        "arm on the shape's collection, and which shape: the edge lands in the collection's drawing space and carries the annotation, so two shapes of one collection are two "
+        "sources. Usually named second, behind the lens the pixels came from, and usually without a transform: the shape is why the data is what it is, not where it sits."
+    ),
     COORDINATE_SYSTEM="A coordinate system directly, when the source is a space rather than a container -- a physical space, or a world.",
 )
 

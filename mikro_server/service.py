@@ -17,7 +17,7 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
 from core import models
-from core.descriptors import annotation_descriptors, dataset_descriptors, lens_descriptors, mesh_descriptors, network_descriptors, sparse_descriptors, table_descriptors
+from core.descriptors import annotation_descriptors, annotation_shape_descriptors, dataset_descriptors, lens_descriptors, mesh_descriptors, network_descriptors, sparse_descriptors, table_descriptors
 from arkitekt_service.service import Service, organization_of
 from datalayer import models as datalayer_models
 
@@ -58,6 +58,7 @@ networkcollection = service.structure(models.NetworkCollection, "@mikro/networkc
 file = service.structure(models.File, "@mikro/file", describe=lambda file: {"@mikro/content_type": file.content_type or ""})
 folder = service.structure(models.Folder, "@mikro/folder")
 annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection", describe=annotation_descriptors)
+annotation = service.structure(models.Annotation, "@mikro/annotation", describe=annotation_shape_descriptors)
 animation = service.structure(models.Animation, "@mikro/animation")
 sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", describe=sparse_descriptors)
 # The coordinate graph, the links and schemas beside the data, and the stores under it. Per
@@ -99,6 +100,8 @@ service.model_signal(networkcollection, organization=org)
 service.model_signal(file, organization=org)
 service.model_signal(folder, organization=org)
 service.model_signal(annotationcollection, organization=org)
+# A shape carries no organization of its own: it is its collection's.
+service.model_signal(annotation, organization=organization_of("collection.organization"))
 service.model_signal(animation, organization=org)
 service.model_signal(sparsedataset, organization=org)
 service.model_signal(coordinatesystem, organization=org)

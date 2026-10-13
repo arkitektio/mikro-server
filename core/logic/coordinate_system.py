@@ -23,6 +23,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from core import base_models, enums, models
+from core import descriptors as descriptors_logic
 from core.creation import CreationContext
 from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
 from core.logic import compositions as compositions_logic
@@ -212,8 +213,8 @@ def source_label(model: type, source) -> str:  # noqa: ANN001 - any container ro
 _NEVER_A_SOURCE: tuple[type, ...] = (models.NetworkLens, models.SparseLens)
 
 
-def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, str]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
-    """The space a derivation derives *from*, and a label for the edge's name.
+def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, str, models.Annotation | None]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
+    """The space a derivation derives *from*, a label for the edge's name, and the shape it names.
 
     **One path for every spelling.** A source is a lens or a bare space: an entry naming a
     container names that container's whole lens, so ``{DATASET: d}`` and ``{LENS: d's whole
@@ -223,15 +224,26 @@ def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, 
     sends, and returned with a human label because ``f"{child} <- {source}"`` used to read
     the source's *dataset* name -- which a table, a mesh collection or a bare coordinate
     system does not have.
+
+    **A shape is its collection's space, and which shape.** ANNOTATION resolves exactly as
+    ANNOTATION_COLLECTION on the shape's collection does -- an annotation owns no space, it
+    is drawn in its collection's -- and hands the annotation back beside it, for the edge to
+    carry. It is the only arm whose third member is not None, and deliberately not an entry
+    of ``_DERIVATION_SOURCES``: that table is also what a ``keyedBy`` reads, and a shape
+    keys nothing.
     """
+    if lowered.source_kind == enums.DerivationSourceKind.ANNOTATION.value:
+        annotation = cast(models.Annotation, get_for_org(models.Annotation, info, id=lowered.source_id))
+        collection = annotation.collection
+        return whole_lens(collection).coordinate_system, f"{source_label(models.AnnotationCollection, collection)} / {annotation.name or annotation.pk}", annotation
     model, keyword = _DERIVATION_SOURCES[lowered.source_kind]
     source = get_for_org(model, info, id=lowered.source_id)
     if keyword == "coordinate_system":
-        return source, source_label(model, source)
+        return source, source_label(model, source), None
     lens = source if keyword == "lens" else whole_lens(source)
     if isinstance(lens, _NEVER_A_SOURCE):
         raise ValueError(f"Lens {lens.pk} is a {type(lens).KIND.lower()} lens; a {type(lens.container).__name__} is never a named derivation source -- it is derived, not derived from.")
-    return lens.coordinate_system, source_label(type(lens.container), lens.container)
+    return lens.coordinate_system, source_label(type(lens.container), lens.container), None
 
 def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSystem", derived_from: Sequence, ctx: CreationContext) -> list["models.Transformation"]:
     """Write one edge per source this data was computed from, child space -> source space.
@@ -267,15 +279,27 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
     # Deduplicated on what was *resolved*, not on how it was spelled: `{DATASET: d}` and
     # `{LENS: d's whole lens}` are one source, and two entries landing in one space would
     # write two edges into it.
-    systems = [system.pk for system, _ in sources]
-    duplicates = sorted({label for (system, label), pk in zip(sources, systems) if systems.count(pk) > 1})
+    #
+    # A shape is the exception that is not one: two shapes of one collection land in one
+    # space and are two sources, so the shape is part of what was resolved. A collection
+    # named beside one of its own shapes still collides -- the shape already says the
+    # collection, and the bare entry would add an edge that names nothing.
+    systems = [system.pk for system, _, _ in sources]
+    shapes = [annotation.pk if annotation is not None else None for _, _, annotation in sources]
+    resolved = list(zip(systems, shapes))
+
+    def collides(index: int) -> bool:
+        system, shape = resolved[index]
+        return any(other != index and system == other_system and (shape is None or other_shape is None or shape == other_shape) for other, (other_system, other_shape) in enumerate(resolved))
+
+    duplicates = sorted({label for index, (_, label, _) in enumerate(sources) if collides(index)})
     if duplicates:
         raise ValueError(f"Each derivedFrom entry must name a distinct source, but {', '.join(duplicates)} appear{'s' if len(duplicates) == 1 else ''} more than once (a container and its whole lens are one source). One entry per source: its transform already says everything about how the data maps back")
     fields = [get_for_org(models.CoordinateSystem, info, id=low.transform.field) if low.transform.field else None for low in lowered]
 
     edges: list[models.Transformation] = []
     with transaction.atomic():
-        for low, (source_system, label), field in zip(lowered, sources, fields):
+        for low, (source_system, label, annotation), field in zip(lowered, sources, fields):
             transform = low.transform
             edges.append(
                 graph_logic.write_relation_edge(
@@ -291,6 +315,7 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
                     field=field,
                     reason=transform.reason,
                     value_relation=low.value_relation,
+                    annotation=annotation,
                     ctx=ctx,
                 )
             )
@@ -527,6 +552,7 @@ def _mint(kind: "type[models.Lens]", **fields: object) -> "models.Lens":
     """
     lens = kind(**fields)
     lens.stored_spec = [member.value for member in lens.derive_spec()]
+    lens.stored_descriptors = descriptors_logic.stored_lens_descriptors(lens)
     lens.save()
     return lens
 
@@ -846,19 +872,43 @@ def create_lens_from_box(dataset: "models.ArrayDataset", system: "models.Coordin
     return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
 
 
-def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "models.Annotation", ctx: CreationContext) -> "models.ArrayLens":
+def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "models.Annotation", ctx: CreationContext, *, within: "models.ArrayLens | None" = None) -> "models.ArrayLens":
     """The dataset's lens that bounds an annotation: the voxels under the shape's stored box, in the frame the collection states it in.
+
+    ``within`` is a lens of the same dataset to cut inside of: the result is then what that
+    lens selects *under* the box (:func:`core.logic.coords.slices_under`) -- a channel it
+    pins stays pinned, a range it keeps is intersected with the box, and a shape that misses
+    it is refused. The box itself is still stated in the shape's own frame, never relative
+    to the crop; only the answer is narrowed. This is the crop a viewer asks for: the shape
+    it clicked, on the lens the layer under it draws.
 
     ``intrinsicBbox`` is already half a voxel padded, so a rectangle on rows 1..4 is the box
     ``[0.5, 4.5]`` and cuts exactly rows 1 to 4. A pin on an axis the drawing space lacks
     ("on channel 1" of the image under a (y, x) tracing) keeps that one position.
+
+    A shape may have fewer components than its frame has axes -- a rectangle on a (c, y, x)
+    image -- and its box is then read as :func:`core.logic.coords.annotation_box` reads its
+    vertices: over the axes it does not pin, or the trailing ones. An axis of the frame it
+    pins is that one plane, and one it says nothing about is kept whole.
     """
     stored = annotation.intrinsic_bbox
     system = annotation.collection.effective_bbox_system
     if not stored or system is None:
         raise ValueError(f"Annotation {annotation.pk} has no geometry to cut a lens from: its collection states no box for it")
     names = [axis.name for axis in system.axes.all()]
-    bounds = {axis: [float(low), float(high)] for axis, low, high in zip(names, stored["min"], stored["max"])}
-    pins = {axis: int(value) for axis, value in (annotation.coordinates or {}).items() if axis not in names and axis in dataset.axis_names}
+    pinned = annotation.coordinates or {}
+    rank = len(stored["min"])
+    unpinned = [axis for axis in names if axis not in pinned]
+    spanned = unpinned if len(unpinned) == rank else names[max(len(names) - rank, 0) :]
+    bounds = {axis: [float(low), float(high)] for axis, low, high in zip(spanned, stored["min"], stored["max"])}
+    bounds.update({axis: [float(pinned[axis]), float(pinned[axis])] for axis in names if axis in pinned and axis not in spanned})
+    pins = {axis: int(value) for axis, value in pinned.items() if axis not in names and axis in dataset.axis_names}
     slices = _box_to_dataset_slices(dataset, system, bounds, pins=pins)
-    return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
+    if within is not None:
+        slices = coords_logic.slices_under(dataset.shape_list, dataset.axis_names, within.slices_list, [base_models.SliceInputModel(**entry) for entry in slices])
+    lens = create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
+    # The cut is recorded beside the lens, never on it: the lens is the dataset's row for
+    # these voxels, whoever asked and however, and this is the one place that knows a shape
+    # did. Get-or-create, as the lens is: cutting twice is one cut, and its first asker's.
+    models.LensCut.objects.get_or_create(annotation=annotation, lens=lens, defaults=dict(creator=ctx.user, **ctx.provenance_kwargs()))
+    return lens

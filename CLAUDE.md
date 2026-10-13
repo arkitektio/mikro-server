@@ -30,7 +30,11 @@ one position on every axis the matrix identifies itself by (`min == max`), never
 plus positions; `_resolve_sparse_slice` checks the lens, and a lens a picker names is held by
 the delete guard like a lens a layer draws through. Every create-lens mutation composes over a lens (slices compose, windows intersect),
 and `createLens` also cuts from a `box` in any space the dataset reaches or from an
-`annotation`; the result is always the container's row for what is selected. A lens is
+`annotation` (over the dataset, or within a `lens`: what that lens selects under the shape's
+box); the result is always the container's row for what is selected. A cut to an annotation
+is recorded beside the lens (`LensCut`, read as `Annotation.derivedLenses`), and data computed
+from a shape names it as an ANNOTATION source of `derivedFrom` (`Transformation.annotation`,
+read as `Annotation.derivedResidents`): both a record of the act, never a relation in space. A lens is
 reached across a polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never
 `select_related` it, or you get the base row. Every kind is hosted *and announced*
 (`mikro_server/contract.py`, `mikro_server/service.py`), described in its container's

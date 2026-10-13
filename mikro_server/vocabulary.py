@@ -51,6 +51,16 @@ IS_WHOLE = "@mikro/is_whole"
 #: spec of its selection.
 SPEC = "@mikro/spec"
 VALUE_KIND = "@mikro/value_kind"
+#: The shape one annotation is drawn as, as the names of ``core.enums.AnnotationKind``.
+ANNOTATION_KIND = "@mikro/annotation_kind"
+N_ANNOTATIONS = "@mikro/n_annotations"
+
+#: The keys that can change after the row is written: a value kind follows the derivation
+#: edges drawn later, a count follows the shapes drawn later. Everything else about a lens or
+#: a container is fixed when it is made, which is what lets it be stored
+#: (``Lens.stored_descriptors``) and a ``requires`` filter be answered from an index. These two
+#: are answered live, in SQL, by ``core.logic.descriptor_filter``.
+LIVE_KEYS: frozenset[str] = frozenset({VALUE_KIND, N_ANNOTATIONS})
 
 
 def _axis_counts(axis_types: Sequence[str]) -> list[Descriptor]:
@@ -102,8 +112,14 @@ NETWORK_DESCRIPTORS = [
 ]
 ANNOTATION_DESCRIPTORS = [
     *_axis_counts(GEOMETRY_AXIS_TYPES),
-    Descriptor(key="@mikro/n_annotations", type="INT", description="How many annotations the selection holds: every one of the collection's, or, for a windowed lens, those whose extent lies in its windows"),
+    Descriptor(key=N_ANNOTATIONS, type="INT", description="How many annotations the selection holds: every one of the collection's, or, for a windowed lens, those whose extent lies in its windows"),
     _IS_WHOLE,
+]
+#: One shape, not a selection of them: what it is drawn as, and the axes of the space it is
+#: drawn in (its collection's), which is what tells a box on a plane from one in a volume.
+ANNOTATION_SHAPE_DESCRIPTORS = [
+    Descriptor(key=ANNOTATION_KIND, type="STRING", description="The shape it is drawn as: POINT, MULTI_POINT, LINE, PATH, POLYGON, RECTANGLE, CUBE, CIRCLE, ELLIPSE, SPHERE or ELLIPSOID"),
+    *_axis_counts(GEOMETRY_AXIS_TYPES),
 ]
 
 #: The vocabulary per lens kind (``core.enums.LensKind`` values), which is also the vocabulary

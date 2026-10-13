@@ -57,6 +57,42 @@ def test_a_crop_of_a_crop_is_the_crop_numpy_takes(parent: list, child: list) -> 
     assert got.shape == expected.shape and np.array_equal(got, expected), (composed, normalized)
 
 
+@pytest.mark.parametrize(
+    "kept, box",
+    [
+        ([_Slice("c", 1, 2)], [_Slice("y", 1, 5), _Slice("x", 2, 7)]),
+        ([_Slice("y", 0, 4)], [_Slice("y", 2, 6), _Slice("x", 2, 7)]),
+        ([_Slice("y", 1, 6, 3)], [_Slice("y", 3, 6)]),
+        ([_Slice("y", 1, 6, 2), _Slice("x", 0, 8, 3)], [_Slice("y", 0, 4), _Slice("x", 2, 8)]),
+        ([], [_Slice("x", 3, 5)]),
+        ([_Slice("x", 3, 5)], []),
+    ],
+)
+def test_a_lens_under_a_box_keeps_the_voxels_both_select(kept: list, box: list) -> None:
+    """The oracle is the index sets: per axis, what the lens keeps that lies in the box's range, stride and phase intact."""
+    narrowed = coords.slices_under(SHAPE, AXES, kept, box)
+    by_axis = {entry["axis"]: entry for entry in narrowed}
+    for axis, size in zip(AXES, SHAPE):
+        of_kept = next((s for s in kept if s.axis == axis), None)
+        of_box = next((s for s in box if s.axis == axis), None)
+        expected = set(range(size))
+        if of_kept is not None:
+            expected &= set(range(*slice(of_kept.start, of_kept.stop, of_kept.step).indices(size)))
+        if of_box is not None:
+            expected &= set(range(*slice(of_box.start, of_box.stop).indices(size)))
+        entry = by_axis.get(axis)
+        got = set(range(entry["start"], entry["stop"], entry["step"])) if entry else set(range(size))
+        assert got == expected, (axis, narrowed)
+
+
+def test_a_box_that_misses_the_lens_is_refused() -> None:
+    with pytest.raises(ValueError, match="outside the lens along 'y'"):
+        coords.slices_under(SHAPE, AXES, [_Slice("y", 0, 1)], [_Slice("y", 1, 5)])
+    with pytest.raises(ValueError, match="outside the lens along 'y'"):
+        # Between the strides: the lens keeps 0 and 4, the box covers 1..3.
+        coords.slices_under(SHAPE, AXES, [_Slice("y", 0, 6, 4)], [_Slice("y", 1, 4)])
+
+
 def test_a_child_slice_that_keeps_nothing_is_refused() -> None:
     with pytest.raises(ValueError, match="selects nothing"):
         coords.compose_slices(SHAPE, AXES, [_Slice("y", 1, 3)], [_Slice("y", 5, 9)])

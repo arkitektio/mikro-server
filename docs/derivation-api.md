@@ -35,8 +35,8 @@ source* you are naming, and only that member's id field is read.
 
 ```graphql
 derivedFrom: [{
-  kind: TABLE_DATASET            # LENS | DATASET | TABLE_DATASET
-                                 # MESH_COLLECTION | ANNOTATION_COLLECTION | COORDINATE_SYSTEM
+  kind: TABLE_DATASET            # LENS | DATASET | TABLE_DATASET | MESH_COLLECTION
+                                 # ANNOTATION_COLLECTION | ANNOTATION | COORDINATE_SYSTEM
   tableDataset: "<id>"           # the field the kind selects; any other is rejected
   transform: {kind: SCALE, scale: [10.0, 10.0]}   # omit for UNMAPPABLE
   valueRelation: TRANSFORMED     # IDENTICAL | TRANSFORMED | CATEGORIZED
@@ -46,6 +46,14 @@ derivedFrom: [{
 Two fields, two orthogonal statements. `transform` says **where the data sits**;
 `valueRelation` says **what happened to the numbers**. A threshold is spatially `IDENTITY`
 with `CATEGORIZED` values; a crop is a `TRANSLATION` with `IDENTICAL` ones.
+
+**A shape is a source too.** `{kind: ANNOTATION, annotation: "<id>"}` says the data was
+computed along or within one shape: a crop written out, an image straightened along a path.
+It is the `ANNOTATION_COLLECTION` arm on the shape's collection plus which shape (the edge
+carries it as `annotation`), so two shapes of one collection are two sources, and a shape
+beside its own collection is refused as a duplicate. Name it after the lens the pixels came
+from, usually with no transform. The shape lists what named it as `derivedResidents`, and
+the lenses cut to it with `createLens(annotation:)` as `derivedLenses`.
 
 **The order is the priority.** The first entry is the primary parent — the one that places
 this data. A fusion names several; the rest are recorded facts that no placement walk

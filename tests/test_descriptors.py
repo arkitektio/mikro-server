@@ -74,3 +74,28 @@ async def test_the_field_answers_what_the_signal_carried(intake, authenticated_c
     result = await schema.execute("query Scene($id: ID!) { scene(id: $id) { descriptors } }", context_value=authenticated_context, variable_values={"id": str(scene.pk)})
     assert not result.errors, result.errors
     assert result.data["scene"]["descriptors"] == json.loads(received["body"])["descriptors"] != {}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_annotation_says_what_shape_it_is_and_the_signal_carries_the_same(intake, authenticated_context: HttpContext):  # noqa: F811
+    scene = await seed.create_scene(authenticated_context, "Canvas")
+    drawn = await schema.execute(
+        "mutation Draw($input: CreateAnnotationInput!) { createAnnotation(input: $input) { id descriptors } }",
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.pk), "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}},
+    )
+    assert not drawn.errors, drawn.errors
+    described = drawn.data["createAnnotation"]["descriptors"]
+
+    # The kind in the schema's spelling, so a port requires it as it would write the enum.
+    assert described["@mikro/annotation_kind"] == "POINT"
+    declared = {s["identifier"]: [d["key"] for d in s["descriptors"]] for s in service.manifest()["structures"]}
+    assert set(described) == set(declared["@mikro/annotation"])
+
+    (received,) = _of(intake, "@mikro/annotation")
+    body = json.loads(received["body"])
+    assert (body["kind"], body["object"]) == ("CREATED", drawn.data["createAnnotation"]["id"])
+    assert body["descriptors"] == described
+    assert body["organization"] == authenticated_context.request.organization.slug
+

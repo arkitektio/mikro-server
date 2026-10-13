@@ -27,7 +27,7 @@ dataset out of every view it is really in.
 """
 
 import math
-from collections.abc import Set
+from collections.abc import Iterator, Set
 from dataclasses import dataclass
 
 from authentikate.models import Organization
@@ -437,6 +437,10 @@ class SpaceGraph:
         except coords_logic.NonAffineTransformError:
             return None
 
+    def lens_ids(self) -> set[int]:
+        """Every lens living in a space placeable here: the candidates `lens_extents` bounds, without bounding them. No query."""
+        return {resident.pk for resident in self._residents if isinstance(resident, models.Lens)}
+
     def lens_extents(self, *, skip: Set[int] = frozenset()) -> dict[int, dict[str, list[float]] | None]:
         """Every lens living in a space placeable here, with its own extent in this space.
 
@@ -535,6 +539,44 @@ def _meeting_spaces(system: "models.CoordinateSystem", organization: Organizatio
     return spaces
 
 
+def _populated_meeting_spaces(info: "Info", system: "models.CoordinateSystem") -> "Iterator[tuple[models.CoordinateSystem, int, SpaceGraph]]":
+    """The spaces a drawing space composes forward into that can hold a lens, nearest first, each with its hop count and its graph.
+
+    What "co-registered with an annotation" is walked over, shared by the two questions that
+    ask it -- which lenses a shape overlaps, and which lenses it can reach at all -- so they
+    cannot come to disagree about where a shape and a lens meet.
+    """
+    for space, depth in _meeting_spaces(system, info.context.request.organization):
+        # A drawing space nothing is registered into holds no lens but the collection's own,
+        # and that is nearly every one of them; asking first saves the whole graph. A window
+        # over the collection itself lives there, and is the one lens that makes it worth it.
+        if depth == 0 and not models.Transformation.objects.filter(output=space).exists() and not models.AnnotationLens.objects.filter(coordinate_system=space).exclude(windows=[]).exists():
+            continue
+        yield space, depth, for_request(info, space)
+
+
+def lenses_reachable_from(info: "Info", annotation: "models.Annotation") -> set[int]:
+    """The ids of the lenses co-registered with this annotation: every lens living in a space its collection's space reaches.
+
+    The candidates :func:`lenses_overlapping` compares the shape against, without the
+    comparison: a lens over the dataset the shape was drawn on, whether or not the shape lies
+    inside it, and a lens over another dataset registered into a world the collection reaches.
+    What a picker offers once a shape is chosen -- the data the shape can be read against.
+    The lenses over its own collection are always among them, since they live in the very
+    space it is drawn in; a shape in a space with no edge out of it reaches those and no more.
+
+    The same price as the overlap: one :class:`SpaceGraph` per meeting space.
+    """
+    system = annotation.collection.coordinate_system_or_none
+    if system is None:
+        return set()
+    # Asked directly: the walk below skips a drawing space nothing is registered into.
+    reachable: set[int] = set(models.Lens.objects.filter(coordinate_system_id=system.pk).values_list("pk", flat=True))
+    for _space, _depth, graph in _populated_meeting_spaces(info, system):
+        reachable |= graph.lens_ids()
+    return reachable
+
+
 def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int]:
     """The ids of the lenses whose extent meets this annotation's, wherever the two are co-registered.
 
@@ -571,14 +613,7 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
 
     overlapping: set[int] = set()
     decided: set[int] = set()
-    for space, depth in _meeting_spaces(system, info.context.request.organization):
-        # A drawing space nothing is registered into holds no lens but the collection's own,
-        # and that is nearly every one of them; asking first saves the whole graph. A window
-        # over the collection itself lives there, and is the one lens that makes it worth it.
-        if depth == 0 and not models.Transformation.objects.filter(output=space).exists() and not models.AnnotationLens.objects.filter(coordinate_system=space).exclude(windows=[]).exists():
-            continue
-
-        graph = for_request(info, space)
+    for space, depth, graph in _populated_meeting_spaces(info, system):
         box = graph.extent_of(system, mins, maxs)
         if box is None:
             continue

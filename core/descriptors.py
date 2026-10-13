@@ -28,7 +28,7 @@ from collections.abc import Sequence
 from core import enums, models
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
-from mikro_server.vocabulary import ARRAY_AXIS_TYPES, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, RECORD_AXIS_TYPES, SPEC, VALUE_KIND
+from mikro_server.vocabulary import ANNOTATION_KIND, ARRAY_AXIS_TYPES, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, LIVE_KEYS, N_ANNOTATIONS, RECORD_AXIS_TYPES, SPEC, VALUE_KIND
 
 Descriptors = dict[str, int | str | bool | list[str]]
 
@@ -165,11 +165,20 @@ def annotations_in_windows(collection: models.AnnotationCollection, windows: Seq
         if box is not None and coords_logic.boxes_overlap(box, bounds):
             kept.append(annotation)
     return kept
+
+
 def annotation_descriptors(collection: models.AnnotationCollection, windows: Sequence[coords_logic.WindowLike] = (), *, is_whole: bool = True) -> Descriptors:
     """An annotation collection's descriptors: the axes of its drawing space and how many shapes the selection holds."""
     system = collection.coordinate_system_or_none
     axis_types = [axis.type for axis in system.axes.all()] if system is not None else []
-    return {**axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES), "@mikro/n_annotations": collection.annotations.count() if not windows else len(annotations_in_windows(collection, windows)), IS_WHOLE: is_whole}
+    return {**axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES), N_ANNOTATIONS: collection.annotations.count() if not windows else len(annotations_in_windows(collection, windows)), IS_WHOLE: is_whole}
+
+
+def annotation_shape_descriptors(annotation: models.Annotation) -> Descriptors:
+    """One annotation's descriptors: the shape it is drawn as, and the axes of the space its collection draws in."""
+    system = annotation.collection.coordinate_system_or_none
+    axis_types = [axis.type for axis in system.axes.all()] if system is not None else []
+    return {ANNOTATION_KIND: str(annotation.kind).upper(), **axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES)}
 
 
 def lens_descriptors(lens: models.Lens) -> Descriptors:
@@ -187,3 +196,36 @@ def lens_descriptors(lens: models.Lens) -> Descriptors:
     if isinstance(lens, models.AnnotationLens):
         return annotation_descriptors(lens.annotation_collection, lens.windows_list, is_whole=lens.is_whole)
     return {}
+
+
+def fixed(descriptors: Descriptors) -> Descriptors:
+    """The part of an object's descriptors that cannot change after it is made: everything but the live keys."""
+    return {key: value for key, value in descriptors.items() if key not in LIVE_KEYS}
+
+
+def stored_dataset_descriptors(axis_types: Sequence[str], shape: Sequence[int], spec: Sequence[str]) -> Descriptors:
+    """What ``ArrayDataset.stored_descriptors`` holds: :func:`dataset_descriptors` without the value kind, from the axes and shape its creator has in hand."""
+    try:
+        counted = array_descriptors(axis_types, shape)
+    except ValueError:
+        return {}
+    return {**counted, SPEC: list(spec), IS_WHOLE: True}
+
+
+def stored_lens_descriptors(lens: models.Lens) -> Descriptors:
+    """What ``Lens.stored_descriptors`` holds: the lens' descriptors without the live keys.
+
+    Computed without asking for the live ones, so writing a lens costs no derivation walk and
+    no count of shapes. Works on a row not saved yet, as ``derive_spec`` does.
+    """
+    if isinstance(lens, models.ArrayLens):
+        try:
+            counted = array_descriptors([axis.type for axis in lens.dataset.axes], lens.shape_list)
+        except ValueError:
+            return {}
+        return {**counted, SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
+    if isinstance(lens, models.AnnotationLens):
+        system = lens.annotation_collection.coordinate_system_or_none
+        axis_types = [axis.type for axis in system.axes.all()] if system is not None else []
+        return {**axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES), IS_WHOLE: lens.is_whole}
+    return fixed(lens_descriptors(lens))

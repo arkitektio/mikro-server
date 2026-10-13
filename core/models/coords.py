@@ -101,7 +101,7 @@ class CoordinateSystem(models.Model):
     now point at that grid like everything else.
     """
 
-    name = models.CharField(max_length=255, help_text="The name of the coordinate space")
+    name = models.TextField(help_text="The name of the coordinate space")
 
     epoch = models.DateTimeField(
         null=True,
@@ -261,7 +261,7 @@ class Transformation(models.Model):
         default=enums.TransformKindChoices.IDENTITY.value,
         help_text="The kind of transformation, which fixes how `params` is interpreted",
     )
-    name = models.CharField(max_length=255, null=True, blank=True, help_text="The name of the transformation")
+    name = models.TextField(null=True, blank=True, help_text="The name of the transformation")
 
     input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps from")
     output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps to")
@@ -398,6 +398,25 @@ class Transformation(models.Model):
     # one edge and `core.logic.graph.transform_version` counts them along a chain; both
     # answer what the column answered, and neither can be forgotten.
 
+    # **Which shape, on an edge into a drawing space.** A crop to an ROI and an image
+    # straightened along a path were computed from pixels *and* from a shape, and the shape
+    # is not a space: it is drawn in its collection's. So the edge lands where every
+    # ANNOTATION_COLLECTION derivation lands and this column narrows it to the one shape --
+    # the same sentence, said more exactly, never a second lineage table beside the edges.
+    #
+    # SET_NULL, not CASCADE: an annotation is mutable and deletable, and the data computed
+    # from it is neither. Deleting the shape leaves the edge as what it also always was, a
+    # derivation from the collection. It is a record of the act and no part of the map:
+    # moving the shape afterwards moves nothing here, which is why nothing spatial reads it.
+    annotation = models.ForeignKey(
+        "Annotation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derivation_edges",
+        help_text="(derivation into an annotation collection's space) The shape this data was computed along or within. Null on every other edge, and once that shape is deleted",
+    )
+
     # See CoordinateSystem.organization.
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this transformation belongs to")
     creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this transformation")
@@ -446,7 +465,7 @@ class MeshCollection(models.Model):
     # No `version`: a collection is immutable, and its identity is its store; what changed between
     # two extractions is their provenance. No `spec_version` either: the store read it from the
     # manifest, and a second copy here could only disagree with the bytes (see `spec_version`).
-    name = models.CharField(max_length=255, null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
+    name = models.TextField(null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`.
     folder = models.ForeignKey(
@@ -544,7 +563,7 @@ class NetworkCollection(models.Model):
     """
 
     # As on `MeshCollection`: no `version`, no `spec_version`; a name, optionally.
-    name = models.CharField(max_length=255, null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
+    name = models.TextField(null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
 
     folder = models.ForeignKey(
         "Folder",
