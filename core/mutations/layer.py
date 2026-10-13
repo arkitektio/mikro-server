@@ -1,3 +1,4 @@
+from django.db import transaction
 
 from kante.types import Info
 import strawberry
@@ -292,17 +293,20 @@ def create_layer(
 
     graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
-    layer = models.Layer.objects.create(
-        kind=enums.LayerKind.IMAGE,
-        lens=lens,
-        scene=scene,
-        blending=model.blending or enums.Blending.ADDITIVE,
-        opacity=model.opacity if model.opacity is not None else 1.0,
-        visible=model.visible if model.visible is not None else True,
-        order=model.order or 0,
-        render_graph=render_graph,
-    )
-    layer.channel_lenses.set(graph_channel_lens_ids(render_graph))
+    # The graph and the index of the lenses it names are one write: a graph whose lenses the
+    # delete guard cannot see is a layer waiting to lose its source.
+    with transaction.atomic():
+        layer = models.Layer.objects.create(
+            kind=enums.LayerKind.IMAGE,
+            lens=lens,
+            scene=scene,
+            blending=model.blending or enums.Blending.ADDITIVE,
+            opacity=model.opacity if model.opacity is not None else 1.0,
+            visible=model.visible if model.visible is not None else True,
+            order=model.order or 0,
+            render_graph=render_graph,
+        )
+        layer.channel_lenses.set(graph_channel_lens_ids(render_graph))
     return layer
 
 
@@ -417,9 +421,10 @@ def update_layer(
         layer.order = model.order
     if render_graph is not None:
         layer.render_graph = render_graph
-    layer.save()
-    if render_graph is not None:
-        layer.channel_lenses.set(graph_channel_lens_ids(render_graph))
+    with transaction.atomic():
+        layer.save()
+        if render_graph is not None:
+            layer.channel_lenses.set(graph_channel_lens_ids(render_graph))
     return layer
 
 

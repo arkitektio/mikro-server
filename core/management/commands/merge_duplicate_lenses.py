@@ -13,12 +13,13 @@ because it was written around the constraint. It converges them, container by co
    negative start wrote a negative translation), that edge's parameters are rewritten. No edge
    changes systems.
 2. **Backfill** the whole lens for every container of every kind that has none.
-3. **Merge** array lenses that duplicate one selection onto the lowest pk. `Layer.lens` and
-   `ChartLayer.lens` are repointed. An unsliced duplicate shares the intrinsic system and is
+3. **Merge** array lenses that duplicate one selection onto the lowest pk. Everything that names
+   the duplicate is repointed: `Layer.lens`, `ChartLayer.lens`, an RGB layer's components, a
+   render graph's nodes, and the scene it opens on when the keeper nominates none. An unsliced duplicate shares the intrinsic system and is
    simply deleted. A sliced duplicate owns a system: it is deleted, with its edge and its
    system, only when nothing else is attached to that system -- no other resident, no scene or
    chart over it, no edge besides its own, nothing that PROTECTs it. Otherwise it is left in
-   place and reported. The database refuses a duplicate since the lens tables were split, so
+   place and reported, as is a windowed lens whose one spelling another row already holds. The database refuses a duplicate since the lens tables were split, so
    this step finds work only on rows written around it by hand.
 4. **Materialize** the spec of every lens whose stored one is not what its container and
    selection denote (`Lens.derive_spec`): the rows written before lenses stated a spec, the
@@ -37,7 +38,6 @@ from typing import cast
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Q
 
 from chart.models import ChartLayer
 from core import enums, models
@@ -48,6 +48,14 @@ from core.logic import coords as coords_logic
 def _key(slices: list[dict[str, int | str]]) -> str:
     """The grouping key of a normalized selection: its JSON, stable across runs."""
     return json.dumps(slices, sort_keys=True)
+
+
+def _rename_graph_lens(node: dict, old: str, new: str) -> None:
+    """Rewrite every channel and phasor node of a stored render graph that names one lens to name another."""
+    if node.get("kind") in ("channel", "phasor") and str(node.get("lens")) == old:
+        node["lens"] = new
+    for child in node.get("children") or []:
+        _rename_graph_lens(child, old, new)
 
 
 class Command(BaseCommand):
@@ -99,7 +107,7 @@ class Command(BaseCommand):
             )
         )
         if self.counts["left"]:
-            self.stdout.write(f"{self.counts['left']} duplicate sliced lens(es) left in place because something else is attached to their system; each is named above.")
+            self.stdout.write(f"{self.counts['left']} duplicate lens(es) left in place; each is named above with the reason.")
 
     # --- what every lens is --------------------------------------------------------
 
@@ -129,6 +137,13 @@ class Command(BaseCommand):
                 self.stdout.write(f"lens {lens.pk} of {noun} {container.pk} left as is: its windows do not resolve ({error})")  # type: ignore[attr-defined]
                 continue
             if normalized != lens.windows:
+                # The database holds one row per spelling: a row whose one spelling another
+                # row already has is a duplicate, and is left where it is and named.
+                holder = kind.objects.filter(**{kind.CONTAINER_FIELD: container}, windows=normalized).exclude(pk=lens.pk).first()
+                if holder is not None:
+                    self.counts["left"] += 1
+                    self.stdout.write(f"lens {lens.pk} of {noun} {container.pk} duplicates lens {holder.pk} but is left in place: it keeps its spelling {lens.windows}")  # type: ignore[attr-defined]
+                    continue
                 self.counts["normalized"] += 1
                 self.stdout.write(f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.windows} -> {normalized}")
                 kind.objects.filter(pk=lens.pk).update(windows=normalized)
@@ -206,6 +221,20 @@ class Command(BaseCommand):
         self.stdout.write(f"{verb} lens {duplicate.pk} into lens {into.pk} ({layers} layer(s), {chart_layers} chart layer(s) repointed)")
         models.Layer.objects.filter(lens=duplicate).update(lens=into)
         ChartLayer.objects.filter(lens=duplicate).update(lens=into)
+        # Every other way a layer names an array lens (`layers_drawing_through`): as an RGB
+        # component, and as the source of a render-graph node. Those columns cascade, so a
+        # name left on the duplicate would take its layer with it.
+        for component in ("red_lens", "green_lens", "blue_lens"):
+            models.Layer.objects.filter(**{component: duplicate}).update(**{component: into})
+        for layer in models.Layer.objects.filter(channel_lenses=duplicate):
+            _rename_graph_lens(layer.render_graph["root"], str(duplicate.pk), str(into.pk))
+            models.Layer.objects.filter(pk=layer.pk).update(render_graph=layer.render_graph)
+            layer.channel_lenses.remove(duplicate)
+            layer.channel_lenses.add(into)
+        # The scene the duplicate opens on, unless the keeper already nominates one.
+        if into.default_scene_id is None and duplicate.default_scene_id is not None:
+            into.default_scene_id = duplicate.default_scene_id
+            models.Lens.objects.filter(pk=into.pk).update(default_scene_id=duplicate.default_scene_id)
 
         # The row, and for a sliced one its edge and its system, as `deleteLens` takes them.
         coordinate_system_logic.delete_lens(duplicate)

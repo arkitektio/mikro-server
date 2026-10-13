@@ -20,7 +20,7 @@ and `on_delete` has nothing to attach to.
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 
 from core import enums, models
 from core.logic import attribute_plans as attribute_plans_logic
@@ -199,7 +199,7 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
         return
 
     stranded: list[tuple] = []
-    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene").prefetch_related("lens").order_by("pk"):
+    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene").prefetch_related(Prefetch("lens", models.Lens.objects.with_sources())).order_by("pk"):
         named = _picker_tables(layer) & tables
         if not named:
             continue

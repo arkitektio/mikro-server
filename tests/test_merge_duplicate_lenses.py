@@ -97,4 +97,55 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
     again = await _run()
     assert "normalized 0 lens(es), repaired 0 edge(s), backfilled 0 whole lens(es), merged 0 unsliced and 0 sliced duplicate(s)" in again
     assert await _lens_ids(dataset) == [whole_id, first.pk, third.pk]
-    assert "1 duplicate sliced lens(es) left in place" in again, "what it cannot fold it keeps reporting"
+    assert "1 duplicate lens(es) left in place" in again, "what it cannot fold it keeps reporting"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named_it(authenticated_context: HttpContext):
+    """An RGB component, a render-graph node and a nomination all move to the keeper."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Image", shapes=[[3, 64, 64]])
+    (whole_id,) = await _lens_ids(dataset)
+    scene = await seed.create_scene(ctx, "A")
+
+    # One channel, spelled two ways.
+    keeper = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "c", "start": -3, "stop": 1, "step": None}])
+    duplicate = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "c", "start": 0, "stop": 1, "step": None}])
+    await models.Lens.objects.filter(pk=duplicate.pk).aupdate(default_scene=scene)
+    rgb = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.RGB.value, lens_id=whole_id, red_lens=duplicate, green_lens=duplicate, blue_lens=duplicate)
+    graph = {"root": {"kind": "add", "children": [{"kind": "channel", "lens": str(duplicate.pk)}, {"kind": "channel", "lens": None}]}}
+    image = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens_id=whole_id, render_graph=graph)
+    await image.channel_lenses.aadd(duplicate)
+
+    report = await _run()
+
+    assert f"merged lens {duplicate.pk} into lens {keeper.pk}" in report
+    assert await _lens_ids(dataset) == [whole_id, keeper.pk]
+    rgb = await models.Layer.objects.aget(pk=rgb.pk)
+    assert (rgb.red_lens_id, rgb.green_lens_id, rgb.blue_lens_id) == (keeper.pk, keeper.pk, keeper.pk), "the layer is still there, drawn through the keeper"
+    image = await models.Layer.objects.aget(pk=image.pk)
+    assert image.render_graph["root"]["children"] == [{"kind": "channel", "lens": str(keeper.pk)}, {"kind": "channel", "lens": None}]
+    assert [pk async for pk in image.channel_lenses.values_list("pk", flat=True)] == [keeper.pk], "and the delete guard sees what the graph names"
+    assert (await models.Lens.objects.aget(pk=keeper.pk)).default_scene_id == scene.pk, "the scene the duplicate opened on is the one the keeper opens on"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(authenticated_context: HttpContext):
+    """A hand-written window that bounds nothing is the whole lens spelled twice: the job reports it and goes on."""
+    from tests.test_charts import _MEASUREMENTS, _table
+
+    ctx = authenticated_context
+    made = await _table(ctx, "measurements", _MEASUREMENTS)
+    table = await models.TableDataset.objects.aget(pk=made["id"])
+    whole = await models.TableLens.objects.aget(table_dataset=table, windows=[])
+    open_window = await models.TableLens.objects.acreate(
+        table_dataset=table, coordinate_system_id=table.coordinate_system_id, organization_id=table.organization_id, windows=[{"axis": "x", "min": None, "max": None}]
+    )
+
+    for _ in range(2):
+        report = await _run()
+        assert f"lens {open_window.pk} of table dataset {table.pk} duplicates lens {whole.pk} but is left in place" in report
+        assert "1 duplicate lens(es) left in place" in report
+    assert (await models.TableLens.objects.aget(pk=open_window.pk)).windows == [{"axis": "x", "min": None, "max": None}]
