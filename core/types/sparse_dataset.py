@@ -87,7 +87,7 @@ class SparseAxisReference:
 class SparseDataset(OrgScoped):
     """A sparse matrix dataset."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(
         prefetch_related=["arrays__store", "axis_references"],

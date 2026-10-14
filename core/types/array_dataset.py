@@ -159,7 +159,7 @@ def _scene_snapshot(info: Info, scene_id: "int | None") -> "SceneSnapshot | None
 class ArrayDataset(OrgScoped):
     """A multi-dimensional array dataset with named dimensions, described by its intrinsic pixel-grid coordinate system."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:
@@ -548,7 +548,7 @@ class OmeMetadata:
 class Scene(OrgScoped, Visualization):
     """A composition of layers over a shared world coordinate system."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     id: auto
     name: auto
@@ -647,7 +647,7 @@ class Lens:
     """A selection over a container. The concrete kind says what the container is and how it is selected over."""
 
     id: auto
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
@@ -1571,7 +1571,7 @@ class BoundingBox:
 class AnnotationCollection:
     """A named set of human-drawn annotations, owning the space they are drawn in."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="The lenses over this annotation collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
     def lenses(self, info: Info, windowed: Optional[bool] = None) -> List["AnnotationLens"]:
@@ -1659,7 +1659,7 @@ class Annotation:
     fill_color: list[int] | None = kante.django_field(description="The fill color of the geometry, as RGBA, or null for no fill")
     stroke_width: float = kante.django_field(description="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale")
     filled: bool = kante.django_field(description="Whether the geometry is filled with fill_color")
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
     # Nullable: the creator FK is SET_NULL, so a shape outlives the user who drew it.
     creator: User | None = kante.django_field(description="The user that drew this annotation, or null when that user is gone or a client created it without one")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation")

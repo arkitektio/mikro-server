@@ -874,7 +874,7 @@ class LineageGraph:
 class MeshCollection(OrgScoped):
     """An immutable collection of meshes, backed by Parquet stores rather than rows."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="The lenses over this mesh collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
     def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]]:
@@ -981,7 +981,7 @@ class MeshCollection(OrgScoped):
 class NetworkCollection(OrgScoped):
     """An immutable collection of node/edge networks, backed by Parquet stores rather than rows."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="The lenses over this network collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
     def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]]:

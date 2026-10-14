@@ -35,7 +35,7 @@ from kanne_server import scalars as kanne_scalars
 class Chart(OrgScoped, core_types.Visualization):
     """A composition of layers along one metric axis."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     id: auto
     name: auto

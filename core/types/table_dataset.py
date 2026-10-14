@@ -76,7 +76,7 @@ class Column:
 class TableDataset(OrgScoped):
     """A parquet-backed table dataset."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(
         description="What this table structurally is, materialized at creation from its declared columns: the one placement member its SPACE coordinate columns denote (RECORDS for none, then POINTS_1D, POINTS_2D, POINTS_3D, POINTS_ND), then a modifier per declared fact (TIMED, TRACKED, GROUPED, KEYED, NODE_TABLE, EDGE_TABLE), then SERIES for a table that is one value against one measured coordinate. A tracking result is [POINTS_2D, TIMED, TRACKED]; a table of per-object measurements keyed to a label mask is [RECORDS, KEYED]; a readout over time is [RECORDS, TIMED, SERIES]. Declared, not measured: the server never scans the rows, so TIMED says a TIME coordinate column exists, not that the rows span more than one instant"
