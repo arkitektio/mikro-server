@@ -1,3 +1,5 @@
+from arkitekt_service.service.described import Described
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.contrib.auth import get_user_model
 from django_choices_field import TextChoicesField
@@ -102,7 +104,7 @@ class Folder(EmbeddedDescriptionMixin, models.Model):
         ]
 
 
-class File(models.Model):
+class File(Described):
     # Nullable, and SET_NULL: deleting a folder unfiles what is in it and destroys nothing.
     # It was CASCADE and NOT NULL, which made `releaseFilesFromFolder` an IntegrityError --
     # it sets this to None and the column would not take it.
@@ -144,8 +146,11 @@ class File(models.Model):
 
     provenance = ProvenanceField()
 
+    class Meta:
+        indexes = [GinIndex(fields=["stored_descriptors"], name="file_desc_gin", opclasses=["jsonb_path_ops"])]
 
-class FileLink(models.Model):
+
+class FileLink(Described):
     """A file and a container holding the same data, and which of the two was made from the other.
 
     **Deliberately not a Transformation.** A derivation is an edge of the coordinate graph --
@@ -259,3 +264,4 @@ class FileLink(models.Model):
                 name="unique_file_link_per_annotation_collection",
             ),
         ]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="file_link_desc_gin", opclasses=["jsonb_path_ops"])]

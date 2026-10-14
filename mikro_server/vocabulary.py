@@ -11,6 +11,10 @@ in hand. The array keys were declared first by the mikro client's spec vocabular
 time axes. The other kinds say what is cheaply true of them from their schema and their axes;
 nothing here needs a store opened.
 
+Every descriptor is stored on its row (``stored_descriptors``) and recomputed whenever the row is
+saved or restored -- the value kind when a derivation edge is drawn, the count of shapes when one
+is drawn -- so a ``requires`` filter is one indexed query for every key.
+
 A container and the lens that selects all of it carry the same keys, so an action typed on
 either reads one vocabulary; ``@mikro/is_whole`` is what tells the two apart, and what tells
 a crop from the whole image.
@@ -55,12 +59,9 @@ VALUE_KIND = "@mikro/value_kind"
 ANNOTATION_KIND = "@mikro/annotation_kind"
 N_ANNOTATIONS = "@mikro/n_annotations"
 
-#: The keys that can change after the row is written: a value kind follows the derivation
-#: edges drawn later, a count follows the shapes drawn later. Everything else about a lens or
-#: a container is fixed when it is made, which is what lets it be stored
-#: (``Lens.stored_descriptors``) and a ``requires`` filter be answered from an index. These two
-#: are answered live, in SQL, by ``core.logic.descriptor_filter``.
-LIVE_KEYS: frozenset[str] = frozenset({VALUE_KIND, N_ANNOTATIONS})
+#: The element type of an array's level-0 zarr store, as numpy spells it (uint8, uint16, float32, ...).
+DTYPE = "@mikro/dtype"
+CONTAINER_KIND = "@mikro/container_kind"
 
 
 def _axis_counts(axis_types: Sequence[str]) -> list[Descriptor]:
@@ -80,6 +81,7 @@ ARRAY_DESCRIPTORS = [
     *_axis_counts(ARRAY_AXIS_TYPES),
     *(Descriptor(key=key, type="INT", description=f"Its total extent along its {axis_type} axes") for key, axis_type in EXTENT_KEYS.items()),
     Descriptor(key=VALUE_KIND, type="STRING", description="What its values mean: categorical (a label map, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity"),
+    Descriptor(key=DTYPE, type="STRING", description="The element type of its values, as numpy spells it (uint8, uint16, float32, ...): an action typed on integers (labels, thresholds) or on floats asks for it"),
     _spec("one spatial member (SCALAR, PROFILE, IMAGE, VOLUME, HYPERVOLUME), a modifier per non-spatial axis it has more than one position along, and TRACE for a curve", "an axis counts only when the lens keeps more than one position along it"),
     _IS_WHOLE,
 ]
@@ -132,3 +134,47 @@ DESCRIPTORS_BY_KIND: dict[str, list[Descriptor]] = {
     "NETWORK": NETWORK_DESCRIPTORS,
     "ANNOTATION": ANNOTATION_DESCRIPTORS,
 }
+
+
+#: A scene: how it composes, and how it asks to be opened.
+SCENE_DESCRIPTORS = [
+    Descriptor(key="@mikro/blending", type="STRING", description="How its layers are blended: additive, multiplicative or normal"),
+    Descriptor(key="@mikro/preferred_view", type="STRING", description="The view it asks to be opened in: two_d, three_d or auto"),
+]
+#: A chart: the one metric axis it lays its data out along.
+CHART_DESCRIPTORS = [
+    Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE, TIME, MICROTIME or SPECTRUM"),
+    Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its axis"),
+]
+#: A file as it was uploaded: what an importer is chosen by.
+FILE_DESCRIPTORS = [
+    Descriptor(key="@mikro/content_type", type="STRING", description="Its media type, empty when unknown"),
+    Descriptor(
+        key="@mikro/extension",
+        type="STRING",
+        description="Its file name's extension, lowercased and without the dot (czi, nd2, lif, tif, ome.tif, ome.zarr), empty when it has none: what picks an importer when the media type is only application/octet-stream",
+    ),
+    Descriptor(key="@mikro/size_bytes", type="INT", description="Its size in bytes, 0 when unknown"),
+]
+#: A space of the coordinate graph: how many axes of each type it has.
+COORDINATE_SYSTEM_DESCRIPTORS = _axis_counts(tuple(KEY_BY_AXIS_TYPE))
+#: An edge of the coordinate graph: what kind of map it is, how sure anyone is of it, and between spaces of how many axes.
+TRANSFORMATION_DESCRIPTORS = [
+    Descriptor(
+        key="@mikro/transform_kind",
+        type="STRING",
+        description="What kind of map it is: IDENTITY, SCALE, TRANSLATION, MAP_AXIS, AFFINE, ROTATION, SEQUENCE, BY_DIMENSION, FIELD or UNMAPPABLE",
+    ),
+    Descriptor(key="@mikro/validity", type="STRING", description="How it is known: MANUAL, INFERRED, VALIDATED or UNKNOWN. A refining action asks for INFERRED or UNKNOWN"),
+    Descriptor(key="@mikro/value_relation", type="STRING", description="What the data it derives did to the values: IDENTICAL, TRANSFORMED or CATEGORIZED, empty when it is a placement, not a derivation"),
+    Descriptor(key="@mikro/n_input_axes", type="INT", description="How many axes the space it maps from has"),
+    Descriptor(key="@mikro/n_output_axes", type="INT", description="How many axes the space it maps to has"),
+]
+_CONTAINER_KIND = Descriptor(key=CONTAINER_KIND, type="STRING", description="Which kind of container it belongs to: ARRAY, TABLE, SPARSE, MESH or ANNOTATION")
+#: A position in a container that metadata is pinned to.
+COORDINATE_ANCHOR_DESCRIPTORS = [_CONTAINER_KIND]
+#: A file and the container holding the same data.
+FILE_LINK_DESCRIPTORS = [
+    Descriptor(key="@mikro/link_direction", type="STRING", description="Which was made from which: SOURCE (the container from the file) or RENDITION (the file from the container)"),
+    _CONTAINER_KIND,
+]

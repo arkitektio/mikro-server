@@ -10,7 +10,22 @@ from __future__ import annotations
 from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Scope, Signal, Start, Structure, blocks
 
 from mikro_server.configuration import Settings
-from mikro_server.vocabulary import ANNOTATION_DESCRIPTORS, ANNOTATION_SHAPE_DESCRIPTORS, ARRAY_DESCRIPTORS, MESH_DESCRIPTORS, NETWORK_DESCRIPTORS, SPARSE_DESCRIPTORS, TABLE_DESCRIPTORS
+from mikro_server.vocabulary import (
+    ANNOTATION_DESCRIPTORS,
+    ANNOTATION_SHAPE_DESCRIPTORS,
+    ARRAY_DESCRIPTORS,
+    CHART_DESCRIPTORS,
+    COORDINATE_ANCHOR_DESCRIPTORS,
+    COORDINATE_SYSTEM_DESCRIPTORS,
+    FILE_DESCRIPTORS,
+    FILE_LINK_DESCRIPTORS,
+    MESH_DESCRIPTORS,
+    NETWORK_DESCRIPTORS,
+    SCENE_DESCRIPTORS,
+    SPARSE_DESCRIPTORS,
+    TABLE_DESCRIPTORS,
+    TRANSFORMATION_DESCRIPTORS,
+)
 
 #: What a token may be allowed to do here: defined at the coordination server when the hub enrols.
 SCOPES = [
@@ -84,19 +99,13 @@ HOSTS = Hosts(
             identifier="@mikro/scene",
             label="Scene",
             description="A renderable composition of layers over a shared world coordinate system.",
-            descriptors=[
-                Descriptor(key="@mikro/blending", type="STRING", description="How its layers are blended"),
-                Descriptor(key="@mikro/preferred_view", type="STRING", description="The view it asks to be opened in"),
-            ],
+            descriptors=SCENE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/chart",
             label="Chart",
             description="A composition of data laid out along one metric axis, with values read off it.",
-            descriptors=[
-                Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE, TIME, MICROTIME or SPECTRUM"),
-                Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its axis"),
-            ],
+            descriptors=CHART_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/scenesnapshot",
@@ -125,9 +134,7 @@ HOSTS = Hosts(
             identifier="@mikro/file",
             label="File",
             description="A file in its original format, as it was uploaded.",
-            descriptors=[
-                Descriptor(key="@mikro/content_type", type="STRING", description="Its media type, empty when unknown"),
-            ],
+            descriptors=FILE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/folder",
@@ -163,21 +170,25 @@ HOSTS = Hosts(
             identifier="@mikro/coordinatesystem",
             label="Coordinate System",
             description="A coordinate space: a node of the coordinate graph, in which data lives and between which transformations map.",
+            descriptors=COORDINATE_SYSTEM_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/transformation",
             label="Transformation",
             description="A directed edge of the coordinate graph: a map from one coordinate system into another.",
+            descriptors=TRANSFORMATION_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/coordinateanchor",
             label="Coordinate Anchor",
             description="A position in a dataset that metadata is pinned to.",
+            descriptors=COORDINATE_ANCHOR_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/filelink",
             label="File Link",
             description="A file and a container holding the same data, and which of the two was made from the other.",
+            descriptors=FILE_LINK_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/metaschema",
@@ -269,13 +280,13 @@ HOSTS = Hosts(
         Signal(
             identifier="@mikro/scene",
             kinds=["CREATED", "UPDATED", "DELETED"],
-            descriptors=["@mikro/blending", "@mikro/preferred_view"],
+            descriptors=_keys(SCENE_DESCRIPTORS),
             description="A scene (a renderable composition of layers) was created, changed or deleted.",
         ),
         Signal(
             identifier="@mikro/chart",
             kinds=["CREATED", "UPDATED", "DELETED"],
-            descriptors=["@mikro/axis_type", "@mikro/axis_unit"],
+            descriptors=_keys(CHART_DESCRIPTORS),
             description="A chart (data laid out along one metric axis) was created, changed or deleted.",
         ),
         Signal(
@@ -304,7 +315,7 @@ HOSTS = Hosts(
         Signal(
             identifier="@mikro/file",
             kinds=["CREATED", "DELETED"],
-            descriptors=["@mikro/content_type"],
+            descriptors=_keys(FILE_DESCRIPTORS),
             description="A file was uploaded or deleted.",
         ),
         Signal(
@@ -339,21 +350,25 @@ HOSTS = Hosts(
             identifier="@mikro/coordinatesystem",
             kinds=["CREATED", "UPDATED", "DELETED"],
             description="A coordinate system was created, changed or deleted.",
+            descriptors=_keys(COORDINATE_SYSTEM_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/transformation",
             kinds=["CREATED", "UPDATED", "DELETED"],
             description="A transformation between two coordinate systems was created, refined or deleted.",
+            descriptors=_keys(TRANSFORMATION_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/coordinateanchor",
             kinds=["CREATED", "DELETED"],
             description="A coordinate anchor was pinned into a dataset or removed.",
+            descriptors=_keys(COORDINATE_ANCHOR_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/filelink",
             kinds=["CREATED", "DELETED"],
             description="A file was linked to the container holding its data, or the link was removed.",
+            descriptors=_keys(FILE_LINK_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/metaschema",
@@ -434,8 +449,11 @@ contract = Contract(
         "respec_datasets": Job(("respec_datasets",), "Recompute the spec of datasets created before an axis of one position stopped counting"),
         "backfill_parquet_schemas": Job(("backfill_parquet_schemas",), "Record the columns of parquet stores finished before they were recorded"),
         "merge_duplicate_lenses": Job(("merge_duplicate_lenses",), "Normalize stored lens selections, give every container of every kind its whole lens, merge duplicate lenses onto one row, and state every lens' spec"),
+        "restore_descriptors": Job(("restore_descriptors",), "Store the descriptors of every row that misses one its structure declares (--all: of every row)"),
     },
     # `merge_duplicate_lenses` runs for every build, before the release serves: a lens row spelled
     # the old way would otherwise escape the lookup `createLens` makes and mint a duplicate.
-    setup=("ensureadmin", "merge_duplicate_lenses"),
+    # `restore_descriptors` first: rows from before a key existed are given it without announcing
+    # anything, so the whole lenses `merge_duplicate_lenses` then mints find their containers described.
+    setup=("ensureadmin", "restore_descriptors", "merge_duplicate_lenses"),
 )

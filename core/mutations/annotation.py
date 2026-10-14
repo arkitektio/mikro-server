@@ -17,6 +17,7 @@ from simple_history.utils import bulk_create_with_history
 
 import kante
 from core import channels, enums, models, scalars, types
+from core import descriptors as descriptors_logic
 from core.creation import CreationContext
 from core.input_unions import camel_field, prose_errors
 from core.inputs.coords import AxisInputModel, CoordinateInput, CoordinateInputModel
@@ -409,13 +410,17 @@ def create_annotations(
         )
 
     with transaction.atomic():
-        created = bulk_create_with_history(rows, models.Annotation)
+        # Described before the insert (a shape's descriptors are its kind and its collection's
+        # axes, both in hand), since no save sees a bulk write.
+        created = bulk_create_with_history(descriptors_logic.stamp(rows), models.Annotation)
         # bulk_create fires no post_save, so the collection's subscribers are told here:
-        # one message for the whole batch (see AnnotationSignal.create_many).
+        # one message for the whole batch (see AnnotationSignal.create_many) -- and the
+        # collection and its lenses, which count the shapes, are restored once.
         channels.announce_annotations(
             channels.AnnotationSignal(create_many=[str(annotation.pk) for annotation in created]),
             collection.pk,
         )
+        descriptors_logic.restore_annotation_counts([collection.pk])
         return created
 
 

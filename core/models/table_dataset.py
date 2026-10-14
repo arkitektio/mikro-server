@@ -19,6 +19,7 @@ came from is UNMAPPABLE. That degenerate case is exactly the old FeatureCollecti
 from typing import TYPE_CHECKING
 
 from django.contrib.postgres.indexes import GinIndex
+from arkitekt_service.service.described import Described
 from django.db import models
 from django.contrib.auth import get_user_model
 
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
     from core.models.coords import CoordinateSystem
 
 
-class TableDataset(EmbeddedDescriptionMixin, models.Model):
+class TableDataset(EmbeddedDescriptionMixin, Described):
     """A parquet-backed table whose rows are scientific records, placed by its coordinate columns.
 
     **Not editable.** The store, the declared columns and the coordinate system they derive
@@ -128,6 +129,7 @@ class TableDataset(EmbeddedDescriptionMixin, models.Model):
         ordering = ["-created_at"]
         indexes = [
             GinIndex(fields=["stored_spec"], name="table_dataset_spec_gin"),
+            GinIndex(fields=["stored_descriptors"], name="table_dataset_desc_gin", opclasses=["jsonb_path_ops"]),
         ]
 
     def __str__(self) -> str:

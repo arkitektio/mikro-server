@@ -4,12 +4,13 @@ from weakref import WeakSet
 
 from django.db import transaction
 from django.db.models import Model
-from django.db.models.signals import post_save, pre_delete
+from django.db.models.signals import post_delete, post_save, pre_delete
 from django.dispatch import receiver
 
 from kante.channel import Channel
 
 from core import channels, models
+from core import descriptors as descriptors_logic
 from core.channel_signals import RowSignal
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,24 @@ def annotation_saved_handler(sender, instance=None, created=None, **kwargs):
 @receiver(pre_delete, sender=models.Annotation)
 def annotation_deleted_handler(sender, instance=None, **kwargs):
     channels.announce_annotations(channels.AnnotationSignal(delete=str(instance.id)), instance.collection_id)
+
+
+# --- descriptors that follow other rows ----------------------------------------------
+# What a dataset's values mean follows the derivation edges leaving its grid, and how many shapes
+# a collection holds follows the shapes drawn into it: neither is a save of the row described, so
+# the row is restored when they change. A bulk write of shapes restores by hand (`create_annotations`).
+
+
+@receiver(post_save, sender=models.Transformation)
+@receiver(post_delete, sender=models.Transformation)
+def edge_written_handler(sender: type[models.Transformation], instance: models.Transformation, **kwargs: object) -> None:
+    descriptors_logic.restore_value_kind([instance.input_id])
+
+
+@receiver(post_save, sender=models.Annotation)
+@receiver(post_delete, sender=models.Annotation)
+def annotation_written_handler(sender: type[models.Annotation], instance: models.Annotation, **kwargs: object) -> None:
+    descriptors_logic.restore_annotation_counts([instance.collection_id])
 
 
 def _relay_rows[M: Model](model: type[M], channel: Channel[RowSignal], rooms: Callable[[M], list[str]]) -> None:

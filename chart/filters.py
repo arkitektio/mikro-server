@@ -1,14 +1,16 @@
 import kante
 import strawberry
 import strawberry_django
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from kante.types import Info
 from strawberry import auto
 from strawberry_django.filters import FilterLookup
 from typing import Optional
 
 from chart import models
-from core.filters import IdsFilterMixin
+from core.filters import REQUIRES_DESCRIPTION, IdsFilterMixin
+from core.logic import descriptor_filter
+from core.logic.descriptor_filter import DescriptorConstraintInput
 
 
 @kante.filter_type(models.Chart)
@@ -23,6 +25,10 @@ class ChartFilter(IdsFilterMixin):
     @kante.filter_field(description="Filter to the charts laid out over this coordinate system")
     def coordinate_system(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}world_id": value})
+
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.Chart, queryset, value, prefix)
 
 
 @kante.filter_type(models.ChartLayer)

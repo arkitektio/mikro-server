@@ -5,7 +5,9 @@ is declared once, as data, in ``mikro_server.contract`` (``hosts``), so that a h
 image. This module only binds it: each structure to its model and to what computes its
 descriptors, each signal to the saves and deletes that send it. A structure the contract does not
 declare cannot be bound, and one it declares that nothing binds here stops the service at its
-start. The GraphQL types answer ``descriptors`` from the same binding (``core.types``).
+start. What a describer computes is stored on the row (``stored_descriptors``) whenever it is saved
+or restored; the GraphQL types answer ``descriptors`` from there (``core.types``), and a
+``requires`` filter reads it in SQL (``core.logic.descriptor_filter``).
 
 Hosting announces nothing by itself: a structure with no signal below is hosted silently.
 
@@ -17,7 +19,22 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
 from core import models
-from core.descriptors import annotation_descriptors, annotation_shape_descriptors, dataset_descriptors, lens_descriptors, mesh_descriptors, network_descriptors, sparse_descriptors, table_descriptors
+from core.descriptors import (
+    annotation_descriptors,
+    annotation_shape_descriptors,
+    coordinate_anchor_descriptors,
+    coordinate_system_descriptors,
+    dataset_descriptors,
+    file_descriptors,
+    file_link_descriptors,
+    lens_descriptors,
+    mesh_descriptors,
+    network_descriptors,
+    scene_descriptors,
+    sparse_descriptors,
+    table_descriptors,
+    transformation_descriptors,
+)
 from arkitekt_service.service import Service, organization_of
 from datalayer import models as datalayer_models
 
@@ -37,11 +54,7 @@ sparselens = service.structure(models.SparseLens, "@mikro/sparselens", describe=
 meshlens = service.structure(models.MeshLens, "@mikro/meshlens", describe=lens_descriptors)
 networklens = service.structure(models.NetworkLens, "@mikro/networklens", describe=lens_descriptors)
 annotationlens = service.structure(models.AnnotationLens, "@mikro/annotationlens", describe=lens_descriptors)
-scene = service.structure(
-    models.Scene,
-    "@mikro/scene",
-    describe=lambda scene: {"@mikro/blending": str(scene.blending), "@mikro/preferred_view": str(scene.preferred_view)},
-)
+scene = service.structure(models.Scene, "@mikro/scene", describe=scene_descriptors)
 
 
 def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
@@ -55,7 +68,7 @@ scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
 tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset", describe=table_descriptors)
 meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection", describe=mesh_descriptors)
 networkcollection = service.structure(models.NetworkCollection, "@mikro/networkcollection", describe=network_descriptors)
-file = service.structure(models.File, "@mikro/file", describe=lambda file: {"@mikro/content_type": file.content_type or ""})
+file = service.structure(models.File, "@mikro/file", describe=file_descriptors)
 folder = service.structure(models.Folder, "@mikro/folder")
 annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection", describe=annotation_descriptors)
 annotation = service.structure(models.Annotation, "@mikro/annotation", describe=annotation_shape_descriptors)
@@ -63,10 +76,10 @@ animation = service.structure(models.Animation, "@mikro/animation")
 sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", describe=sparse_descriptors)
 # The coordinate graph, the links and schemas beside the data, and the stores under it. Per
 # concrete store kind, for the reason a lens is: `post_save` never fires for the polymorphic base.
-coordinatesystem = service.structure(models.CoordinateSystem, "@mikro/coordinatesystem")
-transformation = service.structure(models.Transformation, "@mikro/transformation")
-coordinateanchor = service.structure(models.CoordinateAnchor, "@mikro/coordinateanchor")
-filelink = service.structure(models.FileLink, "@mikro/filelink")
+coordinatesystem = service.structure(models.CoordinateSystem, "@mikro/coordinatesystem", describe=coordinate_system_descriptors)
+transformation = service.structure(models.Transformation, "@mikro/transformation", describe=transformation_descriptors)
+coordinateanchor = service.structure(models.CoordinateAnchor, "@mikro/coordinateanchor", describe=coordinate_anchor_descriptors)
+filelink = service.structure(models.FileLink, "@mikro/filelink", describe=file_link_descriptors)
 metaschema = service.structure(models.MetaSchema, "@mikro/metaschema")
 bigfilestore = service.structure(datalayer_models.BigFileStore, "@mikro/bigfilestore")
 mediastore = service.structure(datalayer_models.MediaStore, "@mikro/mediastore")

@@ -2,6 +2,8 @@
 
 from authentikate.models import Organization
 from django.contrib.auth import get_user_model
+from arkitekt_service.service.described import Described
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import Q
 from django_choices_field import TextChoicesField
@@ -9,7 +11,7 @@ from django_choices_field import TextChoicesField
 from chart import enums
 
 
-class Chart(models.Model):
+class Chart(Described):
     """A composition of layers along one metric axis.
 
     The second kind of composition beside a scene. A scene is a place, drawn as an image; a
@@ -42,6 +44,7 @@ class Chart(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="chart_desc_gin", opclasses=["jsonb_path_ops"])]
 
 
 class ChartLayer(models.Model):

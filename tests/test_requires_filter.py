@@ -11,7 +11,6 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from core import descriptors as descriptors_logic
 from core import enums, models
 from core.logic import descriptor_filter
 from mikro_server.schema import schema
@@ -65,7 +64,15 @@ async def _ids(ctx: HttpContext, query: str, field: str, **filters: object) -> s
 
 @sync_to_async
 def _described(queryset) -> dict[str, dict]:  # noqa: ANN001 - a queryset of hosted rows
+    """What each row states it is: its stored descriptors, which the field and a signal read."""
     return {str(row.pk): service.describe(row) for row in queryset}
+
+
+@sync_to_async
+def _stored_and_computed(queryset) -> tuple[dict[str, dict], dict[str, dict]]:  # noqa: ANN001 - a queryset of hosted rows
+    """What each row has stored, and what its describer says of it now, run afresh."""
+    rows = list(queryset)
+    return {str(row.pk): service.describe(row) for row in rows}, {str(row.pk): service.structure_for(row).compute(row) for row in rows}
 
 
 async def _seed(ctx: HttpContext) -> None:
@@ -158,33 +165,33 @@ async def test_the_dataset_filter_offers_exactly_the_datasets_whose_descriptors_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_what_is_stored_is_what_the_describer_says_without_the_live_keys(authenticated_context: HttpContext):
-    """The column a filter reads and the field a client reads are one answer, for every kind and for the datasets."""
+async def test_what_is_stored_is_what_the_describer_says(authenticated_context: HttpContext):
+    """Every key is stored, the value kind and the counts of shapes included: after the seeding wrote
+    derivation edges and drew shapes, what each row holds is what its describer says of it now."""
     ctx = authenticated_context
     await _seed(ctx)
-    lenses = await _described(models.Lens.objects.with_sources())
-    stored = await sync_to_async(lambda: {str(pk): value for pk, value in models.Lens.objects.values_list("pk", "stored_descriptors")})()
-    assert stored == {pk: descriptors_logic.fixed(descriptors) for pk, descriptors in lenses.items()}
-
-    datasets = await _described(models.ArrayDataset.objects.all())
-    stored = await sync_to_async(lambda: {str(pk): value for pk, value in models.ArrayDataset.objects.values_list("pk", "stored_descriptors")})()
-    assert stored == {pk: descriptors_logic.fixed(descriptors) for pk, descriptors in datasets.items()}
+    for queryset in (models.Lens.objects.with_sources(), models.ArrayDataset.objects.all(), models.Annotation.objects.all(), models.AnnotationCollection.objects.all()):
+        stored, computed = await _stored_and_computed(queryset)
+        assert stored == computed, queryset.model.__name__
+        assert all(stored.values()), f"a {queryset.model.__name__} with no descriptors stored"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_whole_annotation_lens_is_found_by_how_many_shapes_it_holds(authenticated_context: HttpContext):
-    """The count is live: it follows the shapes drawn after the lens was made. A windowed lens counts by geometry and is left out."""
+    """The count follows the shapes drawn after the lens was made, a windowed lens' the shapes drawn inside its windows."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS["ANNOTATION"]
     collection_id, mutation, field = await make(ctx)
     whole = str((await model.objects.aget(annotation_collection_id=collection_id, windows=[])).pk)
-    await _create(ctx, mutation, field, collection_id, [{"axis": axis, "min": 0, "max": 50}])
+    windowed = (await _create(ctx, mutation, field, collection_id, [{"axis": axis, "min": 0, "max": 50}]))["id"]
 
     assert await _ids(ctx, LENSES, "lenses", requires=_inputs([("@mikro/n_annotations", "GTE", 1)])) == set()
-    assert await _ids(ctx, LENSES, "lenses", requires=_inputs([("@mikro/n_annotations", "EQUALS", 0)])) == {whole}
+    assert await _ids(ctx, LENSES, "lenses", requires=_inputs([("@mikro/n_annotations", "EQUALS", 0)])) == {whole, windowed}
     await _draw(ctx, collection_id, "RECTANGLE", [[1.0, 1.0], [4.0, 4.0]])
-    assert await _ids(ctx, LENSES, "lenses", requires=_inputs([("@mikro/n_annotations", "GTE", 1)])) == {whole}
+    assert await _ids(ctx, LENSES, "lenses", requires=_inputs([("@mikro/n_annotations", "GTE", 1)])) == {whole, windowed}
+    await _draw(ctx, collection_id, "RECTANGLE", [[100.0, 100.0], [104.0, 104.0]])
+    assert await _ids(ctx, LENSES, "lenses", requires=_inputs([("@mikro/n_annotations", "EQUALS", 2)])) == {whole}, "the second shape lies outside the window"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -225,15 +232,9 @@ async def test_a_key_the_structure_does_not_declare_is_refused(authenticated_con
     ctx = authenticated_context
     for query, key in ((LENSES, "@mikro/annotation_kind"), (DATASETS, "@mikro/n_index_axes"), (ANNOTATIONS, "@mikro/n_channels")):
         result = await schema.execute(query, context_value=ctx, variable_values={"filters": {"requires": _inputs([(key, "EQUALS", 1)])}})
-        assert result.errors and "is not a descriptor of" in str(result.errors[0]), (query, result.errors)
+        assert result.errors and "is not a descriptor here" in str(result.errors[0]), (query, result.errors)
     wrong_type = await schema.execute(LENSES, context_value=ctx, variable_values={"filters": {"requires": _inputs([(N_SPACE, "GTE", "three")])}})
     assert wrong_type.errors and "takes a number" in str(wrong_type.errors[0])
-
-
-def test_every_declared_key_can_be_asked():
-    """Nothing is declared that the filter cannot answer: a new descriptor comes with its translator."""
-    for model, declared in descriptor_filter.DECLARED.items():
-        assert set(descriptor_filter.TRANSLATORS[model]) == declared, model
 
 
 @pytest.mark.django_db(transaction=True)

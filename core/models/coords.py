@@ -58,6 +58,8 @@ and the on-disk shape are deliberately not the same document.
 """
 
 from django.contrib.auth import get_user_model
+from arkitekt_service.service.described import Described
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django_choices_field import TextChoicesField
 from authentikate.models import Organization
@@ -66,7 +68,7 @@ from koherent.fields import ProvenanceField
 from core import enums
 
 
-class CoordinateSystem(models.Model):
+class CoordinateSystem(Described):
     """A coordinate space: a node in the transformation graph, and nothing else.
 
     The whole model is three concepts. A **space** is a node (this). A **map** between two
@@ -124,6 +126,9 @@ class CoordinateSystem(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, help_text="The time this coordinate space was created")
 
     provenance = ProvenanceField()
+
+    class Meta:
+        indexes = [GinIndex(fields=["stored_descriptors"], name="coord_system_desc_gin", opclasses=["jsonb_path_ops"])]
 
     def __str__(self) -> str:
         """The space's name."""
@@ -202,7 +207,7 @@ class Axis(models.Model):
         return f"{self.name} ({self.type})"
 
 
-class Transformation(models.Model):
+class Transformation(Described):
     """A directed edge of the coordinate graph: a map from ``input`` to ``output``.
 
     One table, discriminated by ``kind``, with the parameters in JSON -- the same
@@ -428,13 +433,14 @@ class Transformation(models.Model):
         """Meta options for the transformation."""
 
         ordering = ["id"]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="transformation_desc_gin", opclasses=["jsonb_path_ops"])]
 
     def __str__(self) -> str:
         """The transformation's kind and endpoints."""
         return f"{self.kind}: {self.input_id} -> {self.output_id}"
 
 
-class MeshCollection(models.Model):
+class MeshCollection(Described):
     """An immutable collection of meshes, addressed by store rather than by row.
 
     The collection resolves to a **Parquet store** and a schema; the client asks the
@@ -522,6 +528,7 @@ class MeshCollection(models.Model):
         # is now a statement about the *anchor edge*, and the graph does not enforce
         # uniqueness on edges anywhere else either.
         ordering = ["-created_at"]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="mesh_coll_desc_gin", opclasses=["jsonb_path_ops"])]
 
     @property
     def label(self) -> str:
@@ -538,7 +545,7 @@ class MeshCollection(models.Model):
         return f"MeshCollection {self.label}"
 
 
-class NetworkCollection(models.Model):
+class NetworkCollection(Described):
     """An immutable collection of node/edge networks, addressed by store.
 
     The graph sibling of :class:`MeshCollection`: traced neurons, vessel trees, skeletons,
@@ -605,6 +612,7 @@ class NetworkCollection(models.Model):
         """Meta options for the network collection."""
 
         ordering = ["-created_at"]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="network_coll_desc_gin", opclasses=["jsonb_path_ops"])]
 
     @property
     def label(self) -> str:

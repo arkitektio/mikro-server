@@ -21,11 +21,11 @@ because it was written around the constraint. It converges them, container by co
    chart over it, no edge besides its own, nothing that PROTECTs it. Otherwise it is left in
    place and reported, as is a windowed lens whose one spelling another row already holds. The database refuses a duplicate since the lens tables were split, so
    this step finds work only on rows written around it by hand.
-4. **Materialize** the spec and the stored descriptors (what a `requires` filter reads) of
-   every lens whose stored ones are not what its container and
-   selection denote (`Lens.derive_spec`, `core.descriptors.stored_lens_descriptors`), and
-   copy each whole array lens' descriptors onto its dataset: the rows written before lenses stated a spec, the
-   ones a rolled-back release wrote without one, and every row after the rule itself changes.
+4. **Materialize** the spec of every lens whose stored one is not what its container and
+   selection denote (`Lens.derive_spec`), and store its descriptors again with it: the rows
+   written before lenses stated a spec, the ones a rolled-back release wrote without one, and
+   every row after the rule itself changes. A row that only misses descriptors is
+   `restore_descriptors`' to give them, which the setup runs before this.
 
 Re-runnable: it finds what is still owed and does nothing when nothing is. Listed in the image's
 setup, so it runs inside `migrate` for every build, before the release serves -- and no row spelled
@@ -118,18 +118,14 @@ class Command(BaseCommand):
         """Give every lens the spec its container and selection denote. After the convergence, so it reads the normalized selections."""
         for lens in models.Lens.objects.with_sources().order_by("pk").iterator(chunk_size=500):
             spec = [member.value for member in lens.derive_spec()]
-            described = descriptors_logic.stored_lens_descriptors(lens)
-            if spec == lens.stored_spec and described == lens.stored_descriptors:
+            if spec == lens.stored_spec:
                 continue
             self.counts["specified"] += 1
             if not self.dry_run:
-                models.Lens.objects.filter(pk=lens.pk).update(stored_spec=spec, stored_descriptors=described)
-        # A dataset's stored descriptors are its whole lens', which was just computed from the
-        # same axes and shape: copied rather than derived a second time. With `update`, as
-        # `respec_datasets` writes: a derived column, not an edit of the dataset.
-        for dataset_id, described in models.ArrayLens.objects.filter(slices=[]).values_list("dataset_id", "stored_descriptors").iterator(chunk_size=500):
-            if not self.dry_run:
-                models.ArrayDataset.objects.filter(pk=dataset_id).exclude(stored_descriptors=described).update(stored_descriptors=described)
+                # With `update`, as `respec_datasets` writes: a derived column, not an edit.
+                models.Lens.objects.filter(pk=lens.pk).update(stored_spec=spec)
+                lens.stored_spec = spec
+                descriptors_logic.restore(lens, emit=False)
 
     # --- a container that is not an array ------------------------------------------
 

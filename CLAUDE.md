@@ -106,7 +106,10 @@ anything is recreated — and runs everything else as a job the image offers by 
 
 What this service declares:
 
-- Setup, in order: `ensureadmin`, `merge_duplicate_lenses`. The second normalizes stored lens
+- Setup, in order: `ensureadmin`, `restore_descriptors`, `merge_duplicate_lenses`. The second
+  stores the descriptors of every row that misses a declared key (rows from before the key
+  existed), announcing nothing; `--all` describes every row again after a describer changed what
+  a key means. The third normalizes stored lens
   selections, gives every container of every kind (array, table, sparse, mesh, network,
   annotation collection) its whole lens, folds duplicate array lenses onto one row and gives
   every lens the spec its selection denotes (`Lens.stored_spec`); the
@@ -120,3 +123,26 @@ What this service declares:
 of this service, the setup run twice. In `deployments/next` the service runs
 `arkitekt-service standalone --debug`, which migrates and then serves: restart its container
 to apply a new migration.
+
+## Descriptors
+
+Every descriptor is stored: each described model is a `Described`
+(`arkitekt_service.service.described`) with a GIN index on `stored_descriptors`, recomputed on
+every save. Signals and the `descriptors` field read the stored value, and every list filter of a
+described structure takes `requires` (`core.logic.descriptor_filter`, one indexed condition).
+Nothing is computed when asked. The vocabulary is `mikro_server/vocabulary.py`, the describers
+`core/descriptors.py`.
+
+What a save of the row cannot see is restored by whoever writes it (`core.descriptors.restore`):
+
+- a container's axes, arrays, columns and layouts are written after its row: `whole_lens`
+  restores the container when it mints the lens every creation ends with;
+- a space's axes: the axis writers in `core/logic/graph.py`;
+- a dataset's `@mikro/value_kind`: every save or delete of a `Transformation` restores the
+  datasets whose grid it leaves, and their array lenses (`core/signals.py`);
+- `@mikro/n_annotations`: every save or delete of an `Annotation` restores its collection and
+  that collection's lenses; `createAnnotations` stamps its bulk insert and restores once.
+
+A restore inside the transaction that created the row adds no UPDATED: its CREATED reads what is
+stored at the commit. A test that seeds rows by hand gets their descriptors through the same
+saves, so seed through the writers above.

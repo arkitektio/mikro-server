@@ -1,4 +1,5 @@
 
+from arkitekt_service.service.described import Described
 from django.db import models
 from django.contrib.auth import get_user_model
 from core import enums
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from core.models.table_dataset import TableDataset
 
 
-class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
+class ArrayDataset(EmbeddedDescriptionMixin, Described):
     """A multi-dimensional array of data, with one or more pyramid levels attached as DataArrays.
 
     The dataset's dimensions and their types live on the axes of its INTRINSIC
@@ -123,15 +124,6 @@ class ArrayDataset(EmbeddedDescriptionMixin, models.Model):
             "from core.logic.coords.specs_for_axes. Immutable because the axes and the shape are, so it "
             "cannot disagree with them. Read it back as enum members through the `spec` property. Empty "
             "while the intrinsic system does not exist yet."
-        ),
-    )
-
-    stored_descriptors = models.JSONField(
-        default=dict,
-        db_default=models.Value({}, output_field=models.JSONField()),
-        help_text=(
-            "The descriptors of this dataset that cannot change after it is made (every key but `@mikro/value_kind`, which follows its derivation), materialized beside "
-            "`stored_spec` by the axis writer. Stored because a `requires` filter reads it in SQL. Empty while the intrinsic system does not exist yet"
         ),
     )
 
@@ -326,7 +318,7 @@ class DataArray(models.Model):
 # ==========================================
 
 
-class CoordinateAnchor(models.Model):
+class CoordinateAnchor(Described):
     """The Axis-Agnostic Hub: the one place metadata spokes are pinned to coordinates.
 
     An anchor belongs to exactly one container: an :class:`ArrayDataset`, whose coordinates
@@ -383,7 +375,7 @@ class CoordinateAnchor(models.Model):
     )
 
     class Meta:
-        indexes = [GinIndex(fields=["coordinates"], name="anchor_coords_gin")]
+        indexes = [GinIndex(fields=["coordinates"], name="anchor_coords_gin"), GinIndex(fields=["stored_descriptors"], name="anchor_desc_gin", opclasses=["jsonb_path_ops"])]
         constraints = [
             models.CheckConstraint(
                 condition=(
@@ -573,7 +565,7 @@ class LensQuerySet(PolymorphicQuerySet):
             self._load_sources = False
 
 
-class Lens(PolymorphicModel):
+class Lens(PolymorphicModel, Described):
     """A selection over a container that lives in a coordinate system. Nothing else.
 
     **One row per selection.** A lens is a deterministic function of what it selects: the
@@ -691,18 +683,6 @@ class Lens(PolymorphicModel):
             "materialized from `derive_spec` when the row is made. A lens is immutable and so is its container, so the column cannot disagree with "
             "what it was computed from. Empty for the kinds that have no spec vocabulary (mesh, network, annotation). Read it back as enum members "
             "through the `spec` property"
-        ),
-    )
-
-    stored_descriptors = models.JSONField(
-        default=dict,
-        # Held by the database too, for the reason `stored_spec` is: a rolled-back build
-        # inserts lens rows without naming it.
-        db_default=models.Value({}, output_field=models.JSONField()),
-        help_text=(
-            "The descriptors of this selection that cannot change after it is made (every key its kind declares but `@mikro/value_kind` and `@mikro/n_annotations`), "
-            "materialized from `core.descriptors.stored_lens_descriptors` when the row is made. Stored because a `requires` filter reads it in SQL: a picker asking for "
-            "the lenses a port accepts is one indexed query, not a describer run over every row. Empty for a row written before it existed, until `merge_duplicate_lenses` states it"
         ),
     )
 
@@ -1112,7 +1092,7 @@ class AnnotationLens(WindowedLens, Lens):
 
 
 #: Which lens kind selects over which container, by the container model.
-class Scene(models.Model):
+class Scene(Described):
     """A composition of layers over a shared world coordinate system.
 
     ``world`` is *which* space the scene composes over, and it is always set. It is

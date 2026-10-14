@@ -48,6 +48,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
+from arkitekt_service.service.described import Described
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 from authentikate.models import Organization
@@ -60,7 +62,7 @@ if TYPE_CHECKING:
     from core.models.coords import CoordinateSystem
 
 
-class SparseDataset(models.Model):
+class SparseDataset(Described):
     """A sparse matrix over two enumerated axes, stored in one or both layouts."""
 
     name = models.CharField(max_length=1000, help_text="The name of this sparse dataset")
@@ -112,6 +114,7 @@ class SparseDataset(models.Model):
         """Meta options for the sparse dataset."""
 
         ordering = ["-created_at"]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="sparse_dataset_desc_gin", opclasses=["jsonb_path_ops"])]
 
     def __str__(self) -> str:
         """Return the dataset's name."""

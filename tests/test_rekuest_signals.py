@@ -85,6 +85,9 @@ def intake(settings):
     settings.INSTANCE = INSTANCE
     yield server
     server.server.shutdown()
+    # Closed, not only stopped: a signal still queued for this intake must be refused at once,
+    # not hang the one sender thread until its timeout while the next test waits for its own.
+    server.server.server_close()
 
 
 def test_descriptors_follow_the_client_vocabulary():
@@ -155,8 +158,8 @@ async def test_nothing_is_sent_when_rekuest_is_not_configured(intake, settings, 
 
 
 def test_the_manifest_declares_every_key_mikro_sends(settings):
-    """A signal is declared with every key of its structure: the client's seven array keys, the value kind, the spec and whether it is whole -- all computed, none merely stated."""
-    from mikro_server.vocabulary import ARRAY_DESCRIPTORS, IS_WHOLE, SPEC, VALUE_KIND
+    """A signal is declared with every key of its structure: the client's seven array keys, the value kind, the element type, the spec and whether it is whole -- all computed, none merely stated."""
+    from mikro_server.vocabulary import ARRAY_DESCRIPTORS, DTYPE, IS_WHOLE, SPEC, VALUE_KIND
 
     from django.test import Client as HttpClient
     from django.urls import reverse
@@ -169,4 +172,4 @@ def test_the_manifest_declares_every_key_mikro_sends(settings):
     (declared,) = [s for s in response.json()["signals"] if s["identifier"] == "@mikro/arraydataset"]
     assert declared["kinds"] == ["CREATED", "UPDATED", "DELETED"]
     counted = set(array_descriptors(["CHANNEL", "SPACE"], [2, 8]))
-    assert set(declared["descriptors"]) == {descriptor.key for descriptor in ARRAY_DESCRIPTORS} == counted | {VALUE_KIND, SPEC, IS_WHOLE}
+    assert set(declared["descriptors"]) == {descriptor.key for descriptor in ARRAY_DESCRIPTORS} == counted | {VALUE_KIND, DTYPE, SPEC, IS_WHOLE}

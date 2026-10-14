@@ -6,6 +6,12 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import descriptor_filter
 from core.logic.descriptor_filter import DescriptorConstraintInput
+
+#: What a `requires` filter says of itself, on every structure that has one.
+REQUIRES_DESCRIPTION = (
+    "Filter to the objects satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
+    "Answered in SQL from the descriptors stored on every row. A key the structure does not declare is refused rather than ignored"
+)
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
@@ -319,6 +325,10 @@ class FolderFilter(IdsFilterMixin, SemanticSearchFilterMixin, OwnedFilterMixin, 
 
 @kante.filter_type(models.File)
 class FileFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.File, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
     size: Optional[FilterLookup[int]]
@@ -431,6 +441,10 @@ class FileFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, Create
 class FileLinkFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     """Filters for the links between a file and the data it encodes."""
 
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.FileLink, queryset, value, prefix)
+
     id: auto
     direction: Optional[enums.FileLinkDirection]
     series_identifier: Optional[FilterLookup[str]]
@@ -454,7 +468,7 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
     @kante.filter_field(
         description=(
             "Filter to the datasets satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
-            "Answered in SQL from the descriptors stored at creation, and `@mikro/value_kind` from the dataset's primary derivation. A key datasets do not declare is refused rather than ignored"
+            "Answered in SQL from the descriptors stored on every dataset (`@mikro/value_kind` restored whenever a derivation edge leaving it is drawn). A key datasets do not declare is refused rather than ignored"
         )
     )
     def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
@@ -607,6 +621,10 @@ class DataArrayFilter(IdsFilterMixin):
 
 @kante.filter_type(models.AnnotationCollection)
 class AnnotationCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.AnnotationCollection, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
 
@@ -647,7 +665,7 @@ class AnnotationFilter(IdsFilterMixin):
     @kante.filter_field(
         description=(
             "Filter to the annotations satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
-            "Answered in SQL: `@mikro/annotation_kind` is the kind (named as the descriptor names it, e.g. PATH) and the axis counts are those of the collection's drawing space. A key annotations do not declare is refused rather than ignored"
+            "Answered in SQL from the descriptors stored on every annotation: `@mikro/annotation_kind` is the kind (named as the descriptor names it, e.g. PATH) and the axis counts are those of the collection's drawing space. A key annotations do not declare is refused rather than ignored"
         )
     )
     def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
@@ -730,7 +748,7 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     @kante.filter_field(
         description=(
             "Filter to the lenses satisfying every one of these descriptor constraints: the `requires` of a port, handed on unchanged, so a picker offers what the port accepts. "
-            "Answered in SQL from the descriptors stored when the lens was made. `@mikro/value_kind` is asked of array lenses only and `@mikro/n_annotations` of whole annotation lenses only (a windowed one counts by geometry and is left out). A key lenses do not declare is refused rather than ignored"
+            "Answered in SQL from the descriptors stored on every lens, restored when what they count changes (a derivation edge, a shape drawn). A key only some kinds declare holds of no lens of another kind. A key no lens declares is refused rather than ignored"
         )
     )
     def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
@@ -891,6 +909,10 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
 
 @kante.filter_type(models.Scene)
 class SceneFilter(IdsFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.Scene, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
     blending: auto
@@ -933,6 +955,10 @@ class LayerFilter(IdsFilterMixin):
 
 @kante.filter_type(models.CoordinateAnchor)
 class CoordinateAnchorFilter(IdsFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.CoordinateAnchor, queryset, value, prefix)
+
     id: auto
     dataset: Optional[FilterLookup[strawberry.ID]]
     table: Optional[FilterLookup[strawberry.ID]]
@@ -967,6 +993,10 @@ class TaskFilter(IdsFilterMixin, CreatedAtFilterMixin):
 
 @kante.filter_type(models.CoordinateSystem)
 class CoordinateSystemFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.CoordinateSystem, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
 
@@ -1002,6 +1032,10 @@ class AxisFilter(IdsFilterMixin):
 
 @kante.filter_type(models.Transformation)
 class TransformationFilter(IdsFilterMixin, OwnedFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.Transformation, queryset, value, prefix)
+
     id: auto
     kind: auto
 
@@ -1029,6 +1063,10 @@ class TransformationFilter(IdsFilterMixin, OwnedFilterMixin):
 
 @kante.filter_type(models.MeshCollection)
 class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.MeshCollection, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
 
@@ -1058,6 +1096,10 @@ class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
 
 @kante.filter_type(models.NetworkCollection)
 class NetworkCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.NetworkCollection, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
 
@@ -1086,8 +1128,11 @@ class NetworkCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
 
 
 @kante.filter_type(models.SparseDataset)
-
 class SparseDatasetFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.SparseDataset, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]
@@ -1105,6 +1150,10 @@ class SparseDatasetFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixi
 
 @kante.filter_type(models.TableDataset)
 class TableDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.TableDataset, queryset, value, prefix)
+
     id: auto
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]

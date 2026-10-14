@@ -548,12 +548,12 @@ def _mint(kind: "type[models.Lens]", **fields: object) -> "models.Lens":
     """Write a lens row with the spec of what it selects: one insert, the spec computed from the unsaved row.
 
     Every lens is made here, so every lens states what it is from its first moment. The
-    spec is a function of the container and the selection, both in hand before the row is.
+    spec is a function of the container and the selection, both in hand before the row is; its
+    descriptors are stored when the row is inserted (``mikro_server.service``).
     """
     lens = kind(**fields)
     lens.stored_spec = [member.value for member in lens.derive_spec()]
-    lens.stored_descriptors = descriptors_logic.stored_lens_descriptors(lens)
-    lens.save()
+    lens.save()  # and described, once it is inserted
     return lens
 
 
@@ -582,6 +582,10 @@ def whole_lens(container: object) -> "models.Lens":
             raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
 
     def make() -> "models.Lens":
+        # The lens is the last thing a container's creation writes, after its axes, its arrays,
+        # its columns: the container's descriptors are stored again over all of it, and the lens
+        # then describes itself over the same.
+        descriptors_logic.restore(container)
         return _mint(
             kind,
             **{kind.CONTAINER_FIELD: container},

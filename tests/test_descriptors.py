@@ -48,6 +48,8 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
         "@mikro/n_channels": 3,
         "@mikro/n_timepoints": 5,
         "@mikro/value_kind": "intensity",
+        # Seeded without a zarr store, so with no element type to state.
+        "@mikro/dtype": "",
         "@mikro/spec": ["IMAGE", "TIMESERIES", "MULTICHANNEL"],
         "@mikro/is_whole": True,
     }

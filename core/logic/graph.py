@@ -176,11 +176,9 @@ def create_pixel_axes(system: "models.CoordinateSystem", axes: list, *, shape: "
         if shape is None:
             raise ValueError(f"The axes of dataset {dataset.pk}'s own grid were written without its shape, so what it is cannot be said: a spec counts only the axes with more than one position.")
         dataset.stored_spec = [spec.value for spec in coords_logic.specs_for_axes(axis_specs, shape)]
-        from core import descriptors as descriptors_logic  # it imports this module
+        dataset.save_without_historical_record(update_fields=["stored_spec"])
 
-        dataset.stored_descriptors = descriptors_logic.stored_dataset_descriptors([axis.type for axis in axis_specs], shape, dataset.stored_spec)
-        dataset.save_without_historical_record(update_fields=["stored_spec", "stored_descriptors"])
-
+    _restore_space(system)
     return created
 
 
@@ -237,7 +235,16 @@ def create_physical_axes(system: "models.CoordinateSystem", axes: list) -> list[
                 description=axis.description,
             )
         )
-    return models.Axis.objects.bulk_create(rows)
+    created = models.Axis.objects.bulk_create(rows)
+    _restore_space(system)
+    return created
+
+
+def _restore_space(system: "models.CoordinateSystem") -> None:
+    """Store a space's descriptors again: its axes are written after its row, in one bulk write no save sees."""
+    from core import descriptors as descriptors_logic  # it imports this module
+
+    descriptors_logic.restore(system)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -322,7 +329,9 @@ def create_table_axes(system: "models.CoordinateSystem", axes: list) -> list["mo
                 description=col.description,
             )
         )
-    return models.Axis.objects.bulk_create(rows)
+    created = models.Axis.objects.bulk_create(rows)
+    _restore_space(system)
+    return created
 
 
 def _sequence(

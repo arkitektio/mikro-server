@@ -13,6 +13,7 @@ the shape.
 
 import uuid
 
+from arkitekt_service.service.described import Described
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex, GistIndex
@@ -25,7 +26,7 @@ from core import enums
 from core.fields import CubeField
 
 
-class AnnotationCollection(models.Model):
+class AnnotationCollection(Described):
     """A named set of human-drawn annotations, owning the space they are drawn in.
 
     The collection is the coordinate-system owner (the FK lives on
@@ -148,6 +149,7 @@ class AnnotationCollection(models.Model):
         """Meta options for the annotation collection."""
 
         ordering = ["-created_at"]
+        indexes = [GinIndex(fields=["stored_descriptors"], name="annotation_coll_desc_gin", opclasses=["jsonb_path_ops"])]
 
     def __str__(self) -> str:
         """The collection's name."""
@@ -161,7 +163,7 @@ class AnnotationCollection(models.Model):
         return getattr(self, "coordinate_system", None)
 
 
-class Annotation(models.Model):
+class Annotation(Described):
     """A human-drawn shape: an addressable, mutable, owned entity in its collection's space.
 
     An annotation belongs to a **collection**, never to a scene. There is no
@@ -269,6 +271,7 @@ class Annotation(models.Model):
             GistIndex(fields=["bbox_cube"], name="annotation_bbox_gist"),
             # A picker asking for the paths (or the boxes) of a collection.
             models.Index(fields=["collection", "kind"], name="annotation_collection_kind_idx"),
+            GinIndex(fields=["stored_descriptors"], name="annotation_desc_gin", opclasses=["jsonb_path_ops"]),
         ]
 
     def __str__(self) -> str:

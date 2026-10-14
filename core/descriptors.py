@@ -1,12 +1,17 @@
 """The descriptors of mikro's containers and lenses: the server-side twin of the client's vocabulary.
 
 They are declared once, as data, in ``mikro_server.contract`` (their keys are in
-``mikro_server.vocabulary``), and read from there by everything that states them: a signal
-carries the object's descriptors so rekuest can match it against triggers and against the
-``requires`` of the ports it would be fed to, and the GraphQL types answer them as
-``descriptors``, so a client can ask which actions take the object in hand. One function per
-kind computes them, bound as the structure's ``describe`` in ``mikro_server.service``, so the
-field and the signal cannot disagree.
+``mikro_server.vocabulary``). One function per kind computes them, bound as the structure's
+``describe`` in ``mikro_server.service``, and what it computes is **stored** on the row
+(``stored_descriptors``) whenever the row is saved or restored: a signal carries the stored value
+so rekuest can match it against triggers and against the ``requires`` of the ports it would be
+fed to, the GraphQL types answer it as ``descriptors``, and a ``requires`` filter reads it in SQL
+(``core.logic.descriptor_filter``). The three cannot disagree.
+
+What a save of the row cannot see is restored by whoever writes it (:func:`restore`): a
+container's axes and level-0 array are written after its row (``whole_lens`` restores the
+container when it mints the lens every container ends its creation with), a derivation edge
+decides a dataset's value kind, a shape drawn changes a collection's count.
 
 **A container and its whole lens describe identically**, and a lens that selects something
 describes the selection: a crop's channel extent is the crop's, a windowed annotation lens
@@ -16,7 +21,7 @@ plane of a stack is an IMAGE, one frame of a tracking table is not TIMED. ``@mik
 Every describer is total: a half-written row (axes and shape that disagree) answers ``{}``,
 still an object, rather than failing the save that announced it.
 
-What each costs beyond the row: an array's value kind is two queries (its primary derivation);
+What each costs beyond the row (paid when the row is stored, never when it is read): an array's value kind is two queries (its primary derivation);
 a lens reached through ``Lens.objects.with_sources()`` has its container, that container's
 axes, a table's columns and a sparse dataset's layouts in hand; a *windowed* annotation lens
 reads the collection's annotations to count the ones in its windows.
@@ -28,7 +33,7 @@ from collections.abc import Sequence
 from core import enums, models
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
-from mikro_server.vocabulary import ANNOTATION_KIND, ARRAY_AXIS_TYPES, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, LIVE_KEYS, N_ANNOTATIONS, RECORD_AXIS_TYPES, SPEC, VALUE_KIND
+from mikro_server.vocabulary import ANNOTATION_KIND, ARRAY_AXIS_TYPES, CONTAINER_KIND, DTYPE, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, N_ANNOTATIONS, RECORD_AXIS_TYPES, SPEC, VALUE_KIND
 
 Descriptors = dict[str, int | str | bool | list[str]]
 
@@ -47,6 +52,15 @@ def array_descriptors(axis_types: Sequence[str], shape: Sequence[int]) -> dict[s
     for key, wanted in EXTENT_KEYS.items():
         descriptors[key] = sum(extent for axis_type, extent in zip(axis_types, shape) if axis_type == wanted)
     return descriptors
+
+
+def array_dtype(dataset: models.ArrayDataset) -> str:
+    """The element type of a dataset's values: its level-0 zarr store's, empty while it has none."""
+    arrays = list(dataset.data_arrays.all())
+    if not arrays:
+        return ""
+    store = min(arrays, key=lambda array: array.level).store
+    return (store.dtype if store is not None else None) or ""
 
 
 def array_value_kind(dataset: models.ArrayDataset) -> str:
@@ -76,7 +90,7 @@ def dataset_descriptors(dataset: models.ArrayDataset) -> Descriptors:
     # From the axes rather than `stored_spec`: the same two facts the counts are read off,
     # so the two agree whenever this is asked.
     spec = [member.value for member in coords_logic.specs_for_axes(dataset.axis_specs, dataset.shape_list)]
-    return {**counted, VALUE_KIND: array_value_kind(dataset), SPEC: spec, IS_WHOLE: True}
+    return {**counted, VALUE_KIND: array_value_kind(dataset), DTYPE: array_dtype(dataset), SPEC: spec, IS_WHOLE: True}
 
 
 def array_lens_descriptors(lens: models.ArrayLens) -> Descriptors:
@@ -90,7 +104,7 @@ def array_lens_descriptors(lens: models.ArrayLens) -> Descriptors:
         counted = array_descriptors([axis.type for axis in lens.dataset.axes], lens.shape_list)
     except ValueError:
         return {}
-    return {**counted, VALUE_KIND: array_value_kind(lens.dataset), SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
+    return {**counted, VALUE_KIND: array_value_kind(lens.dataset), DTYPE: array_dtype(lens.dataset), SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
 
 
 def table_descriptors(table: models.TableDataset, *, is_whole: bool = True, pinned: Sequence[str] = ()) -> Descriptors:
@@ -198,34 +212,93 @@ def lens_descriptors(lens: models.Lens) -> Descriptors:
     return {}
 
 
-def fixed(descriptors: Descriptors) -> Descriptors:
-    """The part of an object's descriptors that cannot change after it is made: everything but the live keys."""
-    return {key: value for key, value in descriptors.items() if key not in LIVE_KEYS}
+def file_descriptors(file: models.File) -> Descriptors:
+    """A file's descriptors: its media type, its extension and its size -- what an importer is picked by."""
+    return {"@mikro/content_type": file.content_type or "", "@mikro/extension": file_extension(file.name), "@mikro/size_bytes": file.size or 0}
 
 
-def stored_dataset_descriptors(axis_types: Sequence[str], shape: Sequence[int], spec: Sequence[str]) -> Descriptors:
-    """What ``ArrayDataset.stored_descriptors`` holds: :func:`dataset_descriptors` without the value kind, from the axes and shape its creator has in hand."""
-    try:
-        counted = array_descriptors(axis_types, shape)
-    except ValueError:
-        return {}
-    return {**counted, SPEC: list(spec), IS_WHOLE: True}
+#: Extensions of two parts, which name a format the last part alone does not.
+DOUBLE_EXTENSIONS = ("ome.tif", "ome.tiff", "ome.zarr", "ome.btf", "tar.gz", "nii.gz")
 
 
-def stored_lens_descriptors(lens: models.Lens) -> Descriptors:
-    """What ``Lens.stored_descriptors`` holds: the lens' descriptors without the live keys.
+def file_extension(name: str) -> str:
+    """A file name's extension, lowercased and without the dot: ``ome.tif`` for ``Cells.OME.TIF``, empty for none."""
+    base = name.rsplit("/", 1)[-1].lower()
+    for double in DOUBLE_EXTENSIONS:
+        if base.endswith(f".{double}"):
+            return double
+    stem, dot, extension = base.rpartition(".")
+    return extension if dot and stem else ""
 
-    Computed without asking for the live ones, so writing a lens costs no derivation walk and
-    no count of shapes. Works on a row not saved yet, as ``derive_spec`` does.
+
+def coordinate_system_descriptors(system: models.CoordinateSystem) -> Descriptors:
+    """A space's descriptors: how many axes of each type it has. Its axes are written after it, by writers that restore it."""
+    return axis_count_descriptors([axis.type for axis in system.axes.all()], tuple(KEY_BY_AXIS_TYPE))
+
+
+def transformation_descriptors(edge: models.Transformation) -> Descriptors:
+    """An edge's descriptors: the kind of map, how it is known, what it did to values, and the rank of the spaces it joins."""
+    return {
+        "@mikro/transform_kind": str(edge.kind),
+        "@mikro/validity": str(edge.validity),
+        "@mikro/value_relation": str(edge.value_relation or ""),
+        "@mikro/n_input_axes": edge.input.axes.count(),
+        "@mikro/n_output_axes": edge.output.axes.count(),
+    }
+
+
+def coordinate_anchor_descriptors(anchor: models.CoordinateAnchor) -> Descriptors:
+    """An anchor's descriptors: the kind of container it is pinned into."""
+    kind = "ARRAY" if anchor.dataset_id else "TABLE" if anchor.table_id else "SPARSE" if anchor.sparse_id else ""
+    return {CONTAINER_KIND: kind}
+
+
+def file_link_descriptors(link: models.FileLink) -> Descriptors:
+    """A file link's descriptors: which side was made from which, and the kind of container on the other side."""
+    kind = "ARRAY" if link.dataset_id else "TABLE" if link.table_dataset_id else "MESH" if link.mesh_collection_id else "ANNOTATION" if link.annotation_collection_id else ""
+    return {"@mikro/link_direction": str(link.direction), CONTAINER_KIND: kind}
+
+
+def scene_descriptors(scene: models.Scene) -> Descriptors:
+    """A scene's descriptors: how its layers are blended and the view it asks to be opened in."""
+    return {"@mikro/blending": str(scene.blending), "@mikro/preferred_view": str(scene.preferred_view)}
+
+
+# --- restoring what a save cannot see -------------------------------------------
+
+
+def restore(target: object, *, emit: bool = True) -> None:
+    """Store the descriptors of a row, or of every row of a queryset, again: for what was written after it.
+
+    Inside the transaction that created the row this announces nothing more -- its CREATED reads
+    what is stored at the commit; on a row made before, a change is announced as UPDATED, unless
+    ``emit`` is False (a setup job, which runs while the service is stopped).
     """
-    if isinstance(lens, models.ArrayLens):
-        try:
-            counted = array_descriptors([axis.type for axis in lens.dataset.axes], lens.shape_list)
-        except ValueError:
-            return {}
-        return {**counted, SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
-    if isinstance(lens, models.AnnotationLens):
-        system = lens.annotation_collection.coordinate_system_or_none
-        axis_types = [axis.type for axis in system.axes.all()] if system is not None else []
-        return {**axis_count_descriptors(axis_types, GEOMETRY_AXIS_TYPES), IS_WHOLE: lens.is_whole}
-    return fixed(lens_descriptors(lens))
+    from mikro_server.service import service  # it binds the models this module describes
+
+    service.restore(target, emit=emit)
+
+
+def stamp[M](rows: list[M]) -> list[M]:
+    """Describe rows about to be bulk-written, which no save sees."""
+    from mikro_server.service import service  # it binds the models this module describes
+
+    return service.stamp(rows)
+
+
+def restore_value_kind(system_ids: Sequence[int]) -> None:
+    """Restore the datasets whose own grid is one of these spaces, and their array lenses: a derivation edge leaving them was drawn, changed or removed."""
+    if not system_ids:
+        return
+    dataset_ids = list(models.ArrayDataset.objects.filter(coordinate_system_id__in=system_ids).values_list("pk", flat=True))
+    if dataset_ids:
+        restore(models.ArrayDataset.objects.filter(pk__in=dataset_ids).order_by("pk"))
+        restore(models.ArrayLens.objects.filter(dataset_id__in=dataset_ids).order_by("pk"))
+
+
+def restore_annotation_counts(collection_ids: Sequence[int]) -> None:
+    """Restore these annotation collections and their lenses: shapes were drawn into them, moved or removed."""
+    if not collection_ids:
+        return
+    restore(models.AnnotationCollection.objects.filter(pk__in=collection_ids).order_by("pk"))
+    restore(models.AnnotationLens.objects.filter(annotation_collection_id__in=collection_ids).order_by("pk"))
