@@ -876,6 +876,49 @@ def create_lens_from_box(dataset: "models.ArrayDataset", system: "models.Coordin
     return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
 
 
+def annotation_cut_slices(dataset: "models.ArrayDataset", annotation: "models.Annotation", *, within: "models.ArrayLens | None" = None) -> list[dict[str, int | str]]:
+    """The slices of the dataset :func:`create_lens_from_annotation` cuts for a shape, without making the lens.
+
+    The whole cut, and nothing else: the shape's stored box read in the frame its collection
+    states it in, its pins, the dataset's grid, and -- with ``within`` -- what that lens selects
+    under the box. Raises ``ValueError`` when the shape has no box or misses ``within``. Pure
+    over the rows it reads, so a client can ask what a crop would be (``ArrayLens.descriptorsUnder``)
+    before anyone makes it, and the answer is the one the cut gives.
+    """
+    stored = annotation.intrinsic_bbox
+    system = annotation.collection.effective_bbox_system
+    if not stored or system is None:
+        raise ValueError(f"Annotation {annotation.pk} has no geometry to cut a lens from: its collection states no box for it")
+    names = [axis.name for axis in system.axes.all()]
+    pinned = annotation.coordinates or {}
+    rank = len(stored["min"])
+    unpinned = [axis for axis in names if axis not in pinned]
+    spanned = unpinned if len(unpinned) == rank else names[max(len(names) - rank, 0) :]
+    bounds = {axis: [float(low), float(high)] for axis, low, high in zip(spanned, stored["min"], stored["max"])}
+    bounds.update({axis: [float(pinned[axis]), float(pinned[axis])] for axis in names if axis in pinned and axis not in spanned})
+    pins = {axis: int(value) for axis, value in pinned.items() if axis not in names and axis in dataset.axis_names}
+    slices = _box_to_dataset_slices(dataset, system, bounds, pins=pins)
+    if within is not None:
+        slices = coords_logic.slices_under(dataset.shape_list, dataset.axis_names, within.slices_list, [base_models.SliceInputModel(**entry) for entry in slices])
+    return slices
+
+
+def cut_descriptors(lens: "models.ArrayLens", annotation: "models.Annotation") -> "descriptors_logic.Descriptors | None":
+    """The descriptors ``createLens(lens:, annotation:)`` would give the lens it returns, without making it.
+
+    The same cut (:func:`annotation_cut_slices` within ``lens``), described over an unsaved lens:
+    a lens' descriptors read only its dataset and its slices. None where the cut would be
+    refused -- the shape has no box, nothing places it in the dataset, or it misses the lens.
+    Asked by ``ArrayLens.descriptorsUnder`` and ``Annotation.descriptorsUnder``, the two ends of one question.
+    """
+    try:
+        slices = annotation_cut_slices(lens.dataset, annotation, within=lens)
+        normalized = coords_logic.normalize_slices(lens.dataset.shape_list, lens.dataset.axis_names, [base_models.SliceInputModel(**entry) for entry in slices])
+    except ValueError:
+        return None
+    return descriptors_logic.array_lens_descriptors(models.ArrayLens(dataset=lens.dataset, slices=normalized))
+
+
 def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "models.Annotation", ctx: CreationContext, *, within: "models.ArrayLens | None" = None) -> "models.ArrayLens":
     """The dataset's lens that bounds an annotation: the voxels under the shape's stored box, in the frame the collection states it in.
 
@@ -895,21 +938,7 @@ def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "mod
     vertices: over the axes it does not pin, or the trailing ones. An axis of the frame it
     pins is that one plane, and one it says nothing about is kept whole.
     """
-    stored = annotation.intrinsic_bbox
-    system = annotation.collection.effective_bbox_system
-    if not stored or system is None:
-        raise ValueError(f"Annotation {annotation.pk} has no geometry to cut a lens from: its collection states no box for it")
-    names = [axis.name for axis in system.axes.all()]
-    pinned = annotation.coordinates or {}
-    rank = len(stored["min"])
-    unpinned = [axis for axis in names if axis not in pinned]
-    spanned = unpinned if len(unpinned) == rank else names[max(len(names) - rank, 0) :]
-    bounds = {axis: [float(low), float(high)] for axis, low, high in zip(spanned, stored["min"], stored["max"])}
-    bounds.update({axis: [float(pinned[axis]), float(pinned[axis])] for axis in names if axis in pinned and axis not in spanned})
-    pins = {axis: int(value) for axis, value in pinned.items() if axis not in names and axis in dataset.axis_names}
-    slices = _box_to_dataset_slices(dataset, system, bounds, pins=pins)
-    if within is not None:
-        slices = coords_logic.slices_under(dataset.shape_list, dataset.axis_names, within.slices_list, [base_models.SliceInputModel(**entry) for entry in slices])
+    slices = annotation_cut_slices(dataset, annotation, within=within)
     lens = create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
     # The cut is recorded beside the lens, never on it: the lens is the dataset's row for
     # these voxels, whoever asked and however, and this is the one place that knows a shape

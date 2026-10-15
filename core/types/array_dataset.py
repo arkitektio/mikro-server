@@ -32,6 +32,7 @@ from core.types.coords import (
 import kante
 from strawberry.scalars import JSON
 from datalayer.types import MediaStore, ZarrStore
+from core.scoping import scope_queryset
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.type_gen import create_stats_type
 
@@ -747,6 +748,18 @@ class ArrayLens(Lens, OrgScoped):
     def suggested_render_axes(self, info: Info) -> "RenderAxes":
         """The default axis mapping a layer over this lens would carry."""
         return coords_logic.resolve_render_axes(self.axis_specs)
+
+    @kante.django_field(
+        select_related=["dataset"],
+        description=(
+            "The descriptors `createLens(input: {lens: <this>, annotation:})` would give the lens it returns, without making it: what a crop of this lens to the shape's box "
+            "provides to an action's port (one plane of a stack is an IMAGE, a pinned channel counts one). Null when the shape has no box or misses this lens -- the cut would be refused"
+        )
+    )
+    def descriptors_under(self, info: Info, annotation: strawberry.ID) -> Optional[JSON]:
+        """The descriptors of this lens' crop to an annotation, computed over an unsaved lens."""
+        shape = scope_queryset(models.Annotation.objects.select_related("collection"), info).get(id=annotation)
+        return coordinate_system_logic.cut_descriptors(self, shape)
 
     @kante.django_field(description="The lens' axis names, in array order. A selection never drops or reorders an axis")
     def axis_names(self, info: Info) -> List[str]:
@@ -1698,6 +1711,18 @@ class Annotation:
     def derived_lenses(self, info: Info) -> List[ArrayLens]:
         """The array lenses a `LensCut` row ties to this shape, in the order they were cut."""
         return list(models.ArrayLens.objects.filter(cuts__annotation=self, organization=info.context.request.organization).order_by("cuts__created_at", "cuts__id"))
+
+    @kante.django_field(
+        description=(
+            "The descriptors `createLens(input: {lens:, annotation: <this>})` would give the lens it returns, without making it: what the crop of that lens to this shape "
+            "provides to an action's port. The reverse of `ArrayLens.descriptorsUnder`, for asking with the shape -- in the same request that draws it. "
+            "Null when the shape has no box or misses the lens, or the lens is not an array lens"
+        )
+    )
+    def descriptors_under(self, info: Info, lens: strawberry.ID) -> Optional[JSON]:
+        """The descriptors of a lens' crop to this annotation, computed over an unsaved lens."""
+        within = scope_queryset(models.ArrayLens.objects.select_related("dataset"), info).filter(id=lens).first()
+        return coordinate_system_logic.cut_descriptors(within, self) if within is not None else None
 
     @kante.django_field(
         description=(
