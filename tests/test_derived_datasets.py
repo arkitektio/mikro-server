@@ -1179,3 +1179,62 @@ async def test_a_long_dataset_name_does_not_refuse_the_dataset(authenticated_con
     assert level_one.coordinate_system.name == f"{name}/1"
     derivation = await sync_to_async(lambda: models.Transformation.objects.filter(input=dataset.coordinate_system, name__startswith=f"{name} <- ").first())()
     assert derivation is not None and len(derivation.name) > 1200, "the derivation edge carries both names"
+
+
+_LENSES = """
+query Lenses($filters: LensFilter) {
+  lenses(filters: $filters) { id }
+}
+"""
+
+_CREATE_COLLECTION = """
+mutation M($input: CreateAnnotationCollectionInput!) {
+  createAnnotationCollection(input: $input) { id }
+}
+"""
+
+
+async def _lens_ids(ctx: HttpContext, filters: dict) -> set[str]:
+    result = await schema.execute(_LENSES, context_value=ctx, variable_values={"filters": filters})
+    assert not result.errors, result.errors
+    return {lens["id"] for lens in result.data["lenses"]}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_lens_not_derived_judges_array_lenses_only(authenticated_context: HttpContext):
+    """`LensFilter.notDerived` drops the lenses over a derived dataset and keeps every other kind.
+
+    The annotation collection is the trap: it carries a derivation edge into the dataset it was
+    drawn on, so a kind-generic test would hide it -- and a negated join would drop it too, its
+    `arraylens` row being NULL.
+    """
+    ctx = authenticated_context
+    source = await seed.create_array_dataset(ctx, "Acquired")
+    lens = await seed.create_lens(ctx, source, slices=[])
+
+    child = await _derive(ctx, "Deconvolved", lens=lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    assert not child.errors, child.errors
+
+    drawn = await schema.execute(
+        _CREATE_COLLECTION,
+        context_value=ctx,
+        variable_values={
+            "input": {
+                "name": "Drawn",
+                "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
+                "derivedFrom": [{"kind": "DATASET", "dataset": str(source.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+            }
+        },
+    )
+    assert not drawn.errors, drawn.errors
+
+    acquired = str(lens.pk)
+    derived = await seed.whole_lens_id(models.ArrayDataset, child.data["createArrayDataset"]["id"])
+    collection = await seed.whole_lens_id(models.AnnotationCollection, drawn.data["createAnnotationCollection"]["id"])
+
+    whole = await _lens_ids(ctx, {"sliced": False})
+    assert {acquired, derived, collection} <= whole
+
+    assert await _lens_ids(ctx, {"sliced": False, "notDerived": True}) == whole - {derived}
+    assert await _lens_ids(ctx, {"sliced": False, "notDerived": False}) == {derived}

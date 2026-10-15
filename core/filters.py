@@ -822,6 +822,20 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
 
     @kante.filter_field(
         description=(
+            "Filter array lenses by whether their dataset was acquired rather than computed: true keeps the lenses over the roots, false those over a derived dataset -- the "
+            "same line `ArrayDatasetFilter.notDerived` draws. Only array lenses are judged: a lens over a table, sparse dataset, mesh, network or annotation collection passes "
+            "true and fails false"
+        )
+    )
+    def not_derived(self, info: Info, value: bool, prefix: str) -> Q:
+        # A pk subquery, not `~Q(arraylens__dataset_id__in=...)`: negating across the child join
+        # would read NULL for every non-array lens and drop it, emptying a mixed list of its
+        # tables and meshes.
+        derived = Q(**{f"{prefix}pk__in": models.ArrayLens.objects.filter(dataset_id__in=_derived_dataset_ids()).values("pk")})
+        return ~derived if value else derived
+
+    @kante.filter_field(
+        description=(
             "Search by the lens' own name or, since most lenses have none and are known by their container's, by its container's label: the name of a dataset, table, sparse dataset or "
             "annotation collection, the name or store key of a mesh or network collection (case-insensitive substring)"
         )
