@@ -542,6 +542,22 @@ def load_lens_sources(lenses: "Iterable[Lens]") -> None:
             target._prefetched_objects_cache = {**getattr(target, "_prefetched_objects_cache", {}), **getattr(loaded, "_prefetched_objects_cache", {})}
 
 
+def selection_label(selection: list) -> str:
+    """What a stored selection selects, in one line -- ``y[0:32], c[1:2]`` -- or empty for the whole.
+
+    Its container is not named: :attr:`Lens.label` puts it in front, and a reader already
+    standing on the container (a lineage tile listing its lenses) does not need it again.
+    """
+    parts = []
+    for entry in selection:
+        if "min" in entry or "max" in entry:
+            parts.append(f"{entry.get('axis')}[{entry.get('min', '')}..{entry.get('max', '')}]")
+        else:
+            start, stop = entry.get("start"), entry.get("stop")
+            parts.append(f"{entry.get('axis')}[{'' if start is None else start}:{'' if stop is None else stop}]")
+    return ", ".join(parts)
+
+
 class LensQuerySet(PolymorphicQuerySet):
     """The polymorphic queryset, with an opt-in to load every row's container chain in a batch."""
 
@@ -781,14 +797,8 @@ class Lens(PolymorphicModel, Described):
             return self.name.strip()
         real = self._real()
         container = getattr(real.container, "name", None) or f"{type(real).__name__} {self.pk}"
-        parts = []
-        for entry in real.selection:
-            if "min" in entry or "max" in entry:
-                parts.append(f"{entry.get('axis')}[{entry.get('min', '')}..{entry.get('max', '')}]")
-            else:
-                start, stop = entry.get("start"), entry.get("stop")
-                parts.append(f"{entry.get('axis')}[{'' if start is None else start}:{'' if stop is None else stop}]")
-        return f"{container} · {', '.join(parts)}" if parts else container
+        selected = selection_label(real.selection)
+        return f"{container} · {selected}" if selected else container
 
     @property
     def active_anchors(self):

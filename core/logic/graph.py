@@ -1813,6 +1813,7 @@ def _containers_derived_through(edges: "list[models.Transformation]", *, own: tu
         return []
 
     keys = _keys_for(edges)
+    drawn = drawing_surfaces({keys[edge.input_id] for edge in edges if edge.input_id in keys})
 
     # One container may have several edges into this dataset -- a fusion of two of its
     # lenses -- and is still one child; pk order makes the answer the creators' order.
@@ -1820,7 +1821,7 @@ def _containers_derived_through(edges: "list[models.Transformation]", *, own: tu
     wanted: list[tuple] = []
     for edge in edges:
         key = keys.get(edge.input_id)
-        if key is None or key in seen or not is_derivation_edge(edge, of_container=key, keys=keys):
+        if key is None or key in seen or not is_lineage_edge(edge, of_container=key, keys=keys, drawn=drawn):
             continue
         seen.add(key)
         wanted.append(key)
@@ -2062,6 +2063,39 @@ def is_derivation_edge(edge: "models.Transformation", *, of_container: tuple | N
     if target is None or target[0] == "system":
         return False
     return target != of_container
+
+
+def drawing_surfaces(keys: "Iterable[tuple]") -> set[tuple]:
+    """The scene drawing collections among these container keys, in one query (none when no key is a collection).
+
+    A scene's annotation collection is minted on the first shape drawn in it, with an identity
+    registration into the scene's world (``_mint_scene_collection``). When the scene was staged
+    on a dataset's own grid, that world IS the dataset's space, and the registration lands in a
+    container -- which :func:`is_derivation_edge` cannot tell from a derivation.
+    """
+    pks = [pk for kind, pk in keys if kind == "annotationcollection"]
+    if not pks:
+        return set()
+    return {("annotationcollection", pk) for pk in models.AnnotationCollection.objects.filter(pk__in=pks, scene__isnull=False).values_list("pk", flat=True)}
+
+
+def is_lineage_edge(edge: "models.Transformation", *, of_container: tuple | None, keys: dict[int, tuple], drawn: set[tuple]) -> bool:
+    """Whether this edge says ``of_container`` was *computed* from where it lands: what lineage reports.
+
+    :func:`is_derivation_edge` plus two refusals, and only for the readers that report lineage
+    (``derivedResidents``, ``lineageGraph``, ``lineage``). Placement, filing and the bbox frame
+    keep the wider predicate on purpose: shapes drawn over a dataset's grid are placed wherever
+    that dataset is, which is exactly what inheriting through the edge buys them.
+
+    - **A drawing surface is drawn, not computed** (``drawn``, from :func:`drawing_surfaces`), so
+      it is never a lineage *child*. It can still be a parent: a crop cut along a shape names
+      the shape's collection, and that is lineage.
+    - **A world is never a child.** An edge out of a resident-less space into a container is a
+      registration read backwards; asked for the child's model it has none.
+    """
+    if of_container is None or of_container[0] == "system" or of_container in drawn:
+        return False
+    return is_derivation_edge(edge, of_container=of_container, keys=keys)
 
 
 def reachable_in(adjacency: dict[int, list[tuple["models.Transformation", bool, int]]], start: int) -> set[int]:
@@ -2773,11 +2807,12 @@ def lineage_graph(
             .select_related("input", "output")
         )
         keys = _keys_for(touching)
+        drawn = drawing_surfaces({keys[edge.input_id] for edge in touching if edge.input_id in keys})
 
         discovered: set[tuple] = set()
         for edge in touching:
             child = keys.get(edge.input_id)
-            if child is None or not is_derivation_edge(edge, of_container=child, keys=keys):
+            if child is None or not is_lineage_edge(edge, of_container=child, keys=keys, drawn=drawn):
                 continue
             parent = keys.get(edge.output_id)
             if parent is None:
