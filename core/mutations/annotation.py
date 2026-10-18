@@ -16,6 +16,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from simple_history.utils import bulk_create_with_history
 
 import kante
+from arkitekt_service.collaborations.guests import require_in_collaboration
 from core import channels, enums, models, scalars, types
 from core import descriptors as descriptors_logic
 from core.creation import CreationContext
@@ -25,7 +26,7 @@ from core.inputs.validators import assert_rgba, assert_shape_vectors
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
-from core.scoping import get_for_org
+from core.scoping import get_for_org, get_in_org_unshared
 
 
 class _ShapeInputModel(BaseModel):
@@ -188,6 +189,11 @@ def _find_or_mint_scene_collection(scene: "models.Scene", ctx: CreationContext) 
         return existing
 
 
+#: Who may draw: the roles of the mutations, held in the organization or, for a guest, in a
+#: collaboration that holds what they draw on (``require_in_collaboration``).
+ANNOTATING_ROLES = ["admin", "editor", "bot"]
+
+
 # A shape's coordinate pins are deliberately *not* checked against the axes of the space
 # it is drawn in, though the camera-pose check (`_assert_positions_are_on_the_world`) is the
 # obvious precedent. The two are not the same question. A camera position is a point in the
@@ -209,9 +215,13 @@ def create_annotation(
     ctx = CreationContext.from_info(info)
 
     if model.collection:
-        collection = get_for_org(models.AnnotationCollection, info, id=model.collection)
+        collection = get_in_org_unshared(models.AnnotationCollection, info, id=model.collection)
+        require_in_collaboration(collection, any_role_of=ANNOTATING_ROLES, info=info)
     else:
-        scene = get_for_org(models.Scene, info, id=model.scene)
+        scene = get_in_org_unshared(models.Scene, info, id=model.scene)
+        require_in_collaboration(scene, any_role_of=ANNOTATING_ROLES, info=info)
+        # A collection minted here comes into the scene's collaborations with the annotation layer
+        # it is drawn through (the scene's `depends`, refreshed when a layer is saved).
         collection = _find_or_mint_scene_collection(scene, ctx)
 
     system = collection.coordinate_system_or_none
@@ -373,9 +383,13 @@ def create_annotations(
     ctx = CreationContext.from_info(info)
 
     if model.collection:
-        collection = get_for_org(models.AnnotationCollection, info, id=model.collection)
+        collection = get_in_org_unshared(models.AnnotationCollection, info, id=model.collection)
+        require_in_collaboration(collection, any_role_of=ANNOTATING_ROLES, info=info)
     else:
-        scene = get_for_org(models.Scene, info, id=model.scene)
+        scene = get_in_org_unshared(models.Scene, info, id=model.scene)
+        require_in_collaboration(scene, any_role_of=ANNOTATING_ROLES, info=info)
+        # A collection minted here comes into the scene's collaborations with the annotation layer
+        # it is drawn through (the scene's `depends`, refreshed when a layer is saved).
         collection = _find_or_mint_scene_collection(scene, ctx)
 
     system = collection.coordinate_system_or_none

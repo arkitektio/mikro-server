@@ -13,6 +13,7 @@ designated seam — every scoped read funnels through it.
 
 from functools import cache
 
+from arkitekt_service.collaborations.guests import object_scope
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models as django_models
 from kante.types import Info
@@ -58,7 +59,9 @@ def organization_path(model: type[django_models.Model]) -> str | None:
 
 
 def scope_queryset(queryset: django_models.QuerySet, info: Info) -> django_models.QuerySet:
-    """Narrow an existing ``queryset`` to the request's organization."""
+    """Narrow an existing ``queryset`` to the request's organization, and, at a root field, for a
+    guest of the organization, to what is in their collaborations (``arkitekt_service.collaborations``). Below a
+    root field the collaboration gate holds them to it."""
     model = queryset.model
     path = organization_path(model)
     if path is None:
@@ -67,8 +70,8 @@ def scope_queryset(queryset: django_models.QuerySet, info: Info) -> django_model
                 f"{model.__name__} has no path to an organization and is not "
                 "registered in core.scoping.UNSCOPED_MODELS"
             )
-        return queryset
-    return queryset.filter(**{path: info.context.request.organization})
+        return object_scope(queryset, info=info)
+    return object_scope(queryset.filter(**{path: info.context.request.organization}), info=info)
 
 
 def for_org(model: type[django_models.Model], info: Info) -> django_models.QuerySet:
@@ -79,6 +82,17 @@ def for_org(model: type[django_models.Model], info: Info) -> django_models.Query
 def get_for_org(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:
     """``Model.objects.get`` limited to the request's organization."""
     return for_org(model, info).get(**kwargs)
+
+
+def get_in_org_unshared(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:
+    """``Model.objects.get`` limited to the request's organization alone, not to a guest's collaborations.
+
+    For a resolver that then checks the collaboration itself (``require_in_collaboration``): what a guest may
+    write to need not be something a root field would hand them.
+    """
+    path = organization_path(model)
+    queryset = model.objects.all() if path is None else model.objects.filter(**{path: info.context.request.organization})
+    return queryset.get(**kwargs)
 
 
 async def aget_for_org(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:

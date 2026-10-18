@@ -40,6 +40,9 @@ from core import scalars as core_scalars
 from kanne_server import scalars as kanne_scalars
 from strawberry.schema.config import StrawberryConfig
 from core.scoping import get_for_org
+from arkitekt_service.graphql import CollaborationGate, annotate_schema
+from arkitekt_service.collaborations import graphql as collaboration_types
+from mikro_server.service import service as mikro_service
 from embeddings.strawberry import scalar_map as embedding_scalars
 
 ID = Annotated[StrawberryID, strawberry.argument(description="The unique identifier of an object")]
@@ -63,10 +66,18 @@ class CreatedByCallerField(StrawberryDjangoField):
         return super().get_queryset(queryset.filter(creator=info.context.request.user), info, **kwargs)
 
 
-def mutation(roles: list[str] | None = None, **kwargs) -> strawberry.mutation:
-    """A wrapper for mutation that adds default permission classes and extensions."""
+def mutation(roles: list[str] | None = None, guests: bool = False, **kwargs) -> strawberry.mutation:
+    """A wrapper for mutation that adds default permission classes and extensions.
 
-    return strawberry_django.mutation(extensions=[AuthExtension(any_role_of=roles or ["admin", "editor", "bot"])], **kwargs)
+    ``guests`` opens it to guests of the organization holding the roles in one of their collaborations:
+    the resolver then checks its target is in such a collaboration (``require_in_collaboration``).
+    """
+
+    return strawberry_django.mutation(extensions=[AuthExtension(any_role_of=roles or ["admin", "editor", "bot"], allow_scoped=guests)], **kwargs)
+
+
+#: The collaborations of mikro's objects, which a guest of the organization is granted.
+collaboration_api = collaboration_types.resolvers(fetch=lambda model, id, info: get_for_org(model, info, id=id))
 
 
 def upload_mutation(**kwargs) -> strawberry.mutation:
@@ -95,6 +106,9 @@ class Query:
 
     layers: list[types.Layer] = field(filters=filters.LayerFilter, ordering=order.LayerOrder, pagination=True, description="List layers placed in scenes (a heterogeneous list of layer kinds)")
     layer: types.Layer = field(description="Get a single layer by ID")
+
+    collaborations: list[collaboration_types.Collaboration] = field(resolver=collaboration_api.collaborations, description="List the organization's collaborations: what a guest granted one sees of it (a guest: the collaborations granted to them)")
+    collaboration: collaboration_types.Collaboration = field(resolver=collaboration_api.collaboration, description="Get a single collaboration by ID")
 
     charts: list[chart_types.Chart] = field(description="List charts (compositions of data laid out along one metric axis)")
     chart: chart_types.Chart = field(description="Get a single chart by ID")
@@ -276,6 +290,11 @@ class Query:
 
 @strawberry.type
 class Mutation:
+
+    create_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.create_collaboration, description="Create an empty collaboration, to put objects in and grant a guest")
+    add_to_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.add_to_collaboration, description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw")
+    remove_from_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.remove_from_collaboration, description="Take an object out of a collaboration, with what it brought that nothing else there needs")
+    delete_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.delete_collaboration, description="Delete a collaboration: whoever was granted it sees nothing of it any more")
 
     request_media_upload = upload_mutation(
         description="Upload media and return a URL for access",
@@ -474,10 +493,12 @@ class Mutation:
     )
 
     create_annotation = mutation(
+        guests=True,
         resolver=mutations.create_annotation,
         description="Draw an annotation into a collection, or onto a scene (exactly one of the two). Drawing on a scene finds its annotation collection or mints it on first use: a coordinate system copying the world's axes, an identity registration into the world, and one annotation layer",
     )
     create_annotations = mutation(
+        guests=True,
         resolver=mutations.create_annotations,
         description="Draw many annotations in one call, into a collection or onto a scene (exactly one of the two, same semantics as createAnnotation). The transform chain and version resolve once for the whole batch, and the rows insert in bulk",
     )
@@ -831,6 +852,8 @@ schema = Schema(
         # trips, and those are what the coordinate graph needs.
         DjangoOptimizerExtension(enable_only_optimization=False),
         AuthentikateExtension,
+        # A guest of the organization is handed only what is in their collaborations.
+        CollaborationGate,
         KoherentExtension,
     ],
     types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *lens_types, *chart_types.chart_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
@@ -839,3 +862,6 @@ schema = Schema(
     schema_directives=[unionElementOf],
     config=StrawberryConfig(scalar_map={**core_scalars.SCALAR_MAP, **datalayer_scalars.SCALAR_MAP, **kanne_scalars.SCALAR_MAP, **embedding_scalars}),
 )
+
+# Which structure each type is (`@identified`), and, behind the gate, that mikro lets guests in.
+annotate_schema(schema, mikro_service)

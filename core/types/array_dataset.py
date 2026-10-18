@@ -1744,9 +1744,10 @@ class Annotation:
         column of its own. A bare list field returns every row in the table, across
         organizations: the hole the old `dataRois` field had. The select_related is
         for the `coordinateSystem` resolver, which walks collection -> system per
-        row and would otherwise cost two queries per annotation.
+        row and would otherwise cost two queries per annotation. At a root field a
+        guest gets what is in their collaborations (``scope_queryset``).
         """
-        return queryset.filter(collection__organization=info.context.request.organization).select_related("collection__coordinate_system").prefetch_related("collection__coordinate_system__axes")
+        return scope_queryset(queryset, info).select_related("collection__coordinate_system").prefetch_related("collection__coordinate_system__axes")
 
 
 @kante.django_type(
