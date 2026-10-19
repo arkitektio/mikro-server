@@ -20,6 +20,7 @@ from mikro_server.vocabulary import (
     FILE_DESCRIPTORS,
     FILE_LINK_DESCRIPTORS,
     MESH_DESCRIPTORS,
+    METRIC_DESCRIPTORS,
     NETWORK_DESCRIPTORS,
     SCENE_DESCRIPTORS,
     SPARSE_DESCRIPTORS,
@@ -152,6 +153,12 @@ HOSTS = Hosts(
             label="Annotation",
             description="One human-drawn shape in an annotation collection.",
             descriptors=ANNOTATION_SHAPE_DESCRIPTORS,
+        ),
+        Structure(
+            identifier="@mikro/metric",
+            label="Metric",
+            description="One value recorded about an annotation or a dataset, by an app or a person: a quantity in a unit, or a code a process emitted. Immutable; a correction supersedes it.",
+            descriptors=METRIC_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/animation",
@@ -336,6 +343,12 @@ HOSTS = Hosts(
             description="An annotation was drawn, changed or deleted, with the shape it is drawn as and the axes of its space.",
         ),
         Signal(
+            identifier="@mikro/metric",
+            kinds=["CREATED", "DELETED"],
+            descriptors=_keys(METRIC_DESCRIPTORS),
+            description="A metric was recorded or deleted. Sent for a metric recorded on its own (createMetric), not for each of a batch (createMetrics): the change feed is where every metric is found.",
+        ),
+        Signal(
             identifier="@mikro/animation",
             kinds=["CREATED", "DELETED"],
             description="An animation (a camera tour of a scene) was created or deleted.",
@@ -433,7 +446,8 @@ contract = Contract(
         needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "zarr", "parquet", "bigfile", "fabriks", "konnektion"], instance_key=True, peers=["rekuest"]),
         # No `rekuest_hook`: the hook agent (`mikro_server.hook_agent`) has no action in this
         # release, and an agent with nothing to do is not offered to a hub.
-        offers=Offers(endpoints={"rekuest_service": "_rekuest/service"}),
+        # `feed`: the change feed of metrics, read by kraph with its instance key (internal network only).
+        offers=Offers(endpoints={"rekuest_service": "_rekuest/service", "feed": "_feed"}),
         requires={"rekuest": ">=6"},
         hosts=HOSTS,
     ),

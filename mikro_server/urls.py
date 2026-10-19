@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 from arkitekt_service.service.views import answers_challenge
 from mikro_server.hook_agent import agent as hook_agent
 from mikro_server.service import service as rekuest_service
+from metric.feed import publisher as metric_feed
 
 urlpatterns = [
     dynamicpath("admin/", admin.site.urls),
@@ -30,4 +31,6 @@ urlpatterns = [
     *rekuest_service.urls,
     # This process's hook agent: the hub's rekuest POSTs it Assigns (internal network only). Not the service's.
     *hook_agent.urls,
+    # The change feed of metrics, read by kraph with its instance key (internal network only).
+    *metric_feed.urls,
 ]

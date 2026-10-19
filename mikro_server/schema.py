@@ -11,6 +11,8 @@ from core import subscriptions
 from chart import filters as chart_filters
 from chart import mutations as chart_mutations
 from chart import types as chart_types
+from metric import mutations as metric_mutations
+from metric import types as metric_types
 from visualization import mutations as visualization_mutations
 import strawberry_django
 from strawberry_django.fields.field import StrawberryDjangoField
@@ -115,6 +117,9 @@ class Query:
 
     chart_layers: list[chart_types.ChartLayer] = field(filters=chart_filters.ChartLayerFilter, ordering=chart_filters.ChartLayerOrder, pagination=True, description="List layers drawn in charts (a heterogeneous list of layer kinds)")
     chart_layer: chart_types.ChartLayer = field(description="Get a single chart layer by ID")
+
+    metrics: list[metric_types.Metric] = field(description="List metrics: values recorded about annotations and datasets, by apps and people")
+    metric: metric_types.Metric = field(description="Get a single metric by ID")
 
     # Unoptimized: the optimizer cannot follow a polymorphic interface to its kinds' own tables.
     lenses: list[types.Lens] = field(filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, disable_optimization=True, description="List lenses: selections over array datasets (by slices) and over tables, sparse datasets, meshes, networks and annotation collections (by windows), a heterogeneous list of lens kinds")
@@ -580,6 +585,16 @@ class Mutation:
     )
     update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer. View state only")
     delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")
+
+    create_metric = mutation(
+        resolver=metric_mutations.create_metric,
+        description="Record one value about an annotation or a dataset: a quantity or a code. Announced to the hub's rekuest (a CREATED @mikro/metric signal) once committed",
+    )
+    create_metrics = mutation(
+        resolver=metric_mutations.create_metrics,
+        description="Record many values in one transaction. No signal is sent for each: a reader finds them in mikro's change feed",
+    )
+    delete_metric = mutation(resolver=metric_mutations.delete_metric, description="Delete a metric. One a correction supersedes is kept while the correction stands")
 
     auto_visualize = mutation(
         resolver=visualization_mutations.auto_visualize,

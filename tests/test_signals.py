@@ -40,6 +40,7 @@ EXPECTED = {
     "@mikro/annotation": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/animation": ["CREATED", "DELETED"],
     "@mikro/sparsedataset": ["CREATED", "DELETED"],
+    "@mikro/metric": ["CREATED", "DELETED"],
     "@mikro/coordinatesystem": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/transformation": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/coordinateanchor": ["CREATED", "DELETED"],

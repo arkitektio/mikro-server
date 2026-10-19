@@ -65,6 +65,9 @@ INSTALLED_APPS = [
     "core",
     "datalayer",
     "chart",
+    "metric",
+    # The change feed: what mikro changed, written with the change, for kraph to read in order.
+    "arkitekt_service.feed",
     "health_check",
     "health_check.db",
     # Collaborations of mikro's objects, which a guest of the organization is granted and held to.

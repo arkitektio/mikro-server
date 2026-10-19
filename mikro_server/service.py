@@ -18,6 +18,8 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
+from metric import logic as metric_logic
+from metric import models as metric_models
 from core import models
 from core.descriptors import (
     annotation_descriptors,
@@ -116,6 +118,7 @@ annotationcollection = service.structure(models.AnnotationCollection, "@mikro/an
 annotation = service.structure(models.Annotation, "@mikro/annotation", describe=annotation_shape_descriptors)
 animation = service.structure(models.Animation, "@mikro/animation")
 sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", describe=sparse_descriptors, depends=_stored_needs)
+metric = service.structure(metric_models.Metric, "@mikro/metric", describe=metric_logic.describe)
 # The coordinate graph, the links and schemas beside the data, and the stores under it. Per
 # concrete store kind, for the reason a lens is: `post_save` never fires for the polymorphic base.
 coordinatesystem = service.structure(models.CoordinateSystem, "@mikro/coordinatesystem", describe=coordinate_system_descriptors)
@@ -159,6 +162,9 @@ service.model_signal(annotationcollection, organization=org)
 service.model_signal(annotation, organization=organization_of("collection.organization"))
 service.model_signal(animation, organization=org)
 service.model_signal(sparsedataset, organization=org)
+# A metric recorded on its own; a batch (`createMetrics`) is a bulk insert and sends none -- the
+# change feed (`metric.feed`) is where a reader finds every metric.
+service.model_signal(metric, organization=org)
 service.model_signal(coordinatesystem, organization=org)
 service.model_signal(transformation, organization=org)
 service.model_signal(coordinateanchor, organization=org)

@@ -76,6 +76,25 @@ system, a derivation edge, a refusal). `specVersion` is read off the store's man
 stored on the collection. `Axis.long_name` stays beside `description` on purpose: a label and
 a prose field.
 
+## Metrics
+
+A **metric** (`metric/`, an app like `chart/`; core never imports it) is one value recorded about
+an annotation or a dataset -- a quantity (`magnitude` in a pint `unit`) or an opaque `code` a
+process emitted, never both (a check constraint), under a producer-namespaced `key`
+(`ais_suite.measure_profile/threshold_distance`, `user:<sub>/spine_count`). It is an
+observation: what it *means* is kraph's, which reads every metric. Metrics are **immutable**: a
+correction `supersedes` (PROTECT), and there is no update. The object a metric is about is a
+`MetricTarget`, made on its first metric (never by the object's own creation paths), with one
+PROTECT foreign key per targetable structure: an object something was measured about cannot be
+deleted, cascades included.
+
+Every write records a feed entry **in its own transaction** (`arkitekt_service.feed`,
+`@mikro/metric`), which kraph reads with its instance key at `POST _feed` (`metric/feed.py`;
+only the readers named there may read). The feed is what a reader relies on; the
+`@mikro/metric` signal is a nudge, sent for `createMetric` only: `createMetrics` (at most 5000,
+one transaction) is a bulk insert and announces nothing. Keep each write's transaction short --
+the feed hands out nothing past the oldest transaction open in the whole Postgres cluster.
+
 ## Migrations and jobs
 
 A container of this image only serves. An installer (konstruktor) prepares the database with

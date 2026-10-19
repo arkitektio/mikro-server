@@ -146,6 +146,16 @@ CHART_DESCRIPTORS = [
     Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE, TIME, MICROTIME or SPECTRUM"),
     Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its axis"),
 ]
+#: A metric: what was measured, its value, and the object it is about. Few and flat, because a
+#: metric is written by the thousand: a trigger reacts to a key, a value past a threshold, a code.
+METRIC_DESCRIPTORS = [
+    Descriptor(key="@mikro/metric_key", type="STRING", description="What was measured, namespaced by who measured it: ais_suite.measure_profile/threshold_distance"),
+    Descriptor(key="@mikro/magnitude", type="FLOAT", description="Its number, for a quantity; absent for a code"),
+    Descriptor(key="@mikro/unit", type="STRING", description="The unit of its magnitude, for a quantity; absent for a code"),
+    Descriptor(key="@mikro/metric_code", type="STRING", description="The category a process emitted, for a code; absent for a quantity"),
+    Descriptor(key="@mikro/target_identifier", type="STRING", description="The structure of the object it is about: @mikro/annotation, @mikro/arraydataset, @mikro/tabledataset or @mikro/sparsedataset"),
+    Descriptor(key="@mikro/target_object", type="STRING", description="The id of the object it is about"),
+]
 #: A file as it was uploaded: what an importer is chosen by.
 FILE_DESCRIPTORS = [
     Descriptor(key="@mikro/content_type", type="STRING", description="Its media type, empty when unknown"),
