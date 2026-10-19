@@ -177,19 +177,19 @@ class TestDeleting:
 
 
 class TestFeed:
-    def read(self, settings, body: dict, key=KRAPH_KEY, issuer="live.arkitekt.kraph"):
+    def read(self, settings, body: dict, key=KRAPH_KEY, issuer="kraph"):
         settings.INSTANCE = {
             **INSTANCE,
             "TRUST_JWKS": {
                 "keys": [
                     *INSTANCE["TRUST_JWKS"]["keys"],
-                    {**trust.public_jwk(KRAPH_KEY), "service": "live.arkitekt.kraph"},
-                    {**trust.public_jwk(STRANGER_KEY), "service": "live.arkitekt.elektro"},
+                    {**trust.public_jwk(KRAPH_KEY), "service": "kraph"},
+                    {**trust.public_jwk(STRANGER_KEY), "service": "elektro"},
                 ]
             },
         }
         raw = json.dumps(body).encode()
-        headers = {"Authorization": trust.sign("POST", "/_feed", raw, issuer=issuer, audience="live.arkitekt.mikro", key=key)}
+        headers = {"Authorization": trust.sign("POST", "/_feed", raw, issuer=issuer, audience="mikro", key=key)}
         return HttpClient().post("/_feed", data=raw, content_type="application/json", headers=headers)
 
     async def test_kraph_reads_each_metric_with_its_body(self, authenticated_context, settings):
@@ -210,4 +210,4 @@ class TestFeed:
         await run(authenticated_context, CREATE, {"input": quantity(dataset)})
         page = {"feed": "@mikro/metric", "organization": "other_org", "after": {"xid": "0", "id": 0}, "limit": 10}
         assert (await sync_to_async(self.read)(settings, page)).json()["entries"] == []
-        assert (await sync_to_async(self.read)(settings, page, key=STRANGER_KEY, issuer="live.arkitekt.elektro")).status_code == 403
+        assert (await sync_to_async(self.read)(settings, page, key=STRANGER_KEY, issuer="elektro")).status_code == 403

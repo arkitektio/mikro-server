@@ -28,8 +28,8 @@ INSTANCE = {
     "PRIVATE_KEY": MIKRO_KEY.as_pem(private=True).decode(),
     "TRUST_JWKS": {
         "keys": [
-            {**trust.public_jwk(MIKRO_KEY), "service": "live.arkitekt.mikro"},
-            {**trust.public_jwk(REKUEST_KEY), "service": "live.arkitekt.rekuest"},
+            {**trust.public_jwk(MIKRO_KEY), "service": "mikro"},
+            {**trust.public_jwk(REKUEST_KEY), "service": "rekuest"},
         ]
     },
 }
@@ -131,8 +131,8 @@ async def test_a_created_dataset_is_signalled_with_its_task_token(intake, authen
     received = _dataset_created(intake)
     assert received["path"] == "/agi/signal/mikro"
     # Checked the way rekuest checks it: signed with mikro's instance key, for rekuest, for this path and body.
-    verified = trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="live.arkitekt.rekuest")
-    assert verified.issuer == "live.arkitekt.mikro"
+    verified = trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="rekuest")
+    assert verified.issuer == "mikro"
     body = json.loads(received["body"])
     assert (body["kind"], body["identifier"], body["object"]) == ("CREATED", "@mikro/arraydataset", dataset_id)
     assert body["organization"] == authenticated_context.request.organization.slug
@@ -167,7 +167,7 @@ def test_the_manifest_declares_every_key_mikro_sends(settings):
     settings.REKUEST_SERVICE = {"REKUEST_URL": "http://127.0.0.1:9", "SERVICE": "mikro"}
     settings.INSTANCE = INSTANCE
     url = reverse("rekuest_service_manifest")  # loads the URLconf, which registers the declarations
-    authorization = trust.sign("GET", url, b"", issuer="live.arkitekt.rekuest", audience="live.arkitekt.mikro", key=REKUEST_KEY)
+    authorization = trust.sign("GET", url, b"", issuer="rekuest", audience="mikro", key=REKUEST_KEY)
     response = HttpClient().get(url, headers={"Authorization": authorization})
     (declared,) = [s for s in response.json()["signals"] if s["identifier"] == "@mikro/arraydataset"]
     assert declared["kinds"] == ["CREATED", "UPDATED", "DELETED"]

@@ -8,10 +8,10 @@ organization a run is for is the reader's to keep apart.
 from arkitekt_service.feed.publisher import FeedPublisher
 
 from metric import logic
-from mikro_server.contract import contract
+from mikro_server.service import service
 
-#: Who reads every metric: kraph, where a metric is given its meaning.
-READERS = ["live.arkitekt.kraph"]
+#: Who reads every metric: kraph (its name in the hub), where a metric is given its meaning.
+READERS = ["kraph"]
 
-publisher = FeedPublisher(contract.description.identifier)
+publisher = FeedPublisher(service.identifier)
 publisher.feed(logic.FEED, readers=READERS, render=logic.render)

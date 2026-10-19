@@ -27,7 +27,7 @@ def hooked(settings):
         "TRUST_JWKS": {
             "keys": [
                 {**trust.public_jwk(SERVICE_KEY), "service": agent.identifier},
-                {**trust.public_jwk(REKUEST_KEY), "service": "live.arkitekt.rekuest"},
+                {**trust.public_jwk(REKUEST_KEY), "service": "rekuest"},
             ]
         },
     }
@@ -35,7 +35,7 @@ def hooked(settings):
 
 
 def _as_rekuest(method: str, url: str, body: bytes = b"", *, key=REKUEST_KEY, audience=None) -> dict:
-    authorization = trust.sign(method, url, body, issuer="live.arkitekt.rekuest", audience=audience or agent.identifier, key=key)
+    authorization = trust.sign(method, url, body, issuer="rekuest", audience=audience or agent.identifier, key=key)
     return {"Authorization": authorization, "X-Rekuest-Agent": "11"}
 
 
@@ -57,7 +57,7 @@ def test_forged_and_unconfigured_requests_are_refused(hooked, settings):
         return client.post(url, data=body, content_type="application/json", headers=headers).status_code
 
     assert post(_as_rekuest("POST", url, body, key=SERVICE_KEY)) == 401  # this service's own key, posing as rekuest
-    assert post(_as_rekuest("POST", url, body, audience="live.arkitekt.other")) == 401  # rekuest's, but for another service
+    assert post(_as_rekuest("POST", url, body, audience="other")) == 401  # rekuest's, but for another service
     assert post(_as_rekuest("POST", url, body, key=OKPKey.generate_key("Ed25519"))) == 401  # a key nobody vouched for
     settings.INSTANCE = None
     assert post(_as_rekuest("POST", url, body)) == 503

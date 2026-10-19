@@ -99,7 +99,7 @@ async def test_a_new_scene_is_signalled_with_its_descriptors(intake, authenticat
     assert (body["kind"], body["object"]) == ("CREATED", str(scene.pk))
     assert body["organization"] == authenticated_context.request.organization.slug
     assert set(body["descriptors"]) == {"@mikro/blending", "@mikro/preferred_view"}
-    assert trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="live.arkitekt.rekuest").issuer == "live.arkitekt.mikro"
+    assert trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="rekuest").issuer == "mikro"
 
     await sync_to_async(lambda: models.Scene.objects.get(pk=scene.pk).delete())()
     kinds = [r["json"]["kind"] for r in _of(intake, "@mikro/scene", 2)]
