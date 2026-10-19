@@ -44,9 +44,11 @@ class MetricTarget(models.Model):
     """One object that metrics are recorded about: its structure and id, and a uuid of its own.
 
     Made the first time a metric names the object, never before: most objects carry no metric,
-    and none of their creation paths knows this table. Exactly one of the foreign keys is set,
-    and it is PROTECT: an object something was measured about cannot be deleted while the
-    measurement stands -- whatever deletes it, a cascade from its collection included.
+    and none of their creation paths knows this table. Exactly one of the foreign keys is set.
+    Deleting the object cascades to its target and stops at the target's metrics
+    (``Metric.target`` is PROTECT): an object something was measured about cannot be deleted
+    while a measurement of it stands -- whatever deletes it, a cascade from its collection
+    included -- and can once the last one is deleted.
 
     The ``uuid`` is what a reader keys the object on; ``identifier`` and ``object`` are its
     readable address, spelled as rekuest's signals and STRUCTURE ports spell them.
@@ -54,10 +56,10 @@ class MetricTarget(models.Model):
 
     uuid = models.UUIDField(db_default=UuidV7(), unique=True, editable=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="metric_targets")
-    annotation = models.OneToOneField("core.Annotation", on_delete=models.PROTECT, null=True, blank=True, related_name="metric_target")
-    array_dataset = models.OneToOneField("core.ArrayDataset", on_delete=models.PROTECT, null=True, blank=True, related_name="metric_target")
-    table_dataset = models.OneToOneField("core.TableDataset", on_delete=models.PROTECT, null=True, blank=True, related_name="metric_target")
-    sparse_dataset = models.OneToOneField("core.SparseDataset", on_delete=models.PROTECT, null=True, blank=True, related_name="metric_target")
+    annotation = models.OneToOneField("core.Annotation", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
+    array_dataset = models.OneToOneField("core.ArrayDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
+    table_dataset = models.OneToOneField("core.TableDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
+    sparse_dataset = models.OneToOneField("core.SparseDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
     created_at = models.DateTimeField(db_default=Now())
 
     class Meta:

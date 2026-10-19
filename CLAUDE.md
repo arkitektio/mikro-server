@@ -85,8 +85,9 @@ process emitted, never both (a check constraint), under a producer-namespaced `k
 observation: what it *means* is kraph's, which reads every metric. Metrics are **immutable**: a
 correction `supersedes` (PROTECT), and there is no update. The object a metric is about is a
 `MetricTarget`, made on its first metric (never by the object's own creation paths), with one
-PROTECT foreign key per targetable structure: an object something was measured about cannot be
-deleted, cascades included.
+foreign key per targetable structure; deleting the object cascades to the target and stops at
+`Metric.target` (PROTECT): an object something was measured about cannot be deleted while a
+metric of it stands, cascades included.
 
 Every write records a feed entry **in its own transaction** (`arkitekt_service.feed`,
 `@mikro/metric`), which kraph reads with its instance key at `POST _feed` (`metric/feed.py`;

@@ -171,9 +171,9 @@ class TestDeleting:
         metric = (await run(authenticated_context, CREATE, {"input": quantity(dataset)}))["createMetric"]
         await refused(authenticated_context, DELETE_DATASET, {"input": {"id": str(dataset.id)}})
         await run(authenticated_context, DELETE, {"input": {"id": metric["id"]}})
-        # The target stays (its uuid is the object's identity to a reader), and protects nothing on its own.
-        await sync_to_async(models.MetricTarget.objects.all().delete)()
+        # Once no measurement of it stands, the object goes, and its target with it.
         await run(authenticated_context, DELETE_DATASET, {"input": {"id": str(dataset.id)}})
+        assert not await models.MetricTarget.objects.aexists()
 
 
 class TestFeed:
