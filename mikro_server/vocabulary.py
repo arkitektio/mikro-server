@@ -80,8 +80,8 @@ def _spec(members: str, selection: str) -> Descriptor:
 ARRAY_DESCRIPTORS = [
     *_axis_counts(ARRAY_AXIS_TYPES),
     *(Descriptor(key=key, type="INT", description=f"Its total extent along its {axis_type} axes") for key, axis_type in EXTENT_KEYS.items()),
-    Descriptor(key=VALUE_KIND, type="STRING", description="What its values mean: categorical (a label map, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity"),
-    Descriptor(key=DTYPE, type="STRING", description="The element type of its values, as numpy spells it (uint8, uint16, float32, ...): an action typed on integers (labels, thresholds) or on floats asks for it"),
+    Descriptor(key=VALUE_KIND, type="STRING", description="What its values mean: categorical (a label image or segmentation mask of object ids, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity"),
+    Descriptor(key=DTYPE, type="STRING", description="The element (pixel) type of its values, as numpy spells it (uint8, uint16, float32, ...): an action typed on integers (labels, thresholds) or on floats asks for it"),
     _spec("one spatial member (SCALAR, PROFILE, IMAGE, VOLUME, HYPERVOLUME), a modifier per non-spatial axis it has more than one position along, and TRACE for a curve", "an axis counts only when the lens keeps more than one position along it"),
     _IS_WHOLE,
 ]
@@ -91,7 +91,7 @@ TABLE_DESCRIPTORS = [
     *_axis_counts(RECORD_AXIS_TYPES),
     Descriptor(key="@mikro/n_coordinate_columns", type="INT", description="How many of its columns place a row (role COORDINATE): the axes of its space"),
     Descriptor(key="@mikro/n_attribute_columns", type="INT", description="How many of its columns are measurements or properties (role ATTRIBUTE)"),
-    Descriptor(key="@mikro/has_track_ids", type="BOOL", description="Whether a column groups rows into trajectories (role TRACK_ID)"),
+    Descriptor(key="@mikro/has_track_ids", type="BOOL", description="Whether a column groups rows into trajectories, i.e. tracks (role TRACK_ID)"),
     Descriptor(key="@mikro/has_group_ids", type="BOOL", description="Whether a column groups rows into connected objects (role GROUP_ID)"),
     Descriptor(key="@mikro/has_labels", type="BOOL", description="Whether a column carries a per-row text label (role LABEL)"),
     _spec("one placement member (RECORDS, POINTS_1D, POINTS_2D, POINTS_3D, POINTS_ND), a modifier per declared fact (TIMED, TRACKED, GROUPED, KEYED, NODE_TABLE, EDGE_TABLE), and SERIES for what a chart draws whole", "a coordinate column a window pins to one value no longer counts"),
@@ -143,7 +143,7 @@ SCENE_DESCRIPTORS = [
 ]
 #: A chart: the one metric axis it lays its data out along.
 CHART_DESCRIPTORS = [
-    Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE, TIME, MICROTIME or SPECTRUM"),
+    Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength)"),
     Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its axis"),
 ]
 #: A metric: what was measured, its value, and the object it is about. Few and flat, because a
@@ -158,7 +158,7 @@ METRIC_DESCRIPTORS = [
 ]
 #: A file as it was uploaded: what an importer is chosen by.
 FILE_DESCRIPTORS = [
-    Descriptor(key="@mikro/content_type", type="STRING", description="Its media type, empty when unknown"),
+    Descriptor(key="@mikro/content_type", type="STRING", description="Its media (MIME) type, empty when unknown"),
     Descriptor(
         key="@mikro/extension",
         type="STRING",
@@ -180,7 +180,7 @@ TRANSFORMATION_DESCRIPTORS = [
     Descriptor(key="@mikro/n_input_axes", type="INT", description="How many axes the space it maps from has"),
     Descriptor(key="@mikro/n_output_axes", type="INT", description="How many axes the space it maps to has"),
 ]
-_CONTAINER_KIND = Descriptor(key=CONTAINER_KIND, type="STRING", description="Which kind of container it belongs to: ARRAY, TABLE, SPARSE, MESH or ANNOTATION")
+_CONTAINER_KIND = Descriptor(key=CONTAINER_KIND, type="STRING", description="Which kind of container (image, table, ...) it belongs to: ARRAY, TABLE, SPARSE, MESH or ANNOTATION")
 #: A position in a container that metadata is pinned to.
 COORDINATE_ANCHOR_DESCRIPTORS = [_CONTAINER_KIND]
 #: A file and the container holding the same data.
