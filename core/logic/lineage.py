@@ -29,6 +29,7 @@ cannot drift from :func:`~core.logic.graph.container_map` and
 from __future__ import annotations
 
 import dataclasses
+import json
 from functools import cache
 
 from django.db import connection
@@ -636,3 +637,344 @@ def lineage(
     ordered_nodes = sorted(nodes.values(), key=lambda node: (node.depth, node.kind, node.pk))
     ordered_edges = sorted(edges.values(), key=lambda edge: (edge.via, edge.via_id))
     return Lineage(nodes=ordered_nodes, edges=ordered_edges, truncated=down_cut or up_cut)
+
+
+#: Roots one ``descendants`` call takes: a page of tiles, not an organization.
+MAX_ROOTS = 100
+
+
+@cache
+def _descendants_sql() -> str:
+    """The downward walk from many roots at once, each row tagged with the root it was reached from.
+
+    :func:`_walk_sql` seeded from ``unnest`` instead of one root, so a page of tiles costs one
+    recursion rather than one per tile. The root rides every row, which keeps two roots'
+    lineages apart even where they meet (a fusion of two series), and ``UNION`` still bounds
+    each root's walk to ``nodes x depth``. Hops are probed at ``fanout + 1`` and the walk one
+    hop past ``depth``, so the caller can tell a cut-off lineage from a finished one without
+    a second pass.
+    """
+    return (
+        "WITH RECURSIVE walk(root_kind, root_pk, kind, pk, depth, parent_kind, parent_pk) AS ("
+        " SELECT r.kind, r.pk, r.kind, r.pk, 0, NULL::text, NULL::bigint FROM unnest(%(kinds)s::text[], %(pks)s::bigint[]) AS r(kind, pk)"
+        " UNION"
+        " SELECT n.root_kind, n.root_pk, s.kind, s.pk, n.depth + 1, n.kind, n.pk"
+        " FROM walk n"
+        f" CROSS JOIN LATERAL ({_hops('n', down=True, limit='%(probe)s')}) s"
+        " WHERE n.depth <= %(depth)s AND (s.kind, s.pk) <> (n.root_kind, n.root_pk)"
+        ") SELECT root_kind, root_pk, kind, pk, depth, parent_kind, parent_pk FROM walk WHERE depth > 0 LIMIT %(limit)s"
+    )
+
+
+@dataclasses.dataclass
+class Descendants:
+    root: tuple[str, int]
+    #: Everything made from the root, nearest first, each once.
+    nodes: list[LineageNode]
+    #: Whether something made from it was left out: past ``down``, past ``fanout`` or past the limit.
+    more: bool = False
+    #: What each node was made from on its nearest path: the root for the first hop.
+    parents: dict[tuple[str, int], tuple[str, int]] = dataclasses.field(default_factory=dict)
+
+
+def descendants(
+    roots: list[tuple[str, int]],
+    *,
+    organization,
+    down: int = 3,
+    limit: int = 500,
+    fanout: int = 20,
+) -> list[Descendants]:
+    """What was made from each of ``roots``, ``down`` hops deep, in three round trips whatever the number of roots.
+
+    The summary :func:`lineage` would give per root with ``up=0``, without its edges, lenses or
+    arrays: what a page of tiles needs to say "these were made from this one". A root another
+    organization owns answers nothing. ``limit`` is shared by all roots; a root whose walk it
+    cut short says so in ``more``.
+    """
+    _assert_direct_scoping()
+    down = max(1, min(down, MAX_DEPTH))
+    limit, fanout = max(1, min(limit, MAX_LIMIT)), max(1, min(fanout, MAX_FANOUT))
+    roots = list(dict.fromkeys(roots))[:MAX_ROOTS]
+    if not roots:
+        return []
+
+    # The roots are scoped like any node: one query per kind present.
+    known = {root: LineageNode(kind=root[0], pk=root[1], depth=0) for root in roots}
+    _hydrate_nodes(known, organization)
+    roots = [root for root in roots if root in known]
+    if not roots:
+        return []
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            _descendants_sql(),
+            {
+                "kinds": [kind for kind, _ in roots],
+                "pks": [pk for _, pk in roots],
+                "depth": down,
+                "probe": fanout + 1,
+                "limit": limit + 1,
+                "org": organization.pk,
+            },
+        )
+        rows = cursor.fetchall()
+    truncated = len(rows) > limit
+    rows = rows[:limit]
+
+    found: dict[tuple[str, int], dict[tuple[str, int], LineageNode]] = {root: {} for root in roots}
+    parents: dict[tuple[str, int], dict[tuple[str, int], tuple[str, int]]] = {root: {} for root in roots}
+    more: dict[tuple[str, int], bool] = {root: truncated for root in roots}
+    children: dict[tuple[tuple[str, int], tuple[str, int]], set] = {}
+    for root_kind, root_pk, kind, pk, depth, parent_kind, parent_pk in rows:
+        root, key = (root_kind, root_pk), (kind, pk)
+        if depth > down:
+            # The probe hop past the bound: there is more below.
+            more[root] = True
+            continue
+        siblings = children.setdefault((root, (parent_kind, parent_pk)), set())
+        if key not in siblings and len(siblings) >= fanout:
+            # The probe hop past the fan-out cap: counted as more, not listed.
+            more[root] = True
+            continue
+        siblings.add(key)
+        node = found[root].get(key)
+        if node is None:
+            found[root][key] = LineageNode(kind=kind, pk=pk, depth=depth)
+            parents[root][key] = (parent_kind, parent_pk)
+        elif depth < node.depth:
+            node.depth = depth
+            parents[root][key] = (parent_kind, parent_pk)
+
+    every = {key: node for nodes in found.values() for key, node in nodes.items()}
+    _hydrate_nodes(every, organization)
+    return [
+        Descendants(
+            root=root,
+            nodes=sorted(
+                (dataclasses.replace(every[key], depth=node.depth) for key, node in found[root].items() if key in every),
+                key=lambda node: (node.depth, node.kind, node.pk),
+            ),
+            more=more[root],
+            parents=parents[root],
+        )
+        for root in roots
+    ]
+
+
+#: The kinds a home page lists as roots. An annotation collection is drawn rather than
+#: brought in, so it is not one of them.
+ROOT_KINDS = (FILE, "dataset", "tabledataset", "meshcollection", "sparsedataset", "networkcollection")
+
+
+@dataclasses.dataclass(frozen=True)
+class RootFilter:
+    """What narrows :func:`roots`. Every field is optional; one left as ``None`` does not narrow.
+
+    ``acquired_after`` / ``acquired_before`` draw the same overlap line as
+    ``ArrayDatasetFilter.acquiredAfter`` / ``acquiredBefore``. Only an array dataset carries an
+    acquisition window, so a file is judged by the series converted out of it, and every other
+    kind drops out while either is set. ``spec`` works the same way, on
+    ``ArrayDatasetFilter.spec``'s line (every one of them); a file's acquisition window and spec
+    are read off one series, so a file matches only when one of its series meets both. A file
+    is in a collaboration when it, or a series converted out of it, was put there.
+    ``search`` matches a name, ignoring case, anywhere in it; a file also matches by the name
+    of a series converted out of it.
+    """
+
+    owner: str | None = None
+    collaboration: int | None = None
+    created_after: object = None
+    created_before: object = None
+    acquired_after: object = None
+    acquired_before: object = None
+    spec: tuple[str, ...] | None = None
+    search: str | None = None
+
+    @property
+    def acquired(self) -> bool:
+        return self.acquired_after is not None or self.acquired_before is not None
+
+
+def _shape(filters: RootFilter) -> tuple[str, ...]:
+    """Which of a filter's fields are set: the shape of the SQL, so its cache key."""
+    return tuple(field.name for field in dataclasses.fields(filters) if getattr(filters, field.name) is not None)
+
+
+def _has_field(model: type, name: str) -> bool:
+    return any(field.name == name for field in model._meta.get_fields())
+
+
+def _acquired_sql(alias: str, shape: tuple[str, ...]) -> str:
+    """The overlap of ``alias``'s acquisition window with the asked one, on the derived columns."""
+    clauses = []
+    if "acquired_after" in shape:
+        clauses.append(f"{alias}.{_q(_column(models.ArrayDataset, 'acquisition_end'))} >= %(acquired_after)s")
+    if "acquired_before" in shape:
+        clauses.append(f"{alias}.{_q(_column(models.ArrayDataset, 'acquisition_start'))} <= %(acquired_before)s")
+    return " AND ".join(clauses)
+
+
+def _name_sql(alias: str, model: type) -> str:
+    """Whether ``alias``'s name holds the searched text, ignoring case (the pattern is built in :func:`roots`)."""
+    return f"{alias}.{_q(_column(model, 'name'))} ILIKE %(search)s"
+
+
+def _spec_sql(alias: str) -> str:
+    """Whether ``alias`` carries every asked spec: ``stored_spec`` contains them, as the list filter asks."""
+    return f"{alias}.{_q(_column(models.ArrayDataset, 'stored_spec'))} @> %(spec)s::jsonb"
+
+
+def _in_collaboration_sql(model: type, pk_sql: str) -> str:
+    """Whether the row whose key ``pk_sql`` reads is an item of the asked collaboration (of this organization)."""
+    from arkitekt_service.collaborations.models import Collaboration, CollaborationItem
+    from django.contrib.contenttypes.models import ContentType
+
+    item, collab, ct = CollaborationItem._meta, Collaboration._meta, ContentType._meta
+    return (
+        f"EXISTS (SELECT 1 FROM {_q(item.db_table)} ci"
+        f" JOIN {_q(collab.db_table)} c ON c.{_q(collab.pk.column)} = ci.{_q(_column(CollaborationItem, 'collaboration'))}"
+        f" JOIN {_q(ct.db_table)} ct ON ct.{_q(ct.pk.column)} = ci.{_q(_column(CollaborationItem, 'content_type'))}"
+        f" WHERE ci.{_q(_column(CollaborationItem, 'collaboration'))} = %(collaboration)s"
+        f" AND c.{_q(_column(Collaboration, 'organization'))} = %(org)s"
+        f" AND ct.app_label = '{model._meta.app_label}' AND ct.model = '{model._meta.model_name}'"
+        f" AND ci.{_q(_column(CollaborationItem, 'object_id'))} = ({pk_sql})::text)"
+    )
+
+
+def _series_sql(x_pk: str, condition: str) -> str:
+    """Whether a series converted out of the file ``x_pk`` names meets ``condition`` (on ``d``)."""
+    link, dataset = models.FileLink._meta, models.ArrayDataset._meta
+    return (
+        f"EXISTS (SELECT 1 FROM {_q(link.db_table)} l"
+        f" JOIN {_q(dataset.db_table)} d ON d.{_q(dataset.pk.column)} = l.{_q(_column(models.FileLink, 'dataset'))}"
+        f" WHERE l.{_q(_column(models.FileLink, 'file'))} = {x_pk}"
+        f" AND l.{_q(_column(models.FileLink, 'direction'))} = '{enums.FileLinkDirectionChoices.SOURCE.value}'"
+        f" AND {condition})"
+    )
+
+
+def _root_arm_filters(key: str, model: type, shape: tuple[str, ...]) -> list[str] | None:
+    """The extra conditions on one kind's arm, or ``None`` when the filter rules the kind out."""
+    pk = f"x.{_q(model._meta.pk.column)}"
+    clauses = []
+    if "owner" in shape:
+        if not _has_field(model, "creator"):
+            return None
+        user = models.ArrayDataset._meta.get_field("creator").related_model._meta
+        clauses.append(
+            f"x.{_q(_column(model, 'creator'))} IN (SELECT u.{_q(user.pk.column)} FROM {_q(user.db_table)} u WHERE u.sub = %(owner)s)"
+        )
+    if "collaboration" in shape:
+        held = _in_collaboration_sql(model, pk)
+        if key == FILE:
+            held = f"({held} OR {_series_sql(pk, _in_collaboration_sql(models.ArrayDataset, f'd.{_q(models.ArrayDataset._meta.pk.column)}'))})"
+        clauses.append(held)
+    if "search" in shape:
+        named = _name_sql("x", model)
+        if key == FILE:
+            named = f"({named} OR {_series_sql(pk, _name_sql('d', models.ArrayDataset))})"
+        clauses.append(named)
+    created = _q(_column(model, "created_at"))
+    if "created_after" in shape:
+        clauses.append(f"x.{created} >= %(created_after)s")
+    if "created_before" in shape:
+        clauses.append(f"x.{created} <= %(created_before)s")
+    # What only an array dataset carries: a file is judged by one of its series meeting all of it.
+    acquired = "acquired_after" in shape or "acquired_before" in shape
+    if acquired or "spec" in shape:
+        if key == "dataset":
+            on = "x"
+        elif key == FILE:
+            on = "d"
+        else:
+            return None
+        series = [*([_acquired_sql(on, shape)] if acquired else []), *([_spec_sql(on)] if "spec" in shape else [])]
+        clauses.append(" AND ".join(series) if key == "dataset" else _series_sql(pk, " AND ".join(series)))
+    return clauses
+
+
+def _not_a_field_sql() -> str:
+    """No edge names the dataset ``x``'s own space as its field."""
+    field = _q(_column(models.Transformation, "field"))
+    system = _q(_column(models.ArrayDataset, "coordinate_system"))
+    return f"NOT EXISTS (SELECT 1 FROM {_T} f WHERE f.{field} = x.{system})"
+
+
+@cache
+def _roots_sql(kinds: tuple[str, ...], shape: tuple[str, ...] = ()) -> str | None:
+    """The newest nodes with no up-hop, across ``kinds``, as ``(kind, pk, created_at)``.
+
+    "No up-hop" is :func:`_step` upward, the very hop the lineage walk takes, so a root here
+    is exactly a node the lineage page draws with nothing above it: no derivation edge into
+    another container, no file it was converted from; for a file, no container it was
+    exported from. Each kind's arm stops at ``offset + limit`` of its newest roots, which is
+    all the outer order can use. ``shape`` names the :class:`RootFilter` fields that are set;
+    their values ride as parameters. ``None`` when the filter rules out every kind.
+    """
+    arms = []
+    for key in kinds:
+        model = models.File if key == FILE else MODEL_BY_KEY[key]
+        extra = _root_arm_filters(key, model, shape)
+        if extra is None:
+            continue
+        table = _q(model._meta.db_table)
+        pk = _q(model._meta.pk.column)
+        created = _q(_column(model, "created_at"))
+        org = _q(_column(model, "organization"))
+        if key == "dataset":
+            # A dataset whose space is another edge's FIELD -- the frame times a movie is placed
+            # by, a warp field -- is part of that placement, not data of its own: reached from
+            # what it places, never listed beside it.
+            extra = [*extra, _not_a_field_sql()]
+        narrowed = "".join(f" AND {clause}" for clause in extra)
+        arms.append(
+            f"(SELECT n.kind, n.pk, x.{created} AS created_at FROM {table} x"
+            f" CROSS JOIN LATERAL (SELECT '{key}'::text AS kind, x.{pk}::bigint AS pk) n"
+            f" WHERE x.{org} = %(org)s AND NOT EXISTS (SELECT 1 FROM ({_step('n', down=False)}) up LIMIT 1){narrowed}"
+            f" ORDER BY x.{created} DESC, x.{pk} DESC LIMIT %(window)s)"
+        )
+    if not arms:
+        return None
+    return (
+        f"SELECT r.kind, r.pk, r.created_at FROM ({' UNION ALL '.join(arms)}) r"
+        " ORDER BY r.created_at DESC, r.kind, r.pk DESC OFFSET %(offset)s LIMIT %(limit)s"
+    )
+
+
+def roots(
+    *,
+    organization,
+    kinds: list[str] | None = None,
+    offset: int = 0,
+    limit: int = 20,
+    filters: RootFilter | None = None,
+) -> list[LineageNode]:
+    """The newest parentless data of an organization, whatever its kind: what a home page lists.
+
+    Two round trips: the walk-backed root test for every kind at once, then the names. A
+    file's converted series and a dataset's mask are not roots -- they are reached from
+    their parent -- and neither is a file exported from a dataset. ``filters`` narrows it by
+    creator, collaboration, creation time and acquisition time; see :class:`RootFilter`.
+    """
+    _assert_direct_scoping()
+    wanted = tuple(key for key in ROOT_KINDS if kinds is None or key in kinds)
+    limit, offset = max(1, min(limit, MAX_LIMIT)), max(0, offset)
+    filters = filters or RootFilter()
+    shape = _shape(filters)
+    sql = _roots_sql(wanted, shape) if wanted else None
+    if sql is None:
+        return []
+    params = {name: getattr(filters, name) for name in shape}
+    if "search" in params:
+        # A literal substring: the LIKE wildcards in what was typed match only themselves.
+        escaped = params["search"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params["search"] = f"%{escaped}%"
+    if "spec" in params:
+        params["spec"] = json.dumps(list(params["spec"]))
+    with connection.cursor() as cursor:
+        cursor.execute(sql, {**params, "org": organization.pk, "window": offset + limit, "offset": offset, "limit": limit})
+        rows = cursor.fetchall()
+    nodes = {(kind, pk): LineageNode(kind=kind, pk=pk, depth=0, created_at=created) for kind, pk, created in rows}
+    _hydrate_nodes(nodes, organization)
+    return [nodes[(kind, pk)] for kind, pk, _ in rows if (kind, pk) in nodes]

@@ -98,7 +98,7 @@ async def _create(ctx: HttpContext, input_id: str, output_id: str, transform: di
         ({"kind": "ROTATION"}, "A ROTATION transformation requires `affine`"),
         ({"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}, "A FIELD transformation requires `field`"),
         ({"kind": "MAP_AXIS", "inputAxes": ["y", "x"]}, "A MAP_AXIS transformation requires `outputAxes`"),
-        ({"kind": "BY_DIMENSION", "outputAxes": ["y"]}, "A BY_DIMENSION transformation requires `inputAxes`"),
+        ({"kind": "BY_DIMENSION", "outputAxes": ["y"]}, "A BY_DIMENSION transformation must name the axes it acts on"),
     ],
 )
 async def test_a_parameter_that_contradicts_the_kind_is_an_error_not_a_drop(authenticated_context: HttpContext, transform: dict, phrase: str) -> None:

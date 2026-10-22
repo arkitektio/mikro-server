@@ -518,6 +518,10 @@ def is_invertible(edge: "models.Transformation") -> bool:
     :func:`~core.inputs.coords.assert_nonsingular_matrix`, which refuses such a matrix
     before any walk can be offered it. The gap is closed one altitude down, not here.
     """
+    if (edge.params or {}).get("lookup"):
+        # A lookup is walked forwards only: its inverse is a search through values this
+        # server never reads.
+        return False
     if edge.kind in _WRAPPER_KINDS:
         return all(kind in _INVERTIBLE_KINDS for kind, _ in edge.step_pairs)
     return edge.kind in _INVERTIBLE_KINDS
@@ -624,6 +628,11 @@ def _params_invariance(params: dict) -> str:
     stated = [invariance for key, invariance in _PARAM_INVARIANCE.items() if key in params]
     if "scale" in params:
         stated.append(_scale_invariance(params["scale"] or []))
+    lookup = params.get("lookup")
+    if lookup and lookup.get("spatial"):
+        # Uneven spacing along a SPACE axis bends straight lines: no matrix states it. A
+        # lookup along time or an index leaves the geometry of space untouched.
+        stated.append(enums.TransformInvariance.DIFFEOMORPHIC.value)
     return weakest_invariance(stated)
 
 
@@ -1109,7 +1118,7 @@ def _states_an_offset(kind: str | None, params: dict) -> bool:
     if kind not in _OFFSET_KINDS:
         return False
     if kind == "BY_DIMENSION":
-        return params.get("translation") is not None or bool(params.get("affine"))
+        return params.get("translation") is not None or bool(params.get("affine")) or bool(params.get("lookup"))
     return True
 
 
@@ -1210,7 +1219,11 @@ def assert_edge_rank(
         return
 
     if kind in (enums.TransformKindChoices.BY_DIMENSION.value, enums.TransformKindChoices.MAP_AXIS.value):
-        if not input_axes or not output_axes:
+        input_axes, output_axes = input_axes or [], output_axes or []
+        if kind == enums.TransformKindChoices.BY_DIMENSION.value and params.get("lookup") and not input_axes and not output_axes:
+            # A BY_DIMENSION whose only map is its lookup: nothing named, nothing scaled.
+            pass
+        elif not input_axes or not output_axes:
             raise ValueError(f"A {kind} transformation must name the axes it acts on, in `inputAxes` and `outputAxes`. That naming IS the map: the axes it does not name are the ones it leaves untouched.")
         if len(input_axes) != len(output_axes):
             raise ValueError(f"A {kind} transformation maps its input axes onto its output axes one for one, but was given {len(input_axes)} ({input_axes}) and {len(output_axes)} ({output_axes})")
@@ -1327,6 +1340,7 @@ def write_relation_edge(
     output_axes: list[str] | None = None,
     field: "models.CoordinateSystem | None" = None,
     reason: str | None = None,
+    lookup: dict | None = None,
     value_relation: "enums.ValueRelation | str | None" = None,
     annotation: "models.Annotation | None" = None,
     ctx: CreationContext,
@@ -1365,6 +1379,7 @@ def write_relation_edge(
         output_axes=output_axes,
         field=field,
         reason=reason,
+        lookup=lookup,
         validity=None,  # defaults to MANUAL inside: an authored claim, never VALIDATED
         value_relation=value_relation,
         annotation=annotation,
@@ -1573,6 +1588,81 @@ _PER_AXIS_KINDS = (
     enums.TransformKind.TRANSLATION.value,
 )
 
+def assert_lookup(
+    *,
+    lookup: dict,
+    field: "models.CoordinateSystem",
+    input_system: "models.CoordinateSystem",
+    output_system: "models.CoordinateSystem",
+    input_axes: list[str],
+    output_axes: list[str],
+) -> dict:
+    """Validate a BY_DIMENSION's lookup and return the dict the edge stores as `params["lookup"]`.
+
+    **What is checked is what the rows can say.** The array is alone in its system, rank one,
+    with one value per position of the axis it is read along (shape lives on the DataArray). Its
+    values are *declared* to strictly increase from `min` to `max` -- the server never reads
+    array contents, so the writer vouches for them the way a table's writer vouches for its
+    dtypes. The unit must reach the output axis' unit, because unlike a bare FIELD a lookup
+    states its values' unit and so can convert.
+
+    ``spatial`` is materialized here, once, from the output axis' type: it is what decides
+    whether the edge is still condensable (a lookup along time or an index leaves space
+    affine; one along a SPACE axis does not), and reading axis rows on every walk to decide it
+    would be a query per edge per placement.
+    """
+    axis = lookup["axis"]
+    output_axis = lookup.get("output_axis") or axis
+
+    inputs = {row.name: row for row in input_system.axes.all()}
+    outputs = {row.name: row for row in output_system.axes.all()}
+    if axis not in inputs:
+        raise ValueError(f"A lookup reads along '{axis}', which '{input_system.name}' does not have (its axes are {sorted(inputs)})")
+    if output_axis not in outputs:
+        raise ValueError(f"A lookup lands on '{output_axis}', which '{output_system.name}' does not have (its axes are {sorted(outputs)})")
+    if axis in input_axes or output_axis in output_axes:
+        raise ValueError(f"'{axis}' -> '{output_axis}' is both looked up and named in `inputAxes`/`outputAxes`: an axis has one map. Name only the axes the parameters act on")
+
+    datasets = list(field.datasets.all()[:2])
+    if len(datasets) != 1:
+        raise ValueError(f"A lookup's array is the one dataset living in its own system, but '{field.name}' holds {len(datasets)}. Upload the values as a dataset of their own")
+    dataset = datasets[0]
+    shape = list(dataset.shape_list or [])
+    if len(shape) != 1:
+        raise ValueError(f"A lookup's array is one value per position, so it is rank one, but '{dataset.name}' has shape {shape}")
+    extent = _axis_extent(input_system, axis)
+    if extent is not None and extent != shape[0]:
+        raise ValueError(f"A lookup holds one value per position of '{axis}', which has {extent}, but '{dataset.name}' holds {shape[0]}")
+
+    target_unit = outputs[output_axis].unit
+    if coords_logic.unit_factor(lookup["unit"], target_unit) is None:
+        raise ValueError(f"A lookup's values are in '{lookup['unit']}', which has no conversion to '{output_axis}' in '{target_unit}'")
+
+    low, high = float(lookup["min"]), float(lookup["max"])
+    if not high > low:
+        raise ValueError(f"A lookup's values strictly increase, so its last value ({high}) must be greater than its first ({low})")
+
+    return {
+        "axis": axis,
+        "output_axis": output_axis,
+        "unit": lookup["unit"],
+        "min": low,
+        "max": high,
+        "spatial": outputs[output_axis].type == enums.AxisTypeChoices.SPACE.value,
+    }
+
+
+def _axis_extent(system: "models.CoordinateSystem", axis: str) -> int | None:
+    """How many positions a data-backed system has along one axis, or None for a frame with no data."""
+    owner = next(iter(system.datasets.all()[:1]), None) or models.ArrayLens.objects.filter(coordinate_system=system).select_related("dataset").first()
+    if owner is None:
+        # A frame, or a table: a table's extent along an axis is its row count, which the
+        # server does not read either.
+        return None
+    names, shape = list(owner.axis_names), list(owner.shape_list or [])
+    return int(shape[names.index(axis)]) if axis in names and len(shape) == len(names) else None
+
+
 #: The parameter fields an UNMAPPABLE edge must not carry: it declares that no point of one
 #: space corresponds to a point of the other, so a scale on it would assert a correspondence
 #: and deny one in the same breath, and nothing downstream would ever read the number.
@@ -1592,6 +1682,7 @@ def build_registration_edge(
     output_axes: list[str] | None = None,
     field: "models.CoordinateSystem | None" = None,
     reason: str | None = None,
+    lookup: dict | None = None,
     validity: "enums.PlacementValidity | str | None" = None,
     value_relation: "enums.ValueRelation | str | None" = None,
     selector: dict | None = None,
@@ -1647,6 +1738,14 @@ def build_registration_edge(
         assert_field_produces(field=field, output_axes=output_axes or [])
         if field.pk == input_system.pk:
             field = None
+    elif lookup is not None:
+        # The lookup's array rides the same `field` column a FIELD's does: one PROTECTed FK,
+        # read with the row, so no walk pays a query for it.
+        if kind != enums.TransformKind.BY_DIMENSION.value:
+            raise ValueError(f"A {kind} transformation takes no `lookup`: only BY_DIMENSION reads one axis from an array beside the axes its parameters act on")
+        if field is None:
+            raise ValueError("A lookup names the coordinate system of the array whose values are the map, in its `field`")
+        params["lookup"] = assert_lookup(lookup=lookup, field=field, input_system=input_system, output_system=output_system, input_axes=input_axes or [], output_axes=output_axes or [])
     elif field is not None:
         raise ValueError(f"A {kind} transformation's map is in its parameters, not in an array, so it takes no `field`")
 
@@ -3203,8 +3302,24 @@ def _edge_step(edge: "models.Transformation", *, inverted: bool = False) -> "coo
         acts_on_input=tuple(edge.input_axes) if edge.input_axes else None,
         acts_on_output=tuple(edge.output_axes) if edge.output_axes else None,
         steps=edge.step_pairs,
+        lookup=_step_lookup(edge, output_axes_rows),
     )
     return coords_logic.invert_step(step) if inverted else step
+
+
+def _step_lookup(edge: "models.Transformation", output_axes_rows: list) -> "coords_logic.StepLookup | None":
+    """An edge's lookup as the step reads it, its values' unit already turned into a factor."""
+    lookup = (edge.params or {}).get("lookup")
+    if not lookup or edge.field_id is None:
+        return None
+    target = next((row.unit for row in output_axes_rows if row.name == lookup["output_axis"]), None)
+    factor = coords_logic.unit_factor(lookup.get("unit"), target)
+    return coords_logic.StepLookup(
+        input_axis=lookup["axis"],
+        output_axis=lookup["output_axis"],
+        field=edge.field_id,
+        factor=1.0 if factor is None else factor,
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -3222,6 +3337,8 @@ class CondensedPlacement:
     input_axes: list[str]
     output_axes: list[str]
     total: bool
+    #: The destination axes given by a lookup rather than by a row of `matrix`, keyed by axis.
+    lookups: dict[str, "coords_logic.LookupForm"] = dataclasses.field(default_factory=dict)
 
 
 def condense_path(
@@ -3272,9 +3389,10 @@ def condense_path(
             ) from error
         axed.append(step)
 
-    forms = coords_logic.compose_forms(axed, source_axes)
+    forms, lookups = coords_logic.compose_placement(axed, source_axes)
     matrix, rows = coords_logic.forms_to_matrix(forms, destination_axes)
-    return CondensedPlacement(matrix=matrix, input_axes=source_axes, output_axes=rows, total=len(rows) == len(destination_axes))
+    lookups = {axis: lookups[axis] for axis in destination_axes if axis in lookups}
+    return CondensedPlacement(matrix=matrix, input_axes=source_axes, output_axes=rows, total=len(rows) + len(lookups) == len(destination_axes), lookups=lookups)
 
 
 def dataset_behind(system: "models.CoordinateSystem") -> "models.ArrayDataset | None":

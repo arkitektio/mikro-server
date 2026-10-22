@@ -110,6 +110,7 @@ def create_coordinate_system(
                 output_axes=lowered.output_axes,
                 field=field,
                 reason=lowered.reason,
+                lookup=lowered.lookup,
                 validity=spec.validity,
                 ctx=ctx,
             )
@@ -314,6 +315,7 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
                     output_axes=transform.output_axes,
                     field=field,
                     reason=transform.reason,
+                    lookup=transform.lookup,
                     value_relation=low.value_relation,
                     annotation=annotation,
                     ctx=ctx,

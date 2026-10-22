@@ -528,7 +528,11 @@ class MeshCollection(Described):
         # is now a statement about the *anchor edge*, and the graph does not enforce
         # uniqueness on edges anywhere else either.
         ordering = ["-created_at"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="mesh_coll_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(fields=["stored_descriptors"], name="mesh_coll_desc_gin", opclasses=["jsonb_path_ops"]),
+            # Newest first per organization: the `roots` walk reads it in order and stops early.
+            models.Index(fields=["organization", "-created_at"], name="mesh_coll_org_newest_idx"),
+        ]
 
     @property
     def label(self) -> str:
@@ -612,7 +616,11 @@ class NetworkCollection(Described):
         """Meta options for the network collection."""
 
         ordering = ["-created_at"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="network_coll_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(fields=["stored_descriptors"], name="network_coll_desc_gin", opclasses=["jsonb_path_ops"]),
+            # Newest first per organization: the `roots` walk reads it in order and stops early.
+            models.Index(fields=["organization", "-created_at"], name="network_coll_org_newest_idx"),
+        ]
 
     @property
     def label(self) -> str:

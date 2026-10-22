@@ -2,11 +2,14 @@ from kante.types import Info
 import strawberry
 
 from core import enums, types, models, scalars
+from core import derived
 from datalayer.datalayer import get_current_datalayer
 import json
 
 import kante
-from pydantic import BaseModel, Field
+import datetime
+
+from pydantic import BaseModel, Field, model_validator
 from lightpath.inputs.types import LightpathGraphInput
 from optikit.inputs import OptikitStateInput
 from optikit.models import OptikitStateModel
@@ -123,6 +126,28 @@ class LabelInput:
     label: str = strawberry.field(description="The label to associate with the coordinate anchor or image, which can provide additional context about the content of the image or the significance of the coordinate anchor")
 
 
+class AcquisitionWindowInputModel(BaseModel):
+    start: datetime.datetime = Field(..., description="When the first of the data at these coordinates was acquired")
+    end: datetime.datetime | None = Field(None, description="When the last of it was acquired. Defaults to start: one instant")
+
+    @model_validator(mode="after")
+    def _a_window_is_a_span_of_known_moments(self) -> "AcquisitionWindowInputModel":
+        # A naive time is a moment in no particular place: stored, it would be read as the
+        # server's zone and compared with everyone else's as if it were.
+        for name, moment in (("start", self.start), ("end", self.end)):
+            if moment is not None and moment.utcoffset() is None:
+                raise ValueError(f"The acquisition window's {name} ({moment.isoformat()}) has no time zone. State it with an offset, e.g. {moment.isoformat()}+00:00 for UTC.")
+        if self.end is not None and self.end < self.start:
+            raise ValueError(f"The acquisition window ends ({self.end.isoformat()}) before it starts ({self.start.isoformat()}).")
+        return self
+
+
+@kante.pydantic_input(AcquisitionWindowInputModel, description="Input type for an acquisition window: when the data at an anchor's coordinates was acquired, from the first of it to the last")
+class AcquisitionWindowInput:
+    start: datetime.datetime = strawberry.field(description="When the first of the data at these coordinates was acquired, with a time zone")
+    end: datetime.datetime | None = strawberry.field(default=None, description="When the last of it was acquired, with a time zone. Defaults to start: one instant")
+
+
 class CoordinateAnchorInputModel(BaseModel):
     axis_anchors: list[AxisAnchorInputModel]
     microscope: OptikitStateModel | None = None
@@ -132,6 +157,7 @@ class CoordinateAnchorInputModel(BaseModel):
     light_graph: LightpathGraphInputModel | None = None
     phasor_histogram: PhasorHistogramInputModel | None = None
     phasor_calibration: PhasorCalibrationInputModel | None = None
+    acquisition_window: AcquisitionWindowInputModel | None = None
 
 
 @kante.pydantic_input(CoordinateAnchorInputModel, description="Input type for a coordinate anchor, which specifies a list of dimension anchors to anchor to")
@@ -144,6 +170,7 @@ class CoordinateAnchorInput:
     light_graph: LightpathGraphInput | None = strawberry.field(default=None, description="Optional lightpath graph to associate with the coordinate anchor, which can provide additional context about the optical path that was used to acquire the image at that coordinate")
     phasor_histogram: PhasorHistogramInput | None = strawberry.field(default=None, description="Optional phasor distribution to associate with the coordinate anchor, for a converter that already computed one. It is more usually attached after ingest with createPhasorHistogram, since computing it means reading the cube")
     phasor_calibration: PhasorCalibrationInput | None = strawberry.field(default=None, description="Optional instrument-response correction to associate with the coordinate anchor, taking a raw phasor at this coordinate to a calibrated one")
+    acquisition_window: AcquisitionWindowInput | None = strawberry.field(default=None, description="Optional acquisition window: when the data at these coordinates was acquired. An anchor holding over the whole dataset gives its span; one pinned to a frame gives that frame's. The dataset's `acquisitionStart`/`acquisitionEnd` are derived from these")
 
 
 class ScaleInputModel(BaseModel):
@@ -462,9 +489,11 @@ def create_array_dataset(
 
     file_link_logic.write_file_links(info, container=dataset, source_files=model.source_files or [], ctx=ctx)
 
-    for anchor in model.anchors or []:
-        coordinate_anchor = _get_or_create_anchor(dataset, anchor.axis_anchors)
-        _write_anchor_spokes(coordinate_anchor, anchor, axis_specs=axis_specs)
+    # One derivation for every anchor stated, not one per spoke (core.derived).
+    with derived.deferred():
+        for anchor in model.anchors or []:
+            coordinate_anchor = _get_or_create_anchor(dataset, anchor.axis_anchors)
+            _write_anchor_spokes(coordinate_anchor, anchor, axis_specs=axis_specs)
 
     # The dataset arrives with the lens that selects all of it. A lens is what a viewer opens
     # and what a processing step is handed, so "the whole array" has to be something that can
@@ -650,6 +679,11 @@ def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnc
         # express -- which is what the comment above claims for every spoke, and what
         # dumping the input model directly quietly broke for this one.
         models.LightPath.objects.update_or_create(anchor=anchor, defaults={"graph": input.light_graph.to_graph().model_dump(mode="json")})
+
+    if input.acquisition_window:
+        # Saving it derives the container's acquisition columns again (core/signals.py).
+        window = input.acquisition_window
+        models.AcquisitionWindow.objects.update_or_create(anchor=anchor, defaults={"start": window.start, "end": window.end or window.start})
 
     if input.phasor_histogram:
         _write_phasor_histogram(anchor, input.phasor_histogram, axis_specs or [])

@@ -22,6 +22,7 @@ from core.inputs.coords import CoordinateInput, at_map
 from core.types.visualization import Visualization
 from core.types.coords import (
     AffinePlacement,
+    PlacementLookup,
     CoordinateSystem,
     MeshCollection,
     NetworkCollection,
@@ -204,6 +205,12 @@ class ArrayDataset(OrgScoped):
         description="The coordinate anchors of this dataset, each pinning metadata spokes -- a microscope state, OME metadata, a value histogram, a channel label -- to some of its level-0 coordinates"
     )
     created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
+    # Described by their own fields: the help text names the deriver (core.derived).
+    acquisition_start: datetime.datetime | None = kante.django_field(description=models.ArrayDataset._meta.get_field("acquisition_start").help_text)
+    acquisition_end: datetime.datetime | None = kante.django_field(description=models.ArrayDataset._meta.get_field("acquisition_end").help_text)
+    derivation_conflicts: List["DerivationConflict"] = kante.django_field(
+        description="Anchors of this dataset that cannot all be true, found while deriving its columns: an anchor contradicting one it holds over. Each leaves its column null. Empty when the metadata is consistent"
+    )
     data_arrays: List["DataArray"] = kante.django_field(description="The multiscale data arrays belonging to this dataset")
 
     @kante.django_field(description="The dataset's INTRINSIC coordinate system: its level-0 pixel grid, the space every pyramid level and lens maps into and the space ROIs resolve against. Structural and unit-independent")
@@ -236,12 +243,15 @@ class ArrayDataset(OrgScoped):
         """Every container whose derivation edges land in one of this dataset's spaces."""
         return graph_logic.derived_containers(self)
 
-    @kante.django_field(description="Whether this dataset carries a resolution pyramid. Derived: true when it has more than one level")
+    @kante.django_field(prefetch_related=["data_arrays"], description="Whether this dataset carries a resolution pyramid. Derived: true when it has more than one level")
     def multiscale(self, info: Info) -> bool:
         """Whether the dataset has more than one pyramid level."""
         return self.multiscale
 
-    @kante.django_field(description="The dataset's axis names, in array order. Derived from the axes of its intrinsic coordinate system")
+    @kante.django_field(
+        prefetch_related=["coordinate_system__axes"],
+        description="The dataset's axis names, in array order. Derived from the axes of its intrinsic coordinate system",
+    )
     def axis_names(self, info: Info) -> List[str]:
         """The dataset's axis names."""
         return self.axis_names
@@ -272,7 +282,7 @@ class ArrayDataset(OrgScoped):
         """Every spec the dataset's axes satisfy."""
         return self.spec
 
-    @kante.django_field(description="The dataset's shape: that of its level-0 array")
+    @kante.django_field(prefetch_related=["data_arrays"], description="The dataset's shape: that of its level-0 array")
     def shape(self, info: Info) -> List[int]:
         """The dataset's shape."""
         return self.shape_list
@@ -424,6 +434,35 @@ class LightPath:
 
 
 @kante.django_type(
+    models.AcquisitionWindow,
+    pagination=True,
+    description="The time truth: when the data at a coordinate anchor's coordinates was acquired, from the first of it to the last",
+)
+class AcquisitionWindow:
+    """When the data at a coordinate anchor's coordinates was acquired."""
+
+    id: auto
+    start: datetime.datetime = kante.django_field(description="When the first of the data at these coordinates was acquired")
+    end: datetime.datetime = kante.django_field(description="When the last of it was acquired. Equal to start for one instant")
+
+
+@kante.django_type(
+    models.DerivationConflict,
+    description="Anchors of a dataset that cannot all be true, found deriving one of its columns: an anchor contradicting one it holds over. The column is left null",
+)
+class DerivationConflict:
+    """Anchors of a dataset that cannot all be true."""
+
+    id: auto
+    field: str = kante.django_field(description="The derived field the conflict left null, e.g. 'acquisition_start'")
+    reason: str = kante.django_field(description="What the anchors say that cannot all be true")
+
+    @kante.django_field(description="The IDs of the anchors that contradict each other")
+    def anchors(self, info: Info) -> list[strawberry.ID]:
+        return [strawberry.ID(str(anchor)) for anchor in self.anchors]
+
+
+@kante.django_type(
     models.ChannelLabel,
     pagination=True,
     description="The channel truth: a human-readable label for a channel, pinned to a coordinate anchor",
@@ -500,6 +539,7 @@ class CoordinateAnchor:
     value_histogram: ValueHistogram | None
     channel_label: ChannelLabel | None
     light_graph: LightPath | None
+    acquisition_window: AcquisitionWindow | None = kante.django_field(description="When the data at these coordinates was acquired")
     # Declared below this type, hence the forward reference.
     ome_metadata: Optional["OmeMetadata"] = kante.django_field(description="The OME image metadata recorded at this coordinate")
     # Lists, not single spokes: one anchor may carry a phasor at several harmonics, and over
@@ -1195,7 +1235,7 @@ class Layer:
 
         if strict and not condensed.total:
             world_axes = [axis.name for axis in self.scene.world.axes.all()] if self.scene.world else []
-            missing = [axis for axis in world_axes if axis not in condensed.output_axes]
+            missing = [axis for axis in world_axes if axis not in condensed.output_axes and axis not in condensed.lookups]
             raise ValueError(
                 f"This layer's placement does not constrain every axis of its scene's world: it maps onto {condensed.output_axes} and says nothing about {missing}. "
                 "That is an honest partial registration, not a failure -- drop `strict` to read the map over the axes it does name, or author a registration that places the data along the rest."
@@ -1206,6 +1246,7 @@ class Layer:
             input_axes=condensed.input_axes,
             output_axes=condensed.output_axes,
             total=condensed.total,
+            lookups=[PlacementLookup.from_form(axis, form) for axis, form in condensed.lookups.items()],
         )
 
     @kante.django_field(

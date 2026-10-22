@@ -20,6 +20,7 @@ from datalayer.datalayer import get_current_datalayer
 from kanne_server import scalars as kanne_scalars
 
 from core import enums, models, scalars, types
+from core import derived
 from core.creation import CreationContext
 from core.inputs.file_link import SourceFileInput, SourceFileInputModel
 from core.inputs.coords import AxisInputModel, DerivedFromInput, DerivedFromSpec
@@ -520,9 +521,10 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             ctx=ctx,
         )
 
-        for anchor_input in model.anchors or []:
-            anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
-            _write_anchor_spokes(anchor, anchor_input)
+        with derived.deferred():
+            for anchor_input in model.anchors or []:
+                anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
+                _write_anchor_spokes(anchor, anchor_input)
 
         # The lens selecting all of it, from the start: the handle an action is handed for the table.
         coordinate_system_logic.whole_lens(dataset)

@@ -49,3 +49,4 @@ from .mesh_layer import create_mesh_layer, update_mesh_layer
 from .network_layer import create_network_layer, update_network_layer
 from .annotation_collection import create_annotation_collection, delete_annotation_collection
 from .annotation import create_annotation, create_annotations, update_annotation, delete_annotation
+from .collaboration import add_many_to_collaboration

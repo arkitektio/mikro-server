@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 import kante
 from core import enums, models, scalars, types
+from core import derived
 from core.creation import CreationContext
 from core.inputs.coords import AxisInputModel, DerivedFromInput, DerivedFromSpec
 from core.inputs.file_link import SourceFileInput, SourceFileInputModel
@@ -293,9 +294,10 @@ def create_sparse_dataset(info: Info, input: CreateSparseDatasetInput) -> types.
             produces=[axis for axis, _ in keyed],
         )
 
-        for anchor_input in model.anchors or []:
-            anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
-            _write_anchor_spokes(anchor, anchor_input)
+        with derived.deferred():
+            for anchor_input in model.anchors or []:
+                anchor = _get_or_create_anchor(dataset, anchor_input.axis_anchors)
+                _write_anchor_spokes(anchor, anchor_input)
 
         # The lens selecting all of it, from the start: the handle an action is handed for the dataset.
         coordinate_system_logic.whole_lens(dataset)

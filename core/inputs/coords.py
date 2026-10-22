@@ -219,6 +219,9 @@ class LoweredTransform:
     output_axes: list[str] | None = None
     field: str | None = None
     reason: str | None = None
+    #: A BY_DIMENSION's per-axis lookup, as ``{"axis", "output_axis", "unit", "min", "max"}``;
+    #: its array's system is ``field``.
+    lookup: dict | None = None
 
 
 IDENTITY_TRANSFORM = LoweredTransform(kind=enums.TransformKind.IDENTITY.value)
@@ -376,15 +379,41 @@ class MapAxisTransformInputModel(BaseModel):
         return LoweredTransform(kind=self.kind, input_axes=self.input_axes, output_axes=self.output_axes)
 
 
+class AxisLookupInputModel(BaseModel):
+    """One axis of a BY_DIMENSION whose output is read from a 1-D array rather than computed.
+
+    ``min`` and ``max`` are the array's first and last values, **declared** by the writer, which
+    also vouches that the values strictly increase: the server never reads array contents, so
+    it records them as facts the way a table's dtypes are recorded.
+    """
+
+    axis: str
+    output_axis: str | None = None
+    field: str
+    unit: str
+    min: float
+    max: float
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("max")
+    @classmethod
+    def _increasing(cls, value: float, info) -> float:
+        low = info.data.get("min")
+        if low is not None and not value > low:
+            raise ValueError(f"A lookup's values strictly increase, so its last value ({value}) must be greater than its first ({low})")
+        return value
+
+
 class ByDimensionTransformInputModel(BaseModel):
     """A map over a named subset of axes, optionally with parameters over that subset."""
 
     kind: Literal["BY_DIMENSION"] = "BY_DIMENSION"
-    input_axes: list[str]
-    output_axes: list[str]
+    input_axes: list[str] = []
+    output_axes: list[str] = []
     scale: list[float] | None = None
     translation: list[float] | None = None
     affine: list[list[float]] | None = None
+    lookup: AxisLookupInputModel | None = None
     model_config = ConfigDict(extra="forbid")
 
     @field_validator("scale")
@@ -414,6 +443,18 @@ class ByDimensionTransformInputModel(BaseModel):
             scale=self.scale,
             translation=self.translation,
             affine=self.affine,
+            field=self.lookup.field if self.lookup else None,
+            lookup=(
+                {
+                    "axis": self.lookup.axis,
+                    "output_axis": self.lookup.output_axis or self.lookup.axis,
+                    "unit": self.lookup.unit,
+                    "min": self.lookup.min,
+                    "max": self.lookup.max,
+                }
+                if self.lookup
+                else None
+            ),
         )
 
 
@@ -529,6 +570,26 @@ class MapAxisTransformInput:
     output_axes: list[str] = strawberry.field(description="The names of the output axes they map onto, position by position. The matrix is synthesized from the two lists")
 
 
+@strawberry.input(description="One axis of a BY_DIMENSION edge whose output is the value of a 1-D array at the input index: a movie whose frames were taken at uneven instants, a stack with uneven z steps. The array's values strictly increase; between samples the map interpolates linearly, so a pyramid level's fractional index is still a position")
+class AxisLookupInput:
+    """The lookup a BY_DIMENSION edge may carry on one axis."""
+
+    axis: str = strawberry.field(description="The input axis the lookup reads, e.g. 't'. It is not one of the edge's `inputAxes`: those are the axes its parameters act on")
+    output_axis: str | None = strawberry.field(default=None, description="The output axis the array's values land on. Defaults to `axis`")
+    field: strawberry.ID = strawberry.field(description="The coordinate system of the 1-D array whose values are the map, alone in its system, with one value per position of `axis`")
+    unit: str = strawberry.field(description="The unit of the array's values, e.g. 'second'. Converted into the output axis' unit when read")
+    min: float = strawberry.field(description="The array's first value, declared: the server never reads array contents")
+    max: float = strawberry.field(description="The array's last value, declared. Greater than `min`: the values strictly increase")
+
+
+def _lookup_data(lookup: "AxisLookupInput | None") -> dict | None:
+    """The flat wire lookup as the dict its pydantic member validates."""
+    if lookup is None:
+        return None
+    data = {"axis": lookup.axis, "output_axis": lookup.output_axis, "field": lookup.field, "unit": lookup.unit, "min": lookup.min, "max": lookup.max}
+    return {key: value for key, value in data.items() if value is not None}
+
+
 @kante.pydantic_input(
     ByDimensionTransformInputModel,
     directives=union_memberships("TransformInput", key="BY_DIMENSION"),
@@ -543,6 +604,7 @@ class ByDimensionTransformInput:
     scale: list[float] | None = strawberry.field(default=None, description="Optional per-axis scale factors over the named axes, in the order they are named")
     translation: list[float] | None = strawberry.field(default=None, description="Optional per-axis offsets over the named axes")
     affine: list[list[float]] | None = strawberry.field(default=None, description="Optional matrix over the named axes, M x (N+1), rows outermost")
+    lookup: AxisLookupInput | None = strawberry.field(default=None, description="Optional: one further axis whose output is read from a 1-D array's values rather than computed, e.g. the instants an event-triggered movie's frames were taken at")
 
 
 @kante.pydantic_input(
@@ -624,10 +686,12 @@ class TransformInput:
     output_axes: list[str] | None = strawberry.field(default=None, description="(MAP_AXIS, BY_DIMENSION, FIELD) The names of the output axes they map onto")
     field: strawberry.ID | None = strawberry.field(default=None, description="(FIELD) The coordinate system of the array whose values are the map")
     reason: str | None = strawberry.field(default=None, description="(UNMAPPABLE) Why nothing corresponds. Purely descriptive")
+    lookup: AxisLookupInput | None = strawberry.field(default=None, description="(BY_DIMENSION) One further axis read from a 1-D array's values rather than computed")
 
     def to_pydantic(self) -> BaseModel:
         """Match the flat wire fields to the member model `kind` selects, strictly."""
         supplied = {
+            "lookup": _lookup_data(self.lookup),
             "kind": self.kind,
             "scale": self.scale,
             "translation": self.translation,

@@ -13,7 +13,9 @@ from enum import Enum
 from django.contrib.postgres.indexes import GinIndex
 from embeddings.models import EmbeddedDescriptionMixin
 from core import base_models
+from core.logic import acquisition
 from core.logic import coords as coords_logic
+from core.derived import DerivedDateTimeField
 from core.models.coords import CoordinateSystem, Transformation, MeshCollection, NetworkCollection  # noqa: F401  (re-exported via core.models)
 from polymorphic.managers import PolymorphicManager
 from polymorphic.models import PolymorphicModel
@@ -56,6 +58,11 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
     to the client, user and task the change happened under, and reads back as
     ``provenanceEntries``. A rename is the only thing about a dataset that can change, which is
     exactly why it is worth knowing who changed it.
+
+    The derived columns (``acquisition_start``, ``acquisition_end``) are the other exception:
+    no client writes them, :func:`core.derived.rederive` does, whenever the anchor spokes they
+    are derived from change. They cache what the anchors say for lists and filters and are kept
+    out of the history, which records edits.
     """
 
     name = models.CharField(max_length=1000, help_text="The name of the data source")
@@ -113,7 +120,11 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
     # The embedding column is storage, not an edit: keep it out of the history rows.
-    provenance = ProvenanceField(excluded_fields=["embedding"])
+    provenance = ProvenanceField(excluded_fields=["embedding", "acquisition_start", "acquisition_end"])
+
+    # What the anchors say about all of it, cached for lists and filters (core.derived).
+    acquisition_start = DerivedDateTimeField(deriver=acquisition.start, db_index=True)
+    acquisition_end = DerivedDateTimeField(deriver=acquisition.end, db_index=True)
 
     stored_spec = models.JSONField(
         default=list,
@@ -131,6 +142,8 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         indexes = [
             GinIndex(fields=["stored_spec"], name="array_dataset_spec_gin"),
             GinIndex(fields=["stored_descriptors"], name="array_dataset_descriptors_gin", opclasses=["jsonb_path_ops"]),
+            # Newest first per organization: the `roots` walk reads it in order and stops early.
+            models.Index(fields=["organization", "-created_at"], name="array_dataset_org_newest_idx"),
         ]
 
     @property
@@ -145,8 +158,12 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
 
     @property
     def multiscale(self) -> bool:
-        """Whether this dataset carries a resolution pyramid. Derived: more than one level."""
-        return self.data_arrays.count() > 1
+        """Whether this dataset carries a resolution pyramid. Derived: more than one level.
+
+        ``len(.all())`` rather than ``count()``, so a page that prefetched the arrays pays no
+        query per dataset here (a pyramid holds a handful of levels).
+        """
+        return len(self.data_arrays.all()) > 1
 
     @property
     def axes(self) -> list:
@@ -427,6 +444,37 @@ class ValueHistogram(models.Model):
     max = models.FloatField(help_text="The maximum pixel value of the histogram", null=True, blank=True)
     p1 = models.FloatField(help_text="The first percentile of the pixel values", null=True, blank=True)
     p99 = models.FloatField(help_text="The 99th percentile of the pixel values", null=True, blank=True)
+
+
+class AcquisitionWindow(models.Model):
+    """1:1 Spoke (Time Truth): when the data at this anchor's coordinates was acquired.
+
+    A span, so an anchor holding over many frames can say when the first and the last were
+    taken; one instant is a span with ``start == end``. What ``ArrayDataset.acquisition_start``
+    and ``acquisition_end`` are derived from.
+    """
+
+    anchor = models.OneToOneField(CoordinateAnchor, related_name="acquisition_window", on_delete=models.CASCADE)
+    start = models.DateTimeField(help_text="When the first of the data at these coordinates was acquired")
+    end = models.DateTimeField(help_text="When the last of the data at these coordinates was acquired. Equal to start for one instant")
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=Q(start__lte=models.F("end")), name="acquisition_window_starts_before_it_ends")]
+
+
+class DerivationConflict(models.Model):
+    """Anchors of a dataset that cannot all be true, found deriving one of its columns.
+
+    An anchor that holds over another contradicts it: the whole dataset says it was acquired
+    from 10:00 to 10:05, its frame 3 says 11:00. The column is left null and this row says why.
+    Replaced every time the dataset is derived again, so it disappears with the contradiction.
+    """
+
+    dataset = models.ForeignKey(ArrayDataset, related_name="derivation_conflicts", on_delete=models.CASCADE)
+    field = models.CharField(max_length=100, help_text="The derived column the conflict left null, e.g. 'acquisition_start'")
+    reason = models.TextField(help_text="What the anchors say that cannot all be true")
+    anchors = models.JSONField(default=list, help_text="The IDs of the anchors that contradict each other")
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class ChannelLabel(models.Model):

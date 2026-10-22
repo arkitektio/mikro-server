@@ -130,6 +130,8 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
         indexes = [
             GinIndex(fields=["stored_spec"], name="table_dataset_spec_gin"),
             GinIndex(fields=["stored_descriptors"], name="table_dataset_desc_gin", opclasses=["jsonb_path_ops"]),
+            # Newest first per organization: the `roots` walk reads it in order and stops early.
+            models.Index(fields=["organization", "-created_at"], name="table_dataset_org_newest_idx"),
         ]
 
     def __str__(self) -> str:

@@ -16,6 +16,8 @@ import strawberry
 from kante.types import Info
 from strawberry import auto
 
+from django.db.models import Prefetch
+
 from core import enums, filters, models, order
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.types.auth import Organization, ProvenanceEntry, Task, User
@@ -30,6 +32,48 @@ if TYPE_CHECKING:
     from core.types.table_dataset import TableDataset
 
 logger = logging.getLogger(__name__)
+
+
+#: Where a page of files keeps its SOURCE links, with each array dataset's tile fields.
+_SOURCE_LINKS_ATTR = "_prefetched_source_links"
+
+
+def _source_links_prefetch(info: Info) -> Prefetch:
+    """A page of files' SOURCE links in one query, and what their datasets' tiles read.
+
+    The tile fields (`shape`, `axisNames`, `multiscale`, `fullLens`, `defaultScene`) carry
+    their own prefetch hints, but those apply to a list of datasets, not to datasets reached
+    through a link's `container` union. So the link queryset prefetches the same rows, under
+    the same attribute names the dataset resolvers read (`core.types.array_dataset`).
+    """
+    from core.types.array_dataset import _FULL_LENSES_ATTR, _NOMINATING_LENS_ATTR
+
+    whole = models.ArrayLens.objects.filter(slices=[]).order_by("pk")
+    links = (
+        models.FileLink.objects.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value)
+        .select_related("dataset", "table_dataset", "mesh_collection", "annotation_collection")
+        .prefetch_related(
+            "dataset__data_arrays",
+            "dataset__coordinate_system__axes",
+            Prefetch("dataset__lenses", queryset=whole, to_attr=_FULL_LENSES_ATTR),
+            Prefetch("dataset__lenses", queryset=whole.select_related("default_scene"), to_attr=_NOMINATING_LENS_ATTR),
+        )
+        .order_by("pk")
+    )
+    return Prefetch("links", queryset=links, to_attr=_SOURCE_LINKS_ATTR)
+
+
+def _asks_only_sources(filters_input) -> bool:  # noqa: ANN001 - a strawberry FileLinkFilter input
+    """Whether a `derivedContainers` filter is answered by the prefetched links: none, or `direction: SOURCE` alone."""
+    if filters_input is strawberry.UNSET or filters_input is None:
+        return True
+    for name, value in vars(filters_input).items():
+        if value is strawberry.UNSET or value is None:
+            continue
+        if name == "direction" and value == enums.FileLinkDirection.SOURCE:
+            continue
+        return False
+    return True
 
 
 @kante.django_type(
@@ -53,10 +97,13 @@ class File:
             "The containers converted out of this file: the datasets a converter wrote from it, one per series. **Not a derivation** -- a file has no coordinate system, so these "
             "links claim no geometry and place nothing; they say only that this file's bytes and that data are the same thing"
         ),
-        prefetch_related=["links__file"],
+        prefetch_related=[_source_links_prefetch],
     )
     def derived_containers(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
-        """The links naming this file as a source."""
+        """The links naming this file as a source: from the page's prefetch when the filter allows, one query otherwise."""
+        prefetched = getattr(self, _SOURCE_LINKS_ATTR, None)
+        if prefetched is not None and _asks_only_sources(filters):
+            return prefetched
         return apply_link_filters(self.links.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value).order_by("pk"), filters, info)
 
     @kante.django_field(

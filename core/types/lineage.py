@@ -38,6 +38,32 @@ class LineageRootInput:
     id: strawberry.ID = strawberry.field(description="Its ID")
 
 
+@strawberry.input(description="What narrows `roots`. A field left out does not narrow")
+class RootFilter:
+    owner: strawberry.ID | None = strawberry.field(default=None, description="Only what this user created, by their subject ID. Kinds that record no creator drop out")
+    collaboration: strawberry.ID | None = strawberry.field(
+        default=None, description="Only what was put in this collaboration. A file counts when it, or a series converted out of it, was put there"
+    )
+    created_after: datetime.datetime | None = strawberry.field(default=None, description="Only what was created at or after this moment")
+    created_before: datetime.datetime | None = strawberry.field(default=None, description="Only what was created at or before this moment")
+    acquired_after: datetime.datetime | None = strawberry.field(
+        default=None,
+        description="Only what was acquired, at least in part, at or after this moment -- the same overlap as `ArrayDatasetFilter.acquiredAfter`. A file is judged by the series converted out of it; kinds with no acquisition time drop out",
+    )
+    acquired_before: datetime.datetime | None = strawberry.field(
+        default=None,
+        description="Only what was acquired, at least in part, at or before this moment -- the same overlap as `ArrayDatasetFilter.acquiredBefore`. A file is judged by the series converted out of it; kinds with no acquisition time drop out",
+    )
+    search: str | None = strawberry.field(
+        default=None,
+        description="Only what is named with this text, anywhere in the name, ignoring case. A file also matches by the name of a series converted out of it. An unnamed mesh or network collection never matches",
+    )
+    spec: List[enums.ArrayDatasetSpec] | None = strawberry.field(
+        default=None,
+        description="Only data satisfying every one of these specs, as `ArrayDatasetFilter.spec` reads them, e.g. [VOLUME, TIMESERIES]. A file is judged by the series converted out of it, and matches only when one series meets both this and the acquisition window; kinds that are not array data drop out",
+    )
+
+
 @kante.type(description="One narrowed axis of an array lens: its normalized slice")
 class LineageSlice:
     axis: str = strawberry.field(description="The dataset axis it narrows")
@@ -110,3 +136,31 @@ class Lineage:
     nodes: List[LineageNode] = strawberry.field(description="Every node reached, the root included, nearest-upstream first")
     edges: List[LineageEdge] = strawberry.field(description="Every edge between two of `nodes`")
     truncated: bool = strawberry.field(description="Whether the walk stopped at `limit` before reaching its depth")
+
+
+@kante.type(description="One thing made from a `descendants` root, as a tile names it")
+class DescendantNode:
+    key: strawberry.ID = strawberry.field(description="`<kind>:<id>`, the same key `lineage` gives it")
+    kind: LineageNodeKind = strawberry.field(description="What it is")
+    id: strawberry.ID = strawberry.field(description="Its ID, as its own query takes it")
+    name: str = strawberry.field(description="Its name; a mesh or network collection without one is named by its store's key")
+    depth: int = strawberry.field(description="Hops below the root, at its nearest")
+    parent: strawberry.ID = strawberry.field(
+        description="The key of what it was made from on its nearest path to the root -- the root's own key one hop down -- so the nodes read as a tree"
+    )
+
+
+@kante.type(description="What was made from one root: its descendants, without the edges, lenses or arrays `lineage` carries")
+class Descendants:
+    root: strawberry.ID = strawberry.field(description="The root's node key")
+    nodes: List[DescendantNode] = strawberry.field(description="Everything made from the root within `down` hops, nearest first, each once")
+    more: bool = strawberry.field(description="Whether something made from it was left out -- past `down`, past `fanout` or past the shared `limit`. `lineage` rooted here walks on")
+
+
+@kante.type(description="A piece of parentless data: nothing it was made from is recorded, so it is where a lineage starts")
+class RootNode:
+    key: strawberry.ID = strawberry.field(description="`<kind>:<id>`, the same key `lineage` gives it")
+    kind: LineageNodeKind = strawberry.field(description="What it is")
+    id: strawberry.ID = strawberry.field(description="Its ID, as its own query takes it")
+    name: str = strawberry.field(description="Its name; a mesh or network collection without one is named by its store's key")
+    created_at: datetime.datetime | None = strawberry.field(description="When it was created")

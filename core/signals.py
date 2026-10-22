@@ -2,14 +2,16 @@ import logging
 from collections.abc import Callable
 from weakref import WeakSet
 
+from django.apps import apps
 from django.db import transaction
-from django.db.models import Model
+from django.db.models import Model, QuerySet
 from django.db.models.signals import post_delete, post_save, pre_delete
 from django.dispatch import receiver
 
 from kante.channel import Channel
 
 from core import channels, models
+from core import derived
 from core import descriptors as descriptors_logic
 from core.channel_signals import RowSignal
 
@@ -65,6 +67,49 @@ def edge_written_handler(sender: type[models.Transformation], instance: models.T
 @receiver(post_delete, sender=models.Annotation)
 def annotation_written_handler(sender: type[models.Annotation], instance: models.Annotation, **kwargs: object) -> None:
     descriptors_logic.restore_annotation_counts([instance.collection_id])
+
+
+# --- columns derived from the anchors --------------------------------------------------
+# A container's derived columns (core.derived) follow the spokes they are read from: a spoke a
+# deriver names, saved or deleted, or an anchor deleted, derives its container again. In the
+# same transaction, so the columns commit with the anchors they summarise.
+
+
+def _deriving_write(origin: object) -> bool:
+    """Whether a delete started at an anchor or a spoke, rather than cascading from the container -- which is going away, and must not gain conflict rows on its way."""
+    if origin is None:
+        return True
+    model = origin.model if isinstance(origin, QuerySet) else type(origin)
+    return issubclass(model, models.CoordinateAnchor) or model._meta.label in derived.SOURCES
+
+
+def _rederive_anchor_container(anchor: models.CoordinateAnchor | None) -> None:
+    container = anchor.container if anchor is not None else None
+    if container is not None and derived.derived_fields(type(container)):
+        derived.request(container)
+
+
+def spoke_written_handler(sender: type[Model], instance: Model, raw: bool = False, origin: object = None, **kwargs: object) -> None:
+    if raw or not _deriving_write(origin):
+        return
+    # The spoke's own anchor, and through it the container instance the writer holds: a
+    # mutation returning that container answers with the columns just derived.
+    try:
+        anchor = instance.anchor
+    except models.CoordinateAnchor.DoesNotExist:
+        return
+    _rederive_anchor_container(anchor)
+
+
+@receiver(post_delete, sender=models.CoordinateAnchor)
+def anchor_deleted_handler(sender: type[models.CoordinateAnchor], instance: models.CoordinateAnchor, origin: object = None, **kwargs: object) -> None:
+    if _deriving_write(origin):
+        _rederive_anchor_container(instance)
+
+
+for _label in sorted(derived.SOURCES):
+    post_save.connect(spoke_written_handler, sender=apps.get_model(_label), dispatch_uid=f"rederive-saved-{_label}")
+    post_delete.connect(spoke_written_handler, sender=apps.get_model(_label), dispatch_uid=f"rederive-deleted-{_label}")
 
 
 def _relay_rows[M: Model](model: type[M], channel: Channel[RowSignal], rooms: Callable[[M], list[str]]) -> None:

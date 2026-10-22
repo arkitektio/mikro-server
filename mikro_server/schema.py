@@ -170,6 +170,16 @@ class Query:
         description="The directed lineage around one container or file: `up` hops of what it was made from and `down` hops of what was made from it, with the tasks that made each step and the files it was ingested from or exported to. One recursive walk per direction, so the cost follows the lineage and not the organization. A node whose hops were cut off -- by depth, by `fanout` per node or by `limit` overall -- says so in `hasMoreUp`/`hasMoreDown`; walk again rooted there to continue. Unlike `lineageGraph` it never turns sideways: a node's siblings appear once its parent is walked from",
     )
 
+    roots = field(
+        resolver=queries.roots,
+        description="The newest parentless data, whatever its kind, newest first: what a home page lists. A root has no up-hop in `lineage` -- no derivation edge into another container and no file it was converted from; a file is one unless it was exported from a container. A file's converted series and a dataset's mask are not roots: they are reached from their parent, with `descendants`. Annotation collections are drawn rather than brought in and are never listed. `kinds` narrows it; the default is every other kind. `filters` narrows it further, by creator, collaboration, creation time and acquisition time",
+    )
+
+    descendants = field(
+        resolver=queries.descendants,
+        description="What was made from each of many containers or files, `down` hops deep, in one walk: a page of tiles asks once rather than once per tile. Kind-blind like `lineage` -- a table uploaded on its own is a root just as a converted series is -- but downstream only, and without the edges, lenses and arrays `lineage` carries. `limit` is shared by every root; `fanout` caps the hops per node. A root another organization owns answers nothing, so the result can be shorter than `starts`",
+    )
+
     attribute_plans = field(
         resolver=queries.attribute_plans,
         description="Every attribute plan reachable from one system: one per FIELD edge landing on a table, discovered across the fact component -- probe a source image and the plans of the instance mask derived from it come back, each carrying the `path` of steps from the probed system to its root. Registrations are never crossed (no scene, no world). A plan is instructions, never attributes -- map along the path, sample this array, look the value up in this parquet -- and takes no coordinate, so a client fetches it once and executes it per hover against the chunks it is already rendering. Cache it against the FIELD edge plus every path step (ids and versions); `maxDepth` bounds the discovery. Each plan is a chain of `hops`: the landing, then every declared reference reachable from it -- `Column.references` into another table, a matrix axis a table identifies, or the same axis walked into the matrix -- up to `maxJoinDepth` (default 1, at most 4; 0 is the landing alone), each bound from the hop before and executed by the client in order. The server reads no store and composes nothing",
@@ -298,6 +308,7 @@ class Mutation:
 
     create_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.create_collaboration, description="Create an empty collaboration, to put objects in and grant a guest")
     add_to_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.add_to_collaboration, description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw")
+    add_many_to_collaboration = mutation(roles=["admin", "editor"], resolver=mutations.add_many_to_collaboration, description="Put several objects in a collaboration at once, each with what it needs to be seen; all or none. How a dataset goes in with what was derived from it")
     remove_from_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.remove_from_collaboration, description="Take an object out of a collaboration, with what it brought that nothing else there needs")
     delete_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.delete_collaboration, description="Delete a collaboration: whoever was granted it sees nothing of it any more")
 

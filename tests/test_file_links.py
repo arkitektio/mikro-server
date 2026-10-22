@@ -727,3 +727,31 @@ def test_filefilter_publishes_no_surface_filterlookup_already_covers() -> None:
     assert "sizes:" not in body
     assert "contentTypes:" not in body
     assert "linkedToDataset" not in body, "superseded by linkedTo, which covers all four container kinds"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_has_source_file_splits_converted_from_written_in(authenticated_context: HttpContext) -> None:
+    """`hasSourceFile` on datasets and tables: what a converter read from an upload, or not."""
+    from asgiref.sync import sync_to_async
+
+    from tests.seed import YX_AXES
+
+    folder = await create_folder(authenticated_context, "Sources")
+    raw = await create_file(authenticated_context, "raw.lif", folder)
+    converted = await create_array_dataset(authenticated_context, "Converted", axes=YX_AXES, shapes=[[16, 16]])
+    await create_array_dataset(authenticated_context, "Written", axes=YX_AXES, shapes=[[16, 16]])
+    exported = await create_array_dataset(authenticated_context, "Exported", axes=YX_AXES, shapes=[[16, 16]])
+    org = authenticated_context.request.organization
+    await sync_to_async(models.FileLink.objects.create)(file=raw, dataset=converted, direction=enums.FileLinkDirectionChoices.SOURCE.value, organization=org)
+    # A rendition is a file written FROM the dataset: the dataset did not come from a file.
+    await sync_to_async(models.FileLink.objects.create)(file=raw, dataset=exported, direction=enums.FileLinkDirectionChoices.RENDITION.value, organization=org)
+
+    query = "query Q($v: Boolean!) { arrayDatasets(filters: {hasSourceFile: $v}) { name } }"
+    names = {}
+    for value in (True, False):
+        result = await schema.execute(query, context_value=authenticated_context, variable_values={"v": value})
+        assert not result.errors, result.errors
+        names[value] = {row["name"] for row in result.data["arrayDatasets"]}
+    assert "Converted" in names[True] and not names[True] & {"Written", "Exported"}
+    assert {"Written", "Exported"} <= names[False] and "Converted" not in names[False]

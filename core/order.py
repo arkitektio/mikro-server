@@ -23,6 +23,7 @@ class FileOrder:
 @strawberry_django.order_type(models.ArrayDataset)
 class ArrayDatasetOrder:
     created_at: auto
+    acquisition_start: auto
     name: auto
     id: auto
 

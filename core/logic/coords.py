@@ -30,7 +30,7 @@ The conventions this module encodes:
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Mapping, Protocol, Sequence
 
 from kanne_server import scalars as kanne_scalars
@@ -1116,6 +1116,41 @@ class AxedStep:
     #: edge that relates the two spaces, not of either axis alone.
     input_units: tuple[str | None, ...] = ()
     output_units: tuple[str | None, ...] = ()
+    #: A BY_DIMENSION's per-axis lookup: one axis whose output is read from an array's values
+    #: rather than computed from the parameters. None on every other step.
+    lookup: "StepLookup | None" = None
+
+
+@dataclass(frozen=True)
+class StepLookup:
+    """One axis of a BY_DIMENSION edge whose output is the value of a 1-D array at the input index.
+
+    ``factor`` converts the array's values into the output axis' unit -- a lookup states its
+    values' unit, so unlike a bare FIELD it can convert (seconds stored, milliseconds read).
+    """
+
+    input_axis: str
+    output_axis: str
+    field: int
+    factor: float = 1.0
+
+
+@dataclass(frozen=True)
+class LookupForm:
+    """One destination axis given by a lookup: ``scale * field[inner_scale * source + inner_offset] + offset``.
+
+    ``field`` is the pk of the 1-D array's coordinate system. The field is read at a
+    *fractional* index between samples by linear interpolation of the sample centres, which is
+    what makes a pyramid level's inner form (``f * i + (f - 1) / 2``) meaningful without a
+    field per level. Evaluating it is the client's: the server never reads array values.
+    """
+
+    field: int
+    source_axis: str
+    inner_scale: float
+    inner_offset: float
+    scale: float = 1.0
+    offset: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1179,6 +1214,13 @@ def _pass_through_factor(step: "AxedStep", axis: str) -> float | None:
     # merely uncalibrated. `dimensionless` is deliberately NOT in this branch: it is a real
     # pint unit and a genuine claim, and a dimensionless axis facing a micrometre one really
     # does have no conversion between them.
+    return unit_factor(source, target)
+
+
+def unit_factor(source: str | None, target: str | None) -> float | None:
+    """How much one ``source`` is worth in ``target``: 1.0 when either is absent or arbitrary, None when no conversion exists."""
+    if not source or not target or source == target:
+        return 1.0
     if kanne_scalars.is_arbitrary_unit(source) or kanne_scalars.is_arbitrary_unit(target):
         return 1.0
     registry = kanne_scalars.get_registry()
@@ -1216,8 +1258,12 @@ def _by_dimension_forms(step: AxedStep) -> dict[str, AxedForm]:
                     coefficients[step.input_axes.index(in_axis)] = float(sub[row][column])
             forms[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=float(sub[row][len(acts_in)]))
 
+    # A looked-up axis is neither mapped by the parameters nor passed through: its value is the
+    # array's, which `compose_placement` carries beside the forms. Its input is consumed too.
+    looked_up = {step.lookup.input_axis, step.lookup.output_axis} if step.lookup else set()
+
     for out_axis in step.output_axes:
-        if out_axis in forms or out_axis in acts_out:
+        if out_axis in forms or out_axis in acts_out or out_axis in looked_up:
             continue
         if out_axis in step.input_axes and out_axis not in acts_in:
             factor = _pass_through_factor(step, out_axis)
@@ -1341,15 +1387,48 @@ def compose_forms(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> dict
 
     A destination axis whose functional would need a source axis some earlier step stopped
     constraining is dropped: once the path has let go of an axis, nothing downstream can
-    take hold of it again.
+    take hold of it again. A looked-up axis has no functional and is absent here; callers
+    that can use it ask :func:`compose_placement`.
     """
-    rank = len(source_axes)
+    return compose_placement(steps, source_axes)[0]
+
+
+def _single_term(form: AxedForm) -> tuple[int, float] | None:
+    """The one source axis a functional reads, with its coefficient, or None when it reads zero or several."""
+    used = [(index, factor) for index, factor in enumerate(form.coefficients) if factor != 0.0]
+    return used[0] if len(used) == 1 else None
+
+
+def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> tuple[dict[str, AxedForm], dict[str, LookupForm]]:
+    """Compose a path into its affine functionals **and** the axes given by a lookup.
+
+    A lookup takes the place of a functional on exactly one axis and leaves every other axis
+    affine, which is the point: a movie timed by an array of instants still has a pixel size,
+    and a FIELD anywhere in its path used to cost it both.
+
+    The lookup's *inner* index must read exactly one source axis (a lens slice offset, a pyramid
+    stride), and later steps may only scale and offset it on its own axis (a session offset
+    onto an experiment clock). Anything that mixes it with another axis, or looks it up a
+    second time, has no form this can state and drops the axis -- absent, not wrong.
+    """
     current: dict[str, AxedForm] = {axis: _identity_form(axis, source_axes) for axis in source_axes}
+    lookups: dict[str, LookupForm] = {}
+    rank = len(source_axes)
 
     for step in steps:
         produced = step_forms(step)
         composed: dict[str, AxedForm] = {}
+        carried: dict[str, LookupForm] = {}
         for out_axis, form in produced.items():
+            reads = [step.input_axes[index] for index, factor in enumerate(form.coefficients) if factor != 0.0 and index < len(step.input_axes)]
+            if any(axis in lookups for axis in reads):
+                term = _single_term(form)
+                if term is not None:
+                    index, factor = term
+                    lookup = lookups[step.input_axes[index]]
+                    carried[out_axis] = replace(lookup, scale=factor * lookup.scale, offset=factor * lookup.offset + form.constant)
+                continue
+
             coefficients = [0.0] * rank
             constant = form.constant
             unconstrained = False
@@ -1366,9 +1445,23 @@ def compose_forms(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> dict
             if unconstrained:
                 continue
             composed[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=constant)
-        current = composed
 
-    return current
+        if step.lookup is not None:
+            inner = current.get(step.lookup.input_axis)
+            term = _single_term(inner) if inner is not None else None
+            if term is not None:
+                index, factor = term
+                carried[step.lookup.output_axis] = LookupForm(
+                    field=step.lookup.field,
+                    source_axis=source_axes[index],
+                    inner_scale=factor,
+                    inner_offset=inner.constant,
+                    scale=step.lookup.factor,
+                )
+
+        current, lookups = composed, carried
+
+    return current, lookups
 
 
 def _sub_matrix(step: AxedStep) -> list[list[float]]:
@@ -1452,6 +1545,11 @@ def invert_step(step: AxedStep) -> AxedStep:
         # axis names -- `graph.assert_edge_rank` holds a MAP_AXIS to exactly that, which is
         # also what makes `permutation_matrix` total.
         return AxedStep(kind=kind, params={}, acts_on_input=step.acts_on_output, acts_on_output=step.acts_on_input, **swapped)
+
+    if kind == enums.TransformKindChoices.BY_DIMENSION.value and step.lookup is not None:
+        # `is_invertible` excludes a BY_DIMENSION carrying a lookup, so the walk never flags
+        # one; inverting it would mean searching an array this module never reads.
+        raise NonAffineTransformError("A BY_DIMENSION edge with a lookup is walked forwards only: its inverse is a search through the array's values")
 
     if kind == enums.TransformKindChoices.BY_DIMENSION.value:
         # Square over the *named subset*, which `assert_edge_rank` maps one for one -- not

@@ -676,6 +676,14 @@ class ByDimensionTransformation(Transformation):
         """The affine over the named axes, if stated."""
         return self.params.get("affine") or []
 
+    @kante.django_field(only=["params", "field"], description="One further axis read from a 1-D array's values rather than computed from the parameters, e.g. the instants an event-triggered movie's frames were taken at. Null when every axis is named or passes through")
+    def lookup(self, info: Info) -> Optional["AxisLookup"]:
+        """The edge's lookup, if it carries one."""
+        lookup = (self.params or {}).get("lookup")
+        if not lookup or self.field_id is None:
+            return None
+        return AxisLookup(axis=lookup["axis"], output_axis=lookup["output_axis"], unit=lookup["unit"], min=lookup["min"], max=lookup["max"], field=self.field)
+
 
 @kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A non-affine map given by the values of an array rather than by a formula. The array is a `field`: a node of this graph, not a payload on this edge, so it keeps its own lineage and its axes say what its numbers mean. It has no closed-form inverse, so a placement path never walks it backwards")
 class FieldTransformation(Transformation):
@@ -756,7 +764,52 @@ class AffinePlacement:
     matrix: List[List[float]] = strawberry.field(description="The composed map, M x (N+1), rows outermost. One row per axis in `outputAxes`, one column per axis in `inputAxes`, plus a final translation column")
     input_axes: List[str] = strawberry.field(description="The axes the matrix's columns are in, which is the layer's own source coordinate system's axis order")
     output_axes: List[str] = strawberry.field(description="The destination axes the matrix's rows are in, in the world's own axis order. An axis the path says nothing about has no row at all")
-    total: bool = strawberry.field(description="Whether `outputAxes` covers every axis of the destination space. False for a partial registration -- an honest map over the axes it names, and silence about the rest")
+    total: bool = strawberry.field(description="Whether `outputAxes` and `lookups` together cover every axis of the destination space. False for a partial registration -- an honest map over the axes it names, and silence about the rest")
+    lookups: List["PlacementLookup"] = strawberry.field(
+        default_factory=list,
+        description="The destination axes given by an array's values rather than by a row of `matrix`, e.g. the time of each frame of an event-triggered movie. An axis is in `outputAxes` or here, never both",
+    )
+
+
+@strawberry.type(
+    description=(
+        "One destination axis of a placement given by a lookup: the world coordinate of source index `i` along `inputAxis` is "
+        "`scale * field[innerScale * i + innerOffset] + offset`, where `field` is the 1-D array of `dataset`. The array's values strictly increase and are the positions of "
+        "the sample *centres*; between samples the map interpolates linearly, so a fractional index (a pyramid level's) is still a position. The server never reads the values: "
+        "fetch the array once and evaluate it, or invert it by binary search to find the sample at a world coordinate"
+    )
+)
+class PlacementLookup:
+    """One looked-up destination axis of a condensed placement."""
+
+    output_axis: str = strawberry.field(description="The destination axis this lookup gives")
+    input_axis: str = strawberry.field(description="The source axis whose index the array is read at")
+    inner_scale: float = strawberry.field(description="Source index to array index: the factor")
+    inner_offset: float = strawberry.field(description="Source index to array index: the offset")
+    scale: float = strawberry.field(description="Array value to destination coordinate: the factor, including the unit conversion from the array's values")
+    offset: float = strawberry.field(description="Array value to destination coordinate: the offset")
+    # Resolved by the caller, inside its own (thread-wrapped) resolver: a plain strawberry
+    # resolver here runs in the async loop and may not touch the ORM.
+    field: CoordinateSystem = strawberry.field(description="The coordinate system of the array whose values are the map")
+    dataset: Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] = strawberry.field(description="The 1-D dataset whose values are the map. Read its level-0 store to evaluate the lookup")
+
+    @classmethod
+    def from_form(cls, axis: str, form) -> "PlacementLookup":  # noqa: ANN001 - coords_logic.LookupForm
+        """One condensed lookup as the wire type. Queries: call it from a sync resolver."""
+        field = models.CoordinateSystem.objects.get(pk=form.field)
+        return cls(output_axis=axis, input_axis=form.source_axis, inner_scale=form.inner_scale, inner_offset=form.inner_offset, scale=form.scale, offset=form.offset, field=field, dataset=graph_logic.system_dataset(field))
+
+
+@strawberry.type(description="The lookup a BY_DIMENSION edge carries on one axis: that axis' output is the value of a 1-D array at the input index, rather than computed from the parameters")
+class AxisLookup:
+    """A BY_DIMENSION edge's stored lookup."""
+
+    axis: str = strawberry.field(description="The input axis the array is read along")
+    output_axis: str = strawberry.field(description="The output axis its values land on")
+    unit: str = strawberry.field(description="The unit of the array's values")
+    min: float = strawberry.field(description="The array's first value, as declared by its writer")
+    max: float = strawberry.field(description="The array's last value, as declared by its writer")
+    field: CoordinateSystem = strawberry.field(description="The coordinate system of the array whose values are the map")
 
 
 @kante.type(description="One axis of a source's extent: the range it occupies along a single named axis of the queried coordinate system")

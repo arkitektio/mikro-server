@@ -114,7 +114,11 @@ class SparseDataset(Described):
         """Meta options for the sparse dataset."""
 
         ordering = ["-created_at"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="sparse_dataset_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(fields=["stored_descriptors"], name="sparse_dataset_desc_gin", opclasses=["jsonb_path_ops"]),
+            # Newest first per organization: the `roots` walk reads it in order and stops early.
+            models.Index(fields=["organization", "-created_at"], name="sparse_dataset_org_newest_idx"),
+        ]
 
     def __str__(self) -> str:
         """Return the dataset's name."""

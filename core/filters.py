@@ -157,6 +157,14 @@ def _link_exclusion(prefix: str, ids: QuerySet, *, negate: bool) -> Q:
     return ~matches if negate else matches
 
 
+def _containers_with_source_file(column: str) -> QuerySet:
+    """The ids of every container of one kind some file was converted into.
+
+    A values-list for a `pk__in` test, for the same reason as `_file_ids_with_links`.
+    """
+    return models.FileLink.objects.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value, **{f"{column}__isnull": False}).values(f"{column}_id")
+
+
 def _container_link_q(prefix: str, ref: "FileLinkContainerRef", direction: str | None = None) -> Q:
     """Files linked to the container this ref names, optionally in one direction only.
 
@@ -570,6 +578,29 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
     def source_series_identifier(self, info: Info, value: str, prefix: str) -> Q:
         """Match datasets converted from this series of a file."""
         return Q(**{f"{prefix}file_links__series_identifier": value, f"{prefix}file_links__direction": enums.FileLinkDirectionChoices.SOURCE.value})
+
+    @kante.filter_field(
+        description="Filter by whether the dataset was converted out of a file: true for the series a converter read from an upload, false for data written straight in (by an app, an agent, a script). Pair `false` with `notDerived` for the acquired data that came without a file"
+    )
+    def has_source_file(self, info: Info, value: bool, prefix: str) -> Q:
+        """Match datasets with, or without, a SOURCE file link."""
+        return _link_exclusion(prefix, _containers_with_source_file("dataset"), negate=not value)
+
+    # Overlap, read off the derived columns (core.derived): a dataset whose acquisition began
+    # before the window closed and ended after it opened. One with no stated time never matches.
+    @kante.filter_field(description="Filter to datasets acquired, at least in part, after this moment: their `acquisitionEnd` is at or after it. With `acquiredBefore`, the datasets whose acquisition overlaps the window. A dataset with no stated acquisition time never matches")
+    def acquired_after(self, info: Info, value: datetime.datetime, prefix: str) -> Q:
+        return Q(**{f"{prefix}acquisition_end__gte": value})
+
+    @kante.filter_field(description="Filter to datasets acquired, at least in part, before this moment: their `acquisitionStart` is at or before it. With `acquiredAfter`, the datasets whose acquisition overlaps the window. A dataset with no stated acquisition time never matches")
+    def acquired_before(self, info: Info, value: datetime.datetime, prefix: str) -> Q:
+        return Q(**{f"{prefix}acquisition_start__lte": value})
+
+    @kante.filter_field(description="Filter by whether the dataset's anchors contradict each other: true finds the nonsensical metadata (`derivationConflicts`), false the consistent")
+    def has_derivation_conflicts(self, info: Info, value: bool, prefix: str) -> Q:
+        # A subquery, not a join: a dataset with a conflict on both ends would come back twice.
+        conflicted = Q(**{f"{prefix}pk__in": models.DerivationConflict.objects.values("dataset_id")})
+        return conflicted if value else ~conflicted
 
     @kante.filter_field(description="Filter by whether the dataset nominates a scene to open (through its whole lens). False finds the ones with no thumbnail")
     def has_default_scene(self, info: Info, value: bool, prefix: str) -> Q:
@@ -1181,6 +1212,11 @@ class TableDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
     def folders(self, info: Info, value: list[strawberry.ID], prefix: str) -> Q:
         """Match table datasets filed in any of the given folders."""
         return Q(**{f"{prefix}folder_id__in": value})
+
+    @kante.filter_field(description="Filter by whether the table was converted out of a file: true for the tables a converter read from an upload, false for those written straight in")
+    def has_source_file(self, info: Info, value: bool, prefix: str) -> Q:
+        """Match table datasets with, or without, a SOURCE file link."""
+        return _link_exclusion(prefix, _containers_with_source_file("table_dataset"), negate=not value)
 
     @kante.filter_field(description="Filter by the dataset the table was computed from, following its derivation edge")
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:

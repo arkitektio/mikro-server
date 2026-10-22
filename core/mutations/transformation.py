@@ -104,6 +104,7 @@ def create_transformation(info: Info, input: CreateTransformationInput) -> types
         output_axes=lowered.output_axes,
         field=field,
         reason=lowered.reason,
+        lookup=lowered.lookup,
         validity=model.validity,
         value_relation=model.value_relation,
         ctx=ctx,

@@ -147,7 +147,11 @@ class File(Described):
     provenance = ProvenanceField()
 
     class Meta:
-        indexes = [GinIndex(fields=["stored_descriptors"], name="file_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(fields=["stored_descriptors"], name="file_desc_gin", opclasses=["jsonb_path_ops"]),
+            # Newest first per organization: the `roots` walk reads it in order and stops early.
+            models.Index(fields=["organization", "-created_at"], name="file_org_newest_idx"),
+        ]
 
 
 class FileLink(Described):

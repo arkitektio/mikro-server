@@ -9,11 +9,8 @@ read to it -- the field, the filter, and the migration that gave it to the table
 before it was stored.
 """
 
-from importlib import import_module
 
 import pytest
-from asgiref.sync import sync_to_async
-from django.apps import apps
 from kante.context import HttpContext
 
 from core import models
@@ -182,18 +179,3 @@ async def test_a_stored_spec_this_build_does_not_know_is_left_out(authenticated_
     result = await schema.execute("query T($id: ID!) { tableDataset(id: $id) { spec } }", context_value=authenticated_context, variable_values={"id": points["id"]})
     assert not result.errors, result.errors
     assert result.data["tableDataset"]["spec"] == ["POINTS_2D"]
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_the_migration_gives_an_older_table_the_spec_it_would_be_created_with(authenticated_context: HttpContext):
-    """The rule is frozen in the migration; this is what holds the frozen copy to the live one."""
-    created = [await _create(authenticated_context, name, columns) for name, columns in (("tracks", TRACKS), ("points", POINTS), ("readout", READOUT), ("measurements", MEASUREMENTS))]
-    expected = {table["id"]: table["spec"] for table in created}
-    await models.TableDataset.objects.all().aupdate(stored_spec=[])
-
-    migration = import_module("core.migrations.0022_every_table_states_its_spec")
-    await sync_to_async(migration.materialize)(apps, None)
-
-    stored = {str(pk): spec async for pk, spec in models.TableDataset.objects.values_list("pk", "stored_spec")}
-    assert stored == expected

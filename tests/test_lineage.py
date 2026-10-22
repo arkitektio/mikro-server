@@ -424,3 +424,226 @@ async def test_a_scenes_drawing_surface_is_drawn_not_computed(authenticated_cont
         assert graph_logic.collection_derivation_edges(drawn.coordinate_system), "placement keeps the edge"
 
     await sync_to_async(check)()
+
+
+DESCENDANTS = """
+query Descendants($starts: [LineageRootInput!]!, $down: Int!) {
+  descendants(starts: $starts, down: $down) { root more nodes { key kind id name depth parent } }
+}
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_descendants_answer_what_lineage_answers_per_root(authenticated_context: HttpContext) -> None:
+    """One walk for many roots, of any kind: each root gets exactly its `lineage(up: 0)` nodes."""
+    ids = await _chain(authenticated_context)
+    starts = [
+        {"kind": "DATASET", "id": str(ids["acquired"])},
+        {"kind": "DATASET", "id": str(ids["mask"])},
+        # A table is a root as much as a series is: not everything starts from a file.
+        {"kind": "TABLE_DATASET", "id": str(ids["objects"])},
+        {"kind": "FILE", "id": str(ids["raw"])},
+    ]
+    result = await schema.execute(DESCENDANTS, context_value=authenticated_context, variable_values={"starts": starts, "down": 3})
+    assert not result.errors, result.errors
+    by_root = {entry["root"]: entry for entry in result.data["descendants"]}
+
+    for start in starts:
+        walked = await _walk(authenticated_context, start["kind"], start["id"], up=0, down=3)
+        want = {node["key"] for node in walked["nodes"] if node["depth"] > 0}
+        entry = by_root[walked["root"]]
+        assert {node["key"] for node in entry["nodes"]} == want, start
+        assert not entry["more"]
+
+    assert by_root[f"tabledataset:{ids['objects']}"]["nodes"] == []
+
+    # Each node names what it was made from, so the walk reads as a tree.
+    parent_of = {node["key"]: node["parent"] for node in by_root[f"dataset:{ids['acquired']}"]["nodes"]}
+    assert parent_of[f"dataset:{ids['mask']}"] == f"dataset:{ids['acquired']}"
+    assert parent_of[f"tabledataset:{ids['objects']}"] == f"dataset:{ids['mask']}"
+    assert [node["depth"] for node in by_root[f"dataset:{ids['acquired']}"]["nodes"]] == sorted(
+        node["depth"] for node in by_root[f"dataset:{ids['acquired']}"]["nodes"]
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_descendants_say_when_they_were_cut_short(authenticated_context: HttpContext) -> None:
+    ids = await _chain(authenticated_context)
+
+    def check() -> None:
+        org = Organization.objects.get(slug="static_org")
+        # Acquired -> Mask -> Objects: one hop leaves Objects out.
+        (shallow,) = lineage_logic.descendants([("dataset", ids["acquired"])], organization=org, down=1)
+        assert {node.pk for node in shallow.nodes} == {ids["mask"], ids["projection"]}
+        assert shallow.more
+
+        # Two children (Mask, Projection), a fan-out of one.
+        (narrow,) = lineage_logic.descendants([("dataset", ids["acquired"])], organization=org, down=1, fanout=1)
+        assert len(narrow.nodes) == 1 and narrow.more
+
+        assert lineage_logic.descendants([("dataset", 10**9)], organization=org) == []
+
+    await sync_to_async(check)()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_descendants_cost_does_not_grow_with_the_roots(authenticated_context: HttpContext) -> None:
+    roots = []
+    for index in range(6):
+        acquired = await seed.create_array_dataset(authenticated_context, f"Acquired{index}", axes=seed.YX_AXES, shapes=[[64, 64]])
+        lens = await seed.create_lens(authenticated_context, acquired)
+        await _derived(authenticated_context, f"Mask{index}", lens=lens)
+        roots.append(("dataset", acquired.pk))
+
+    def check() -> None:
+        org = Organization.objects.get(slug="static_org")
+        counts = []
+        for some in (roots[:2], roots):
+            with CaptureQueriesContext(connection) as queries:
+                got = lineage_logic.descendants(some, organization=org)
+            assert [len(entry.nodes) for entry in got] == [1] * len(some)
+            counts.append(len(queries))
+        assert counts[0] == counts[1], counts
+
+    await sync_to_async(check)()
+
+
+ROOTS = """
+query Roots($kinds: [LineageNodeKind!], $pagination: OffsetPaginationInput, $filters: RootFilter) {
+  roots(kinds: $kinds, pagination: $pagination, filters: $filters) { key kind id name createdAt }
+}
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_roots_are_the_nodes_nothing_was_made_from(authenticated_context: HttpContext) -> None:
+    """A file and what came without one are roots; a converted series, a mask, a measurement and an export are not."""
+    ids = await _chain(authenticated_context)
+    written = await seed.create_array_dataset(authenticated_context, "Written", axes=seed.YX_AXES, shapes=[[16, 16]])
+    uploaded = await _table(authenticated_context, "Uploaded", columns=_MEASUREMENT_COLUMNS)
+
+    def export() -> int:
+        org = Organization.objects.get(slug="static_org")
+        exported = models.File.objects.create(name="export.ome.tif", organization=org, membership=models.File.objects.get(pk=ids["raw"]).membership)
+        models.FileLink.objects.create(file=exported, dataset_id=ids["mask"], direction=enums.FileLinkDirectionChoices.RENDITION.value, organization=org)
+        return exported.pk
+
+    exported = await sync_to_async(export)()
+
+    result = await schema.execute(ROOTS, context_value=authenticated_context, variable_values={"pagination": {"limit": 50}})
+    assert not result.errors, result.errors
+    keys = [row["key"] for row in result.data["roots"]]
+    assert {f"file:{ids['raw']}", f"dataset:{written.pk}", f"tabledataset:{uploaded['id']}"} <= set(keys)
+    for derived in (f"dataset:{ids['acquired']}", f"dataset:{ids['mask']}", f"tabledataset:{ids['objects']}", f"file:{exported}"):
+        assert derived not in keys, derived
+
+    # Newest first, across kinds.
+    stamps = [row["createdAt"] for row in result.data["roots"]]
+    assert stamps == sorted(stamps, reverse=True)
+
+    narrowed = await schema.execute(ROOTS, context_value=authenticated_context, variable_values={"kinds": ["TABLE_DATASET"]})
+    assert {row["kind"] for row in narrowed.data["roots"]} == {"TABLE_DATASET"}
+
+    first = await schema.execute(ROOTS, context_value=authenticated_context, variable_values={"pagination": {"limit": 1}})
+    second = await schema.execute(ROOTS, context_value=authenticated_context, variable_values={"pagination": {"limit": 1, "offset": 1}})
+    assert [first.data["roots"][0]["key"], second.data["roots"][0]["key"]] == keys[:2]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_roots_narrow_by_creator_collaboration_and_time(authenticated_context: HttpContext) -> None:
+    """A file is judged by its converted series for acquisition and collaboration; kinds with no acquisition time drop out."""
+    import datetime
+
+    from arkitekt_service.collaborations.models import Collaboration, CollaborationItem
+    from django.contrib.contenttypes.models import ContentType
+
+    ids = await _chain(authenticated_context)
+    written = await seed.create_array_dataset(authenticated_context, "Written", axes=seed.YX_AXES, shapes=[[16, 16]])
+    uploaded = await _table(authenticated_context, "Uploaded", columns=_MEASUREMENT_COLUMNS)
+    other = await seed.create_other_user(authenticated_context)
+    folder = await seed.create_folder(authenticated_context, "Theirs")
+    theirs = await seed.create_file(authenticated_context, "theirs.czi", folder, creator=other)
+
+    day = lambda hour: datetime.datetime(2026, 10, 22, hour, tzinfo=datetime.UTC)  # noqa: E731
+
+    def stage() -> int:
+        # The series converted out of raw.czi was acquired 10:00-11:00; "Written" at 14:00.
+        models.ArrayDataset.objects.filter(pk=ids["acquired"]).update(acquisition_start=day(10), acquisition_end=day(11))
+        models.ArrayDataset.objects.filter(pk=written.pk).update(acquisition_start=day(14), acquisition_end=day(14))
+        models.ArrayDataset.objects.filter(pk=ids["acquired"]).update(stored_spec=["VOLUME", "TIMESERIES"])
+        models.ArrayDataset.objects.filter(pk=written.pk).update(stored_spec=["IMAGE"])
+        org = Organization.objects.get(slug="static_org")
+        collaboration = Collaboration.objects.create(organization=org, name="Shared")
+        # Only the converted series is put in; its file counts as in through it.
+        CollaborationItem.objects.create(
+            collaboration=collaboration, content_type=ContentType.objects.get_for_model(models.ArrayDataset), object_id=str(ids["acquired"])
+        )
+        CollaborationItem.objects.create(
+            collaboration=collaboration, content_type=ContentType.objects.get_for_model(models.TableDataset), object_id=str(uploaded["id"])
+        )
+        return collaboration.pk
+
+    collaboration = await sync_to_async(stage)()
+
+    async def keys(filters: dict) -> set[str]:
+        result = await schema.execute(ROOTS, context_value=authenticated_context, variable_values={"pagination": {"limit": 50}, "filters": filters})
+        assert not result.errors, result.errors
+        return {row["key"] for row in result.data["roots"]}
+
+    raw, mine = f"file:{ids['raw']}", f"dataset:{written.pk}"
+    table = f"tabledataset:{uploaded['id']}"
+
+    assert await keys({"owner": "2"}) == {f"file:{theirs.pk}"}
+    assert {raw, mine, table} <= await keys({"owner": authenticated_context.request.user.sub})
+
+    assert await keys({"collaboration": str(collaboration)}) == {raw, table}
+
+    assert await keys({"acquiredAfter": day(9).isoformat(), "acquiredBefore": day(12).isoformat()}) == {raw}
+    assert await keys({"acquiredAfter": day(13).isoformat()}) == {mine}
+    assert await keys({"acquiredBefore": day(9).isoformat()}) == set()
+
+    assert await keys({"spec": ["IMAGE"]}) == {mine}
+    assert await keys({"spec": ["VOLUME", "TIMESERIES"]}) == {raw}
+    assert await keys({"spec": ["VOLUME", "MULTICHANNEL"]}) == set()
+    # A file's series must meet the spec and the window at once: raw's series is a volume but
+    # was acquired at 10:00, and the image acquired at 14:00 is not a volume.
+    assert await keys({"spec": ["VOLUME"], "acquiredAfter": day(13).isoformat()}) == set()
+    assert await keys({"spec": ["VOLUME"], "acquiredBefore": day(12).isoformat()}) == {raw}
+
+    assert await keys({"search": "writ"}) == {mine}
+    assert await keys({"search": "upload"}) == {table}
+    # raw.czi is found by its series' name, "Acquired"; the series itself is not a root.
+    assert await keys({"search": "ACQUIRED"}) == {raw}
+    assert await keys({"search": ".czi"}) == {raw, f"file:{theirs.pk}"}
+    assert await keys({"search": "%"}) == set()
+    assert await keys({"search": ".czi", "owner": "2"}) == {f"file:{theirs.pk}"}
+
+    everything = await keys({})
+    assert await keys({"createdAfter": day(0).replace(year=2000).isoformat()}) == everything
+    assert await keys({"createdBefore": day(0).replace(year=2000).isoformat()}) == set()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_roots_cost_does_not_grow_with_the_page(authenticated_context: HttpContext) -> None:
+    for index in range(8):
+        acquired = await seed.create_array_dataset(authenticated_context, f"Acquired{index}", axes=seed.YX_AXES, shapes=[[16, 16]])
+        lens = await seed.create_lens(authenticated_context, acquired)
+        await _derived(authenticated_context, f"Mask{index}", lens=lens)
+
+    def check() -> None:
+        org = Organization.objects.get(slug="static_org")
+        counts = []
+        for limit in (2, 8):
+            with CaptureQueriesContext(connection) as queries:
+                got = lineage_logic.roots(organization=org, limit=limit)
+            assert len(got) == limit and all(node.name.startswith("Acquired") for node in got)
+            counts.append(len(queries))
+        assert counts[0] == counts[1], counts
+
+    await sync_to_async(check)()
