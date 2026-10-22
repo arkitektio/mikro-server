@@ -789,3 +789,87 @@ async def test_one_annotation_layer_per_lens_not_per_collection(authenticated_co
     assert again["createAnnotationChartLayer"]["id"] != made["id"], "a second selection of the same collection is a second layer"
     twice = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": str(window.pk)})
     assert twice.errors and "One layer per lens" in twice.errors[0].message, twice.errors
+
+
+# --- computed data is placed through its lineage --------------------------------
+
+_SECOND_AXIS = {"name": "t", "type": "TIME", "unit": "second"}
+
+
+async def _derive_array(ctx: HttpContext, name: str, *, axes: list[dict], shape: list[int], derived_from: list[dict]) -> dict:
+    store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key=f"derived-{name}", bucket="zarr", shape=shape, chunks=shape, version="3", dtype="float32", populated=True)
+    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+        return (await _ok(ctx, DERIVE, {"name": name, "data": str(store.id), "scales": [], "axes": axes, "derivedFrom": derived_from}))["createArrayDataset"]
+
+
+async def _edges_into(world_id: str, inputs: set[str]) -> list[int]:
+    def read() -> list[int]:
+        return list(models.Transformation.objects.filter(output_id=world_id, input_id__in=inputs).values_list("pk", flat=True))
+
+    return await sync_to_async(read)()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_traces_computed_from_a_movie_are_laid_along_the_chart_by_the_movies_registration(authenticated_context: HttpContext):
+    """Only the movie is registered; the traces reach the clock through their derivation.
+
+    The traces are ``(cell, t)``, computed per cell from a ``(t, y, x)`` movie: sample ``j`` is
+    frame ``j``, which is one IDENTITY part on ``t``. ``cell`` corresponds to nothing in the
+    movie, so no part names it -- and it is the series axis because nothing places it.
+    """
+    ctx = authenticated_context
+    chart = await _chart(ctx, "Activity", axis=_SECOND_AXIS)
+    world = chart["worldCoordinateSystem"]["id"]
+    movie = await _dataset(ctx, "Movie", [("t", enums.AxisType.TIME), ("y", enums.AxisType.SPACE), ("x", enums.AxisType.SPACE)], [10, 8, 8])
+    await _register(ctx, (await _system_of(movie)).pk, world, {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["t"], "outputAxes": ["t"], "scale": [0.5]}]})
+    movie_lens = await seed.create_lens(ctx, movie)
+
+    traces = await _derive_array(
+        ctx,
+        "Traces",
+        axes=[{"name": "cell", "type": "INDEX"}, {"name": "t", "type": "TIME"}],
+        shape=[3, 10],
+        derived_from=[
+            {"kind": "LENS", "lens": str(movie_lens.pk), "valueRelation": "TRANSFORMED", "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["t"], "outputAxes": ["t"]}]}}
+        ],
+    )
+    made = (await _ok(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, traces["id"])}))["createTraceChartLayer"]
+    assert made["alongAxis"] == "t" and made["seriesAxis"] == "cell"
+
+    (layer,) = await _layers(ctx, chart["id"])
+    assert layer["placement"] == "PLACED"
+    assert layer["asAffine"]["inputAxes"] == ["cell", "t"]
+    assert layer["asAffine"]["matrix"] == [[0.0, 0.5, 0.0]], "the movie's frame interval on t, and nothing from cell"
+    traces_system = await sync_to_async(lambda: models.ArrayDataset.objects.get(pk=traces["id"]).intrinsic_coordinate_system.pk)()
+    assert await _edges_into(world, {traces_system}) == [], "the traces were never registered"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_table_in_seconds_computed_from_a_movie_is_placed_through_it(authenticated_context: HttpContext):
+    """A table keeps its readable seconds; its derivation divides them back into frames.
+
+    The movie's registration multiplies by the frame interval again, so the composed map is
+    the identity on seconds -- one claim about time, the movie's, and nothing parallel to it.
+    """
+    ctx = authenticated_context
+    chart = await _chart(ctx, "Mean", axis=_SECOND_AXIS)
+    world = chart["worldCoordinateSystem"]["id"]
+    movie = await _dataset(ctx, "Movie", [("t", enums.AxisType.TIME), ("y", enums.AxisType.SPACE), ("x", enums.AxisType.SPACE)], [10, 8, 8])
+    await _register(ctx, (await _system_of(movie)).pk, world, {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["t"], "outputAxes": ["t"], "scale": [0.5]}]})
+    movie_lens = await seed.create_lens(ctx, movie)
+
+    columns = [
+        {"name": "t", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "TIME", "unit": "second"},
+        {"name": "mean", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
+    ]
+    derivation = {"kind": "LENS", "lens": str(movie_lens.pk), "valueRelation": "TRANSFORMED", "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["t"], "outputAxes": ["t"], "scale": [2.0]}]}}
+    table = (await _ok(ctx, CREATE_TABLE, await seed.table_input(ctx, "mean", columns, derivedFrom=[derivation])))["createTableDataset"]
+
+    made = (await _ok(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"])}))["createSeriesChartLayer"]
+    assert made["alongAxis"] == "t" and made["valueColumn"] == "mean"
+    (layer,) = await _layers(ctx, chart["id"])
+    assert layer["placement"] == "PLACED"
+    assert layer["asAffine"]["matrix"] == [[pytest.approx(1.0), 0.0]]
+    assert await _edges_into(world, {table["coordinateSystem"]["id"]}) == [], "the table was never registered"
