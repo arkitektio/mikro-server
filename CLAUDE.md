@@ -60,14 +60,21 @@ and `tests/test_lens_geometry.py`.
 
 **A composite edge is one row.** A SEQUENCE (what the ingest writes for a stepped lens and a
 downsampled pyramid level) carries its ordered steps in `Transformation.steps` as
-`{kind, params[, field]}` dicts, read everywhere as `step_pairs`; a BY_DIMENSION carries its map
-in its own `params` (`affine`, or `scale`/`translation`, or nothing, which is the identity on the
-axes it names). There are no child rows, no `parent`, and every row joins two systems. A step
-is not an edge: it has no id and no history, `SequenceTransformation.steps` reads it and nothing
-refines it; a BY_DIMENSION publishes `scale`/`translation`/`affine` directly and is refined like
-any edge, so `version` and `transformVersion` move on the row a client reads. A BY_DIMENSION is
-not a metric kind: its map over an INDEX axis is a relabelling the product writes (`cell_id =
-cell + 1`). `tests/test_composite_edges.py` holds this.
+`{kind, params}` dicts, read everywhere as `step_pairs`; a BY_DIMENSION carries its **parts** in
+`Transformation.parts`, side by side (`{kind, input_axes, output_axes, params[, field]}`, one
+`PartKind` each, disjoint on both sides, as OME-NGFF's `byDimension`), and its row
+`input_axes`/`output_axes` are the parts' axes in part order. **Nothing passes through
+implicitly**: an axis no part names is one the edge says nothing about, and a pass-through is an
+IDENTITY part. FIELD is a part kind, not an edge kind: a FIELD part's array is linked through
+`TransformationField` (PROTECT; a mask's self field is `"self"` and links nothing), and one whose
+values land on an INDEX axis is a **key** (`graph.is_dereference`, `dereference_q`) that places
+nothing. There are no child rows, no `parent`, and every row joins two systems. A step is not an
+edge: it has no id and no history, `SequenceTransformation.steps` reads it and nothing refines
+it; a BY_DIMENSION publishes its `parts` and is refined part by part (`updateTransformation(part:)`),
+so `version` and `transformVersion` move on the row a client reads. A part over an INDEX axis is
+not a metric claim: it is a relabelling the product writes (`cell_id = cell + 1`).
+`tests/test_composite_edges.py` and `tests/test_by_dimension_parts.py` hold this; the model is
+`docs/by-dimension-parts.md`.
 
 **A collection has a name, optionally, and a label always.** `MeshCollection` and
 `NetworkCollection` are identified by their store and labelled by `name` or, failing that, the

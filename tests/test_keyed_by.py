@@ -5,17 +5,18 @@ measured out of, and they run in opposite directions:
 
 * ``derivedFrom`` -- table -> mask, the lineage. UNMAPPABLE, because a row is an object and
   an object is not anywhere, so nothing places the table.
-* ``keyedBy`` -- mask -> table, the dereference. A FIELD, and the only direction
-  ``attributePlans`` can discover, because it looks for FIELD edges *landing on* a table.
+* ``keyedBy`` -- mask -> table, the dereference. A key (a BY_DIMENSION with a FIELD part whose
+  values are ids), and the only direction ``attributePlans`` can discover, because it looks for
+  keys *landing on* a table.
 
 Both are true, so both are written, and the point of ``keyedBy`` is that one mutation says
 both instead of a create followed by a ``createTransformation`` that can fail after the
 table is already stored.
 
 The load-bearing test is :func:`test_keyed_by_derives_the_axis_split_from_the_two_spaces`:
-the caller states no axes at all. The rank rule says the axes a FIELD does not consume pass
-through by name, which leaves exactly one split for a given pair of systems -- so asking a
-client for it would only be an opportunity to get it wrong, and a FIELD whose axes are
+the caller states no axes at all. The axes the two spaces share pass through, as an IDENTITY
+part, and the rest is the FIELD part -- exactly one split for a given pair of systems -- so
+asking a client for it would only be an opportunity to get it wrong, and a key whose axes are
 wrong is not refused at read, it is silently skipped.
 """
 
@@ -24,6 +25,7 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
+from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
 
@@ -42,7 +44,7 @@ mutation Create($input: CreateTableDatasetInput!) {
 PLANS = """
 query Plans($system: ID!) {
   attributePlans(system: $system) {
-    edge { id kind name validity input { id } output { id } inputAxes outputAxes }
+    edge { id kind name validity input { id } output { id } inputAxes outputAxes parts { kind inputAxes outputAxes } }
     path { inverted }
     sample {
       __typename
@@ -130,11 +132,10 @@ async def test_keyed_by_derives_the_axis_split_from_the_two_spaces(authenticated
     assert [(key["axis"], key["column"]["name"]) for key in plan["hops"][0]["lookup"]["keyColumns"]] == [("t", "t"), ("i", "i")]
 
     edge = plan["edge"]
-    assert edge["kind"] == "FIELD"
+    assert edge["kind"] == "BY_DIMENSION"
     assert edge["input"]["id"] == str(mask_system.pk), "the edge runs mask -> table"
     assert edge["output"]["id"] == table["coordinateSystem"]["id"]
-    assert edge["inputAxes"] == ["y", "x"]
-    assert edge["outputAxes"] == ["i"]
+    assert [(part["kind"], part["inputAxes"], part["outputAxes"]) for part in edge["parts"]] == [("IDENTITY", ["t"], ["t"]), ("FIELD", ["y", "x"], ["i"])], "t passes through, stated"
     assert edge["name"] == "nuclei labels -> nuclei morphology"
     assert edge["validity"] == "MANUAL", "an authored claim unless the caller says otherwise"
 
@@ -341,7 +342,7 @@ async def test_keying_a_table_does_not_make_the_mask_derived_from_it(authenticat
     assert mask_lineage.data["arrayDataset"]["derivedFrom"] == [], "keying a table is not a lineage claim about the mask"
 
     # and the edge really does exist, rooted at the mask
-    assert await sync_to_async(models.Transformation.objects.filter(input=mask_system, kind=enums.TransformKindChoices.FIELD.value).exists)()
+    assert await sync_to_async(models.Transformation.objects.filter(graph_logic.dereference_q(), input=mask_system).exists)()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -489,7 +490,8 @@ async def test_a_mesh_collection_keys_a_table(authenticated_context: HttpContext
     assert [(key["axis"], key["column"]["name"]) for key in plan["hops"][0]["lookup"]["keyColumns"]] == [("object", "object")]
 
     edge = plan["edge"]
-    assert edge["kind"] == "FIELD"
+    assert edge["kind"] == "BY_DIMENSION"
+    assert [part["kind"] for part in edge["parts"]] == ["FIELD"], "nothing is shared, so the key is the field alone"
     assert edge["input"]["id"] == str(system.pk), "the edge runs collection -> table"
     assert edge["output"]["id"] == table["coordinateSystem"]["id"]
     assert edge["name"] == "v1 -> shape stats", "a collection is named by its label, as a dataset is by its name"

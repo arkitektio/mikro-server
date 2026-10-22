@@ -181,7 +181,7 @@ async def _lay_along(ctx: HttpContext, dataset: models.ArrayDataset, chart: dict
         ctx,
         system.pk,
         chart["worldCoordinateSystem"]["id"],
-        {"kind": "BY_DIMENSION", "inputAxes": [axis], "outputAxes": [chart_axis], "affine": [[scale, offset]]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": [axis], "outputAxes": [chart_axis], "affine": [[scale, offset]]}]},
     )
 
 
@@ -387,7 +387,7 @@ async def test_a_table_is_drawn_as_a_series(authenticated_context: HttpContext):
     table = await _table(ctx, "measurements", _MEASUREMENTS)
     # Nanometres in the table, micrometres on the chart. The edge states the factor: a named
     # axis of a BY_DIMENSION is not unit-converted for its author.
-    await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["d"], "affine": [[0.001, 0.0]]})
+    await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["x"], "outputAxes": ["d"], "affine": [[0.001, 0.0]]}]})
 
     made = (await _ok(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"])}))["createSeriesChartLayer"]
     assert made["kind"] == "SERIES"
@@ -410,7 +410,7 @@ async def test_a_series_value_is_one_numeric_attribute_column(authenticated_cont
     chart = await _chart(ctx)
     columns = [*_MEASUREMENTS, {"name": "background", "dtype": "DOUBLE", "role": "ATTRIBUTE"}]
     table = await _table(ctx, "measurements", columns)
-    await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["d"]})
+    await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["x"], "outputAxes": ["d"]}]})
 
     ambiguous = await _run(ctx, SERIES, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.TableDataset, table["id"])})
     assert ambiguous.errors and "cannot be inferred" in str(ambiguous.errors[0]), ambiguous.errors
@@ -465,7 +465,7 @@ async def test_an_existing_collection_is_drawn_once(authenticated_context: HttpC
     unplaced = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.AnnotationCollection, collection["id"])})
     assert unplaced.errors and "Nothing places" in str(unplaced.errors[0]), unplaced.errors
 
-    await _register(ctx, collection["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["d"], "outputAxes": ["d"]})
+    await _register(ctx, collection["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["d"], "outputAxes": ["d"]}]})
     await _ok(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.AnnotationCollection, collection["id"])})
 
     twice = await _run(ctx, ANNOTATION_LAYER, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.AnnotationCollection, collection["id"])})
@@ -516,12 +516,12 @@ async def test_reaching_the_axis_through_a_field_is_not_placement(authenticated_
     objects = await _dataset(ctx, "Objects", [("i", enums.AxisType.INDEX)], [128])
     signal_system, object_system = await _system_of(signal), await _system_of(objects)
 
-    field_id = await _register(ctx, signal_system.pk, object_system.pk, {"kind": "FIELD", "field": str(signal_system.pk), "inputAxes": ["d"], "outputAxes": ["i"]})
-    await _register(ctx, object_system.pk, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["i"], "outputAxes": ["d"]})
+    field_id = await _register(ctx, signal_system.pk, object_system.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["d"], "outputAxes": ["i"], "field": {"system": str(signal_system.pk)}}]})
+    await _register(ctx, object_system.pk, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["i"], "outputAxes": ["d"]}]})
 
     refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(signal.pk))})
     assert refused.errors, "reachable, and still not placed"
-    assert "affinely" in str(refused.errors[0]) and f"{field_id} (FIELD)" in str(refused.errors[0]), refused.errors
+    assert "composably" in str(refused.errors[0]) and f"{field_id} (BY_DIMENSION)" in str(refused.errors[0]), refused.errors
 
 
 @pytest.mark.django_db(transaction=True)
@@ -543,8 +543,8 @@ async def test_a_route_that_says_nothing_about_the_axis_lays_nothing_along_it(au
             {"name": "frame", "axes": [{"name": "d", "type": "SPACE", "unit": "micrometer"}, {"name": "e", "type": "SPACE", "unit": "micrometer"}]},
         )
     )["createCoordinateSystem"]["id"]
-    await _register(ctx, (await _system_of(profile)).pk, frame, {"kind": "BY_DIMENSION", "inputAxes": ["a"], "outputAxes": ["e"], "affine": [[0.25, 0.0]]})
-    await _register(ctx, frame, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["d"], "outputAxes": ["d"]})
+    await _register(ctx, (await _system_of(profile)).pk, frame, {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["a"], "outputAxes": ["e"], "affine": [[0.25, 0.0]]}]})
+    await _register(ctx, frame, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["d"], "outputAxes": ["d"]}]})
 
     refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(profile.pk))})
     assert refused.errors and "says nothing about the axis 'd'" in str(refused.errors[0]), refused.errors
@@ -700,7 +700,7 @@ async def test_a_chart_is_bootstrapped_from_what_is_laid_along_a_space(authentic
     await _lay_along(ctx, image, staged, "x")
     await _dataset(ctx, "Elsewhere", [("d", enums.AxisType.SPACE)], [64])  # never registered
     table = await _table(ctx, "measurements", _MEASUREMENTS)
-    await _register(ctx, table["coordinateSystem"]["id"], world_id, {"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["d"]})
+    await _register(ctx, table["coordinateSystem"]["id"], world_id, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["x"], "outputAxes": ["d"]}]})
     edges = await sync_to_async(models.Transformation.objects.count)()
 
     chart = (await _ok(ctx, CHART_FROM_SYSTEM, {"coordinateSystem": world_id, "name": "Overview"}))["createChartFromCoordinateSystem"]

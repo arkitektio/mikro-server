@@ -14,6 +14,7 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
+from core.logic import graph as graph_logic
 from core.logic import attribute_plans as attribute_plans_logic
 from mikro_server.schema import schema
 from tests import seed
@@ -143,11 +144,9 @@ async def test_a_node_table_creates_with_one_object_edge(authenticated_context: 
 
     def edge_facts() -> tuple[int, list[str]]:
         edges = list(
-            models.Transformation.objects.filter(
-                input=collection.coordinate_system, kind=enums.TransformKindChoices.FIELD.value
-            )
+            models.Transformation.objects.filter(graph_logic.dereference_q(), input=collection.coordinate_system)
         )
-        return len(edges), list(edges[0].output_axes or [])
+        return len(edges), [axis for part in graph_logic.field_parts_of(edges[0]) for axis in part["output_axes"]]
 
     count, produced = await sync_to_async(edge_facts)()
     assert count == 1, "one edge, however many axes the table has"

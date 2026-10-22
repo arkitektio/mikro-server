@@ -1411,7 +1411,7 @@ def _derived_dataset_ids(source_id: strawberry.ID | None = None):
     )
     edges = (
         models.Transformation.objects.filter(input__datasets__isnull=False)
-        .exclude(kind=enums.TransformKindChoices.FIELD.value)  # a FIELD is a lookup, never a derivation (`is_derivation_edge`)
+        .exclude(graph_logic.dereference_q())  # a key is never a derivation (`is_derivation_edge`)
         .annotate(_source_dataset=source_dataset, _source_collection=source_collection)
     )
     if source_id is not None:

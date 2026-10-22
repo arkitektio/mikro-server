@@ -141,7 +141,7 @@ async def test_one_layer_resolves_differently_per_channel(db, authenticated_cont
     for index, offset in ((0, [0.0, 0.0]), (2, [3.0, 5.0])):
         await _register(
             ctx, source.pk, world.pk,
-            {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": offset},
+            {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": offset}]},
             selector={"axis": "c", "index": index},
         )
 
@@ -173,7 +173,7 @@ async def test_without_a_fixed_coordinate_a_scoped_edge_is_not_crossed(db, authe
 
     await _register(
         ctx, source.pk, world.pk,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [3.0, 5.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [3.0, 5.0]}]},
         selector={"axis": "c", "index": 2},
     )
 
@@ -199,7 +199,7 @@ async def test_an_unscoped_edge_still_answers_without_at(db, authenticated_conte
     world = await sync_to_async(lambda: scene.world)()
     source = await sync_to_async(lambda: dataset.coordinate_system)()
 
-    await _register(ctx, source.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [1.0, 1.0]})
+    await _register(ctx, source.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [1.0, 1.0]}]})
 
     unfixed = await _layer_at(ctx, str(scene.id), None)
     assert _translation(unfixed["asAffine"]["matrix"]) == approx([1.0, 1.0])
@@ -219,7 +219,7 @@ async def test_a_selector_must_name_an_axis_that_can_be_indexed(db, authenticate
     scene, dataset = await _chromatic_scene(ctx)
     world = await sync_to_async(lambda: scene.world)()
     source = await sync_to_async(lambda: dataset.coordinate_system)()
-    transform = {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [1.0, 1.0]}
+    transform = {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [1.0, 1.0]}]}
 
     absent = await _errors(ctx, source.pk, world.pk, transform, {"axis": "t", "index": 0})
     assert absent and "does not have" in str(absent[0]), "the dataset is (c,y,x); it has no time axis to be at a position along"
@@ -248,12 +248,12 @@ async def test_refining_one_channel_moves_only_that_channel(db, authenticated_co
     for index, offset in ((0, [1.0, 1.0]), (1, [2.0, 2.0])):
         await _register(
             ctx, source.pk, world.pk,
-            {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": offset},
+            {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": offset}]},
             selector={"axis": "c", "index": index},
         )
 
     edge_zero = await sync_to_async(lambda: models.Transformation.objects.get(selector={"axis": "c", "index": 0}))()
-    await sync_to_async(lambda: models.Transformation.objects.filter(pk=edge_zero.pk).update(params={"translation": [9.0, 9.0]}))()
+    await sync_to_async(lambda: models.Transformation.objects.filter(pk=edge_zero.pk).update(parts=[{"kind": "TRANSLATION", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"translation": [9.0, 9.0]}}]))()
 
     assert _translation((await _layer_at(ctx, str(scene.id), [{"name": "c", "value": 0}]))["asAffine"]["matrix"]) == approx([9.0, 9.0])
     assert _translation((await _layer_at(ctx, str(scene.id), [{"name": "c", "value": 1}]))["asAffine"]["matrix"]) == approx([2.0, 2.0]), "channel 1 did not move"
@@ -296,7 +296,7 @@ async def test_a_per_index_registration_is_a_registration_everywhere_it_is_asked
     for index, offset in ((0, [0.0, 0.0]), (2, [3.0, 5.0])):
         await _register(
             ctx, source.pk, world.pk,
-            {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": offset},
+            {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": offset}]},
             selector={"axis": "c", "index": index},
         )
 
@@ -363,10 +363,10 @@ async def test_a_layer_can_be_created_over_a_scoped_only_registration(db, authen
     # reaches world from the dataset, and the only thing that does is scoped.
     await _register(
         ctx, intrinsic.pk, aligned_id,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [3.0, 5.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [3.0, 5.0]}]},
         selector={"axis": "c", "index": 2},
     )
-    await _register(ctx, aligned_id, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.5]})
+    await _register(ctx, aligned_id, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.5]}]})
 
     made = await schema.execute(
         MAKE_LAYER,
@@ -401,7 +401,7 @@ async def test_a_scoped_source_is_in_view_of_the_space_it_is_registered_into(db,
 
     await _register(
         ctx, source.pk, world.pk,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [3.0, 5.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [3.0, 5.0]}]},
         selector={"axis": "c", "index": 2},
     )
 

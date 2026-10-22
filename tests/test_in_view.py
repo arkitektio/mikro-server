@@ -133,8 +133,9 @@ async def test_refining_a_registration_moves_the_extent(authenticated_context: H
     assert _extent(before[0])["x"] == [-0.5, 63.5]
 
     def refine() -> None:
-        edge.params = {"scale": [2.0, 2.0, 2.0]}
-        edge.save(update_fields=["params"])
+        (part,) = edge.parts
+        edge.parts = [{"kind": "SCALE", "input_axes": part["input_axes"], "output_axes": part["output_axes"], "params": {"scale": [2.0, 2.0, 2.0]}}]
+        edge.save(update_fields=["parts"])
 
     await sync_to_async(refine)()
 

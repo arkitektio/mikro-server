@@ -119,8 +119,36 @@ async def _table(ctx: HttpContext, name: str, columns: list[dict]) -> dict:
     return result.data["createTableDataset"]
 
 
+def _field_row(ctx: HttpContext, *, input: models.CoordinateSystem, output: models.CoordinateSystem, field: models.CoordinateSystem, consumed: list[str], produced: list[str], dereference: bool) -> models.Transformation:
+    """A BY_DIMENSION with one FIELD part, written straight through the ORM -- the shape no validation has seen."""
+    edge = models.Transformation.objects.create(
+        kind=enums.TransformKindChoices.BY_DIMENSION.value,
+        input=input,
+        output=output,
+        input_axes=consumed,
+        output_axes=produced,
+        parts=[
+            {
+                "kind": enums.PartKind.FIELD.value,
+                "input_axes": consumed,
+                "output_axes": produced,
+                "params": {"values": "SCALAR", "spatial": not dereference, "dereference": dereference},
+                "field": "self" if field.pk == input.pk else field.pk,
+            }
+        ],
+        organization=ctx.request.organization,
+    )
+    if field.pk != input.pk:
+        models.TransformationField.objects.create(transformation=edge, field=field, part=0)
+    return edge
+
+
 async def _field_edge(ctx: HttpContext, mask_system: models.CoordinateSystem, table: dict, output_axes: list[str]) -> None:
-    """The dereference: the mask's own pixels are the map, (y,x) consumed, ids produced."""
+    """The dereference: the mask's own pixels are the map, (y,x) consumed, ids produced, and an axis both share (`t`) stated as passing through."""
+    mask_axes = await sync_to_async(lambda: [axis.name for axis in mask_system.axes.all()])()
+    table_axes = await sync_to_async(lambda: [axis.name for axis in models.CoordinateSystem.objects.get(pk=table["coordinateSystem"]["id"]).axes.all()])()
+    shared = [axis for axis in table_axes if axis in mask_axes and axis not in output_axes]
+    parts = [{"kind": "IDENTITY", "inputAxes": shared, "outputAxes": shared}] if shared else []
     result = await schema.execute(
         CREATE_TRANSFORM,
         context_value=ctx,
@@ -129,10 +157,8 @@ async def _field_edge(ctx: HttpContext, mask_system: models.CoordinateSystem, ta
                 "input": str(mask_system.pk),
                 "output": table["coordinateSystem"]["id"],
                 "transform": {
-                    "kind": "FIELD",
-                    "field": str(mask_system.pk),
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": output_axes,
+                    "kind": "BY_DIMENSION",
+                    "parts": [*parts, {"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": output_axes, "field": {"system": str(mask_system.pk)}}],
                 },
             }
         },
@@ -209,15 +235,7 @@ async def test_a_warp_field_target_is_not_a_plan(authenticated_context: HttpCont
     mask_system = await sync_to_async(lambda: mask.intrinsic_coordinate_system)()
 
     def warp_edge() -> None:
-        models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
-            input=mask_system,
-            output=atlas.intrinsic_coordinate_system,
-            field=mask_system,
-            input_axes=["y", "x"],
-            output_axes=["y", "x"],
-            organization=authenticated_context.request.organization,
-        )
+        _field_row(authenticated_context, input=mask_system, output=atlas.intrinsic_coordinate_system, field=mask_system, consumed=["y", "x"], produced=["y", "x"], dereference=False)
 
     await sync_to_async(warp_edge)()
 
@@ -240,15 +258,8 @@ async def test_a_degenerate_table_is_not_a_plan(authenticated_context: HttpConte
     degenerate = await _table(authenticated_context, "measurements", [{"name": "area", "dtype": "DOUBLE", "role": "ATTRIBUTE"}])
 
     def edge() -> None:
-        models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
-            input=mask_system,
-            output=models.CoordinateSystem.objects.get(pk=degenerate["coordinateSystem"]["id"]),
-            field=mask_system,
-            input_axes=["y", "x"],
-            output_axes=["object"],
-            organization=authenticated_context.request.organization,
-        )
+        output = models.CoordinateSystem.objects.get(pk=degenerate["coordinateSystem"]["id"])
+        _field_row(authenticated_context, input=mask_system, output=output, field=mask_system, consumed=["y", "x"], produced=["object"], dereference=True)
 
     await sync_to_async(edge)()
 
@@ -272,15 +283,8 @@ async def test_a_lens_owned_field_is_refused(authenticated_context: HttpContext)
     def lens_field_edge() -> None:
         lens_system = models.CoordinateSystem.objects.create(name="crop", organization=authenticated_context.request.organization)
         models.ArrayLens.objects.create(dataset=mask, coordinate_system=lens_system, organization=mask.organization, slices=[{"axis": "y", "start": 0, "stop": 32, "step": 1}])
-        models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
-            input=mask_system,
-            output=models.CoordinateSystem.objects.get(pk=table["coordinateSystem"]["id"]),
-            field=lens_system,
-            input_axes=["y", "x"],
-            output_axes=["i"],
-            organization=authenticated_context.request.organization,
-        )
+        output = models.CoordinateSystem.objects.get(pk=table["coordinateSystem"]["id"])
+        _field_row(authenticated_context, input=mask_system, output=output, field=lens_system, consumed=["y", "x"], produced=["i"], dereference=True)
 
     await sync_to_async(lens_field_edge)()
 
@@ -318,10 +322,8 @@ async def test_a_table_cannot_be_a_field(authenticated_context: HttpContext):
                 "input": nuclei["coordinateSystem"]["id"],
                 "output": tracks["coordinateSystem"]["id"],
                 "transform": {
-                    "kind": "FIELD",
-                    "field": nuclei["coordinateSystem"]["id"],
-                    "inputAxes": ["i"],
-                    "outputAxes": ["track"],
+                    "kind": "BY_DIMENSION",
+                    "parts": [{"kind": "FIELD", "inputAxes": ["i"], "outputAxes": ["track"], "field": {"system": nuclei["coordinateSystem"]["id"]}}],
                 },
             }
         },
@@ -370,8 +372,7 @@ async def _derive(
             input_system=derived.intrinsic_coordinate_system,
             output_system=source_system,
             kind=kind,
-            input_axes=input_axes,
-            output_axes=output_axes,
+            parts=[{"kind": "IDENTITY", "input_axes": input_axes, "output_axes": output_axes}] if kind == "BY_DIMENSION" else None,
             value_relation=value_relation,
             ctx=seed._creation(ctx),
         )
@@ -578,15 +579,7 @@ async def test_a_field_edge_is_payload_never_connectivity(authenticated_context:
     probe_system = await sync_to_async(lambda: probe.intrinsic_coordinate_system)()
 
     def warp() -> None:
-        models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
-            input=probe_system,
-            output=atlas.intrinsic_coordinate_system,
-            field=probe_system,
-            input_axes=["y", "x"],
-            output_axes=["y", "x"],
-            organization=authenticated_context.request.organization,
-        )
+        _field_row(authenticated_context, input=probe_system, output=atlas.intrinsic_coordinate_system, field=probe_system, consumed=["y", "x"], produced=["y", "x"], dereference=False)
 
     await sync_to_async(warp)()
 

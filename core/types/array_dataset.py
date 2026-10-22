@@ -22,7 +22,7 @@ from core.inputs.coords import CoordinateInput, at_map
 from core.types.visualization import Visualization
 from core.types.coords import (
     AffinePlacement,
-    PlacementLookup,
+    PlacementField,
     CoordinateSystem,
     MeshCollection,
     NetworkCollection,
@@ -781,8 +781,9 @@ class ArrayLens(Lens, OrgScoped):
 
     @kante.django_field(
         description=(
-            "What a layer over this lens would answer for `renderAxes`, before any layer exists: which of the lens' axes face screen x, y, z, time and intensity under the default convention. "
-            "A preview for opening a viewer on a bare lens; once a layer exists, its own `renderAxes` is the one to follow -- the mapping is the view's, not the selection's"
+            "Which of the lens' axes face screen x, y, z, time and intensity under the default convention (spatial axes by name when named x/y/z, else last is x). "
+            "A suggestion for a bare lens, before anything places it: a viewer that has the lens' placement reads which axis faces which screen axis off that map and its own view, "
+            "since the mapping is the view's, not the selection's"
         )
     )
     def suggested_render_axes(self, info: Info) -> "RenderAxes":
@@ -1221,10 +1222,10 @@ class Layer:
         description=(
             "This layer's whole `pathToWorld` composed into one affine map -- the same path, same edges, same order, with the flagged steps inverted. Derived on read and stored "
             "nowhere, exactly as the path itself is, so refining one registration moves it. **Null when `pathToWorld` is null** and for the same two reasons; `placement` is what "
-            "tells them apart. It errors rather than returning null when a path exists but does not condense: a FIELD step gives its map as the values of an array and has no "
-            "closed form, and a singular step cannot be walked backwards -- the error names the transformation that stopped it. Note that `placementInvariance` being AFFINE or "
-            "stronger is necessary but not sufficient for this to succeed. `outputAxes` names only the destination axes the path constrains, so pass `strict: true` to be refused "
-            "a partial map instead of handed one"
+            "tells them apart. A field map on the path (a times array, a warp) gives its axes as the values of an array: they are in `fields`, not in the matrix, and the rest "
+            "stays affine. It errors rather than returning null when a path exists but does not compose: a key from pixels to a table's rows places nothing, and a singular step "
+            "cannot be walked backwards -- the error names the transformation that stopped it. `outputAxes` names only the destination axes the path constrains, so pass "
+            "`strict: true` to be refused a partial map instead of handed one"
         ),
     )
     def as_affine(self, info: Info, strict: bool = False, at: List[CoordinateInput] | None = None) -> AffinePlacement | None:
@@ -1235,7 +1236,7 @@ class Layer:
 
         if strict and not condensed.total:
             world_axes = [axis.name for axis in self.scene.world.axes.all()] if self.scene.world else []
-            missing = [axis for axis in world_axes if axis not in condensed.output_axes and axis not in condensed.lookups]
+            missing = [axis for axis in world_axes if axis not in condensed.output_axes and axis not in condensed.fields]
             raise ValueError(
                 f"This layer's placement does not constrain every axis of its scene's world: it maps onto {condensed.output_axes} and says nothing about {missing}. "
                 "That is an honest partial registration, not a failure -- drop `strict` to read the map over the axes it does name, or author a registration that places the data along the rest."
@@ -1246,7 +1247,7 @@ class Layer:
             input_axes=condensed.input_axes,
             output_axes=condensed.output_axes,
             total=condensed.total,
-            lookups=[PlacementLookup.from_form(axis, form) for axis, form in condensed.lookups.items()],
+            fields=[PlacementField.from_form(axis, form, condensed.input_axes) for axis, form in condensed.fields.items()],
         )
 
     @kante.django_field(
@@ -1313,19 +1314,6 @@ _LEVEL_PATHS_DESCRIPTION = (
 )
 
 
-_RENDER_AXES_DESCRIPTION = (
-    "Which axis of this layer's lens faces screen x, y, z, time and intensity (and which carries the phasor or the vector components). A convention of the *view*, which is why it "
-    "is a field of the layer: a lens is a selection and a coordinate system is a container of axes, and neither chooses how it is looked at. Derived on every read from the axis "
-    "types and names by the one server-side rule (`core.logic.coords.resolve_render_axes`), never stored, so two layers over one lens -- and two clients over one layer -- cannot "
-    "transpose the axes differently. A lens has no such field: a selection does not choose how it is looked at"
-)
-
-
-def _render_axes(layer) -> "RenderAxes":  # noqa: ANN001 - the Layer row behind any lens-backed type
-    """The renderer's axis mapping for a lens-backed layer, derived from its lens' axes."""
-    return coords_logic.resolve_render_axes(layer.lens.axis_specs)
-
-
 @kante.django_type(
     models.Layer,
     filters=filters.LayerFilter,
@@ -1350,11 +1338,6 @@ class ImageLayer(Layer):
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.IMAGE.value
-
-    @kante.django_field(description=_RENDER_AXES_DESCRIPTION)
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """Which lens axis faces screen x, y, z, time and intensity, for this view."""
-        return _render_axes(self)
 
     @kante.django_field(description="The composable in-layer render graph, if this layer defines one")
     def render_graph(self, info: Info) -> LayerRenderGraph | None:
@@ -1400,11 +1383,6 @@ class IntensityLayer(Layer):
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.INTENSITY.value
 
-    @kante.django_field(description=_RENDER_AXES_DESCRIPTION)
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """Which lens axis faces screen x, y, z, time and intensity, for this view."""
-        return _render_axes(self)
-
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
     def level_paths(self, info: Info) -> List["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
@@ -1445,11 +1423,6 @@ class RgbLayer(Layer):
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.RGB.value
 
-    @kante.django_field(description=_RENDER_AXES_DESCRIPTION)
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """Which lens axis faces screen x, y, z, time and intensity, for this view."""
-        return _render_axes(self)
-
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
     def level_paths(self, info: Info) -> List["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
@@ -1480,11 +1453,6 @@ class PhasorLayer(Layer):
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.PHASOR.value
-
-    @kante.django_field(description=_RENDER_AXES_DESCRIPTION)
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """Which lens axis faces screen x, y, z, time and intensity, for this view."""
-        return _render_axes(self)
 
     @kante.django_field(description="Which axis is reduced to a phasor, at which harmonic, and how the resulting (g, s) becomes color")
     def phasor_render(self, info: Info) -> PhasorRender | None:
@@ -1531,11 +1499,6 @@ class VectorLayer(Layer):
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.VECTOR.value
 
-    @kante.django_field(description=_RENDER_AXES_DESCRIPTION)
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """Which lens axis faces screen x, y, z, time and intensity, for this view."""
-        return _render_axes(self)
-
     @kante.django_field(
         description=(
             "The lens axis whose positions are the vector components: the DISPLACEMENT value axis. Derived from the axis types on every read and stored nowhere, so two layers "
@@ -1573,11 +1536,6 @@ class LabelLayer(Layer):
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.LABEL.value
-
-    @kante.django_field(description=_RENDER_AXES_DESCRIPTION)
-    def render_axes(self, info: Info) -> "RenderAxes":
-        """Which lens axis faces screen x, y, z, time and intensity, for this view."""
-        return _render_axes(self)
 
     @kante.django_field(description="How this layer's object ids become color: the hashing, the transparent background id, contour-or-fill, the selection, and any `colorBy`")
     def label_render(self, info: Info) -> LabelRender | None:
@@ -1820,47 +1778,6 @@ class AnnotationLayer(Layer):
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.ANNOTATION.value
 
 
-def _coordinate_column_named(layer: "models.Layer", axis_name: str) -> str | None:
-    """The table dataset column that is this layer's x / y / z / t, or None.
-
-    **Name first, position second -- the same rule `resolve_render_axes` applies to an array's
-    axes**, and for the same reason: a spatial axis named for the screen says which one it is,
-    and one that is not named for the screen says nothing, leaving only the array convention.
-
-    It used to be name-only, and the docstring defended that against deriving x from array
-    *position* -- rightly, since a table's coordinate columns are matched to the world by name.
-    But it left the case `create_table_axes` was explicitly relaxed to allow with no answer at
-    all: a table declaring `centroid_x` / `centroid_y` matched no literal `"x"`, so `xColumn`
-    came back **null** and the point cloud simply did not draw, with nothing said.
-
-    The trade-off is real and worth stating. Under the positional fallback such a table now
-    renders, but by array convention -- so `centroid_x, centroid_y` gives x=`centroid_y`,
-    transposed. That is worse than nothing only if nothing is preferable to a picture; it is
-    the same bargain the array path already makes, and the honest end state is for a coordinate
-    column to *declare* which screen axis it is, which is an input change (see item 14).
-    """
-    coordinates = layer.lens.table_dataset.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value)
-    if not coordinates:
-        return None
-
-    named = {column.name.lower(): column.name for column in coordinates}
-    if axis_name in named:
-        return named[axis_name]
-
-    # Only the *spatial* columns take part in the fallback: x/y/z are screen directions, and an
-    # INDEX or TIME coordinate is not one of them however it is named.
-    spatial = [column for column in coordinates if column.axis_type == enums.AxisTypeChoices.SPACE.value]
-    if axis_name == "t" or len(spatial) < 2:
-        return None
-
-    # The array convention: the last spatial column is x, the one before it y, before that z.
-    by_convention = {"x": -1, "y": -2, "z": -3}
-    offset = by_convention.get(axis_name)
-    if offset is None or len(spatial) < -offset:
-        return None
-    return spatial[offset].name
-
-
 def _role_column(layer: "models.Layer", role: str) -> str | None:
     """The name of the table dataset's column of a given role, or None."""
     columns = layer.lens.table_dataset.columns_by_role(role)
@@ -1926,26 +1843,6 @@ class PointLayer(Layer):
         del info
         return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
 
-    @kante.django_field(description="The coordinate column whose axis is named 'x', from the dataset's declared schema")
-    def x_column(self, info: Info) -> str | None:
-        """The x-coordinate column."""
-        return _coordinate_column_named(self, "x")
-
-    @kante.django_field(description="The coordinate column whose axis is named 'y'")
-    def y_column(self, info: Info) -> str | None:
-        """The y-coordinate column."""
-        return _coordinate_column_named(self, "y")
-
-    @kante.django_field(description="The coordinate column whose axis is named 'z', if any")
-    def z_column(self, info: Info) -> str | None:
-        """The z-coordinate column."""
-        return _coordinate_column_named(self, "z")
-
-    @kante.django_field(description="The coordinate column whose axis is named 't', if any")
-    def t_column(self, info: Info) -> str | None:
-        """The time-coordinate column."""
-        return _coordinate_column_named(self, "t")
-
     @kante.django_field(description="The dataset's ID-role column identifying each point, if any")
     def id_column(self, info: Info) -> str | None:
         """The point-id column."""
@@ -1989,26 +1886,6 @@ class TrackLayer(Layer):
     def track_id_column(self, info: Info) -> str | None:
         """The track-id column."""
         return _role_column(self, enums.ColumnRoleChoices.TRACK_ID.value)
-
-    @kante.django_field(description="The coordinate column whose axis is named 'x', from the dataset's declared schema")
-    def x_column(self, info: Info) -> str | None:
-        """The x-coordinate column."""
-        return _coordinate_column_named(self, "x")
-
-    @kante.django_field(description="The coordinate column whose axis is named 'y'")
-    def y_column(self, info: Info) -> str | None:
-        """The y-coordinate column."""
-        return _coordinate_column_named(self, "y")
-
-    @kante.django_field(description="The coordinate column whose axis is named 'z', if any")
-    def z_column(self, info: Info) -> str | None:
-        """The z-coordinate column."""
-        return _coordinate_column_named(self, "z")
-
-    @kante.django_field(description="The coordinate column whose axis is named 't', if any")
-    def t_column(self, info: Info) -> str | None:
-        """The time-coordinate column."""
-        return _coordinate_column_named(self, "t")
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:

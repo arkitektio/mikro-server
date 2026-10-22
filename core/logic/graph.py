@@ -14,7 +14,7 @@ request cannot go stale. See :mod:`core.models.coords`.
 
 import dataclasses
 import heapq
-from typing import TYPE_CHECKING, Iterable, Sequence
+from typing import TYPE_CHECKING, Callable, Iterable, Sequence
 
 from django.db.models import F, Q
 
@@ -477,11 +477,18 @@ _INVERTIBLE_KINDS = frozenset(
     }
 )
 
-#: Kinds that are invertible exactly when every one of their steps is (a BY_DIMENSION has none).
-_WRAPPER_KINDS = frozenset(
+#: Kinds that are invertible exactly when every one of their steps is.
+_WRAPPER_KINDS = frozenset({enums.TransformKindChoices.SEQUENCE.value})
+
+#: The part kinds a BY_DIMENSION can be undone through, part by part. Not FIELD: its inverse
+#: is a search through an array's values.
+_INVERTIBLE_PART_KINDS = frozenset(
     {
-        enums.TransformKindChoices.SEQUENCE.value,
-        enums.TransformKindChoices.BY_DIMENSION.value,
+        enums.PartKind.IDENTITY.value,
+        enums.PartKind.SCALE.value,
+        enums.PartKind.TRANSLATION.value,
+        enums.PartKind.AFFINE.value,
+        enums.PartKind.ROTATION.value,
     }
 )
 
@@ -506,10 +513,9 @@ def is_invertible(edge: "models.Transformation") -> bool:
     inverse at all; rank alone would happily offer it for inversion and hand the client
     an `inverted: true` step it cannot honour.
 
-    A SEQUENCE is invertible exactly when every one of its steps is -- one whose second
-    step is a warp field is not invertible because its first step is a scale. That is the
-    reason this is a function and not a set membership test. A BY_DIMENSION carries its map
-    in its params and is invertible by kind.
+    A SEQUENCE is invertible exactly when every one of its steps is, and a BY_DIMENSION exactly
+    when every one of its parts is -- one with a FIELD part beside a scale is not invertible
+    because the scale is. That is the reason this is a function and not a set membership test.
 
     Not caught here, and worth knowing: a **singular** square AFFINE (a projection written
     as a matrix) passes both the kind gate and the rank gate and still has no inverse. This
@@ -518,10 +524,10 @@ def is_invertible(edge: "models.Transformation") -> bool:
     :func:`~core.inputs.coords.assert_nonsingular_matrix`, which refuses such a matrix
     before any walk can be offered it. The gap is closed one altitude down, not here.
     """
-    if (edge.params or {}).get("lookup"):
-        # A lookup is walked forwards only: its inverse is a search through values this
+    if edge.kind == enums.TransformKindChoices.BY_DIMENSION.value:
+        # A FIELD part is walked forwards only: its inverse is a search through values this
         # server never reads.
-        return False
+        return all(part.get("kind") in _INVERTIBLE_PART_KINDS for part in edge.parts or [])
     if edge.kind in _WRAPPER_KINDS:
         return all(kind in _INVERTIBLE_KINDS for kind, _ in edge.step_pairs)
     return edge.kind in _INVERTIBLE_KINDS
@@ -546,29 +552,9 @@ _INVARIANCE_BY_KIND: dict[str, str] = {
     enums.TransformKindChoices.ROTATION.value: enums.TransformInvariance.ISOMETRY.value,
     enums.TransformKindChoices.MAP_AXIS.value: enums.TransformInvariance.ISOMETRY.value,
     enums.TransformKindChoices.AFFINE.value: enums.TransformInvariance.AFFINE.value,
-    enums.TransformKindChoices.FIELD.value: enums.TransformInvariance.DIFFEOMORPHIC.value,
     enums.TransformKindChoices.UNMAPPABLE.value: enums.TransformInvariance.NONE.value,
 }
 
-#: Kinds whose invariance is the weakest of their steps' (a BY_DIMENSION's being the map in its params). Equal to `_WRAPPER_KINDS` now
-#: that BIJECTION is gone; it used to be wider by exactly that kind, because invertibility is
-#: a property a BIJECTION *had* by construction so `is_invertible` never looked inside one --
-#: but a pair of warp fields does not become a rigid map by carrying its own inverse, so
-#: invariance had to look. Kept as its own name rather than aliased: the two sets answer
-#: different questions and a future kind may separate them again.
-_COMPOSITE_KINDS = frozenset(
-    {
-        enums.TransformKindChoices.SEQUENCE.value,
-        enums.TransformKindChoices.BY_DIMENSION.value,
-    }
-)
-
-#: What each optional parameter of a childless composite does to the geometry. `scale` is
-#: absent because its answer depends on its entries.
-_PARAM_INVARIANCE: dict[str, str] = {
-    "translation": enums.TransformInvariance.ISOMETRY.value,
-    "affine": enums.TransformInvariance.AFFINE.value,
-}
 
 #: How known each claim is, ordered weakest to strongest. Beside `_INVARIANCE_RANK` and for
 #: the same reason: two copies of an order are two chances to rank it differently.
@@ -617,23 +603,67 @@ def _scale_invariance(scale: list[float]) -> str:
     return enums.TransformInvariance.SIMILARITY.value if len(set(scale)) <= 1 else enums.TransformInvariance.AFFINE.value
 
 
-def _params_invariance(params: dict) -> str:
-    """The class of the map a BY_DIMENSION carries in its own parameters.
+def _affine_invariance(affine: list[list[float]]) -> str:
+    """AFFINE, unless the matrix is a per-axis scale plus an offset -- then what that scale is.
 
-    A min, not a first match: `build_registration_edge` admits `scale`, `translation` and
-    `affine` on one BY_DIMENSION, so an anisotropic scale riding beside a translation must
-    still read AFFINE. No parameters at all is a pure axis selection: an identity on the axes
-    the edge names.
+    The one more number this module reads, and for the same equality `_scale_invariance` reads
+    a SCALE's vector for: a square linear block with nothing off its diagonal is a scale, and a
+    scale with an offset beside it (a pixel size and a stage position, written as one AFFINE
+    part) keeps whatever the scale keeps. Anything else reads AFFINE without an SVD.
     """
-    stated = [invariance for key, invariance in _PARAM_INVARIANCE.items() if key in params]
-    if "scale" in params:
-        stated.append(_scale_invariance(params["scale"] or []))
-    lookup = params.get("lookup")
-    if lookup and lookup.get("spatial"):
-        # Uneven spacing along a SPACE axis bends straight lines: no matrix states it. A
-        # lookup along time or an index leaves the geometry of space untouched.
-        stated.append(enums.TransformInvariance.DIFFEOMORPHIC.value)
-    return weakest_invariance(stated)
+    rows = len(affine)
+    linear = [list(row[:-1]) for row in affine]
+    if not rows or any(len(row) != rows for row in linear):
+        return enums.TransformInvariance.AFFINE.value
+    if any(value != 0.0 for i, row in enumerate(linear) for j, value in enumerate(row) if i != j):
+        return enums.TransformInvariance.AFFINE.value
+    return _scale_invariance([abs(float(linear[i][i])) for i in range(rows)])
+
+
+def _part_invariance(part: dict) -> str:
+    """The class of one BY_DIMENSION part's map.
+
+    A FIELD part along time or an index leaves the geometry of space untouched; one along a
+    SPACE axis bends straight lines, and a key (pixels to object ids) keeps no geometry at
+    all -- both DIFFEOMORPHIC, which no matrix states.
+    """
+    kind, params = part.get("kind"), part.get("params") or {}
+    if kind == enums.PartKind.FIELD.value:
+        if params.get("spatial") or params.get("dereference"):
+            return enums.TransformInvariance.DIFFEOMORPHIC.value
+        return enums.TransformInvariance.ISOMETRY.value
+    return _kind_invariance(str(kind), params)
+
+
+def field_parts_of(edge: "models.Transformation") -> list[dict]:
+    """An edge's FIELD parts: the axes it reads off arrays' values. Empty off a BY_DIMENSION."""
+    return [part for part in edge.parts or [] if part.get("kind") == enums.PartKind.FIELD.value]
+
+
+def is_dereference(edge: "models.Transformation") -> bool:
+    """Whether this edge is a key: a FIELD part whose values are ids, so it places nothing.
+
+    Materialized on the part when the edge is written (`assert_field_part`), from where its
+    values land: a field producing an INDEX axis gives ids, which have no metric, so it is a
+    key -- a label mask keying its object table -- and no walk places anything through it.
+    Every other field part places: a times array, a warp, a coordinate grid.
+    """
+    return any((part.get("params") or {}).get("dereference") for part in field_parts_of(edge))
+
+
+def field_part_q(prefix: str = "") -> Q:
+    """Edges with any FIELD part, as a filter: containment, false and never NULL on an edge without one."""
+    return Q(**{f"{prefix}parts__contains": [{"kind": enums.PartKind.FIELD.value}]})
+
+
+def dereference_q(prefix: str = "") -> Q:
+    """:func:`is_dereference` as a filter over transformation rows, ``prefix`` naming the relation to them.
+
+    Containment rather than a key path: a key path is NULL on an edge with no such part, and
+    under ``exclude`` a NULL makes the whole negation NULL, which Postgres reads as false --
+    every ordinary edge would vanish from the walk. Containment is false, never NULL.
+    """
+    return Q(**{f"{prefix}parts__contains": [{"kind": enums.PartKind.FIELD.value, "params": {"dereference": True}}]})
 
 
 def invariance_of(edge: "models.Transformation") -> str:
@@ -647,26 +677,24 @@ def invariance_of(edge: "models.Transformation") -> str:
     needs an SVD, and that is exactly where :func:`is_invertible` stops too, declining to
     catch a singular affine.
 
-    A SEQUENCE is the weakest of its steps. A BY_DIMENSION carries its map in its own params
-    and is read from them -- the one place this must NOT mirror `is_invertible`, which answers
-    True there because invertibility does not depend on which parameters ride along;
-    invariance is nothing but that, and a BY_DIMENSION carrying an `affine` is the ordinary
-    shape of a registration crossing a rank boundary.
+    A SEQUENCE is the weakest of its steps, a BY_DIMENSION the weakest of its parts.
 
     An unrecognised kind is NONE -- the bottom -- so a future kind fails safe rather than
     claiming rigidity.
     """
+    if edge.kind == enums.TransformKindChoices.BY_DIMENSION.value:
+        return weakest_invariance(_part_invariance(part) for part in edge.parts or [])
     return _kind_invariance(edge.kind, edge.params or {}, edge.step_pairs)
 
 
 def _kind_invariance(kind: str, params: dict, steps: tuple[tuple[str, dict], ...] = ()) -> str:
-    """The invariance of one ``(kind, params)`` -- an edge or a step -- a SEQUENCE's read off its steps."""
-    if kind in _COMPOSITE_KINDS:
-        if steps:
-            return weakest_invariance(_kind_invariance(step_kind, step_params) for step_kind, step_params in steps)
-        return _params_invariance(params)
+    """The invariance of one ``(kind, params)`` -- an edge, a step or a part -- a SEQUENCE's read off its steps."""
+    if kind in _WRAPPER_KINDS:
+        return weakest_invariance(_kind_invariance(step_kind, step_params) for step_kind, step_params in steps)
     if kind == enums.TransformKindChoices.SCALE.value:
         return _scale_invariance(params.get("scale") or [])
+    if kind == enums.TransformKindChoices.AFFINE.value and params.get("affine"):
+        return _affine_invariance(params["affine"])
     return _INVARIANCE_BY_KIND.get(kind, enums.TransformInvariance.NONE.value)
 
 
@@ -687,6 +715,10 @@ def is_reverse_traversable(edge: "models.Transformation") -> bool:
     writable kind happened to be invertible, which stopped being true the moment a
     field became writable.
     """
+    if edge.kind == enums.TransformKindChoices.BY_DIMENSION.value:
+        # Part by part: each part undoes on its own, so each must be square -- an AFFINE part
+        # changing rank has no inverse even where the edge's two lists happen to be as long.
+        return is_traversable(edge) and is_invertible(edge) and all(len(part.get("input_axes") or ()) == len(part.get("output_axes") or ()) for part in edge.parts or [])
     return is_traversable(edge) and is_invertible(edge) and len(edge_axis_names(edge, "input")) == len(edge_axis_names(edge, "output"))
 
 
@@ -707,24 +739,28 @@ _SQUARE_FORM_KINDS = frozenset(
 
 
 def is_condensable(edge: "models.Transformation") -> bool:
-    """Whether this edge, walked forwards, composes into a closed affine form.
+    """Whether this edge, walked forwards, composes: into affine rows, plus the axes its field map gives.
 
     The write-time twin of what :func:`condense_path` discovers at read time. Reachability is
     not placement: :func:`is_traversable` refuses only UNMAPPABLE, so a walk happily crosses a
-    FIELD and hands back a path that `asAffine` then cannot condense -- a layer accepted at
+    key and hands back a path that `asAffine` then cannot compose -- a layer accepted at
     creation that no renderer can place. This is the predicate that closes that gap, and it
-    mirrors the exact two places `coords.step_forms` raises.
+    mirrors the places `coords.step_forms` and `condense_path` raise.
 
-    **Kind, through the wrapper recursion -- read off the invariance.** `step_forms` has
-    exactly two kinds with no closed form, and says so: a FIELD, whose map is the values of an
-    array, and an UNMAPPABLE, which denies the correspondence outright. In the lattice RFC-8
-    writes down those are exactly DIFFEOMORPHIC and NONE, so AFFINE-and-stronger *is* the
-    condensable set, and :func:`invariance_of` already does every hard part -- it recurses into
-    a SEQUENCE's steps, reads a BY_DIMENSION's params as its map, and falls
-    back to NONE for a kind it does not know, which fails safe in this direction too. A third
-    copy of that recursion would be a third chance to disagree with it. **The line to revisit
-    when a kind is added** is therefore this one: a new kind is condensable exactly when
-    `_INVARIANCE_BY_KIND` puts it at AFFINE or above.
+    **A field map composes; a key does not.** The axes a placing field map gives (a times
+    array, a warp) are carried beside the affine rows as `FieldForm`s, so what has to be
+    affine is the *rest* of the edge -- its parameters, or a FIELD's pass-through. A key
+    (:func:`is_dereference`) places nothing at all.
+
+    **Kind, through the wrapper recursion -- read off the invariance.** Beside a key, `step_forms`
+    has one kind with no form at all, an UNMAPPABLE, and a FIELD inside a SEQUENCE has no
+    matrix. In the lattice RFC-8 writes down those read DIFFEOMORPHIC and NONE, so
+    AFFINE-and-stronger *is* the composable set once the field map is set aside, and
+    :func:`invariance_of` already does every hard part -- it recurses into a SEQUENCE's steps,
+    reads a BY_DIMENSION's params as its map, and falls back to NONE for a kind it does not
+    know, which fails safe in this direction too. **The line to revisit when a kind is added**
+    is therefore this one: a new kind is composable exactly when `_INVARIANCE_BY_KIND` puts it
+    at AFFINE or above.
 
     Note the question is about `step_forms`/`compose_forms`, **not** about `coords.has_matrix`,
     whose `MATRIX_KINDS` excludes BY_DIMENSION -- the shape of every ordinary registration
@@ -740,6 +776,12 @@ def is_condensable(edge: "models.Transformation") -> bool:
     :func:`is_invertible`, which excludes FIELD and UNMAPPABLE, and equal rank on the two
     sides -- so every step a walk offers inverted is square and closed-form already.
     """
+    if is_dereference(edge):
+        return False
+    if edge.kind == enums.TransformKindChoices.BY_DIMENSION.value:
+        # A placing FIELD part composes as a `FieldForm` beside the affine rows; every other
+        # part kind is affine by construction.
+        return True
     if _INVARIANCE_RANK.get(invariance_of(edge), 0) < _INVARIANCE_RANK[enums.TransformInvariance.AFFINE.value]:
         return False
 
@@ -869,33 +911,6 @@ def identified_axes(system: "models.CoordinateSystem") -> set[str]:
         return {reference.axis for reference in sparse.axis_references.all()}
 
     return set()
-
-
-def assert_field_produces(*, field: "models.CoordinateSystem", output_axes: list[str]) -> None:
-    """Enforce a FIELD's value axis against the rank the edge says its values produce.
-
-    The value axis is deliberately **elidable**. A label mask is a plain (y,x) array whose
-    one value is an object id; making it carry a length-1 COORDINATE axis to satisfy a
-    schema would add a phantom dimension no reader wants and no writer stores. So absent
-    means scalar, and scalar produces exactly one axis. A field that produces more than one
-    must say so with a value axis -- whose type is, in the same breath, what says whether
-    its numbers are positions or offsets.
-
-    The value axis' *length* is not checked: an ``Axis`` row carries no size (shape lives on
-    the DataArray), so "this COORDINATE axis has 3 positions, so the edge must produce 3
-    axes" is not answerable from here. The scalar case is, and it is the one a mask hits.
-    """
-    value_axes = [axis for axis in field.axes.all() if axis.type in _VALUE_AXIS_TYPES]
-
-    if len(value_axes) > 1:
-        raise ValueError(
-            f"A field's values are one thing, so its system carries at most one value axis, but '{field.name}' has {[axis.name for axis in value_axes]}. Two value axes would be two answers to 'what are these numbers'."
-        )
-
-    if not value_axes and len(output_axes) != 1:
-        raise ValueError(
-            f"Field '{field.name}' carries no value axis, so its values are scalar and produce exactly one axis, but this edge says they produce {output_axes}. Give the field a COORDINATE (positions) or DISPLACEMENT (offsets) value axis to produce more than one."
-        )
 
 
 #: The axis types a per-index selector may name: the ones you index rather than measure. A
@@ -1104,21 +1119,25 @@ def _assert_epochs_agree(input_system: "models.CoordinateSystem", output_system:
 
 #: The kinds whose parameters can state a constant term on an axis. Everything else -- IDENTITY,
 #: SCALE, MAP_AXIS -- maps zero onto zero by construction.
-_OFFSET_KINDS = frozenset({"TRANSLATION", "AFFINE", "ROTATION", "BY_DIMENSION", "FIELD", "SEQUENCE"})
+_OFFSET_KINDS = frozenset({"TRANSLATION", "AFFINE", "ROTATION", "BY_DIMENSION", "SEQUENCE"})
+
+#: The part kinds that can state a constant term: a FIELD part's values are the positions themselves.
+_OFFSET_PART_KINDS = frozenset({"TRANSLATION", "AFFINE", "ROTATION", "FIELD"})
 
 
 def _states_an_offset(kind: str | None, params: dict) -> bool:
     """Whether an edge of this kind, with these parameters, says where one zero sits on the other.
 
-    A FIELD (a lookup, whose values are the instants) and a SEQUENCE (whose steps are checked
-    as they are written) count; a BY_DIMENSION counts only when it carries a translation or an
-    affine, since a scale-only one pins zero to zero exactly as a SCALE does.
+    A SEQUENCE (whose steps are checked as they are written) counts; a BY_DIMENSION counts
+    only when one of its parts (handed in as ``params["parts"]``) can state an offset -- a
+    translation, a matrix, or a FIELD, whose values are the instants -- since a scale-only one
+    pins zero to zero exactly as a SCALE does.
     """
     kind = getattr(kind, "value", kind)
     if kind not in _OFFSET_KINDS:
         return False
     if kind == "BY_DIMENSION":
-        return params.get("translation") is not None or bool(params.get("affine")) or bool(params.get("lookup"))
+        return any(part.get("kind") in _OFFSET_PART_KINDS for part in params.get("parts") or [])
     return True
 
 
@@ -1130,6 +1149,7 @@ def assert_edge_rank(
     output_axes: list[str] | None,
     input_system: "models.CoordinateSystem",
     output_system: "models.CoordinateSystem",
+    parts: list[dict] | None = None,
 ) -> None:
     """Enforce that an edge's parameters have the rank its endpoints imply.
 
@@ -1153,7 +1173,12 @@ def assert_edge_rank(
     # Two clocks anchored to different instants cannot be related by an edge that says nothing
     # about the offset. Checked for every kind, before the per-kind branches: it is a fact about
     # the two *spaces*, not about the map, so no kind is exempt from it.
-    _assert_epochs_agree(input_system, output_system, kind=kind, params=params)
+    _assert_epochs_agree(input_system, output_system, kind=kind, params={"parts": parts or []} if kind == enums.TransformKindChoices.BY_DIMENSION.value else params)
+
+    if kind == enums.TransformKindChoices.BY_DIMENSION.value:
+        # A BY_DIMENSION's rank is its parts': each is checked against its own axes by
+        # `assert_parts`, which is the only thing that can say what a part's numbers mean.
+        return
 
     # An INDEX axis has no metric -- that is its definition, not an omission -- so the kinds
     # that do arithmetic on a coordinate mean nothing over it. Checked here rather than left
@@ -1185,45 +1210,9 @@ def assert_edge_rank(
         _assert_units_interchangeable(kind=kind, pairs=_axis_pairs(input_system, output_system, input_names, output_names), input_system=input_system, output_system=output_system)
         return
 
-    if kind == enums.TransformKindChoices.FIELD.value:
-        # A FIELD consumes input axes and produces output axes out of the array's values;
-        # the axes it does not name pass through by name. That is the entire map, so the
-        # endpoints are checkable against it exactly -- no convention, no elided component.
-        # Deliberately NOT the one-for-one rule below: a FIELD is many-to-one on purpose,
-        # (y,x) collapsing to one object id.
-        if not input_axes or not output_axes:
-            raise ValueError("A FIELD transformation must name the axes it consumes in `inputAxes` and the axes its values produce in `outputAxes`. That naming IS the map: the axes it does not consume pass through by name.")
-        for names, axes, side, system in ((input_names, input_axes, "input", input_system), (output_names, output_axes, "output", output_system)):
-            if len(set(axes)) != len(axes):
-                raise ValueError(f"A FIELD transformation names the {side} axis {axes} more than once")
-            unknown = [axis for axis in axes if axis not in names]
-            if unknown:
-                raise ValueError(f"A FIELD transformation names {side} axes {unknown} that do not exist on coordinate system '{system.name}' (its axes are {names})")
-        implied = [axis for axis in input_names if axis not in set(input_axes)] + list(output_axes)
-        # Every axis of the target has to be accounted for -- but not necessarily by this edge.
-        # An axis the target identifies itself (an INDEX coordinate naming the table its
-        # positions enumerate) is one the *reader* selects a position along, so the edge says
-        # nothing about it and is not expected to. See `identified_axes`.
-        identified = identified_axes(output_system)
-        overlap = sorted(set(implied) & identified)
-        if overlap:
-            raise ValueError(
-                f"A FIELD transformation over '{output_system.name}' names {overlap}, which that space already identifies by `references`. An axis is accounted for once: either the edge supplies it or its own declaration does, and two answers to 'what are these positions' is the ambiguity `references` on a coordinate exists to avoid."
-            )
-        accountable = sorted(set(output_names) - identified)
-        if sorted(implied) != accountable:
-            unaccounted = "" if not identified else f" ('{output_system.name}' identifies {sorted(identified)} by `references`, which this edge is not expected to supply)"
-            raise ValueError(
-                f"A FIELD transformation consuming {input_axes} of '{input_system.name}' {input_names} and producing {list(output_axes)} implies the axes {sorted(implied)}, but '{output_system.name}' has {accountable} to account for{unaccounted}. The axes it does not consume pass through by name."
-            )
-        return
-
-    if kind in (enums.TransformKindChoices.BY_DIMENSION.value, enums.TransformKindChoices.MAP_AXIS.value):
+    if kind == enums.TransformKindChoices.MAP_AXIS.value:
         input_axes, output_axes = input_axes or [], output_axes or []
-        if kind == enums.TransformKindChoices.BY_DIMENSION.value and params.get("lookup") and not input_axes and not output_axes:
-            # A BY_DIMENSION whose only map is its lookup: nothing named, nothing scaled.
-            pass
-        elif not input_axes or not output_axes:
+        if not input_axes or not output_axes:
             raise ValueError(f"A {kind} transformation must name the axes it acts on, in `inputAxes` and `outputAxes`. That naming IS the map: the axes it does not name are the ones it leaves untouched.")
         if len(input_axes) != len(output_axes):
             raise ValueError(f"A {kind} transformation maps its input axes onto its output axes one for one, but was given {len(input_axes)} ({input_axes}) and {len(output_axes)} ({output_axes})")
@@ -1338,9 +1327,8 @@ def write_relation_edge(
     affine: list[list[float]] | None = None,
     input_axes: list[str] | None = None,
     output_axes: list[str] | None = None,
-    field: "models.CoordinateSystem | None" = None,
+    parts: list[dict] | None = None,
     reason: str | None = None,
-    lookup: dict | None = None,
     value_relation: "enums.ValueRelation | str | None" = None,
     annotation: "models.Annotation | None" = None,
     ctx: CreationContext,
@@ -1377,9 +1365,8 @@ def write_relation_edge(
         affine=affine,
         input_axes=input_axes,
         output_axes=output_axes,
-        field=field,
+        parts=parts,
         reason=reason,
-        lookup=lookup,
         validity=None,  # defaults to MANUAL inside: an authored claim, never VALIDATED
         value_relation=value_relation,
         annotation=annotation,
@@ -1435,13 +1422,7 @@ _PARAMS_BY_KIND: dict[str, tuple[str, ...]] = {
     enums.TransformKind.ROTATION.value: ("affine",),
     enums.TransformKind.MAP_AXIS.value: (),
     enums.TransformKind.BY_DIMENSION.value: (),
-    enums.TransformKind.FIELD.value: (),
     enums.TransformKind.UNMAPPABLE.value: (),
-}
-
-#: The parameters a BY_DIMENSION edge may additionally carry, acting on its named axes.
-_OPTIONAL_PARAMS_BY_KIND: dict[str, tuple[str, ...]] = {
-    enums.TransformKind.BY_DIMENSION.value: ("scale", "translation", "affine"),
 }
 
 #: The kinds whose map is the axis naming itself, so `input_axes`/`output_axes` belong on
@@ -1451,7 +1432,6 @@ _OPTIONAL_PARAMS_BY_KIND: dict[str, tuple[str, ...]] = {
 _AXIS_KINDS = (
     enums.TransformKind.MAP_AXIS.value,
     enums.TransformKind.BY_DIMENSION.value,
-    enums.TransformKind.FIELD.value,
 )
 
 
@@ -1475,7 +1455,7 @@ def _assemble_edge_params(
     an error here, not a row whose extra key nothing ever reads.
     """
     supplied = {"scale": scale, "translation": translation, "affine": affine}
-    allowed = set(_PARAMS_BY_KIND[kind]) | set(_OPTIONAL_PARAMS_BY_KIND.get(kind, ()))
+    allowed = set(_PARAMS_BY_KIND[kind])
 
     stray = sorted(param for param, value in supplied.items() if value is not None and param not in allowed)
     if stray:
@@ -1493,11 +1473,6 @@ def _assemble_edge_params(
         if value is None:
             raise ValueError(f"A {kind} {noun} requires `{param}`")
         params[param] = value
-
-    for param in _OPTIONAL_PARAMS_BY_KIND.get(kind, ()):
-        value = supplied[param]
-        if value is not None:
-            params[param] = value
 
     if reason:
         params["reason"] = reason
@@ -1545,7 +1520,7 @@ def updatable_params(kind: str) -> tuple[str, ...]:
     """
     return tuple(
         param
-        for param in (*_PARAMS_BY_KIND.get(kind, ()), *_OPTIONAL_PARAMS_BY_KIND.get(kind, ()))
+        for param in _PARAMS_BY_KIND.get(kind, ())
         if param in ("scale", "translation", "affine")
     )
 
@@ -1588,68 +1563,230 @@ _PER_AXIS_KINDS = (
     enums.TransformKind.TRANSLATION.value,
 )
 
-def assert_lookup(
+def assert_field_part(
     *,
-    lookup: dict,
     field: "models.CoordinateSystem",
+    part: dict,
+    consumed: list[str],
+    produced: list[str],
     input_system: "models.CoordinateSystem",
     output_system: "models.CoordinateSystem",
-    input_axes: list[str],
-    output_axes: list[str],
 ) -> dict:
-    """Validate a BY_DIMENSION's lookup and return the dict the edge stores as `params["lookup"]`.
+    """Validate a FIELD part and return the params it stores.
 
-    **What is checked is what the rows can say.** The array is alone in its system, rank one,
-    with one value per position of the axis it is read along (shape lives on the DataArray). Its
-    values are *declared* to strictly increase from `min` to `max` -- the server never reads
-    array contents, so the writer vouches for them the way a table's writer vouches for its
-    dtypes. The unit must reach the output axis' unit, because unlike a bare FIELD a lookup
-    states its values' unit and so can convert.
+    ``consumed`` are the axes the array is read along, ``produced`` the axes its values give;
+    that they exist and no other part names them is `assert_parts`'.
 
-    ``spatial`` is materialized here, once, from the output axis' type: it is what decides
-    whether the edge is still condensable (a lookup along time or an index leaves space
-    affine; one along a SPACE axis does not), and reading axis rows on every walk to decide it
-    would be a query per edge per placement.
+    **What is checked is what the rows can say.** The field is something standing in yields a
+    value (`assert_field_is_dereferenceable`). Its value axis is elidable: absent means scalar,
+    and scalar produces exactly one axis -- a label mask, a times array; a COORDINATE value
+    axis means the values are positions, a DISPLACEMENT one offsets. An array field is indexed
+    by one axis per consumed axis, one value per position where the input has data. The
+    values' *range* is **declared** (``min``/``max``) because the server never reads array
+    contents; a field read along one axis -- a lookup -- must declare it. A ``unit`` must
+    reach every produced axis' unit, because a field map states its values' unit and can
+    therefore convert.
+
+    Materialized once, so no walk reads axis rows to decide: ``values`` (SCALAR, COORDINATE or
+    DISPLACEMENT), ``spatial`` (a produced axis is SPACE: the map bends straight lines) and
+    ``dereference`` (it produces an INDEX axis -- object ids, which have no metric: a key, which
+    no walk places anything through -- see :func:`is_dereference`).
     """
-    axis = lookup["axis"]
-    output_axis = lookup.get("output_axis") or axis
-
-    inputs = {row.name: row for row in input_system.axes.all()}
     outputs = {row.name: row for row in output_system.axes.all()}
-    if axis not in inputs:
-        raise ValueError(f"A lookup reads along '{axis}', which '{input_system.name}' does not have (its axes are {sorted(inputs)})")
-    if output_axis not in outputs:
-        raise ValueError(f"A lookup lands on '{output_axis}', which '{output_system.name}' does not have (its axes are {sorted(outputs)})")
-    if axis in input_axes or output_axis in output_axes:
-        raise ValueError(f"'{axis}' -> '{output_axis}' is both looked up and named in `inputAxes`/`outputAxes`: an axis has one map. Name only the axes the parameters act on")
+
+    assert_field_is_dereferenceable(field)
+
+    value_axes = [axis for axis in field.axes.all() if axis.type in _VALUE_AXIS_TYPES]
+    if len(value_axes) > 1:
+        raise ValueError(
+            f"A field's values are one thing, so its system carries at most one value axis, but '{field.name}' has {[axis.name for axis in value_axes]}. Two value axes would be two answers to 'what are these numbers'."
+        )
+    if not value_axes and len(produced) != 1:
+        raise ValueError(
+            f"Field '{field.name}' carries no value axis, so its values are scalar and produce exactly one axis, but this edge says they produce {list(produced)}. Give the field a COORDINATE (positions) or DISPLACEMENT (offsets) value axis to produce more than one."
+        )
 
     datasets = list(field.datasets.all()[:2])
-    if len(datasets) != 1:
-        raise ValueError(f"A lookup's array is the one dataset living in its own system, but '{field.name}' holds {len(datasets)}. Upload the values as a dataset of their own")
-    dataset = datasets[0]
-    shape = list(dataset.shape_list or [])
-    if len(shape) != 1:
-        raise ValueError(f"A lookup's array is one value per position, so it is rank one, but '{dataset.name}' has shape {shape}")
-    extent = _axis_extent(input_system, axis)
-    if extent is not None and extent != shape[0]:
-        raise ValueError(f"A lookup holds one value per position of '{axis}', which has {extent}, but '{dataset.name}' holds {shape[0]}")
+    if len(datasets) > 1:
+        raise ValueError(f"A field's array is the one dataset living in its own system, but '{field.name}' holds {len(datasets)}. Upload the values as a dataset of their own")
+    if datasets and field.pk != input_system.pk:
+        # A self-field (a mask) is its input's own grid, so it is indexed by it by construction.
+        dataset = datasets[0]
+        names, shape = list(dataset.axis_names), list(dataset.shape_list or [])
+        value_names = {axis.name for axis in value_axes}
+        index_axes = [name for name in names if name not in value_names]
+        if len(index_axes) != len(consumed):
+            raise ValueError(f"A field read along {list(consumed)} is indexed by one axis per consumed axis, but '{dataset.name}' is indexed by {index_axes}")
+        if len(shape) == len(names):
+            for axis, index_axis in zip(consumed, index_axes):
+                extent = _axis_extent(input_system, axis)
+                if extent is not None and extent != int(shape[names.index(index_axis)]):
+                    raise ValueError(f"A field holds one value per position of '{axis}', which has {extent}, but '{dataset.name}' holds {shape[names.index(index_axis)]} along '{index_axis}'")
 
-    target_unit = outputs[output_axis].unit
-    if coords_logic.unit_factor(lookup["unit"], target_unit) is None:
-        raise ValueError(f"A lookup's values are in '{lookup['unit']}', which has no conversion to '{output_axis}' in '{target_unit}'")
+    unit = part.get("unit")
+    if unit:
+        for axis in produced:
+            if coords_logic.unit_factor(unit, outputs[axis].unit) is None:
+                raise ValueError(f"A field's values are in '{unit}', which has no conversion to '{axis}' in '{outputs[axis].unit}'")
 
-    low, high = float(lookup["min"]), float(lookup["max"])
-    if not high > low:
-        raise ValueError(f"A lookup's values strictly increase, so its last value ({high}) must be greater than its first ({low})")
+    low, high = part.get("min"), part.get("max")
+    if (low is None) != (high is None):
+        raise ValueError("A field's range is declared as `min` and `max` together, or not at all")
+    if low is not None and not float(high) > float(low):
+        raise ValueError(f"A field's values strictly increase, so its last value ({high}) must be greater than its first ({low})")
+
+    # An INDEX axis has no metric, so a value landing on one is an id, never a position:
+    # whatever holds that axis -- a table, a matrix, an array of objects -- the field is a key.
+    dereference = any(outputs[axis].type == enums.AxisTypeChoices.INDEX.value for axis in produced)
+    if not value_axes and len(consumed) == 1 and not dereference and low is None:
+        raise ValueError(
+            "A field read along one axis is a lookup, and its values strictly increase from `min` to `max`: declare both. The server never reads array contents, so the writer vouches for them the way a table's writer vouches for its dtypes."
+        )
 
     return {
-        "axis": axis,
-        "output_axis": output_axis,
-        "unit": lookup["unit"],
-        "min": low,
-        "max": high,
-        "spatial": outputs[output_axis].type == enums.AxisTypeChoices.SPACE.value,
+        "unit": unit or None,
+        "min": float(low) if low is not None else None,
+        "max": float(high) if high is not None else None,
+        "values": value_axes[0].type if value_axes else "SCALAR",
+        "spatial": any(outputs[axis].type == enums.AxisTypeChoices.SPACE.value for axis in produced),
+        "dereference": dereference,
     }
+
+
+def resolve_part_fields(parts: list[dict] | None, resolve: "Callable[[str], models.CoordinateSystem]") -> list[dict] | None:
+    """Lowered parts with each FIELD part's system ID resolved, by ``resolve`` (the request-scoped, org-checked fetch)."""
+    if parts is None:
+        return None
+    return [{**part, "field": resolve(part["field"])} if part.get("field") is not None else part for part in parts]
+
+
+_PART_KINDS = frozenset(kind.value for kind in enums.PartKind)
+_SQUARE_PART_KINDS = frozenset({enums.PartKind.IDENTITY.value, enums.PartKind.SCALE.value, enums.PartKind.TRANSLATION.value, enums.PartKind.ROTATION.value})
+_MATRIX_PART_KINDS = frozenset({enums.PartKind.AFFINE.value, enums.PartKind.ROTATION.value})
+
+
+def assert_parts(
+    parts: list[dict],
+    *,
+    input_system: "models.CoordinateSystem",
+    output_system: "models.CoordinateSystem",
+) -> tuple[list[dict], list[tuple[int, "models.CoordinateSystem"]]]:
+    """Validate a BY_DIMENSION's parts; return them as stored, and the arrays to link.
+
+    Each part maps its own input axes onto its own output axes by one kind, and the parts sit
+    side by side: disjoint on both sides, so every axis has one map. Each is held to what its
+    kind means over its own axes -- one number per axis for a SCALE or TRANSLATION, one row per
+    output axis for an AFFINE, square for a ROTATION or an IDENTITY, the array's own checks for
+    a FIELD (`assert_field_part`) -- and to the same correspondence rules a whole edge is: a
+    paired axis relates the same kind of coordinate, and an IDENTITY claims the same units.
+
+    **Nothing passes through implicitly.** An axis no part names is one the edge says nothing
+    about; a pass-through is stated, as an IDENTITY part. And a key -- a FIELD part whose values
+    are ids -- must account for every axis of what it keys: named by a part, or identified by
+    the target itself (`identified_axes`), never both.
+
+    ``parts`` arrive lowered: ``{"kind", "input_axes", "output_axes"}`` plus the kind's own
+    ``scale``/``translation``/``affine``, or a FIELD part's resolved ``field`` system and its
+    values' ``unit``/``min``/``max``.
+    """
+    if not parts:
+        raise ValueError(
+            "A BY_DIMENSION maps its axes by its parts, but names none. Name each axis it relates in a part -- an IDENTITY part for one that passes through -- or use UNMAPPABLE between spaces where nothing corresponds."
+        )
+    inputs = {row.name: row for row in input_system.axes.all()}
+    outputs = {row.name: row for row in output_system.axes.all()}
+    seen_in: set[str] = set()
+    seen_out: set[str] = set()
+    stored: list[dict] = []
+    links: list[tuple[int, "models.CoordinateSystem"]] = []
+
+    for index, part in enumerate(parts):
+        kind = getattr(part.get("kind"), "value", part.get("kind"))
+        noun = f"part {index} ({kind})"
+        if kind not in _PART_KINDS:
+            raise ValueError(f"A BY_DIMENSION part is one of {sorted(_PART_KINDS)}, not {kind}")
+        consumed, produced = list(part.get("input_axes") or []), list(part.get("output_axes") or [])
+        if not consumed or not produced:
+            raise ValueError(f"A BY_DIMENSION's {noun} names the axes it maps in `inputAxes` and `outputAxes`: that naming IS the part")
+        for axes, names, side, system in ((consumed, inputs, "input", input_system), (produced, outputs, "output", output_system)):
+            if len(set(axes)) != len(axes):
+                raise ValueError(f"A BY_DIMENSION's {noun} names the {side} axis {axes} more than once")
+            unknown = [axis for axis in axes if axis not in names]
+            if unknown:
+                raise ValueError(f"A BY_DIMENSION's {noun} names {side} axes {unknown} that do not exist on coordinate system '{system.name}' (its axes are {sorted(names)})")
+        twice = sorted((set(consumed) & seen_in) | (set(produced) & seen_out))
+        if twice:
+            raise ValueError(f"{twice} is named by more than one part of this BY_DIMENSION: an axis has one map")
+        seen_in |= set(consumed)
+        seen_out |= set(produced)
+
+        if kind == enums.PartKind.FIELD.value:
+            stray = [name for name in ("scale", "translation", "affine") if part.get(name) is not None]
+            if stray:
+                raise ValueError(f"A FIELD part's map is its array's values, so it takes no `{stray[0]}`")
+            field = part.get("field")
+            if field is None:
+                raise ValueError(
+                    "A FIELD part's map is the values of an array, so it requires `field`: the coordinate system of that array. Name the input's own system when its pixels are themselves the map, as for a label mask."
+                )
+            params = assert_field_part(field=field, part=part, consumed=consumed, produced=produced, input_system=input_system, output_system=output_system)
+            reference: int | str = "self" if field.pk == input_system.pk else field.pk
+            if reference != "self":
+                links.append((index, field))
+            stored.append({"kind": kind, "input_axes": consumed, "output_axes": produced, "params": params, "field": reference})
+            continue
+
+        stray = [name for name in ("field", "unit", "min", "max") if part.get(name) is not None]
+        if stray:
+            raise ValueError(f"A {kind} part's map is in its parameters, not in an array, so it takes no `{stray[0]}`")
+        params = _assemble_edge_params(
+            kind=kind, noun="part", scale=part.get("scale"), translation=part.get("translation"), affine=part.get("affine"), input_axes=None, output_axes=None, reason=None
+        )
+        if kind in _SQUARE_PART_KINDS and len(consumed) != len(produced):
+            raise ValueError(f"A BY_DIMENSION's {noun} maps its axes one for one, but names {len(consumed)} ({consumed}) onto {len(produced)} ({produced}). Use an AFFINE part for a map that changes rank")
+        for name in ("scale", "translation"):
+            vector = params.get(name)
+            if vector is not None and len(vector) != len(consumed):
+                raise ValueError(f"A BY_DIMENSION's {noun} `{name}` has one entry per input axis of the part: expected {len(consumed)}, got {len(vector)}")
+        if kind in _MATRIX_PART_KINDS:
+            affine = params["affine"]
+            if len(affine) != len(produced) or any(len(row) != len(consumed) + 1 for row in affine):
+                raise ValueError(
+                    f"A BY_DIMENSION's {noun} `affine` has one row per output axis of the part and one column per input axis plus the offset: expected {len(produced)} x {len(consumed) + 1}, got {len(affine)} x {[len(row) for row in affine]}"
+                )
+        pairs = _axis_pairs(input_system, output_system, consumed, produced)
+        if len(consumed) == len(produced):
+            _assert_axis_types_correspond(kind=f"{kind} part", pairs=pairs, input_system=input_system, output_system=output_system)
+        if kind == enums.PartKind.IDENTITY.value:
+            # The same positions said twice, *converted*: `_by_dimension_forms` applies the factor
+            # between the two units, so a nanometre axis onto a micrometre one is a pass-through
+            # by 1/1000 -- and only a pair with no conversion at all is no pass-through.
+            unconvertible = [f"'{a.name}' ({a.unit}) -> '{b.name}' ({b.unit})" for a, b in pairs if coords_logic.unit_factor(a.unit, b.unit) is None]
+            if unconvertible:
+                raise ValueError(
+                    f"An IDENTITY part says its axes are the same positions in two units, but {', '.join(unconvertible)} have no conversion between them. "
+                    "Use an AFFINE part, stating what one unit is in the other, or relate the spaces some other way."
+                )
+        stored.append({"kind": kind, "input_axes": consumed, "output_axes": produced, "params": params})
+
+    if any((part["params"] or {}).get("dereference") for part in stored if part["kind"] == enums.PartKind.FIELD.value):
+        # Every axis of a key's target has to be accounted for -- by a part, or by the target's
+        # own identification. An axis the target identifies itself (an INDEX coordinate naming
+        # the table its positions enumerate) is one the *reader* selects a position along.
+        identified = identified_axes(output_system)
+        overlap = sorted(seen_out & identified)
+        if overlap:
+            raise ValueError(
+                f"A key into '{output_system.name}' names {overlap}, which that space already identifies by `references`. An axis is accounted for once: either a part supplies it or its own declaration does, and two answers to 'what are these positions' is the ambiguity `references` on a coordinate exists to avoid."
+            )
+        accountable = sorted(set(outputs) - identified)
+        if sorted(seen_out) != accountable:
+            unaccounted = "" if not identified else f" ('{output_system.name}' identifies {sorted(identified)} by `references`, which the parts are not expected to supply)"
+            raise ValueError(
+                f"A key into '{output_system.name}' gives {sorted(seen_out)}, but that space has {accountable} to account for{unaccounted}. Name every axis it keys by in a part -- an IDENTITY part for one that passes through, like a timelapse's t."
+            )
+
+    return stored, links
 
 
 def _axis_extent(system: "models.CoordinateSystem", axis: str) -> int | None:
@@ -1680,9 +1817,8 @@ def build_registration_edge(
     affine: list[list[float]] | None = None,
     input_axes: list[str] | None = None,
     output_axes: list[str] | None = None,
-    field: "models.CoordinateSystem | None" = None,
+    parts: list[dict] | None = None,
     reason: str | None = None,
-    lookup: dict | None = None,
     validity: "enums.PlacementValidity | str | None" = None,
     value_relation: "enums.ValueRelation | str | None" = None,
     selector: dict | None = None,
@@ -1727,27 +1863,18 @@ def build_registration_edge(
         reason=reason,
     )
 
-    # The field itself, for the one kind whose map is an array rather than a formula. The
-    # caller always states it -- an edge whose map is implicit is an edge nobody can read --
-    # but a *self* field is stored as null: see `Transformation.field`, where PROTECT would
-    # otherwise make a dereferenced mask undeletable.
-    if kind == enums.TransformKind.FIELD.value:
-        if field is None:
-            raise ValueError("A FIELD transformation's map is the values of an array, so it requires `field`: the coordinate system of that array. Pass the input's own system when the array's pixels are themselves the map, as for a label mask.")
-        assert_field_is_dereferenceable(field)
-        assert_field_produces(field=field, output_axes=output_axes or [])
-        if field.pk == input_system.pk:
-            field = None
-    elif lookup is not None:
-        # The lookup's array rides the same `field` column a FIELD's does: one PROTECTed FK,
-        # read with the row, so no walk pays a query for it.
-        if kind != enums.TransformKind.BY_DIMENSION.value:
-            raise ValueError(f"A {kind} transformation takes no `lookup`: only BY_DIMENSION reads one axis from an array beside the axes its parameters act on")
-        if field is None:
-            raise ValueError("A lookup names the coordinate system of the array whose values are the map, in its `field`")
-        params["lookup"] = assert_lookup(lookup=lookup, field=field, input_system=input_system, output_system=output_system, input_axes=input_axes or [], output_axes=output_axes or [])
-    elif field is not None:
-        raise ValueError(f"A {kind} transformation's map is in its parameters, not in an array, so it takes no `field`")
+    # A BY_DIMENSION's map is its parts, and nothing else: no top-level axes or parameters, and
+    # a FIELD part's array linked below. Every other kind has no parts.
+    stored_parts: list[dict] = []
+    links: list[tuple[int, "models.CoordinateSystem"]] = []
+    if kind == enums.TransformKind.BY_DIMENSION.value:
+        if input_axes or output_axes:
+            raise ValueError("A BY_DIMENSION names its axes in its parts, each part the axes it maps; it takes no `inputAxes`/`outputAxes` of its own.")
+        stored_parts, links = assert_parts(parts or [], input_system=input_system, output_system=output_system)
+        input_axes = [axis for part in stored_parts for axis in part["input_axes"]]
+        output_axes = [axis for part in stored_parts for axis in part["output_axes"]]
+    elif parts:
+        raise ValueError(f"A {kind} transformation does not read `parts`: only a BY_DIMENSION maps its axes part by part.")
 
     assert_edge_rank(
         kind=kind,
@@ -1756,6 +1883,7 @@ def build_registration_edge(
         output_axes=output_axes,
         input_system=input_system,
         output_system=output_system,
+        parts=stored_parts,
     )
     # Orthogonal to kind and to rank -- *where* the map applies rather than what it is -- so it
     # is checked beside them rather than inside the per-kind branches.
@@ -1778,7 +1906,7 @@ def build_registration_edge(
         input_axes=input_axes if keeps_axes else None,
         output_axes=output_axes if keeps_axes else None,
         params=params,
-        field=field,
+        parts=stored_parts,
         validity=validity or enums.PlacementValidityChoices.MANUAL.value,
         value_relation=value_relation,
         selector=selector,
@@ -1786,6 +1914,9 @@ def build_registration_edge(
         creator=ctx.user,
         organization=ctx.organization,
     )
+    # Each separate array a FIELD part reads, PROTECTed: deleting a times array or a warp
+    # field would take a placement nobody named. A self field (a mask) has no link.
+    models.TransformationField.objects.bulk_create([models.TransformationField(transformation=edge, field=field, part=index) for index, field in links])
     return edge
 
 
@@ -2144,9 +2275,9 @@ def is_derivation_edge(edge: "models.Transformation", *, of_container: tuple | N
     which silently dropped an edge whose parent was a table or a mesh collection -- the
     parent vanished from ``derivedFrom`` rather than erroring.
 
-    **A FIELD is never a derivation**, and this is the one kind that is excluded. It records
-    that a label mask's pixels *are* the map into a table of objects -- a lookup, not a
-    statement about where either side came from. RFC-7 already draws that line for the
+    **A key is never a derivation** (:func:`is_dereference`), and it is the one edge that is
+    excluded. It records that a label mask's pixels *are* the map into a table of objects -- a
+    dereference, not a statement about where either side came from. RFC-7 already draws that line for the
     attribute-plan walk ("FIELD edges are payload, never connectivity"), and it has to be
     drawn here too: a FIELD points mask -> table, so left in, a mask with a dereference
     would report the table as the thing it was *derived from*. The table's real provenance
@@ -2156,7 +2287,7 @@ def is_derivation_edge(edge: "models.Transformation", *, of_container: tuple | N
     output resolved through the table's own derivation edge back to the mask, compared equal
     and was dropped. Container keys removed the accident, which is what surfaced the rule.
     """
-    if edge.kind == enums.TransformKindChoices.FIELD.value:
+    if is_dereference(edge):
         return False
     target = keys.get(edge.output_id)
     if target is None or target[0] == "system":
@@ -2302,11 +2433,14 @@ def assert_placeable_in(
     the space's own name.
 
     **What is claimed is stronger than reachability.** The route the graph holds must be one
-    that composes into a matrix -- ``require_affine`` -- because a layer is a thing a renderer
-    draws, and it draws it with an affine. A FIELD relates two spaces by the values of an
-    array and has no closed form, so a path across one is a path `condense_path` refuses:
-    accepting such a layer meant `asAffine` raised for a layer creation had promised was
-    placed. Reachability is not placement.
+    that composes -- ``require_affine`` -- into affine rows plus the axes a field map gives,
+    which is what `asAffine` hands a renderer. A field map that places (a times array, a warp)
+    composes; a key from pixels to a table's rows (a dereference) places nothing, and neither
+    does an UNMAPPABLE, so a path across either is a path `condense_path` refuses: accepting
+    such a layer meant `asAffine` raised for a layer creation had promised was placed.
+    Reachability is not placement. Whether a client can *draw* what composes is its own
+    question: a warp composes here and is "placed, not drawable yet" in a viewer that has no
+    warp shader.
 
     A source is placed or it is not, and when it is not the error says which of the three very
     different gaps it is:
@@ -2319,10 +2453,11 @@ def assert_placeable_in(
     registration to author, and the error says so instead of sending someone to look
     for one.
 
-    **Not affinely placed** -- registered, reachable, and still not drawable: every route runs
-    through a step with no closed form. Its own message because both others are actively
-    *wrong* here -- "author the registration" sends someone after an edge that already exists,
-    and "unmappable" denies a correspondence the FIELD asserts.
+    **Not composably placed** -- registered, reachable, and still not composable: every route
+    runs through a step with no form (a key, a field inside a SEQUENCE, a rank change that is
+    not a BY_DIMENSION). Its own message because both others are actively *wrong* here --
+    "author the registration" sends someone after an edge that already exists, and
+    "unmappable" denies a correspondence the edge asserts.
 
     The first two mirror :meth:`core.logic.scene_graph.SceneGraph.placement_state` so that
     creation-time refusal and query-time state never disagree. The third has no twin there on
@@ -2357,11 +2492,11 @@ def assert_placeable_in(
             {f"{edge.pk} ({edge.kind})" for edge in edges if edge.input_id in reached and is_traversable(edge) and not is_condensable(edge)}
         )
         raise ValueError(
-            f"'{source_system.name}' is registered into {where}, but nothing places it there *affinely*: "
-            f"every route runs through a step with no closed form{' -- ' + ', '.join(blocking) if blocking else ''}. "
-            "A FIELD gives its map as the values of an array rather than as a matrix, and a step that changes "
-            "rank without being a BY_DIMENSION states no square map, so neither composes into the affine a "
-            f"layer is drawn with. Author a registration into {where} that does -- then create the layer."
+            f"'{source_system.name}' is registered into {where}, but nothing places it there composably: "
+            f"every route runs through a step with no form{' -- ' + ', '.join(blocking) if blocking else ''}. "
+            "A key from pixels to the rows of a table says which object a pixel is, not where it is, and a step "
+            "that changes rank without being a BY_DIMENSION states no square map, so neither composes into the "
+            f"placement a layer is drawn with. Author a registration into {where} that does -- then create the layer."
         )
 
     if _blocked_by_unmappable(source_system, set(lineage_ids), edges):
@@ -2826,8 +2961,8 @@ def create_identity_registration(
 ) -> "models.Transformation":
     """One identity placement edge on the named shared axes.
 
-    A BY_DIMENSION carrying no map -- the identity on the axes it names -- because that is
-    the only shape that can say "these axes correspond one-to-one, and I claim nothing about the rest" -- a
+    A BY_DIMENSION with one IDENTITY part over the shared axes, because that is the only shape
+    that can say "these axes correspond one-to-one, and I claim nothing about the rest" -- a
     square edge between systems of different rank cannot.
 
     Its one caller in the product is the minting of a scene's annotation collection, which
@@ -2849,6 +2984,7 @@ def create_identity_registration(
         input_axes=shared,
         output_axes=shared,
         params={},
+        parts=[{"kind": enums.PartKind.IDENTITY.value, "input_axes": list(shared), "output_axes": list(shared), "params": {}}],
         validity=validity,
         creator=ctx.user,
         organization=ctx.organization,
@@ -3057,9 +3193,11 @@ def fact_paths(
     so a probe on a source image can find the instance mask derived from it. Three refusals
     define the component. Registrations are never crossed and a SHARED system is never even
     stood on (either side, see ``_UNINHABITED``): which claims compose is a scene's
-    say-so, and this walk has no scene. UNMAPPABLE never walks, in either direction. And a
-    FIELD edge is payload, not connectivity -- it is what a caller collects *at* the reached
-    systems, and crossing it would put a table's index space in the frontier.
+    say-so, and this walk has no scene. UNMAPPABLE never walks, in either direction. And an
+    edge with a FIELD part is payload, not connectivity: a key is what a caller collects *at*
+    the reached systems, and crossing it would put a table's index space in the frontier; a
+    placing field (a warp) has no form a plan's `path` can be composed with without reading
+    the array, which a plan's executor does not do.
 
     Two phases. The frontier walk over-reaches on purpose (it knows endpoints, not
     primaries or invertibility); the second fetch pulls every edge *touching* the reached
@@ -3080,7 +3218,8 @@ def fact_paths(
         endpoints = (
             models.Transformation.objects.filter(organization=organization)
             .filter(Q(input_id__in=frontier) | Q(output_id__in=frontier))
-            .exclude(kind__in=[enums.TransformKindChoices.UNMAPPABLE.value, enums.TransformKindChoices.FIELD.value])
+            .exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
+            .exclude(field_part_q())
             .exclude(**{f"input__{lookup}": value for lookup, value in _UNINHABITED.items()})
             .exclude(**{f"output__{lookup}": value for lookup, value in _UNINHABITED.items()})
             .values_list("input_id", "output_id")
@@ -3104,7 +3243,7 @@ def fact_paths(
         .order_by("pk")
     )
 
-    connectivity = [edge for edge in edges if edge.kind != enums.TransformKindChoices.FIELD.value and edge.input_id in reached and edge.output_id in reached]
+    connectivity = [edge for edge in edges if not field_parts_of(edge) and edge.input_id in reached and edge.output_id in reached]
     parents = _bfs_tree(adjacency_of(connectivity), root.pk, max_depth=max_depth)
 
     return {pk: _steps_from_parents(parents, root.pk, pk) for pk in parents}
@@ -3299,27 +3438,46 @@ def _edge_step(edge: "models.Transformation", *, inverted: bool = False) -> "coo
         # only -- see `_pass_through_factor` for why that is the only defensible scope.
         input_units=tuple(axis.unit for axis in input_axes_rows),
         output_units=tuple(axis.unit for axis in output_axes_rows),
-        acts_on_input=tuple(edge.input_axes) if edge.input_axes else None,
-        acts_on_output=tuple(edge.output_axes) if edge.output_axes else None,
+        acts_on_input=tuple(edge.input_axes) if edge.kind == enums.TransformKindChoices.MAP_AXIS.value and edge.input_axes else None,
+        acts_on_output=tuple(edge.output_axes) if edge.kind == enums.TransformKindChoices.MAP_AXIS.value and edge.output_axes else None,
         steps=edge.step_pairs,
-        lookup=_step_lookup(edge, output_axes_rows),
+        parts=_step_parts(edge, output_axes_rows),
     )
     return coords_logic.invert_step(step) if inverted else step
 
 
-def _step_lookup(edge: "models.Transformation", output_axes_rows: list) -> "coords_logic.StepLookup | None":
-    """An edge's lookup as the step reads it, its values' unit already turned into a factor."""
-    lookup = (edge.params or {}).get("lookup")
-    if not lookup or edge.field_id is None:
-        return None
-    target = next((row.unit for row in output_axes_rows if row.name == lookup["output_axis"]), None)
-    factor = coords_logic.unit_factor(lookup.get("unit"), target)
-    return coords_logic.StepLookup(
-        input_axis=lookup["axis"],
-        output_axis=lookup["output_axis"],
-        field=edge.field_id,
-        factor=1.0 if factor is None else factor,
-    )
+def _step_parts(edge: "models.Transformation", output_axes_rows: list) -> tuple["coords_logic.StepPart", ...]:
+    """An edge's parts as the step reads them, each FIELD part's values' unit already turned into a factor.
+
+    A FIELD part's array is its stored pk -- or, for a self field, the edge's own input -- read
+    without a query: the id is on the row.
+    """
+    units = {row.name: row.unit for row in output_axes_rows}
+    parts = []
+    for part in edge.parts or []:
+        params = part.get("params") or {}
+        field = None
+        if part.get("kind") == enums.PartKind.FIELD.value:
+            produced = tuple(part.get("output_axes") or ())
+            factor = coords_logic.unit_factor(params.get("unit"), units.get(produced[0]) if produced else None)
+            field = coords_logic.StepField(
+                input_axes=tuple(part.get("input_axes") or ()),
+                output_axes=produced,
+                field=edge.input_id if part.get("field") == "self" else int(part["field"]),
+                factor=1.0 if factor is None else factor,
+                vector=params.get("values") in _VALUE_AXIS_TYPES,
+                displacement=params.get("values") == enums.AxisTypeChoices.DISPLACEMENT.value,
+            )
+        parts.append(
+            coords_logic.StepPart(
+                kind=str(part.get("kind")),
+                input_axes=tuple(part.get("input_axes") or ()),
+                output_axes=tuple(part.get("output_axes") or ()),
+                params=params,
+                field=field,
+            )
+        )
+    return tuple(parts)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -3337,8 +3495,8 @@ class CondensedPlacement:
     input_axes: list[str]
     output_axes: list[str]
     total: bool
-    #: The destination axes given by a lookup rather than by a row of `matrix`, keyed by axis.
-    lookups: dict[str, "coords_logic.LookupForm"] = dataclasses.field(default_factory=dict)
+    #: The destination axes given by a field rather than by a row of `matrix`, keyed by axis.
+    fields: dict[str, "coords_logic.FieldForm"] = dataclasses.field(default_factory=dict)
 
 
 def condense_path(
@@ -3347,7 +3505,7 @@ def condense_path(
     source_axes: list[str],
     destination_axes: list[str],
 ) -> CondensedPlacement:
-    """Compose a placement path into one affine map, or raise saying which edge stopped it.
+    """Compose a placement path into one affine map and its field terms, or raise saying which edge stopped it.
 
     The server does not *store* a composed placement and this does not change that: the same
     data under two registrations still has two answers, and this is only ever called with a
@@ -3374,10 +3532,15 @@ def condense_path(
     """
     axed: list[coords_logic.AxedStep] = []
     for edge, inverted in steps:
+        if is_dereference(edge):
+            # A key is no placement: it says which object a pixel belongs to, not where it is.
+            raise coords_logic.NonAffineTransformError(
+                f"This placement does not compose: transformation {edge.pk} ({edge.kind}) is a key from pixels to the rows of a table, which places nothing"
+            )
         try:
             step = _edge_step(edge, inverted=inverted)
             # Asked here, and thrown away, purely so the failure carries an edge id: a step
-            # with no closed form (a FIELD, whose map is an array) raises from inside
+            # with no closed form (an UNMAPPABLE, a FIELD inside a SEQUENCE) raises from inside
             # `compose_forms`, which sees a list of steps and no rows, and the resulting
             # message is about a matrix when what a client needs is which registration to go
             # and fix. Recomposed below rather than threaded through -- these are matrices of
@@ -3389,10 +3552,10 @@ def condense_path(
             ) from error
         axed.append(step)
 
-    forms, lookups = coords_logic.compose_placement(axed, source_axes)
+    forms, fields = coords_logic.compose_placement(axed, source_axes)
     matrix, rows = coords_logic.forms_to_matrix(forms, destination_axes)
-    lookups = {axis: lookups[axis] for axis in destination_axes if axis in lookups}
-    return CondensedPlacement(matrix=matrix, input_axes=source_axes, output_axes=rows, total=len(rows) + len(lookups) == len(destination_axes), lookups=lookups)
+    fields = {axis: fields[axis] for axis in destination_axes if axis in fields}
+    return CondensedPlacement(matrix=matrix, input_axes=source_axes, output_axes=rows, total=len(rows) + len(fields) == len(destination_axes), fields=fields)
 
 
 def dataset_behind(system: "models.CoordinateSystem") -> "models.ArrayDataset | None":

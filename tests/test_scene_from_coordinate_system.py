@@ -73,8 +73,7 @@ def _register(source_field: str, source_id: str, axes=("y", "x"), validity: str 
         source_field: source_id,
         "transform": {
             "kind": "BY_DIMENSION",
-            "inputAxes": list(axes),
-            "outputAxes": list(axes),
+            "parts": [{"kind": "IDENTITY", "inputAxes": list(axes), "outputAxes": list(axes)}],
         },
         "validity": validity,
     }

@@ -95,7 +95,7 @@ async def test_an_assumed_placement_reads_unknown(authenticated_context: HttpCon
                 "input": str(intrinsic.pk),
                 "output": str(world.pk),
                 "validity": "UNKNOWN",
-                "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [1.0, 1.0]},
+                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [1.0, 1.0]}]},
             }
         },
     )
@@ -135,9 +135,7 @@ async def test_an_authored_registration_reads_manual_and_validating_it_needs_no_
                 "output": str(world.pk),
                 "transform": {
                     "kind": "BY_DIMENSION",
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["y", "x"],
-                    "affine": [[1.0, 0.0, 10.0], [0.0, 1.0, 20.0]],
+                    "parts": [{"kind": "AFFINE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[1.0, 0.0, 10.0], [0.0, 1.0, 20.0]]}],
                 },
             }
         },

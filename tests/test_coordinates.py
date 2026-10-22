@@ -1045,13 +1045,9 @@ async def _register(context, input_system, world, scene, affine=None, axes=None)
     on t and c. Naming the axes is what makes the map honest, and the parameters are then
     checked against the named subset.
     """
-    transform = {
-        "kind": "BY_DIMENSION" if axes else "AFFINE",
-        "affine": affine or _AFFINE,
-    }
+    transform = {"kind": "AFFINE", "affine": affine or _AFFINE}
     if axes:
-        transform["inputAxes"] = list(axes)
-        transform["outputAxes"] = list(axes)
+        transform = {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": list(axes), "outputAxes": list(axes), "affine": affine or _AFFINE}]}
     edge = {
         "input": str(input_system.pk),
         "output": str(world.pk),
@@ -1775,25 +1771,24 @@ def test_singularity_is_judged_relative_to_the_matrix_own_scale():
             acts_on_input=("y", "x"),
             acts_on_output=("x", "y"),
         ),
+        # Two parts side by side, each inverted on its own: a scale on y, an offset on x.
         coords.AxedStep(
             kind=enums.TransformKindChoices.BY_DIMENSION.value,
-            params={"scale": [2.0, 3.0], "translation": [1.0, -1.0]},
+            params={},
             input_axes=("y", "x"),
             output_axes=("y", "x"),
-            acts_on_input=("y", "x"),
-            acts_on_output=("y", "x"),
+            parts=(
+                coords.StepPart(kind="SCALE", input_axes=("y",), output_axes=("y",), params={"scale": [2.0]}),
+                coords.StepPart(kind="TRANSLATION", input_axes=("x",), output_axes=("x",), params={"translation": [-1.0]}),
+            ),
         ),
-        # The `affine` branch of `_params_matrix`, which sizes its matrix at
-        # `max(rank_in, rank_out)` -- equal here only because `assert_edge_rank` maps a
-        # BY_DIMENSION's named axes one for one, so the inverse's row count rests on a
-        # guarantee held in another module. Rotated, so a transposed inverse is visible.
+        # An AFFINE part over both. Rotated, so a transposed inverse is visible.
         coords.AxedStep(
             kind=enums.TransformKindChoices.BY_DIMENSION.value,
-            params={"affine": [[0.0, -2.0, 3.0], [0.5, 0.0, -1.0]]},
+            params={},
             input_axes=("y", "x"),
             output_axes=("y", "x"),
-            acts_on_input=("y", "x"),
-            acts_on_output=("y", "x"),
+            parts=(coords.StepPart(kind="AFFINE", input_axes=("y", "x"), output_axes=("y", "x"), params={"affine": [[0.0, -2.0, 3.0], [0.5, 0.0, -1.0]]}),),
         ),
     ],
     ids=["identity", "translation", "scale", "affine", "sequence", "map_axis", "by_dimension", "by_dimension_affine"],
@@ -1816,12 +1811,21 @@ def test_inverting_a_step_undoes_it(step: coords.AxedStep):
     assert [returned[axis] for axis in step.input_axes] == approx(point, abs=1e-9)
 
 
-@pytest.mark.parametrize("kind", [enums.TransformKindChoices.FIELD.value, enums.TransformKindChoices.UNMAPPABLE.value])
-def test_the_kinds_with_no_inverse_refuse_to_be_inverted(kind: str):
+def test_the_maps_with_no_inverse_refuse_to_be_inverted():
     """Unreachable through the walk -- `is_reverse_traversable` excludes both -- and guarded anyway."""
-    step = coords.AxedStep(kind=kind, params={}, input_axes=("y", "x"), output_axes=("y", "x"))
+    unmappable = coords.AxedStep(kind=enums.TransformKindChoices.UNMAPPABLE.value, params={}, input_axes=("y", "x"), output_axes=("y", "x"))
     with pytest.raises(coords.NonAffineTransformError):
-        coords.invert_step(step)
+        coords.invert_step(unmappable)
+    field = coords.StepField(input_axes=("t",), output_axes=("t",), field=1)
+    timed = coords.AxedStep(
+        kind=enums.TransformKindChoices.BY_DIMENSION.value,
+        params={},
+        input_axes=("t",),
+        output_axes=("t",),
+        parts=(coords.StepPart(kind=enums.PartKind.FIELD.value, input_axes=("t",), output_axes=("t",), params={}, field=field),),
+    )
+    with pytest.raises(coords.NonAffineTransformError):
+        coords.invert_step(timed)
 
 
 def test_a_sequence_composes_its_children_rather_than_its_own_empty_params():
@@ -1874,11 +1878,10 @@ def test_forms_to_matrix_gives_no_row_to_an_axis_the_path_says_nothing_about():
     """
     step = coords.AxedStep(
         kind=enums.TransformKindChoices.BY_DIMENSION.value,
-        params={"scale": [2.0, 2.0]},
+        params={},
         input_axes=("c", "y", "x"),
         output_axes=("t", "z", "y", "x"),
-        acts_on_input=("y", "x"),
-        acts_on_output=("y", "x"),
+        parts=(coords.StepPart(kind="SCALE", input_axes=("y", "x"), output_axes=("y", "x"), params={"scale": [2.0, 2.0]}),),
     )
     forms = coords.compose_forms([step], ["c", "y", "x"])
     matrix, rows = coords.forms_to_matrix(forms, ["t", "z", "y", "x"])
@@ -2014,28 +2017,31 @@ def test_the_same_unit_on_both_sides_changes_nothing():
         assert coords.step_forms(step)["x"].coefficients == approx((1.0,)), units
 
 
-def test_a_by_dimension_converts_the_axes_it_passes_through_and_not_the_ones_it_maps():
+def test_an_identity_part_converts_and_a_scale_part_keeps_the_authors_number():
     """The scope, stated as a test: a pass-through is a unit pair, a stated number is not.
 
-    `z` is not named, so it passes through and its unit pair is the whole of what relates the
-    two sides. `y` and `x` *are* named, and their scale is the author's own statement about
+    `z` passes through as an IDENTITY part, so its unit pair is the whole of what relates the
+    two sides. `y` and `x` are a SCALE part, and their scale is the author's own statement about
     two spaces they already knew the units of -- converting it too would double-count exactly
     the author who folded the factor in correctly, and nothing in the row says which kind of
-    author wrote it.
+    author wrote it. And an axis no part names gets nothing: there is no implicit pass-through.
     """
     step = coords.AxedStep(
         kind=enums.TransformKindChoices.BY_DIMENSION.value,
-        params={"scale": [2.0, 2.0]},
-        input_axes=("z", "y", "x"),
-        output_axes=("z", "y", "x"),
-        input_units=("nanometer", "nanometer", "nanometer"),
-        output_units=("micrometer", "micrometer", "micrometer"),
-        acts_on_input=("y", "x"),
-        acts_on_output=("y", "x"),
+        params={},
+        input_axes=("t", "z", "y", "x"),
+        output_axes=("t", "z", "y", "x"),
+        input_units=("second", "nanometer", "nanometer", "nanometer"),
+        output_units=("second", "micrometer", "micrometer", "micrometer"),
+        parts=(
+            coords.StepPart(kind="IDENTITY", input_axes=("z",), output_axes=("z",), params={}),
+            coords.StepPart(kind="SCALE", input_axes=("y", "x"), output_axes=("y", "x"), params={"scale": [2.0, 2.0]}),
+        ),
     )
     forms = coords.step_forms(step)
-    assert forms["z"].coefficients == approx((0.001, 0.0, 0.0)), "the unnamed axis converts"
-    assert forms["y"].coefficients == approx((0.0, 2.0, 0.0)), "the named axis keeps the author's number"
+    assert forms["z"].coefficients == approx((0.0, 0.001, 0.0, 0.0)), "the IDENTITY part converts"
+    assert forms["y"].coefficients == approx((0.0, 0.0, 2.0, 0.0)), "the SCALE part keeps the author's number"
+    assert "t" not in forms, "no part names t, so the edge says nothing about it"
 
 
 def test_two_units_with_no_conversion_between_them_leave_the_axis_unplaced():

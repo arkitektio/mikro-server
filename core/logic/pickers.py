@@ -24,6 +24,7 @@ from django.db.models import Prefetch, Q
 
 from core import enums, models
 from core.logic import attribute_plans as attribute_plans_logic
+from core.logic import graph as graph_logic
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -175,7 +176,7 @@ def _layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem":
     """The space this layer's ids dereference from: its lens' system, whatever the kind."""
     return layer.lens.coordinate_system
 def assert_edge_not_stranding_a_picker(edge) -> None:
-    """Refuse to delete a FIELD edge that some layer's picker is reaching a table through.
+    """Refuse to delete a key (a dereferencing FIELD edge) that some layer's picker is reaching a table through.
 
     The other way to arrive at a picker naming an unreachable table: leave the table in place
     and remove the crossing. `deleteTableDataset` is refused for the first route, and this is
@@ -186,11 +187,11 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
     rival edge still provides the crossing -- RFC-9 allows rivals, and refusing a delete that
     breaks nothing is its own kind of wrong.
 
-    Only FIELD edges. A derivation or registration edge upstream can strand a picker too, by
+    Only keys. A derivation or registration edge upstream can strand a picker too, by
     disconnecting the fact component the walk crosses; catching that would mean re-walking for
     every layer with a picker on every edge delete, and it is not what this guard claims to do.
     """
-    if edge.kind != enums.TransformKindChoices.FIELD.value:
+    if not graph_logic.is_dereference(edge):
         return
 
     tables = {str(table.pk) for table in edge.output.table_datasets.all()}

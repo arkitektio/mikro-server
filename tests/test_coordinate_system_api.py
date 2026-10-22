@@ -291,7 +291,7 @@ async def test_a_space_someone_else_created_is_not_yours_to_delete(authenticated
 async def test_a_space_in_use_is_refused_rather_than_cascaded_away(bot_context: HttpContext):
     """Each refusal guards a CASCADE that would take something the caller never named."""
     dataset = await seed.create_array_dataset(bot_context, "A", axes=seed.YX_AXES, shapes=[[64, 64]])
-    registration = {"dataset": str(dataset.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}
+    registration = {"dataset": str(dataset.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}
     space = await _create_space(bot_context, "Populated", registrations=[registration])
 
     # An edge registered into it: deleting the space would delete a placement someone authored.

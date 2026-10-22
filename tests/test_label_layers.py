@@ -21,6 +21,7 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
+from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
 
@@ -1013,7 +1014,7 @@ async def test_the_field_edge_a_picker_reaches_through_is_protected(authenticate
     assert not created.errors, created.errors
 
     def field_edges() -> list[models.Transformation]:
-        return list(models.Transformation.objects.filter(kind=enums.TransformKindChoices.FIELD.value).order_by("pk"))
+        return list(models.Transformation.objects.filter(graph_logic.dereference_q()).order_by("pk"))
 
     edges = await sync_to_async(field_edges)()
     assert len(edges) == 1, "createTableDataset(keyedBy:) authored exactly one crossing"

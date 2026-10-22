@@ -54,7 +54,7 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str = "Traced") -
             "input": {
                 "name": name,
                 "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                "derivedFrom": [{"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+                "derivedFrom": [{"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
             }
         },
     )

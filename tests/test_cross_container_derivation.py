@@ -548,7 +548,7 @@ async def test_the_documented_sequences_run_end_to_end(authenticated_context: Ht
                 derivedFrom: [{
                   kind: LENS
                   lens: $lens
-                  transform: {kind: BY_DIMENSION, inputAxes: ["y", "x"], outputAxes: ["y", "x"]}
+                  transform: {kind: BY_DIMENSION, parts: [{kind: IDENTITY, inputAxes: ["y", "x"], outputAxes: ["y", "x"]}]}
                   valueRelation: CATEGORIZED
                 }]
               }) { id intrinsicSystem { id } }
@@ -589,7 +589,7 @@ async def test_the_documented_sequences_run_end_to_end(authenticated_context: Ht
           createTransformation(input: {
             input: $mask
             output: $table
-            transform: {kind: FIELD, field: $mask, inputAxes: ["y", "x"], outputAxes: ["i"]}
+            transform: {kind: BY_DIMENSION, parts: [{kind: FIELD, inputAxes: ["y", "x"], outputAxes: ["i"], field: {system: $mask}}]}
           }) { id }
         }
         """,
@@ -600,7 +600,7 @@ async def test_the_documented_sequences_run_end_to_end(authenticated_context: Ht
     # The doc's reading-it-back claim: from the mask, the stack above and the table below.
     graph = (await _run(LINEAGE, system=mask["intrinsicSystem"]["id"], maxDepth=None))["lineageGraph"]
     assert {n.get("name") for n in graph["nodes"]} == {"raw", "nuclei labels", "nuclei morphology"}
-    assert sorted(e["kind"] for e in graph["edges"]) == ["BY_DIMENSION", "UNMAPPABLE"], "the FIELD edge is payload, not lineage"
+    assert sorted(e["kind"] for e in graph["edges"]) == ["BY_DIMENSION", "UNMAPPABLE"], "the key is payload, not lineage"
 
 
 def test_the_derivation_union_is_published_for_codegen() -> None:

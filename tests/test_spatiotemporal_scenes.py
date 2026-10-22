@@ -235,9 +235,8 @@ async def test_by_dimension_places_a_dataset_of_a_different_rank(authenticated_c
                 "output": world_id,
                 "transform": {
                     "kind": "BY_DIMENSION",
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["y", "x"],
-                    "affine": [[1.0, 0.0, 10.0], [0.0, 1.0, 20.0]],  # 2 rows, 2+1 columns: the named subset
+                    # 2 rows, 2+1 columns: the part's own axes.
+                    "parts": [{"kind": "AFFINE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[1.0, 0.0, 10.0], [0.0, 1.0, 20.0]]}],
                 },
             }
         },
@@ -266,8 +265,7 @@ async def test_by_dimension_must_name_axes_that_exist(authenticated_context: Htt
                 "output": str(world.pk),
                 "transform": {
                     "kind": "BY_DIMENSION",
-                    "inputAxes": ["q"],
-                    "outputAxes": ["y"],
+                    "parts": [{"kind": "IDENTITY", "inputAxes": ["q"], "outputAxes": ["y"]}],
                 },
             }
         },
@@ -557,10 +555,10 @@ async def test_a_time_axis_stays_navigable_under_a_single_channel_lens(authentic
     whole = await seed.create_lens(authenticated_context, dataset, slices=[])
     scene = await seed.create_scene(authenticated_context, "Sc")
     await seed.register_into_scene(authenticated_context, scene, dataset)
-    make = "mutation Make($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id renderAxes { t intensity } } }"
+    make = "mutation Make($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id lens { suggestedRenderAxes { t intensity } } } }"
     both = await schema.execute(make, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(whole.pk)}})
     assert both.errors and "pin one channel" in str(both.errors[0]), "two detectors in one lens is not one channel"
     one = await seed.channel_lens(authenticated_context, whole, 1)
     accepted = await schema.execute(make, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(one.pk)}})
     assert not accepted.errors, accepted.errors
-    assert accepted.data["createIntensityLayer"]["renderAxes"] == {"t": "t", "intensity": "c"}, "time stays the slider; the channel axis, one position wide, is the intensity"
+    assert accepted.data["createIntensityLayer"]["lens"]["suggestedRenderAxes"] == {"t": "t", "intensity": "c"}, "time stays the slider; the channel axis, one position wide, is the intensity"

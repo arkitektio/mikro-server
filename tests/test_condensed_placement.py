@@ -123,7 +123,7 @@ async def test_a_partial_registration_condenses_over_the_axes_it_names(authentic
         authenticated_context,
         intrinsic.pk,
         world.pk,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.5], "translation": [10.0, 20.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[0.5, 0.0, 10.0], [0.0, 0.5, 20.0]]}]},
     )
     await _image_layer(scene, lens)
 
@@ -154,7 +154,7 @@ async def test_strict_refuses_the_partial_map_and_names_the_axes_it_cannot_reach
     scene = await seed.create_scene(authenticated_context, "Composition")
     intrinsic, world = await sync_to_async(lambda: (dataset.intrinsic_coordinate_system, scene.world))()
 
-    await _register(authenticated_context, intrinsic.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]})
+    await _register(authenticated_context, intrinsic.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]})
     await _image_layer(scene, lens)
 
     # Without strict, the same layer answers happily.
@@ -217,7 +217,7 @@ async def test_a_stepped_lens_carries_its_crop_and_its_subsample(authenticated_c
     intrinsic, world, lens_system = await sync_to_async(lambda: (dataset.intrinsic_coordinate_system, scene.world, lens.coordinate_system))()
     assert lens_system.pk != intrinsic.pk, "a stepped lens owns a space of its own, or there is no SEQUENCE to test"
 
-    await _register(authenticated_context, intrinsic.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]})
+    await _register(authenticated_context, intrinsic.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]})
     await _image_layer(scene, lens)
 
     layer = await _layer(authenticated_context, str(scene.pk))
@@ -261,7 +261,7 @@ async def test_a_path_walked_backwards_is_inverted_rather_than_refused(authentic
         authenticated_context,
         world.pk,
         physical.pk,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]}]},
     )
     await _image_layer(scene, lens)
 
@@ -277,13 +277,13 @@ async def test_a_path_walked_backwards_is_inverted_rather_than_refused(authentic
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_field_step_errors_and_names_the_edge(authenticated_context: HttpContext):
-    """A path that exists and does not condense is an error, never a null.
+async def test_a_key_on_the_path_errors_and_names_the_edge(authenticated_context: HttpContext):
+    """A path that exists and does not compose is an error, never a null.
 
     Null already means two things -- unregistered, or unmappable -- and `placement` is what
     tells them apart. Adding a third meaning ("there is a path but I would not compose it")
-    would make the null useless. A FIELD gives its map as the values of an array, so there is
-    no closed form at all, and the error says which edge.
+    would make the null useless. A key gives ids, not positions, so it places nothing, and the
+    error says which edge.
     """
     scene = await seed.create_scene(authenticated_context, "Composition")
     world = await sync_to_async(lambda: scene.world)()
@@ -303,15 +303,15 @@ async def test_a_field_step_errors_and_names_the_edge(authenticated_context: Htt
         authenticated_context,
         mask_system.pk,
         object_system.pk,
-        {"kind": "FIELD", "field": str(mask_system.pk), "inputAxes": ["y", "x"], "outputAxes": ["i"]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}]},
     )
-    await _register(authenticated_context, object_system.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["i"], "outputAxes": ["z"]})
+    await _register(authenticated_context, object_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["i"], "outputAxes": ["z"]}]})
     await _image_layer(scene, lens)
 
     result = await schema.execute(AS_AFFINE, context_value=_fresh_request(authenticated_context), variable_values={"id": str(scene.pk)})
-    assert result.errors, "a FIELD on the path has no closed form, and silence about that would be worse than an error"
+    assert result.errors, "a key on the path places nothing, and silence about that would be worse than an error"
     message = str(result.errors[0])
-    assert f"transformation {field_id} (FIELD)" in message, message
+    assert f"transformation {field_id} (BY_DIMENSION)" in message and "key" in message, message
 
 
 @pytest.mark.django_db(transaction=True)
@@ -341,7 +341,7 @@ async def test_an_unmappable_layer_is_null_too_and_placement_tells_it_apart(auth
         lambda: (source.intrinsic_coordinate_system, derived.intrinsic_coordinate_system, scene.world)
     )()
 
-    await _register(authenticated_context, source_system.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]})
+    await _register(authenticated_context, source_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]})
     await _register(authenticated_context, derived_system.pk, source_system.pk, {"kind": "UNMAPPABLE", "reason": "one row per segmented object"})
     await _image_layer(scene, lens)
 
@@ -375,7 +375,7 @@ async def test_as_affine_condenses_the_very_path_that_path_to_world_reports(auth
         authenticated_context,
         physical.pk,
         world.pk,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, -5.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, -5.0]}]},
     )
     await _image_layer(scene, lens)
 

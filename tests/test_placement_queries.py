@@ -381,8 +381,8 @@ query SceneLenses {
     id
     layers {
       id
-      ... on ImageLayer { renderAxes { x y } lens { id shape axisNames coordinateSystem { id } dataset { id axisNames } slices { axis start stop step } } }
-      ... on IntensityLayer { renderAxes { x y } lens { id shape axisNames coordinateSystem { id } dataset { id axisNames } slices { axis start stop step } } }
+      ... on ImageLayer { lens { id shape axisNames coordinateSystem { id name axes { name type } } dataset { id axisNames } slices { axis start stop step } } }
+      ... on IntensityLayer { lens { id shape axisNames coordinateSystem { id name axes { name type } } dataset { id axisNames } slices { axis start stop step } } }
     }
   }
 }

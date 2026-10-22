@@ -474,7 +474,7 @@ async def test_scene_layers_resolves_imagelayer_polymorphically(db, authenticate
                     id
                     opacity
                     ... on RgbLayer {
-                        renderAxes { x y z intensity }
+                        lens { suggestedRenderAxes { x y z intensity } coordinateSystem { axes { name type } } }
                         redLens { id }
                         greenLens { id }
                         blueLens { id }
@@ -491,11 +491,12 @@ async def test_scene_layers_resolves_imagelayer_polymorphically(db, authenticate
     assert layers[0]["id"] == str(layer_id)
     assert [layers[0]["redLens"]["id"], layers[0]["greenLens"]["id"], layers[0]["blueLens"]["id"]] == [components["redLens"], components["greenLens"], components["blueLens"]]
 
-    # The render axes are derived from the lens' axis types on every read, never stored --
-    # so two layers over one lens cannot disagree about which axis is x. Note that
-    # x is the LAST spatial axis: the old stored rule took the first, and for these
-    # (c, y, x) axes it wrote xDim="y".
-    assert layers[0]["renderAxes"] == {"x": "x", "y": "y", "z": None, "intensity": "c"}
+    # Which axis faces the screen is never stored on the layer: a viewer reads the roles off
+    # the lens' axis TYPES and the spatial slots off the placement. The convention the server
+    # suggests takes x as the LAST spatial axis: the old stored rule took the first, and for
+    # these (c, y, x) axes it wrote xDim="y".
+    assert layers[0]["lens"]["suggestedRenderAxes"] == {"x": "x", "y": "y", "z": None, "intensity": "c"}
+    assert [axis["type"] for axis in layers[0]["lens"]["coordinateSystem"]["axes"]] == ["CHANNEL", "SPACE", "SPACE"]
 
 
 @pytest.mark.django_db(transaction=True)

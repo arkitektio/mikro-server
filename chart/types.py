@@ -16,7 +16,7 @@ from core import types as core_types
 from core.inputs.coords import CoordinateInput, at_map
 from core.render import filter_by as filter_by_models
 from core.render.layer.types import LabelFilterBy
-from core.types.coords import AffinePlacement, PlacementLookup, PlacementStep
+from core.types.coords import AffinePlacement, PlacementField, PlacementStep
 from core.types._shared import DESCRIPTORS_DESCRIPTION, OrgScoped, build_prescoped_queryset, resolve_descriptors
 from core.types.auth import User
 from kanne_server import scalars as kanne_scalars
@@ -118,7 +118,7 @@ class ChartLayer:
             input_axes=condensed.input_axes,
             output_axes=condensed.output_axes,
             total=condensed.total,
-            lookups=[PlacementLookup.from_form(axis, form) for axis, form in condensed.lookups.items()],
+            fields=[PlacementField.from_form(axis, form, condensed.input_axes) for axis, form in condensed.fields.items()],
         )
 
     @kante.django_field(

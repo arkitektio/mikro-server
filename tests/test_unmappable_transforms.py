@@ -313,20 +313,26 @@ async def test_a_displacement_field_is_not_walked_backwards(authenticated_contex
         for index, axis in enumerate(["c", "y", "x"]):
             models.Axis.objects.create(coordinate_system=world, order=index, name=axis, type=enums.AxisTypeChoices.SPACE.value if axis != "c" else enums.AxisTypeChoices.CHANNEL.value)
 
-        # The warp field is a node now, not a store on the edge: its own space, carrying the
+        # The warp field is a node, not a store on the edge: its own space, carrying the
         # DISPLACEMENT value axis that says its numbers are offsets rather than positions.
         field = models.CoordinateSystem.objects.create(name="Warp field", organization=authenticated_context.request.organization)
-        for index, (axis, kind) in enumerate((("y", enums.AxisTypeChoices.SPACE), ("x", enums.AxisTypeChoices.SPACE), ("d", enums.AxisTypeChoices.DISPLACEMENT))):
+        for index, (axis, kind) in enumerate((("d", enums.AxisTypeChoices.DISPLACEMENT), ("y", enums.AxisTypeChoices.SPACE), ("x", enums.AxisTypeChoices.SPACE))):
             models.Axis.objects.create(coordinate_system=field, order=index, name=axis, type=kind.value)
 
         # Authored world -> intrinsic, so reaching world from the data REQUIRES inverting it.
         warp = models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
+            kind=enums.TransformKindChoices.BY_DIMENSION.value,
             input=world,
             output=intrinsic,
-            field=field,
+            input_axes=["c", "y", "x"],
+            output_axes=["c", "y", "x"],
+            parts=[
+                {"kind": "IDENTITY", "input_axes": ["c"], "output_axes": ["c"], "params": {}},
+                {"kind": "FIELD", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"values": "DISPLACEMENT", "spatial": True, "dereference": False}, "field": field.pk},
+            ],
             organization=authenticated_context.request.organization,
         )
+        models.TransformationField.objects.create(transformation=warp, field=field, part=1)
         scale = models.Transformation.objects.create(
             kind=enums.TransformKindChoices.SCALE.value,
             input=intrinsic,
@@ -347,12 +353,12 @@ async def test_a_displacement_field_is_not_walked_backwards(authenticated_contex
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_sequence_is_invertible_only_if_its_children_are(authenticated_context: HttpContext):
-    """A wrapper's kind says nothing about whether it can be undone. Its children do.
+async def test_a_by_dimension_is_invertible_only_if_its_parts_are(authenticated_context: HttpContext):
+    """A wrapper's kind says nothing about whether it can be undone. Its parts do.
 
     A set-membership test on the wrapper's own kind -- the obvious implementation -- would
-    wave this through: SEQUENCE is a perfectly invertible kind, right up until one of its
-    steps is a warp field.
+    wave this through: BY_DIMENSION is a perfectly invertible kind, right up until one of its
+    parts is a field.
     """
     dataset = await seed.create_array_dataset(authenticated_context, "Warped")
 
@@ -362,31 +368,27 @@ async def test_a_sequence_is_invertible_only_if_its_children_are(authenticated_c
         for index, axis in enumerate(["c", "y", "x"]):
             models.Axis.objects.create(coordinate_system=target, order=index, name=axis, type=enums.AxisTypeChoices.SPACE.value if axis != "c" else enums.AxisTypeChoices.CHANNEL.value)
 
-        field = models.CoordinateSystem.objects.create(name="Warp field", organization=authenticated_context.request.organization)
-        models.Axis.objects.create(coordinate_system=field, order=0, name="d", type=enums.AxisTypeChoices.DISPLACEMENT.value)
-
-        scale = {"kind": enums.TransformKindChoices.SCALE.value, "params": {"scale": [1.0, 2.0, 2.0]}}
+        scale = {"kind": "SCALE", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"scale": [2.0, 2.0]}}
         honest = models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.SEQUENCE.value,
+            kind=enums.TransformKindChoices.BY_DIMENSION.value,
             input=intrinsic,
             output=target,
-            steps=[scale, {"kind": enums.TransformKindChoices.TRANSLATION.value, "params": {"translation": [0.0, 1.0, 1.0]}}],
+            parts=[{"kind": "TRANSLATION", "input_axes": ["c"], "output_axes": ["c"], "params": {"translation": [1.0]}}, scale],
             organization=authenticated_context.request.organization,
         )
         warped = models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.SEQUENCE.value,
+            kind=enums.TransformKindChoices.BY_DIMENSION.value,
             input=intrinsic,
             output=target,
-            steps=[scale, {"kind": enums.TransformKindChoices.FIELD.value, "params": {}, "field": field.pk}],
+            parts=[{"kind": "FIELD", "input_axes": ["c"], "output_axes": ["c"], "params": {"values": "SCALAR", "spatial": False, "dereference": False}, "field": "self"}, scale],
             organization=authenticated_context.request.organization,
         )
-
         return honest, warped
 
     honest, warped = await sync_to_async(build)()
 
     assert await sync_to_async(graph_logic.is_reverse_traversable)(honest) is True
-    assert await sync_to_async(graph_logic.is_reverse_traversable)(warped) is False, "a sequence is only as invertible as its least invertible step"
+    assert await sync_to_async(graph_logic.is_reverse_traversable)(warped) is False, "a by-dimension is only as invertible as its least invertible part"
 
 
 @pytest.mark.django_db(transaction=True)

@@ -39,7 +39,6 @@ from core.types.coords import (
     MapAxisTransformation,
     SequenceTransformation,
     ByDimensionTransformation,
-    FieldTransformation,
     transformation_types,
 )
 from core.types.visualization import Visualization
@@ -160,7 +159,6 @@ __all__ = [
     "MapAxisTransformation",
     "SequenceTransformation",
     "ByDimensionTransformation",
-    "FieldTransformation",
     "transformation_types",
     "ArrayDataset",
     "ArrayDatasetStats",

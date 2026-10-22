@@ -96,7 +96,7 @@ def create_coordinate_system(
         )
         graph_logic.create_physical_axes(system, axes)
 
-        for source_system, field, spec in registrations:
+        for source_system, parts, spec in registrations:
             lowered = spec.transform.lower() if spec.transform else IDENTITY_TRANSFORM
             graph_logic.build_registration_edge(
                 input_system=source_system,
@@ -108,9 +108,8 @@ def create_coordinate_system(
                 affine=lowered.affine,
                 input_axes=lowered.input_axes,
                 output_axes=lowered.output_axes,
-                field=field,
+                parts=parts,
                 reason=lowered.reason,
-                lookup=lowered.lookup,
                 validity=spec.validity,
                 ctx=ctx,
             )
@@ -296,11 +295,11 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
     duplicates = sorted({label for index, (_, label, _) in enumerate(sources) if collides(index)})
     if duplicates:
         raise ValueError(f"Each derivedFrom entry must name a distinct source, but {', '.join(duplicates)} appear{'s' if len(duplicates) == 1 else ''} more than once (a container and its whole lens are one source). One entry per source: its transform already says everything about how the data maps back")
-    fields = [get_for_org(models.CoordinateSystem, info, id=low.transform.field) if low.transform.field else None for low in lowered]
+    resolved_parts = [graph_logic.resolve_part_fields(low.transform.parts, lambda id: get_for_org(models.CoordinateSystem, info, id=id)) for low in lowered]
 
     edges: list[models.Transformation] = []
     with transaction.atomic():
-        for low, (source_system, label, annotation), field in zip(lowered, sources, fields):
+        for low, (source_system, label, annotation), parts in zip(lowered, sources, resolved_parts):
             transform = low.transform
             edges.append(
                 graph_logic.write_relation_edge(
@@ -313,9 +312,8 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
                     affine=transform.affine,
                     input_axes=transform.input_axes,
                     output_axes=transform.output_axes,
-                    field=field,
+                    parts=parts,
                     reason=transform.reason,
-                    lookup=transform.lookup,
                     value_relation=low.value_relation,
                     annotation=annotation,
                     ctx=ctx,
@@ -453,7 +451,7 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
                     "The table needs a coordinate the source's ids supply -- an INDEX column of object ids"
                 )
             # One place holds one id, whether it is a pixel or a surface, so one source
-            # supplies one id. `assert_field_produces` refuses this too, but from the
+            # supplies one id. `assert_field_part` refuses this too, but from the
             # field's side -- it reads as though the source were at fault and suggests
             # giving it a value axis, which turns a label mask into a warp field and is not
             # what anyone keying a table wants. The table's second id column is the thing to
@@ -467,15 +465,20 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
                     "or, when the second id is a node of a network collection an object axis already keys, declare it INDEX with a NETWORK_COLLECTION_NODES identification, which scopes it by that axis and again leaves this edge one id"
                 )
 
+            # The key, stated in full: the source's own values give the id (a FIELD part over its
+            # own system -- its pixels are the map), and every axis the two share -- a
+            # timelapse's t -- is a pass-through, stated as an IDENTITY part.
+            shared = [axis for axis in table_axes if axis in source_axes and axis not in identified]
+            parts = [{"kind": enums.PartKind.FIELD.value, "input_axes": consumed, "output_axes": produced, "field": source_system}]
+            if shared:
+                parts.insert(0, {"kind": enums.PartKind.IDENTITY.value, "input_axes": shared, "output_axes": shared})
             edges.append(
                 graph_logic.build_registration_edge(
                     input_system=source_system,
                     output_system=own_system,
-                    kind=enums.TransformKind.FIELD.value,
+                    kind=enums.TransformKind.BY_DIMENSION.value,
                     name=entry.name or f"{label} -> {name}",
-                    input_axes=consumed,
-                    output_axes=produced,
-                    field=source_system,
+                    parts=parts,
                     validity=entry.validity,
                     ctx=ctx,
                 )

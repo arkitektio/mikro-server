@@ -208,8 +208,6 @@ async def test_create_point_layer(db, authenticated_context: HttpContext):
                 __typename
                 blending
                 pointSize
-                xColumn
-                yColumn
                 colormap
                 tableDataset { id }
             }
@@ -225,7 +223,6 @@ async def test_create_point_layer(db, authenticated_context: HttpContext):
     assert data["__typename"] == "PointLayer"
     assert data["blending"] == "NORMAL"
     assert data["pointSize"] == 5.0
-    assert data["xColumn"] == "x", "the coordinate columns come from the dataset's declared schema, never a per-layer binding"
     assert data["colormap"] == "VIRIDIS"
     assert data["tableDataset"]["id"] == str(dataset.id)
 

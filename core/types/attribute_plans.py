@@ -15,7 +15,7 @@ from datalayer.types import FabriksStore, KonnektionStore, ParquetStore, ZarrSto
 
 from core import enums
 from core.types.column_options import ColumnOptionJoinStep
-from core.types.coords import CoordinateSystem, FieldTransformation, PlacementStep
+from core.types.coords import ByDimensionTransformation, CoordinateSystem, PlacementStep
 from core.types.table_dataset import TableDataset, Column
 
 
@@ -158,7 +158,7 @@ class HopVia:
 
 @kante.type(
     description=(
-        "One step of a plan's chain through record-land. `hops[0]` is the landing -- the FIELD edge's own target, bound from `sample` -- and every later hop binds from the rows "
+        "One step of a plan's chain through record-land. `hops[0]` is the landing -- the key's own target, bound from `sample` -- and every later hop binds from the rows "
         "or slice its `parent` returned, under the name `via` states, and lands one declared reference further: a `Column.references`, a matrix axis a table identifies, the "
         "same axis walked into the matrix, or a dense array derived from a table with one of its enumerating axes mapped onto the table's row ids. Nothing hops out of an array. Execute in list order; a hop's parent always precedes it. `cardinality` says whether to bind a scalar or a list. The server describes "
         "the chain and reads nothing; the client runs it hop by hop with grants it already holds"
@@ -199,13 +199,13 @@ class Hop:
 class AttributePlan:
     """A coordinate-free recipe: map along the path, sample the field array, run the hops."""
 
-    edge: FieldTransformation = strawberry.field(description="The FIELD edge this plan was built from. The plan's cache key is this edge's (id, version) together with every `path` step's transformation (id, version): the stores and columns of a table are written once, so a deleted or version-bumped edge -- the FIELD, or any step on the way to it -- is the only thing that can stale what a cached plan already says. What it can *reach* still grows: a matrix or a derived array created later extends the chain without touching any of these edges, so refetch when such data arrives")
+    edge: ByDimensionTransformation = strawberry.field(description="The key this plan was built from: the edge whose dereferencing FIELD part gives the id. The plan's cache key is this edge's (id, version) together with every `path` step's transformation (id, version): the stores and columns of a table are written once, so a deleted or version-bumped edge -- the key, or any step on the way to it -- is the only thing that can stale what a cached plan already says. What it can *reach* still grows: a matrix or a derived array created later extends the chain without touching any of these edges, so refetch when such data arrives")
     path: List[PlacementStep] = strawberry.field(
-        description="The steps from the PROBED system to this plan's root (the FIELD edge's input system -- equal to `sample.system` when the mask's own pixels are the map). Empty when the plan is rooted where you probed. Compose in order, inverting the flagged steps, to map a probed-space point into the space `consumes` and `passthrough` are stated in -- the same contract as `pathToWorld`. The path crosses derivations, levels, lenses and physical spaces, never a registration"
+        description="The steps from the PROBED system to this plan's root (the key's input system -- equal to `sample.system` when the mask's own pixels are the map). Empty when the plan is rooted where you probed. Compose in order, inverting the flagged steps, to map a probed-space point into the space `consumes` and `passthrough` are stated in -- the same contract as `pathToWorld`. The path crosses derivations, levels, lenses and physical spaces, never a registration"
     )
     sample: SampleStep = strawberry.field(description="Where the id comes from: an `ArraySample` to read at the (path-mapped) point, or a `MeshSample`/`NetworkSample` whose id the client already picked")
     hops: List[Hop] = strawberry.field(
-        description="The chain, in execution order. `hops[0]` is the landing: the table or matrix the FIELD edge's id keys, bound from `sample`. Each later hop crosses one declared reference from a parent hop, up to the query's `maxJoinDepth`. A client that only wants the landing reads `hops[0]`"
+        description="The chain, in execution order. `hops[0]` is the landing: the table or matrix the key's id keys, bound from `sample`. Each later hop crosses one declared reference from a parent hop, up to the query's `maxJoinDepth`. A client that only wants the landing reads `hops[0]`"
     )
 
 

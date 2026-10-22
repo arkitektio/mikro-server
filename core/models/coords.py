@@ -244,8 +244,9 @@ class Transformation(Described):
     it is.
 
     **A composite edge is one row.** A SEQUENCE carries its ordered steps in ``steps``
-    (each a ``kind`` and its ``params``, applied first to last) and a BY_DIMENSION
-    carries its map in its own ``params``; neither is a tree of rows. A step is not an
+    (each a ``kind`` and its ``params``, applied first to last) and a BY_DIMENSION its
+    ``parts`` (each a ``kind``, its ``params`` and the axes it maps, side by side, as
+    OME-NGFF's ``byDimension``); neither is a tree of rows. A step is not an
     edge -- it has no endpoints, no identity and no history of its own -- so every row
     of this table joins two systems, and a refinement writes the row a client reads.
 
@@ -257,7 +258,7 @@ class Transformation(Described):
     :func:`core.inputs.coords.assert_nonsingular_matrix` runs on every write, both
     through the input union and through :func:`core.logic.graph.assert_edge_values`,
     so the row cannot exist to be offered. The gap is closed one altitude down; this
-    predicate stays kind-only on purpose. And a FIELD has no closed-form inverse at
+    predicate stays kind-only on purpose. And a FIELD part has no closed-form inverse at
     any rank, which is why kind, and not rank alone, decides.
     """
 
@@ -271,25 +272,37 @@ class Transformation(Described):
     input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps from")
     output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps to")
 
-    # BY_DIMENSION only: which axes this edge acts on, by NAME. RFC-5's
+    # MAP_AXIS and BY_DIMENSION: which axes this edge acts on, by NAME. RFC-5's
     # transformation table says List[str] while its byDimension prose says
     # integer indices into the axes; the two contradict. Names are
-    # self-documenting and survive a reordering, so we use names.
-    input_axes = models.JSONField(null=True, blank=True, help_text="(byDimension) The names of the input axes this edge acts on, e.g. ['z', 'y', 'x']")
-    output_axes = models.JSONField(null=True, blank=True, help_text="(byDimension) The names of the output axes this edge produces")
+    # self-documenting and survive a reordering, so we use names. On a BY_DIMENSION
+    # they are its parts' axes, concatenated in part order: what the edge states.
+    input_axes = models.JSONField(null=True, blank=True, help_text="(MAP_AXIS, BY_DIMENSION) The names of the input axes this edge acts on, e.g. ['z', 'y', 'x']")
+    output_axes = models.JSONField(null=True, blank=True, help_text="(MAP_AXIS, BY_DIMENSION) The names of the output axes this edge produces")
 
     params = models.JSONField(
         default=dict,
-        help_text="The transformation's parameters, keyed by kind: SCALE {'scale': [...]}, TRANSLATION {'translation': [...]}, AFFINE {'affine': [[...], ...]} (M x (N+1), rows outermost), BY_DIMENSION any of 'scale', 'translation', 'affine' over the axes it names (none: the identity on them), UNMAPPABLE {'reason': '...'} (optional, purely descriptive)",
+        help_text="The transformation's parameters, keyed by kind: SCALE {'scale': [...]}, TRANSLATION {'translation': [...]}, AFFINE {'affine': [[...], ...]} (M x (N+1), rows outermost), UNMAPPABLE {'reason': '...'} (optional, purely descriptive). Empty on a BY_DIMENSION, whose maps are its parts",
+    )
+    # BY_DIMENSION only. Each part maps its own input axes onto its own output axes by one
+    # kind -- IDENTITY, SCALE, TRANSLATION, AFFINE, ROTATION, or FIELD, whose map is an
+    # array's values -- and the parts sit side by side, disjoint on both sides. An axis no
+    # part names is one the edge says nothing about: nothing passes through implicitly.
+    parts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "(BY_DIMENSION) The parts, each {'kind', 'input_axes', 'output_axes', 'params'}; a FIELD part also names its array's system "
+            "as 'field' (a pk, or 'self' when the input is its own field) and carries {'unit', 'min', 'max', 'values', 'spatial', 'dereference'} "
+            "in its params. Empty for every other kind"
+        ),
     )
     # SEQUENCE only. The ingest writes a stepped lens and a downsampled pyramid level as a
-    # scale then a translation; nothing nested ever arrives from a client. A step may name a
-    # `field` (a system pk) when its kind is FIELD, which is the one thing a step reads off a
-    # row other than its kind and params.
+    # scale then a translation; nothing nested ever arrives from a client.
     steps = models.JSONField(
         default=list,
         blank=True,
-        help_text="(SEQUENCE) The ordered steps, applied first to last, each {'kind': ..., 'params': {...}} and, for a FIELD step, 'field': the pk of the array's system. Empty for every other kind",
+        help_text="(SEQUENCE) The ordered steps, applied first to last, each {'kind': ..., 'params': {...}}. Empty for every other kind",
     )
 
     # An edge fact, deliberately: it used to be a column on the layer, where two layers
@@ -319,44 +332,26 @@ class Transformation(Described):
         ),
     )
 
-    # FIELD only: the array whose values are the map. A *node*, not a store hanging
-    # off this edge. The array is data before it is a map -- a label mask has its own
-    # lineage, provenance and placement -- and a payload cannot carry any of that. It
-    # also cannot carry axes, which is what once left AxisType.COORDINATE and
-    # AxisType.DISPLACEMENT with nothing to sit on: the fact "my values are offsets" had no
-    # array to attach to. As a node it does, and this edge reads it rather than restating
-    # it -- so both types are live on the read side now (`graph._VALUE_AXIS_TYPES`),
-    # even though no production writer emits one yet. Matches DataArray, which owns a system and reaches its dataset's intrinsic
-    # space through a stored Transformation: arrays are nodes; edges relate their spaces.
-    #
-    # **Null means the input is its own field** -- a label mask, whose pixels are the map
-    # of the space they index. The same shape as a level-0 DataArray owning no system and
-    # an unsliced Lens owning no system: when the answer would be "that one, there", this
-    # codebase stores nothing and lets the definition carry it. It is not only an idiom
-    # here, it is load-bearing. PROTECT is right for a *separate* array -- deleting a warp
-    # field would take a registration nobody named -- but a self-dereference is a fact
-    # ABOUT the mask, which `input`'s CASCADE already removes with it. Written as a real
-    # self-FK, PROTECT would win that race and the mask could never be deleted at all.
-    # Read it through `effective_field`, never directly.
-    field = models.ForeignKey(
-        CoordinateSystem,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="fields_of",
-        help_text="(FIELD) The coordinate system of the array whose values are this map, when that array is a separate one (a warp field). Null when the input is its own field, as for a label mask whose pixels are the map. Its value axis (COORDINATE or DISPLACEMENT) says whether the values are positions or offsets; no value axis means scalar, and scalar means positions",
-    )
+    def field_of(self, part: dict) -> "CoordinateSystem | None":
+        """The array whose values are a FIELD part's map: its linked system, or the input when it is its own.
+
+        The one reader of the self convention: a label mask's pixels are the map of the space
+        they index, so its part names ``'self'`` and no link row exists -- a self-dereference is
+        a fact ABOUT the mask, which ``input``'s CASCADE removes with it, where a PROTECTed link
+        would make the mask undeletable. A separate array (a times array, a warp) is linked
+        through `TransformationField`, PROTECTed, so it cannot be deleted from under the edge.
+        """
+        field = part.get("field")
+        if field is None:
+            return None
+        if field == "self":
+            return self.input
+        return CoordinateSystem.objects.get(pk=field)
 
     @property
-    def effective_field(self) -> "CoordinateSystem | None":
-        """The array whose values are this map: the `field`, or the input when it is its own.
-
-        The one reader of the null-means-self convention above. Everything that resolves a
-        FIELD's map goes through here, so the convention lives in exactly one place.
-        """
-        if self.kind != enums.TransformKindChoices.FIELD.value:
-            return None
-        return self.field or self.input
+    def part_list(self) -> tuple[dict, ...]:
+        """The parts as stored; empty off a BY_DIMENSION."""
+        return tuple(dict(part) for part in self.parts or [])
 
     @property
     def step_pairs(self) -> tuple[tuple[str, dict], ...]:
@@ -438,6 +433,33 @@ class Transformation(Described):
     def __str__(self) -> str:
         """The transformation's kind and endpoints."""
         return f"{self.kind}: {self.input_id} -> {self.output_id}"
+
+
+class TransformationField(models.Model):
+    """One FIELD part's array, linked so it cannot be deleted from under the edge reading it.
+
+    The array is a *node*, not a payload on the edge: data before it is a map -- a times
+    array, a warp field, a label mask -- with its own lineage, provenance and placement, and
+    its axes say what its numbers mean (no value axis: scalar; COORDINATE: positions;
+    DISPLACEMENT: offsets). A part names it by pk in the edge's JSON; this row is what makes
+    that reference a real, PROTECTed one, and what an index can find.
+
+    A self field (a label mask, whose own pixels are the map) has no row: see
+    `Transformation.field_of`.
+    """
+
+    transformation = models.ForeignKey(Transformation, on_delete=models.CASCADE, related_name="field_links", help_text="The edge whose part reads this array")
+    field = models.ForeignKey(CoordinateSystem, on_delete=models.PROTECT, related_name="fields_of", help_text="The coordinate system of the array whose values are the part's map")
+    part = models.PositiveSmallIntegerField(help_text="The index of the part in the edge's `parts` that reads this array")
+
+    class Meta:
+        """Meta options for the link."""
+
+        constraints = [models.UniqueConstraint(fields=["transformation", "part"], name="transformation_field_part_unique")]
+
+    def __str__(self) -> str:
+        """The edge, the part and the array."""
+        return f"{self.transformation_id}[{self.part}] -> {self.field_id}"
 
 
 class MeshCollection(Described):

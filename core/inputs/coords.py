@@ -13,7 +13,7 @@ import dataclasses
 from typing import Annotated, ClassVar, Literal
 
 import strawberry
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import kante
 from kanne_server import scalars as kanne_scalars
@@ -208,7 +208,7 @@ class LoweredTransform:
     ``kind`` is the value string; the rest are exactly the keyword arguments of
     :func:`core.logic.graph.build_registration_edge` and ``write_relation_edge``, so a
     resolver lowers once and passes through. ``field`` stays an unresolved ID: the
-    resolver is the request-scoped place to fetch the system.
+    resolver is the request-scoped place to fetch it (`core.logic.graph.resolve_part_fields`).
     """
 
     kind: str
@@ -217,11 +217,10 @@ class LoweredTransform:
     affine: list[list[float]] | None = None
     input_axes: list[str] | None = None
     output_axes: list[str] | None = None
-    field: str | None = None
     reason: str | None = None
-    #: A BY_DIMENSION's per-axis lookup, as ``{"axis", "output_axis", "unit", "min", "max"}``;
-    #: its array's system is ``field``.
-    lookup: dict | None = None
+    #: A BY_DIMENSION's parts, each ``{"kind", "input_axes", "output_axes"}`` plus its kind's
+    #: parameters; a FIELD part's ``field`` is still an unresolved system ID.
+    parts: list[dict] | None = None
 
 
 IDENTITY_TRANSFORM = LoweredTransform(kind=enums.TransformKind.IDENTITY.value)
@@ -379,97 +378,93 @@ class MapAxisTransformInputModel(BaseModel):
         return LoweredTransform(kind=self.kind, input_axes=self.input_axes, output_axes=self.output_axes)
 
 
-class AxisLookupInputModel(BaseModel):
-    """One axis of a BY_DIMENSION whose output is read from a 1-D array rather than computed.
+class FieldInputModel(BaseModel):
+    """The array a FIELD part reads: its coordinate system, and the unit and declared range of its values.
 
-    ``min`` and ``max`` are the array's first and last values, **declared** by the writer, which
-    also vouches that the values strictly increase: the server never reads array contents, so
-    it records them as facts the way a table's dtypes are recorded.
+    ``min`` and ``max`` are **declared** by the writer, which also vouches for them: the server
+    never reads array contents, so it records them as facts the way a table's dtypes are
+    recorded. A field read along one axis (a lookup) must declare them.
     """
 
-    axis: str
-    output_axis: str | None = None
-    field: str
-    unit: str
-    min: float
-    max: float
+    system: str
+    unit: str | None = None
+    min: float | None = None
+    max: float | None = None
     model_config = ConfigDict(extra="forbid")
 
     @field_validator("max")
     @classmethod
-    def _increasing(cls, value: float, info) -> float:
+    def _increasing(cls, value: float | None, info) -> float | None:
         low = info.data.get("min")
-        if low is not None and not value > low:
-            raise ValueError(f"A lookup's values strictly increase, so its last value ({value}) must be greater than its first ({low})")
+        if value is not None and low is not None and not value > low:
+            raise ValueError(f"A field's values strictly increase, so its last value ({value}) must be greater than its first ({low})")
         return value
 
 
-class ByDimensionTransformInputModel(BaseModel):
-    """A map over a named subset of axes, optionally with parameters over that subset."""
+#: What each part kind reads beside its axes. Every other parameter is a stray, refused.
+_PART_PARAMS: dict[str, tuple[str, ...]] = {
+    "IDENTITY": (),
+    "SCALE": ("scale",),
+    "TRANSLATION": ("translation",),
+    "AFFINE": ("affine",),
+    "ROTATION": ("affine",),
+    "FIELD": ("field",),
+}
 
-    kind: Literal["BY_DIMENSION"] = "BY_DIMENSION"
-    input_axes: list[str] = []
-    output_axes: list[str] = []
+
+class DimensionPartInputModel(BaseModel):
+    """One part of a BY_DIMENSION: its own input axes onto its own output axes, by one kind."""
+
+    kind: Literal["IDENTITY", "SCALE", "TRANSLATION", "AFFINE", "ROTATION", "FIELD"]
+    input_axes: list[str]
+    output_axes: list[str]
     scale: list[float] | None = None
     translation: list[float] | None = None
     affine: list[list[float]] | None = None
-    lookup: AxisLookupInputModel | None = None
+    field: FieldInputModel | None = None
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("scale")
-    @classmethod
-    def _no_collapsed_factors(cls, scale: list[float] | None) -> list[float] | None:
-        if scale is not None:
-            assert_no_collapsed_factors(scale)
-        return scale
+    @model_validator(mode="after")
+    def _reads_its_own(self) -> "DimensionPartInputModel":
+        reads = _PART_PARAMS[self.kind]
+        for name in ("scale", "translation", "affine", "field"):
+            given = getattr(self, name) is not None
+            if given and name not in reads:
+                raise ValueError(f"{_an(self.kind)} part does not read `{name}`: it reads {', '.join(f'`{read}`' for read in reads) or 'nothing beside its axes'}.")
+            if not given and name in reads:
+                raise ValueError(f"{_an(self.kind)} part requires `{name}`")
+        if self.scale is not None:
+            assert_no_collapsed_factors(self.scale, noun="part")
+        if self.affine is not None:
+            assert_no_collapsed_rows(self.affine, noun="part")
+            if len(self.affine) == len(self.affine[0]) - 1:
+                assert_nonsingular_matrix(self.affine, noun="part")
+        if self.kind == "ROTATION" and self.affine is not None:
+            assert_orthonormal(self.affine, noun="part")
+        return self
 
-    @field_validator("affine")
-    @classmethod
-    def _no_collapsed_rows(cls, affine: list[list[float]] | None) -> list[list[float]] | None:
-        if affine is not None:
-            assert_no_collapsed_rows(affine)
-            # The case most worth catching: a BY_DIMENSION maps its named axes one for one,
-            # so its linear part is always square, and a childless one is `is_invertible`
-            # by kind -- meaning a singular one is offered for backwards traversal.
-            assert_nonsingular_matrix(affine)
-        return affine
-
-    def lower(self) -> LoweredTransform:
-        """Flatten to the shape the graph writers take."""
-        return LoweredTransform(
-            kind=self.kind,
-            input_axes=self.input_axes,
-            output_axes=self.output_axes,
-            scale=self.scale,
-            translation=self.translation,
-            affine=self.affine,
-            field=self.lookup.field if self.lookup else None,
-            lookup=(
-                {
-                    "axis": self.lookup.axis,
-                    "output_axis": self.lookup.output_axis or self.lookup.axis,
-                    "unit": self.lookup.unit,
-                    "min": self.lookup.min,
-                    "max": self.lookup.max,
-                }
-                if self.lookup
-                else None
-            ),
-        )
+    def lower(self) -> dict:
+        """The part as the graph writers take it, a FIELD's system still an unresolved ID."""
+        lowered: dict = {"kind": self.kind, "input_axes": self.input_axes, "output_axes": self.output_axes, "scale": self.scale, "translation": self.translation, "affine": self.affine}
+        if self.field is not None:
+            lowered.update(field=self.field.system, unit=self.field.unit, min=self.field.min, max=self.field.max)
+        return lowered
 
 
-class FieldTransformInputModel(BaseModel):
-    """An array-valued map: `field` names the array's coordinate system."""
+def _an(kind: str) -> str:
+    return f"An {kind}" if kind[:1] in "AEIOU" else f"A {kind}"
 
-    kind: Literal["FIELD"] = "FIELD"
-    field: str
-    input_axes: list[str]
-    output_axes: list[str]
+
+class ByDimensionTransformInputModel(BaseModel):
+    """Parts side by side, each mapping its own named axes by one kind; nothing else passes through."""
+
+    kind: Literal["BY_DIMENSION"] = "BY_DIMENSION"
+    parts: list[DimensionPartInputModel]
     model_config = ConfigDict(extra="forbid")
 
     def lower(self) -> LoweredTransform:
         """Flatten to the shape the graph writers take."""
-        return LoweredTransform(kind=self.kind, field=self.field, input_axes=self.input_axes, output_axes=self.output_axes)
+        return LoweredTransform(kind=self.kind, parts=[part.lower() for part in self.parts])
 
 
 class UnmappableTransformInputModel(BaseModel):
@@ -494,7 +489,6 @@ TRANSFORM_MEMBERS: dict[str, type[BaseModel]] = {
     "ROTATION": RotationTransformInputModel,
     "MAP_AXIS": MapAxisTransformInputModel,
     "BY_DIMENSION": ByDimensionTransformInputModel,
-    "FIELD": FieldTransformInputModel,
     "UNMAPPABLE": UnmappableTransformInputModel,
 }
 
@@ -570,23 +564,55 @@ class MapAxisTransformInput:
     output_axes: list[str] = strawberry.field(description="The names of the output axes they map onto, position by position. The matrix is synthesized from the two lists")
 
 
-@strawberry.input(description="One axis of a BY_DIMENSION edge whose output is the value of a 1-D array at the input index: a movie whose frames were taken at uneven instants, a stack with uneven z steps. The array's values strictly increase; between samples the map interpolates linearly, so a pyramid level's fractional index is still a position")
-class AxisLookupInput:
-    """The lookup a BY_DIMENSION edge may carry on one axis."""
+@kante.pydantic_input(
+    FieldInputModel,
+    description=(
+        "The array a FIELD part reads: a times array, a warp field, a label mask whose pixels are the ids of a table's rows. "
+        "The array is read at a fractional position by linear interpolation of its sample centres, so a pyramid level's fractional index is still a position"
+    ),
+)
+class FieldInput:
+    """The array, and the unit and declared range of its values."""
 
-    axis: str = strawberry.field(description="The input axis the lookup reads, e.g. 't'. It is not one of the edge's `inputAxes`: those are the axes its parameters act on")
-    output_axis: str | None = strawberry.field(default=None, description="The output axis the array's values land on. Defaults to `axis`")
-    field: strawberry.ID = strawberry.field(description="The coordinate system of the 1-D array whose values are the map, alone in its system, with one value per position of `axis`")
-    unit: str = strawberry.field(description="The unit of the array's values, e.g. 'second'. Converted into the output axis' unit when read")
-    min: float = strawberry.field(description="The array's first value, declared: the server never reads array contents")
-    max: float = strawberry.field(description="The array's last value, declared. Greater than `min`: the values strictly increase")
+    system: strawberry.ID = strawberry.field(
+        description="The coordinate system of the array whose values are the map, alone in its system. Its value axis says what they mean -- COORDINATE for absolute positions, DISPLACEMENT for offsets, none at all for a scalar array whose one value is a position (a time) or an id (a label). Name the input's own system when the array's pixels are themselves the map, as for a label mask keying a table of objects"
+    )
+    unit: str | None = strawberry.field(default=None, description="The unit of the values, e.g. 'second'. Converted into the output axes' unit when read")
+    min: float | None = strawberry.field(default=None, description="The smallest value, declared: the server never reads array contents. Required for a field read along one axis")
+    max: float | None = strawberry.field(default=None, description="The largest value, declared. Greater than `min`")
 
 
-def _lookup_data(lookup: "AxisLookupInput | None") -> dict | None:
-    """The flat wire lookup as the dict its pydantic member validates."""
-    if lookup is None:
-        return None
-    data = {"axis": lookup.axis, "output_axis": lookup.output_axis, "field": lookup.field, "unit": lookup.unit, "min": lookup.min, "max": lookup.max}
+@kante.pydantic_input(
+    DimensionPartInputModel,
+    description="One part of a BY_DIMENSION: its own input axes onto its own output axes, by one kind. Each kind reads only its own field beside the axes -- `scale`, `translation`, `affine` or `field` -- and refuses any other",
+)
+class DimensionPartInput:
+    """One part of a BY_DIMENSION."""
+
+    kind: enums.PartKind = strawberry.field(description="How this part maps its axes, which fixes which field beside them it reads")
+    input_axes: list[str] = strawberry.field(description="The input axes this part maps, e.g. ['y', 'x']; for a FIELD, the axes its array is read along, in the array's own order")
+    output_axes: list[str] = strawberry.field(description="The output axes they map onto, position by position; for a FIELD, the axes its values give, in value-axis order")
+    scale: list[float] | None = strawberry.field(default=None, description="(SCALE) One factor per input axis of the part")
+    translation: list[float] | None = strawberry.field(default=None, description="(TRANSLATION) One offset per input axis of the part")
+    affine: list[list[float]] | None = strawberry.field(default=None, description="(AFFINE, ROTATION) One row per output axis of the part, one column per input axis plus the offset")
+    field: FieldInput | None = strawberry.field(default=None, description="(FIELD) The array whose values are the map")
+
+
+def _part_data(part: "DimensionPartInput") -> dict:
+    """The flat wire part as the dict its pydantic model validates."""
+    data = {
+        "kind": getattr(part.kind, "value", part.kind),
+        "input_axes": part.input_axes,
+        "output_axes": part.output_axes,
+        "scale": part.scale,
+        "translation": part.translation,
+        "affine": part.affine,
+        "field": (
+            {key: value for key, value in {"system": part.field.system, "unit": part.field.unit, "min": part.field.min, "max": part.field.max}.items() if value is not None}
+            if part.field is not None
+            else None
+        ),
+    }
     return {key: value for key, value in data.items() if value is not None}
 
 
@@ -599,28 +625,9 @@ class ByDimensionTransformInput:
     """The BY_DIMENSION member of the transform input union."""
 
     kind: enums.CreatableTransformKind = strawberry.field(description="The discriminator: which member of TransformInput this is")
-    input_axes: list[str] = strawberry.field(description="The names of the input axes this edge acts on, e.g. ['y', 'x'] for a (c,y,x) dataset placed into a (t,z,y,x) world. The axes it does not name it says nothing about")
-    output_axes: list[str] = strawberry.field(description="The names of the output axes they map onto")
-    scale: list[float] | None = strawberry.field(default=None, description="Optional per-axis scale factors over the named axes, in the order they are named")
-    translation: list[float] | None = strawberry.field(default=None, description="Optional per-axis offsets over the named axes")
-    affine: list[list[float]] | None = strawberry.field(default=None, description="Optional matrix over the named axes, M x (N+1), rows outermost")
-    lookup: AxisLookupInput | None = strawberry.field(default=None, description="Optional: one further axis whose output is read from a 1-D array's values rather than computed, e.g. the instants an event-triggered movie's frames were taken at")
-
-
-@kante.pydantic_input(
-    FieldTransformInputModel,
-    directives=union_memberships("TransformInput", key="FIELD"),
-    description="The fields a FIELD member of TransformInput reads. Published for codegen; the wire type is the flat TransformInput",
-)
-class FieldTransformInput:
-    """The FIELD member of the transform input union."""
-
-    kind: enums.CreatableTransformKind = strawberry.field(description="The discriminator: which member of TransformInput this is")
-    field: strawberry.ID = strawberry.field(
-        description="The coordinate system of the array whose values are the map. Its value axis says what they mean -- COORDINATE for absolute positions, DISPLACEMENT for offsets, none at all for a scalar array whose one value is a position. Pass the input's own system when the array's pixels are themselves the map, as for a label mask keying a table of objects. A FIELD has no closed-form inverse, so a placement path only ever walks it forwards"
+    parts: list[DimensionPartInput] = strawberry.field(
+        description="The parts, side by side, each mapping its own axes by one kind -- e.g. a SCALE on ['y', 'x'] and a FIELD on ['t'] reading the instants each frame was taken at. Disjoint on both sides: an axis has one map. An axis no part names is one the edge says nothing about; a pass-through is stated, as an IDENTITY part"
     )
-    input_axes: list[str] = strawberry.field(description="The input axes the lookup consumes, e.g. ['y', 'x'] for a label mask -- the ones it does not name pass through")
-    output_axes: list[str] = strawberry.field(description="The output axes the field's values produce, e.g. ['i']")
 
 
 @kante.pydantic_input(
@@ -645,7 +652,6 @@ transform_union_types: list[type] = [
     RotationTransformInput,
     MapAxisTransformInput,
     ByDimensionTransformInput,
-    FieldTransformInput,
     UnmappableTransformInput,
 ]
 
@@ -662,7 +668,6 @@ TransformSpec = Annotated[
     | RotationTransformInputModel
     | MapAxisTransformInputModel
     | ByDimensionTransformInputModel
-    | FieldTransformInputModel
     | UnmappableTransformInputModel,
     Field(discriminator="kind"),
 ]
@@ -679,26 +684,24 @@ class TransformInput:
     """
 
     kind: enums.CreatableTransformKind = strawberry.field(description="The kind of transformation, which fixes which of the fields below are read. Any field outside the chosen kind's member is rejected")
-    scale: list[float] | None = strawberry.field(default=None, description="(SCALE, BY_DIMENSION) The per-axis scale factors")
-    translation: list[float] | None = strawberry.field(default=None, description="(TRANSLATION, BY_DIMENSION) The per-axis offsets")
-    affine: list[list[float]] | None = strawberry.field(default=None, description="(AFFINE, ROTATION, BY_DIMENSION) The matrix, M x (N+1), rows outermost")
-    input_axes: list[str] | None = strawberry.field(default=None, description="(MAP_AXIS, BY_DIMENSION, FIELD) The names of the input axes the edge acts on")
-    output_axes: list[str] | None = strawberry.field(default=None, description="(MAP_AXIS, BY_DIMENSION, FIELD) The names of the output axes they map onto")
-    field: strawberry.ID | None = strawberry.field(default=None, description="(FIELD) The coordinate system of the array whose values are the map")
+    scale: list[float] | None = strawberry.field(default=None, description="(SCALE) The per-axis scale factors")
+    translation: list[float] | None = strawberry.field(default=None, description="(TRANSLATION) The per-axis offsets")
+    affine: list[list[float]] | None = strawberry.field(default=None, description="(AFFINE, ROTATION) The matrix, M x (N+1), rows outermost")
+    input_axes: list[str] | None = strawberry.field(default=None, description="(MAP_AXIS) The names of the input axes the edge permutes")
+    output_axes: list[str] | None = strawberry.field(default=None, description="(MAP_AXIS) The names of the output axes they map onto")
+    parts: list[DimensionPartInput] | None = strawberry.field(default=None, description="(BY_DIMENSION) The parts, side by side, each mapping its own axes by one kind")
     reason: str | None = strawberry.field(default=None, description="(UNMAPPABLE) Why nothing corresponds. Purely descriptive")
-    lookup: AxisLookupInput | None = strawberry.field(default=None, description="(BY_DIMENSION) One further axis read from a 1-D array's values rather than computed")
 
     def to_pydantic(self) -> BaseModel:
         """Match the flat wire fields to the member model `kind` selects, strictly."""
         supplied = {
-            "lookup": _lookup_data(self.lookup),
+            "parts": [_part_data(part) for part in self.parts] if self.parts is not None else None,
             "kind": self.kind,
             "scale": self.scale,
             "translation": self.translation,
             "affine": self.affine,
             "input_axes": self.input_axes,
             "output_axes": self.output_axes,
-            "field": self.field,
             "reason": self.reason,
         }
         data = {name: value for name, value in supplied.items() if value is not None}

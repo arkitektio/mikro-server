@@ -39,6 +39,7 @@ from .coords import (
     CoordinateSystem,
     Axis,
     Transformation,
+    TransformationField,
     MeshCollection,
     NetworkCollection,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "CoordinateSystem",
     "Axis",
     "Transformation",
+    "TransformationField",
     "MeshCollection",
     "NetworkCollection",
     # table dataset

@@ -1,16 +1,16 @@
-"""A FIELD edge: a map given by the values of an array, where the array is a node.
+"""A FIELD part: a map given by the values of an array, where the array is a node.
 
 The label-mask case is the point. Segment a channel and you get a mask whose pixel values
 are object ids; measure the objects and you get a table whose `i` column holds those same
 ids. The correspondence is total and exact -- pixel value 7 IS row i=7 -- and it is not
 geometric, so before this it could only be written UNMAPPABLE, which says the opposite.
 
-The load-bearing tests here are the dereference one (a mask keys a table through an edge
-whose `field` is the mask's own system), the rank one (a FIELD's consumed/produced axes must
-account for the endpoints exactly, which is what makes the map checkable rather than
-conventional), the refusal ones (no metric kind over an index space; no scalar field
-claiming to produce two axes), and the inversion one (a FIELD never walks backwards, because
-an object is a set of pixels and the reverse would ask for a point where there is a set).
+The load-bearing tests here are the dereference one (a mask keys a table through a FIELD part
+whose array is the mask's own system), the accounting one (a key must account for every axis
+of what it keys, by a part -- an IDENTITY part for a passed-through `t` -- or by the target's
+own identification), the refusal ones (no metric kind over an index space; no scalar field
+claiming to produce two axes), and the inversion one (a FIELD part never walks backwards,
+because an object is a set of pixels and the reverse would ask for a point where there is a set).
 """
 
 from unittest.mock import patch
@@ -31,7 +31,7 @@ mutation Create($input: CreateTransformationInput!) {
     kind
     input { id }
     output { id }
-    ... on FieldTransformation { field { id name axes { name type } } }
+    ... on ByDimensionTransformation { parts { kind inputAxes outputAxes field { dereference field { id name axes { name type } } } } }
   }
 }
 """
@@ -129,7 +129,7 @@ async def test_an_index_coordinate_column_refuses_a_unit(authenticated_context: 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_mask_dereferences_into_a_table_of_objects(authenticated_context: HttpContext):
-    """The label mask IS the map: a FIELD whose `field` is the input's own system.
+    """The label mask IS the map: a FIELD part whose array is the input's own system.
 
     (y,x) is consumed, `i` is produced by the value at each pixel, and nothing passes through.
     This is the edge that used to be UNMAPPABLE -- lineage kept, map lost.
@@ -146,10 +146,8 @@ async def test_a_mask_dereferences_into_a_table_of_objects(authenticated_context
                 "input": str(mask_system.pk),
                 "output": table["coordinateSystem"]["id"],
                 "transform": {
-                    "kind": "FIELD",
-                    "field": str(mask_system.pk),
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["i"],
+                    "kind": "BY_DIMENSION",
+                    "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}],
                 },
             }
         },
@@ -157,8 +155,10 @@ async def test_a_mask_dereferences_into_a_table_of_objects(authenticated_context
     assert not result.errors, result.errors
 
     edge = result.data["createTransformation"]
-    assert edge["kind"] == "FIELD"
-    assert edge["field"]["id"] == edge["input"]["id"], "a mask's own pixels are the map: field == input"
+    assert edge["kind"] == "BY_DIMENSION"
+    (part,) = edge["parts"]
+    assert part["kind"] == "FIELD" and part["field"]["dereference"] is True, "ids land on an INDEX axis: a key"
+    assert part["field"]["field"]["id"] == edge["input"]["id"], "a mask's own pixels are the map: field == input"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -176,12 +176,12 @@ async def test_a_field_is_never_walked_backwards(authenticated_context: HttpCont
 
     def build() -> models.Transformation:
         return models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
+            kind=enums.TransformKindChoices.BY_DIMENSION.value,
             input=mask_system,
             output=models.CoordinateSystem.objects.get(pk=table["coordinateSystem"]["id"]),
-            field=mask_system,
             input_axes=["y", "x"],
             output_axes=["i"],
+            parts=[{"kind": "FIELD", "input_axes": ["y", "x"], "output_axes": ["i"], "params": {"values": "SCALAR", "spatial": False, "dereference": True}, "field": "self"}],
             organization=authenticated_context.request.organization,
         )
 
@@ -193,14 +193,12 @@ async def test_a_field_is_never_walked_backwards(authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_field_edge_must_account_for_its_endpoints(authenticated_context: HttpContext):
-    """output == (input - consumed) + produced. The axes it does not consume pass through.
+async def test_a_key_must_account_for_every_axis_it_keys(authenticated_context: HttpContext):
+    """A per-frame table (t, i) keyed by a timelapse mask (t, y, x): the key states `t`, or it is refused.
 
-    A timelapse mask (t,y,x) consuming (y,x) and producing `i` implies (t,i) -- `t` survives
-    because the edge did not name it. Claiming to produce into a bare (i) is then a rank
-    change nothing else would catch: a FIELD has no parameters for `assert_edge_rank` to
-    measure, so without this branch the edge is written and the missing `t` is discovered
-    by whoever reads it.
+    Nothing passes through implicitly, so a key giving only `i` says nothing about which frame's
+    row it keys -- the edge is written and the missing `t` is discovered by whoever reads it,
+    unless refused here. With `t` stated as an IDENTITY part it accounts for the whole table.
     """
     mask = await seed.create_array_dataset(
         authenticated_context,
@@ -208,27 +206,30 @@ async def test_a_field_edge_must_account_for_its_endpoints(authenticated_context
         axes=[seed.axis("t", enums.AxisType.TIME), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
         shapes=[[10, 64, 64]],
     )
-    table = await _objects_table(authenticated_context)  # space is (i) alone
-    mask_system = await sync_to_async(lambda: mask.intrinsic_coordinate_system)()
-
-    result = await schema.execute(
-        CREATE_TRANSFORM,
+    store = await _parquet(authenticated_context, "per-frame", [("t", "BIGINT"), ("i", "BIGINT")])
+    created = await schema.execute(
+        CREATE_TABLE,
         context_value=authenticated_context,
-        variable_values={
-            "input": {
-                "input": str(mask_system.pk),
-                "output": table["coordinateSystem"]["id"],
-                "transform": {
-                    "kind": "FIELD",
-                    "field": str(mask_system.pk),
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["i"],
-                },
-            }
-        },
+        variable_values={"input": {"name": "per frame", "data": str(store.pk), "columns": [{"name": "t", "dtype": "BIGINT", "axisType": "TIME"}, {"name": "i", "dtype": "BIGINT", "axisType": "INDEX"}]}},
     )
-    assert result.errors, "(t,y,x) consuming (y,x) implies (t,i), not (i): the unconsumed t passes through"
-    assert "pass through by name" in str(result.errors[0])
+    assert not created.errors, created.errors
+    table = created.data["createTableDataset"]
+    mask_system = await sync_to_async(lambda: mask.intrinsic_coordinate_system)()
+    key = {"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}
+
+    async def create(parts: list[dict]):
+        return await schema.execute(
+            CREATE_TRANSFORM,
+            context_value=authenticated_context,
+            variable_values={"input": {"input": str(mask_system.pk), "output": table["coordinateSystem"]["id"], "transform": {"kind": "BY_DIMENSION", "parts": parts}}},
+        )
+
+    refused = await create([key])
+    assert refused.errors, "the key gives i and says nothing about t, which the table is keyed by"
+    assert "Name every axis it keys by" in str(refused.errors[0])
+
+    accepted = await create([{"kind": "IDENTITY", "inputAxes": ["t"], "outputAxes": ["t"]}, key])
+    assert not accepted.errors, accepted.errors
 
 
 @pytest.mark.django_db(transaction=True)
@@ -259,10 +260,8 @@ async def test_a_scalar_field_produces_exactly_one_axis(authenticated_context: H
                 "input": str(mask_system.pk),
                 "output": str(two_axis.pk),
                 "transform": {
-                    "kind": "FIELD",
-                    "field": str(mask_system.pk),
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["i", "j"],
+                    "kind": "BY_DIMENSION",
+                    "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i", "j"], "field": {"system": str(mask_system.pk)}}],
                 },
             }
         },
@@ -313,16 +312,12 @@ async def test_a_field_requires_its_array_and_other_kinds_refuse_one(authenticat
             "input": {
                 "input": str(mask_system.pk),
                 "output": table["coordinateSystem"]["id"],
-                "transform": {
-                    "kind": "FIELD",
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["i"],
-                },
+                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"]}]},
             }
         },
     )
-    assert missing.errors, "a FIELD without its array is an edge with no map"
-    assert "requires `field`" in str(missing.errors[0])
+    assert missing.errors, "a FIELD part without its array is a part with no map"
+    assert "A FIELD part requires `field`" in str(missing.errors[0])
 
     # And the converse: a kind whose map is a formula has no business carrying an array.
     spurious = await schema.execute(
@@ -332,12 +327,12 @@ async def test_a_field_requires_its_array_and_other_kinds_refuse_one(authenticat
             "input": {
                 "input": str(mask_system.pk),
                 "output": str(mask_system.pk),
-                "transform": {"kind": "IDENTITY", "field": str(mask_system.pk)},
+                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y"], "outputAxes": ["y"], "field": {"system": str(mask_system.pk)}}]},
             }
         },
     )
-    assert spurious.errors, "an IDENTITY's map is in its parameters, not in an array"
-    assert "does not read `field`" in str(spurious.errors[0])
+    assert spurious.errors, "an IDENTITY part's map is no array"
+    assert "An IDENTITY part does not read `field`" in str(spurious.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
@@ -380,18 +375,18 @@ async def test_a_composite_key_orders_time_before_index(authenticated_context: H
 async def test_dereferencing_a_mask_does_not_pin_it_forever(authenticated_context: HttpContext):
     """Keying a table off a mask must not make the mask undeletable.
 
-    `field` is PROTECT, which is right for a *separate* array: deleting a warp field would
-    take a registration nobody named. But a self-dereference is a fact ABOUT the mask, and
-    `input`'s CASCADE already removes it. Written as a real self-FK, PROTECT wins that race
-    and the headline feature silently makes its own subject permanent.
+    A FIELD part's array is linked PROTECT, which is right for a *separate* array: deleting a
+    warp field would take a registration nobody named. But a self-dereference is a fact ABOUT
+    the mask, and `input`'s CASCADE already removes it. Linked as a real self-reference,
+    PROTECT wins that race and the headline feature silently makes its own subject permanent.
 
     Under residence the CASCADE lives one level down: deleting the mask *dataset* no longer
     removes its space, so the sequence is "the data moves out, then the space goes" -- and
     the edge goes with the space, because `Transformation.input` still cascades.
 
-    ABLATION: store `field=input_system` instead of null in `build_registration_edge` and
-    deleting the space raises ProtectedError on its own field FK -- the self-PROTECT
-    deadlock the null-means-self convention exists to avoid.
+    ABLATION: link a self field in `assert_parts` instead of storing `"self"` and deleting the
+    space raises ProtectedError on its own link -- the self-PROTECT deadlock the convention
+    exists to avoid.
     """
     mask = await seed.create_array_dataset(authenticated_context, "labels", axes=seed.YX_AXES, shapes=[[64, 64]])
     table = await _objects_table(authenticated_context)
@@ -405,10 +400,8 @@ async def test_dereferencing_a_mask_does_not_pin_it_forever(authenticated_contex
                 "input": str(mask_system.pk),
                 "output": table["coordinateSystem"]["id"],
                 "transform": {
-                    "kind": "FIELD",
-                    "field": str(mask_system.pk),
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["i"],
+                    "kind": "BY_DIMENSION",
+                    "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}],
                 },
             }
         },
@@ -416,11 +409,12 @@ async def test_dereferencing_a_mask_does_not_pin_it_forever(authenticated_contex
     assert not result.errors, result.errors
     edge_id = result.data["createTransformation"]["id"]
 
-    # Stored as null -- the input is its own field, by definition...
+    # Stored as "self" with no link -- the input is its own field, by definition...
     stored = await sync_to_async(lambda: models.Transformation.objects.get(pk=edge_id))()
-    assert stored.field_id is None, "a self-dereference owns no field FK, exactly as a level-0 DataArray owns no system"
+    assert stored.parts[0]["field"] == "self", "a self-dereference links nothing, exactly as a level-0 DataArray owns no system"
+    assert not await sync_to_async(stored.field_links.exists)()
     # ...and read back as the input, so the client never sees the convention.
-    assert await sync_to_async(lambda: stored.effective_field.pk)() == mask_system.pk
+    assert await sync_to_async(lambda: stored.field_of(stored.parts[0]).pk)() == mask_system.pk
 
     # The dataset moves out first: its space is PROTECTed while it lives there.
     await sync_to_async(mask.delete)()
@@ -446,15 +440,16 @@ async def test_a_separate_field_array_is_protected_from_deletion(authenticated_c
         atlas = models.CoordinateSystem.objects.create(name="Atlas", organization=authenticated_context.request.organization)
         for index, name in enumerate(["y", "x"]):
             models.Axis.objects.create(coordinate_system=atlas, order=index, name=name, type=enums.AxisTypeChoices.SPACE.value)
-        models.Transformation.objects.create(
-            kind=enums.TransformKindChoices.FIELD.value,
+        edge = models.Transformation.objects.create(
+            kind=enums.TransformKindChoices.BY_DIMENSION.value,
             input=atlas,
             output=warped_system,
-            field=warp_system,
             input_axes=["y", "x"],
             output_axes=["y", "x"],
+            parts=[{"kind": "FIELD", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"values": "SCALAR", "spatial": True, "dereference": False}, "field": warp_system.pk}],
             organization=authenticated_context.request.organization,
         )
+        models.TransformationField.objects.create(transformation=edge, field=warp_system, part=0)
 
     await sync_to_async(build)()
 
@@ -464,7 +459,7 @@ async def test_a_separate_field_array_is_protected_from_deletion(authenticated_c
     # would leave a registration claiming a map it cannot produce. The dataset may move out
     # (residence, RFC-9); the frame its values were expressed in may not go with it.
     await sync_to_async(warp.delete)()
-    with pytest.raises(ProtectedError):
+    with pytest.raises(ProtectedError, match="TransformationField.field"):
         await sync_to_async(warp_system.delete)()
 
 
@@ -540,7 +535,7 @@ async def test_the_documented_sequence_runs_end_to_end(authenticated_context: Ht
                     "data": str(mask_store.id),
                     "scales": [],
                     "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                    "derivedFrom": [{"kind": "LENS", "lens": lens.data["createLens"]["id"], "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}, "valueRelation": "CATEGORIZED"}],
+                    "derivedFrom": [{"kind": "LENS", "lens": lens.data["createLens"]["id"], "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}, "valueRelation": "CATEGORIZED"}],
                 }
             },
         )
@@ -560,10 +555,8 @@ async def test_the_documented_sequence_runs_end_to_end(authenticated_context: Ht
                 "input": mask_system,
                 "output": table["coordinateSystem"]["id"],
                 "transform": {
-                    "kind": "FIELD",
-                    "field": mask_system,
-                    "inputAxes": ["y", "x"],
-                    "outputAxes": ["i"],
+                    "kind": "BY_DIMENSION",
+                    "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": mask_system}}],
                 },
                 "validity": "VALIDATED",
                 "name": "nuclei labels -> morphology",
@@ -571,4 +564,4 @@ async def test_the_documented_sequence_runs_end_to_end(authenticated_context: Ht
         },
     )
     assert not edge.errors, edge.errors
-    assert edge.data["createTransformation"]["field"]["id"] == mask_system
+    assert edge.data["createTransformation"]["parts"][0]["field"]["field"]["id"] == mask_system

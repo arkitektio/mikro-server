@@ -431,7 +431,7 @@ class Transformation(OrgScoped):
     # meant to spare the client).
     @kante.django_field(
         prefetch_related=["input__axes", "output__axes"],
-        description="The names of the input axes this edge's parameters are ordered by. `scale`, `translation` and the columns of `affine` follow this order -- which is the input system's axis order, NOT the reading layer's axis names, and the two differ often enough that indexing the arrays against them silently misplaces them. A BY_DIMENSION edge names only the subset of axes it acts on; the axes it does not name are the ones it leaves untouched",
+        description="The names of the input axes this edge's parameters are ordered by. `scale`, `translation` and the columns of `affine` follow this order -- which is the input system's axis order, NOT the reading layer's axis names, and the two differ often enough that indexing the arrays against them silently misplaces them. A BY_DIMENSION's are its parts' input axes, in part order; an axis it does not name is one it says nothing about",
     )
     def input_axes(self, info: Info) -> List[str]:
         """The axis order this edge's parameters are written in, on the input side."""
@@ -439,7 +439,7 @@ class Transformation(OrgScoped):
 
     @kante.django_field(
         prefetch_related=["input__axes", "output__axes"],
-        description="The names of the output axes this edge produces. For a rank-changing BY_DIMENSION edge (placing a (c,y,x) dataset into a (t,z,y,x) world) this is the subset it maps onto; the world's other axes are untouched",
+        description="The names of the output axes this edge produces. A BY_DIMENSION's are its parts' output axes, in part order: placing a (c,y,x) dataset into a (t,z,y,x) world names y and x, and says nothing about t and z",
     )
     def output_axes(self, info: Info) -> List[str]:
         """The axis order this edge's parameters are written in, on the output side."""
@@ -598,13 +598,10 @@ class TransformationStep:
     translation: List[float] = strawberry.field(description="(TRANSLATION) The per-axis offsets, in the axis order of the sequence's input; empty on any other kind")
     affine: List[List[float]] = strawberry.field(description="(AFFINE / ROTATION) The matrix, M x (N+1), rows outermost; empty on any other kind")
     reason: str | None = strawberry.field(description="(UNMAPPABLE) Why nothing corresponds, if the author said")
-    field: "CoordinateSystem | None" = strawberry.field(description="(FIELD) The coordinate system of the array whose values are this step's map")
 
     @classmethod
     def from_steps(cls, steps: list[dict], info: Info) -> list["TransformationStep"]:
-        """The stored steps (`Transformation.steps`) as this type, their fields read once and scoped as any system read is."""
-        field_ids = [step["field"] for step in steps if step.get("field") is not None]
-        systems = {system.pk: system for system in build_prescoped_queryset(info, models.CoordinateSystem.objects.filter(pk__in=field_ids))} if field_ids else {}
+        """The stored steps (`Transformation.steps`) as this type."""
         return [
             cls(
                 kind=enums.TransformKind(step["kind"]),
@@ -612,7 +609,6 @@ class TransformationStep:
                 translation=(step.get("params") or {}).get("translation") or [],
                 affine=(step.get("params") or {}).get("affine") or [],
                 reason=(step.get("params") or {}).get("reason"),
-                field=systems.get(step.get("field")),
             )
             for step in steps
         ]
@@ -638,18 +634,85 @@ class SequenceTransformation(Transformation):
         return TransformationStep.from_steps(self.steps or [], info)
 
 
+@strawberry.type(
+    description=(
+        "The array a FIELD part reads, as its writer declared it. `values` says what the numbers are -- SCALAR (one value: a time, an id), COORDINATE (positions) or "
+        "DISPLACEMENT (offsets) -- `spatial` whether it gives a SPACE axis (it bends straight lines, so drawing it needs the field evaluated), and `dereference` whether "
+        "its values are ids keying the rows of a table rather than positions"
+    )
+)
+class FieldPart:
+    """A FIELD part's array and what its values are."""
+
+    field: "CoordinateSystem" = strawberry.field(description="The coordinate system of the array whose values are the map. Equal to the edge's `input` when the array's own pixels are the map, as for a label mask")
+    unit: str | None = strawberry.field(description="The unit of the values, when stated; they are converted into the output axes' unit when read")
+    min: float | None = strawberry.field(description="The smallest value, as declared by the writer")
+    max: float | None = strawberry.field(description="The largest value, as declared by the writer")
+    values: str = strawberry.field(description="What the numbers are: SCALAR, COORDINATE or DISPLACEMENT")
+    spatial: bool = strawberry.field(description="Whether it gives a SPACE axis: no matrix states such a map")
+    dereference: bool = strawberry.field(description="Whether its values are ids keying the rows of a table, so it places nothing")
+
+
+@strawberry.type(description="One part of a BY_DIMENSION: its own input axes onto its own output axes, by one kind. Each kind fills only its own field: `scale`, `translation`, `affine`, or `field` for a FIELD")
+class TransformationPart:
+    """One BY_DIMENSION part, as stored."""
+
+    kind: enums.PartKind = strawberry.field(description="How this part maps its axes")
+    input_axes: List[str] = strawberry.field(description="The input axes this part maps; for a FIELD, the axes its array is read along, in the array's own order")
+    output_axes: List[str] = strawberry.field(description="The output axes they map onto; for a FIELD, the axes its values give, in value-axis order")
+    scale: List[float] = strawberry.field(description="(SCALE) One factor per input axis of the part; empty on any other kind")
+    translation: List[float] = strawberry.field(description="(TRANSLATION) One offset per input axis of the part; empty on any other kind")
+    affine: List[List[float]] = strawberry.field(description="(AFFINE, ROTATION) One row per output axis, one column per input axis plus the offset; empty on any other kind")
+    field: FieldPart | None = strawberry.field(description="(FIELD) The array whose values are the map; null on any other kind")
+
+    @classmethod
+    def from_edge(cls, edge, info: Info) -> List["TransformationPart"]:  # noqa: ANN001 - models.Transformation
+        """The stored parts as this type, their arrays read once and scoped as any system read is."""
+        ids = [part["field"] for part in edge.parts or [] if part.get("field") not in (None, "self")]
+        systems = {system.pk: system for system in build_prescoped_queryset(info, models.CoordinateSystem.objects.filter(pk__in=ids))} if ids else {}
+        parts = []
+        for part in edge.parts or []:
+            params = part.get("params") or {}
+            field = None
+            if part.get("kind") == enums.PartKind.FIELD.value:
+                system = edge.input if part.get("field") == "self" else systems.get(part.get("field"))
+                if system is not None:
+                    field = FieldPart(
+                        field=system,
+                        unit=params.get("unit"),
+                        min=params.get("min"),
+                        max=params.get("max"),
+                        values=params.get("values") or "SCALAR",
+                        spatial=bool(params.get("spatial")),
+                        dereference=bool(params.get("dereference")),
+                    )
+            parts.append(
+                cls(
+                    kind=enums.PartKind(part["kind"]),
+                    input_axes=list(part.get("input_axes") or []),
+                    output_axes=list(part.get("output_axes") or []),
+                    scale=params.get("scale") or [],
+                    translation=params.get("translation") or [],
+                    affine=params.get("affine") or [],
+                    field=field,
+                )
+            )
+        return parts
+
+
 @kante.django_type(
     models.Transformation,
     filters=filters.TransformationFilter,
     pagination=True,
     description=(
-        "A map over a named subset of the axes: `inputAxes` onto `outputAxes`, one for one, by a `scale` and/or a `translation`, or by an `affine` -- or by none of them, which is the "
-        "identity on the named axes. The axes it does not name pass through untouched, which is how a registration crosses a rank boundary: a (c,y,x) dataset placed into a (t,z,y,x) "
-        "world names y and x and says nothing about t and z"
+        "Parts side by side, each mapping its own input axes onto its own output axes by one kind -- a pixel size on (y, x), the instants of each frame read from an array on t, "
+        "a label mask's ids. Disjoint on both sides, so every axis has one map. An axis no part names is one the edge says nothing about: nothing passes through implicitly, "
+        "which is how a registration crosses a rank boundary -- a (c,y,x) dataset placed into a (t,z,y,x) world names y and x and says nothing about c, t and z. `inputAxes` "
+        "and `outputAxes` are the parts' axes, in part order"
     ),
 )
 class ByDimensionTransformation(Transformation):
-    """A map over a named subset of the axes, the rest passing through."""
+    """Parts side by side over named axes."""
 
     id: auto
 
@@ -661,58 +724,10 @@ class ByDimensionTransformation(Transformation):
         asking every member, so this also sees rows of other models."""
         return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.BY_DIMENSION.value
 
-    @kante.django_field(description="The per-axis scale factors over the named axes, in `inputAxes` order. Empty when the map states none -- as `ScaleTransformation.scale` is shaped, so one fragment reads both")
-    def scale(self, info: Info) -> List[float]:
-        """The scale over the named axes, if stated."""
-        return self.params.get("scale") or []
-
-    @kante.django_field(description="The per-axis offsets over the named axes, in `inputAxes` order. Empty when the map states none")
-    def translation(self, info: Info) -> List[float]:
-        """The translation over the named axes, if stated."""
-        return self.params.get("translation") or []
-
-    @kante.django_field(description="The matrix over the named axes, M x (N+1) with rows outermost, in `outputAxes` x `inputAxes` order. Empty when the map is stated per axis or not at all. When present it is the whole map: a `scale` or `translation` beside it is not read")
-    def affine(self, info: Info) -> List[List[float]]:
-        """The affine over the named axes, if stated."""
-        return self.params.get("affine") or []
-
-    @kante.django_field(only=["params", "field"], description="One further axis read from a 1-D array's values rather than computed from the parameters, e.g. the instants an event-triggered movie's frames were taken at. Null when every axis is named or passes through")
-    def lookup(self, info: Info) -> Optional["AxisLookup"]:
-        """The edge's lookup, if it carries one."""
-        lookup = (self.params or {}).get("lookup")
-        if not lookup or self.field_id is None:
-            return None
-        return AxisLookup(axis=lookup["axis"], output_axis=lookup["output_axis"], unit=lookup["unit"], min=lookup["min"], max=lookup["max"], field=self.field)
-
-
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A non-affine map given by the values of an array rather than by a formula. The array is a `field`: a node of this graph, not a payload on this edge, so it keeps its own lineage and its axes say what its numbers mean. It has no closed-form inverse, so a placement path never walks it backwards")
-class FieldTransformation(Transformation):
-    """A non-affine map given by the values of an array, which is itself a node of the graph."""
-
-    id: auto
-
-    @classmethod
-    def is_type_of(cls, obj, info) -> bool:
-        """Discriminate on the model's `kind` column.
-
-        The model check comes first: `_entities` resolves the `_Entity` union by
-        asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.FIELD.value
-
-    # A node, not the store this edge used to carry: the array is data before it is a map --
-    # a label mask has its own lineage, provenance and placement -- and a payload can hold
-    # none of that. Read its store through the system's own container.
-    #
-    # Resolved, not exposed raw: the column is null for a self-dereference (see the model),
-    # and a client reading `field: null` on an edge whose whole purpose is its field would
-    # have to know that convention to make sense of it. It answers the question instead.
-    @kante.django_field(
-        only=["kind", "field", "input"],
-        description="The coordinate system of the array whose values are this map. Its value axis says what they mean: COORDINATE for absolute positions, DISPLACEMENT for offsets, none at all for a scalar array whose single value is a position. Equal to `input` when the array's own pixels are the map, as for a label mask keying a table of objects",
-    )
-    def field(self, info: Info) -> "CoordinateSystem | None":
-        """The field, or the input when the input is its own field. See the model property."""
-        return self.effective_field
+    @kante.django_field(only=["parts", "input"], description="The parts, in order: each maps its own axes by one kind")
+    def parts(self, info: Info) -> List[TransformationPart]:
+        """The edge's parts."""
+        return TransformationPart.from_edge(self, info)
 
 
 @kante.django_type(
@@ -764,52 +779,59 @@ class AffinePlacement:
     matrix: List[List[float]] = strawberry.field(description="The composed map, M x (N+1), rows outermost. One row per axis in `outputAxes`, one column per axis in `inputAxes`, plus a final translation column")
     input_axes: List[str] = strawberry.field(description="The axes the matrix's columns are in, which is the layer's own source coordinate system's axis order")
     output_axes: List[str] = strawberry.field(description="The destination axes the matrix's rows are in, in the world's own axis order. An axis the path says nothing about has no row at all")
-    total: bool = strawberry.field(description="Whether `outputAxes` and `lookups` together cover every axis of the destination space. False for a partial registration -- an honest map over the axes it names, and silence about the rest")
-    lookups: List["PlacementLookup"] = strawberry.field(
+    total: bool = strawberry.field(description="Whether `outputAxes` and `fields` together cover every axis of the destination space. False for a partial registration -- an honest map over the axes it names, and silence about the rest")
+    fields: List["PlacementField"] = strawberry.field(
         default_factory=list,
-        description="The destination axes given by an array's values rather than by a row of `matrix`, e.g. the time of each frame of an event-triggered movie. An axis is in `outputAxes` or here, never both",
+        description="The destination axes given by an array's values rather than by a row of `matrix`: the time of each frame of an event-triggered movie, the positions a warp field gives. An axis is in `outputAxes` or here, never both",
     )
 
 
 @strawberry.type(
     description=(
-        "One destination axis of a placement given by a lookup: the world coordinate of source index `i` along `inputAxis` is "
-        "`scale * field[innerScale * i + innerOffset] + offset`, where `field` is the 1-D array of `dataset`. The array's values strictly increase and are the positions of "
-        "the sample *centres*; between samples the map interpolates linearly, so a fractional index (a pyramid level's) is still a position. The server never reads the values: "
-        "fetch the array once and evaluate it, or invert it by binary search to find the sample at a world coordinate"
+        "One destination axis of a placement given by an array's values: the world coordinate of a source position `x` (a vector over `AffinePlacement.inputAxes`) is "
+        "`scale * field[inner · x](component) + base · x`, where `field` is the array of `dataset`, read at the fractional position each row of `inner` gives, one row per "
+        "axis the array is indexed by, and `component` picks the value-axis position of a vector field (null for a scalar one). `inner` and `base` rows hold one "
+        "coefficient per source axis and a final constant. `base` is the constant offset for a positions field and adds the source position for a DISPLACEMENT field. "
+        "The array's values are the positions of the sample *centres*; between samples the map interpolates linearly, so a fractional index (a pyramid level's) is still a "
+        "position. The server never reads the values: fetch the array and evaluate it. A field read along one source axis -- a lookup, the time of each frame -- also "
+        "states `inputAxis`, `innerScale` and `innerOffset`, and its values strictly increase, so it can be inverted by binary search"
     )
 )
-class PlacementLookup:
-    """One looked-up destination axis of a condensed placement."""
+class PlacementField:
+    """One destination axis of a composed placement given by a field."""
 
-    output_axis: str = strawberry.field(description="The destination axis this lookup gives")
-    input_axis: str = strawberry.field(description="The source axis whose index the array is read at")
-    inner_scale: float = strawberry.field(description="Source index to array index: the factor")
-    inner_offset: float = strawberry.field(description="Source index to array index: the offset")
+    output_axis: str = strawberry.field(description="The destination axis this field gives")
+    inner: List[List[float]] = strawberry.field(description="Source position to array position: one row per axis the array is indexed by, one coefficient per source axis plus a constant")
+    base: List[float] = strawberry.field(description="The affine part added to the scaled value: one coefficient per source axis plus a constant. Zero coefficients unless the field holds DISPLACEMENT offsets")
+    component: int | None = strawberry.field(description="The value-axis position of a vector field (COORDINATE or DISPLACEMENT) this axis reads; null for a scalar field")
     scale: float = strawberry.field(description="Array value to destination coordinate: the factor, including the unit conversion from the array's values")
-    offset: float = strawberry.field(description="Array value to destination coordinate: the offset")
+    offset: float = strawberry.field(description="Array value to destination coordinate: the constant, `base`'s last entry")
+    input_axis: str | None = strawberry.field(description="For a field read along one source axis -- a lookup: that axis. Null otherwise")
+    inner_scale: float | None = strawberry.field(description="For a lookup: source index to array index, the factor")
+    inner_offset: float | None = strawberry.field(description="For a lookup: source index to array index, the offset")
     # Resolved by the caller, inside its own (thread-wrapped) resolver: a plain strawberry
     # resolver here runs in the async loop and may not touch the ORM.
     field: CoordinateSystem = strawberry.field(description="The coordinate system of the array whose values are the map")
-    dataset: Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] = strawberry.field(description="The 1-D dataset whose values are the map. Read its level-0 store to evaluate the lookup")
+    dataset: Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] | None = strawberry.field(description="The dataset whose values are the map. Read its level-0 store to evaluate the field")
 
     @classmethod
-    def from_form(cls, axis: str, form) -> "PlacementLookup":  # noqa: ANN001 - coords_logic.LookupForm
-        """One condensed lookup as the wire type. Queries: call it from a sync resolver."""
+    def from_form(cls, axis: str, form, source_axes: List[str]) -> "PlacementField":  # noqa: ANN001 - coords_logic.FieldForm
+        """One composed field as the wire type. Queries: call it from a sync resolver."""
         field = models.CoordinateSystem.objects.get(pk=form.field)
-        return cls(output_axis=axis, input_axis=form.source_axis, inner_scale=form.inner_scale, inner_offset=form.inner_offset, scale=form.scale, offset=form.offset, field=field, dataset=graph_logic.system_dataset(field))
-
-
-@strawberry.type(description="The lookup a BY_DIMENSION edge carries on one axis: that axis' output is the value of a 1-D array at the input index, rather than computed from the parameters")
-class AxisLookup:
-    """A BY_DIMENSION edge's stored lookup."""
-
-    axis: str = strawberry.field(description="The input axis the array is read along")
-    output_axis: str = strawberry.field(description="The output axis its values land on")
-    unit: str = strawberry.field(description="The unit of the array's values")
-    min: float = strawberry.field(description="The array's first value, as declared by its writer")
-    max: float = strawberry.field(description="The array's last value, as declared by its writer")
-    field: CoordinateSystem = strawberry.field(description="The coordinate system of the array whose values are the map")
+        single = form.single_term()
+        return cls(
+            output_axis=axis,
+            inner=[[*row.coefficients, row.constant] for row in form.inner],
+            base=[*form.base.coefficients, form.base.constant],
+            component=form.component,
+            scale=form.scale,
+            offset=form.base.constant,
+            input_axis=source_axes[single[0]] if single else None,
+            inner_scale=single[1] if single else None,
+            inner_offset=single[2] if single else None,
+            field=field,
+            dataset=graph_logic.system_dataset(field),
+        )
 
 
 @kante.type(description="One axis of a source's extent: the range it occupies along a single named axis of the queried coordinate system")
@@ -1151,6 +1173,5 @@ transformation_types = [
     MapAxisTransformation,
     SequenceTransformation,
     ByDimensionTransformation,
-    FieldTransformation,
     UnmappableTransformation,
 ]

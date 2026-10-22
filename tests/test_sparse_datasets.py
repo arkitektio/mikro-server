@@ -20,6 +20,7 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
+from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
 
@@ -187,12 +188,13 @@ async def test_the_keyed_axis_is_produced_and_the_referenced_one_is_not(authenti
 
     def edges() -> list[models.Transformation]:
         system = models.CoordinateSystem.objects.get(pk=result.data["createSparseDataset"]["coordinateSystem"]["id"])
-        return list(models.Transformation.objects.filter(output=system, kind=enums.TransformKind.FIELD.value))
+        return list(models.Transformation.objects.filter(graph_logic.dereference_q(), output=system))
 
     field_edges = await sync_to_async(edges)()
-    assert len(field_edges) == 1, "one source, one FIELD edge"
-    assert field_edges[0].output_axes == ["object"], "the mask supplies the object id and nothing about a feature"
-    assert sorted(field_edges[0].input_axes) == ["x", "y"], "and it consumes the pixel grid to do it"
+    assert len(field_edges) == 1, "one source, one key"
+    (key,) = graph_logic.field_parts_of(field_edges[0])
+    assert key["output_axes"] == ["object"], "the mask supplies the object id and nothing about a feature"
+    assert sorted(key["input_axes"]) == ["x", "y"], "and it consumes the pixel grid to do it"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -249,7 +251,8 @@ async def test_a_matrix_nothing_keys_is_reachable_only_through_a_hop(authenticat
 
     system = dataset["coordinateSystem"]["id"]
     edges = await sync_to_async(lambda: [(e.kind, e.input.name, e.output.name, e.input_axes, e.output_axes) for e in models.Transformation.objects.filter(output_id=system)])()
-    assert not [e for e in edges if e[0] == "FIELD"], f"no source keys it, so no FIELD edge: {edges}"
+    keys = await sync_to_async(lambda: list(models.Transformation.objects.filter(graph_logic.dereference_q(), output_id=system)))()
+    assert not keys, f"no source keys it, so no key: {edges}"
     plans = await schema.execute(PLANS, context_value=authenticated_context, variable_values={"system": system})
     assert not plans.errors, plans.errors
     assert plans.data["attributePlans"] == [], "and so no plan of its own -- it is reached, never probed"
@@ -866,11 +869,11 @@ async def test_a_rank_three_edge_still_produces_exactly_one_id(authenticated_con
 
     def edges() -> list[models.Transformation]:
         system = models.CoordinateSystem.objects.get(pk=result.data["createSparseDataset"]["coordinateSystem"]["id"])
-        return list(models.Transformation.objects.filter(output=system, kind=enums.TransformKind.FIELD.value))
+        return list(models.Transformation.objects.filter(graph_logic.dereference_q(), output=system))
 
     field_edges = await sync_to_async(edges)()
     assert len(field_edges) == 1
-    assert field_edges[0].output_axes == ["object"], "one place holds one id, whatever the rank of what it keys"
+    assert [axis for part in graph_logic.field_parts_of(field_edges[0]) for axis in part["output_axes"]] == ["object"], "one place holds one id, whatever the rank of what it keys"
 
 
 @pytest.mark.django_db(transaction=True)

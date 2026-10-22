@@ -94,7 +94,7 @@ async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_i
     ctx = authenticated_context
     world = await _space(ctx, "distance", [_MICROMETRES])
     profile = await seed.create_array_dataset(ctx, "Profile", axes=[seed.axis("d", enums.AxisType.SPACE)], shapes=[[64]])
-    await _ok(ctx, REGISTER, {"input": str(profile.coordinate_system_id), "output": world, "transform": {"kind": "BY_DIMENSION", "inputAxes": ["d"], "outputAxes": ["d"], "affine": [[0.25, 0.0]]}})
+    await _ok(ctx, REGISTER, {"input": str(profile.coordinate_system_id), "output": world, "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["d"], "outputAxes": ["d"], "affine": [[0.25, 0.0]]}]}})
     edges = await sync_to_async(models.Transformation.objects.count)()
 
     shown = await _auto(ctx, world)
@@ -147,7 +147,7 @@ async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered
     ctx = authenticated_context
     atlas = await _space(ctx, "atlas", [{"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}])
     image = await seed.create_array_dataset(ctx, "Section", axes=seed.YX_AXES, shapes=[[64, 64]])
-    await _ok(ctx, REGISTER, {"input": str(image.coordinate_system_id), "output": atlas, "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}})
+    await _ok(ctx, REGISTER, {"input": str(image.coordinate_system_id), "output": atlas, "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}})
 
     shown = await _auto(ctx, atlas)
 

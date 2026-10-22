@@ -11,6 +11,15 @@ refusal in `tests/test_layer_kinds.py`.
 **Unchanged:** every model. No column, no migration — the rule is about edges, and RFC-8's
 rule that a spatial fact is a node or an edge and never a column on a view still holds.
 
+> **Amended (October 2026, [`by-dimension-parts.md`](by-dimension-parts.md)).** "Condense" now means *compose*:
+> affine rows **plus** the axes a FIELD part gives, returned as `asAffine.fields`. FIELD is no
+> longer an edge kind but a part of a BY_DIMENSION; one that places -- a times array, a warp --
+> composes and passes the gate, and only a **key** (a FIELD part whose values land on an INDEX
+> axis, a label mask's ids) and the shapes below still stop it. Everything this RFC says about a
+> FIELD edge below is now true of a key, not of every FIELD part.
+> Whether a composed field can be *drawn* moved to the viewer, which reports "placed, not
+> drawable yet" for what it cannot.
+
 ## The rule
 
 > **A layer's placement must condense. A route that reaches the world without composing into

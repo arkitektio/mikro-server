@@ -174,7 +174,7 @@ _FL = _q(models.FileLink._meta.db_table)
 
 
 def _transformation_columns() -> dict[str, str]:
-    return {name: _q(_column(models.Transformation, name)) for name in ("input", "output", "kind", "organization")}
+    return {name: _q(_column(models.Transformation, name)) for name in ("input", "output", "kind", "organization", "parts")}
 
 
 def _file_link_arm(n: str, *, from_file: bool, direction: str) -> list[str]:
@@ -214,7 +214,10 @@ def _step(n: str, *, down: bool) -> str:
     edges = (
         f"SELECT t.{_q('id')} AS id, t.{t['input']} AS i, t.{t['output']} AS o FROM (SELECT DISTINCT * FROM ({systems}) u) sys(id) "
         f"JOIN {_T} t ON t.{via_column} = sys.id "
-        f"WHERE t.{t['kind']} <> '{enums.TransformKindChoices.FIELD.value}' AND t.{t['organization']} = %(org)s OFFSET 0"
+        # A key (`graph.is_dereference`) is never lineage: it says which object a pixel is.
+        # Containment, as `graph.dereference_q`: false, never NULL, on an edge with no such part.
+        f"""WHERE NOT (t.{t['parts']} @> '[{{"kind": "FIELD", "params": {{"dereference": true}}}}]'::jsonb) """
+        f"AND t.{t['organization']} = %(org)s OFFSET 0"
     )
     if down:
         derivation = (
@@ -895,10 +898,11 @@ def _root_arm_filters(key: str, model: type, shape: tuple[str, ...]) -> list[str
 
 
 def _not_a_field_sql() -> str:
-    """No edge names the dataset ``x``'s own space as its field."""
-    field = _q(_column(models.Transformation, "field"))
+    """No edge's FIELD part reads the dataset ``x``'s own space as its array (a self field has no link, so a mask stays a root)."""
+    links = _q(models.TransformationField._meta.db_table)
+    field = _q(_column(models.TransformationField, "field"))
     system = _q(_column(models.ArrayDataset, "coordinate_system"))
-    return f"NOT EXISTS (SELECT 1 FROM {_T} f WHERE f.{field} = x.{system})"
+    return f"NOT EXISTS (SELECT 1 FROM {links} f WHERE f.{field} = x.{system})"
 
 
 @cache

@@ -319,11 +319,11 @@ came from:
 
 - **a registration**, which says where data was *put*. It points into a world, and a world
   belongs to no container, so it is not a lineage edge by construction rather than by filter.
-- **a `FIELD`**, which says the mask's pixels *are* the lookup into the table. Left in, the
-  mask in sequence B would report the table as something it was *derived from* — backwards.
-  The table's provenance is its own `derivedFrom`, which is the separate `UNMAPPABLE` edge
-  step 3 wrote. This is the same line RFC-7 draws for the attribute-plan walk: *FIELD edges
-  are payload, never connectivity.*
+- **a key** (a BY_DIMENSION whose `FIELD` part's values are ids), which says the mask's pixels
+  *are* the lookup into the table. Left in, the mask in sequence B would report the table as
+  something it was *derived from* — backwards. The table's provenance is its own `derivedFrom`,
+  which is the separate `UNMAPPABLE` edge step 3 wrote. This is the same line RFC-7 draws for the
+  attribute-plan walk: *keys are payload, never connectivity.*
 
 So in sequence B the mask and the morphology table are joined by **two** edges that say
 different things, and only one of them is lineage.

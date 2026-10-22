@@ -43,7 +43,7 @@ YX_AXES = [seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.S
 CELL_T = [{"name": "cell", "type": "INDEX"}, {"name": "t", "type": "TIME"}]
 
 #: `cell_id = cell + 1`: ids start at one because zero is the mask's background.
-ONE_BASED = {"kind": "BY_DIMENSION", "inputAxes": ["cell"], "outputAxes": ["cell_id"], "affine": [[1.0, 1.0]]}
+ONE_BASED = {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["cell"], "outputAxes": ["cell_id"], "affine": [[1.0, 1.0]]}]}
 
 
 async def _mask(ctx: HttpContext, name: str = "cell labels") -> models.ArrayDataset:
@@ -139,19 +139,11 @@ async def test_a_plan_hops_from_the_cell_table_into_the_traces_derived_from_it(a
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "transform",
-    [
-        {"kind": "BY_DIMENSION", "inputAxes": ["cell"], "outputAxes": ["cell_id"], "affine": [[2.0, 1.0]]},
-        {"kind": "BY_DIMENSION", "inputAxes": ["cell"], "outputAxes": ["cell_id"], "scale": [2.0], "translation": [1.0]},
-    ],
-    ids=["affine", "scale-and-translation"],
-)
-async def test_the_key_map_is_the_edge_inverted_however_the_edge_was_spelled(authenticated_context: HttpContext, transform: dict):
-    """`cell_id = 2 * cell + 1` is one map with two spellings; the plan states its inverse once."""
+async def test_the_key_map_is_the_edge_inverted(authenticated_context: HttpContext):
+    """`cell_id = 2 * cell + 1`, one AFFINE part; the plan states its inverse."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
-    await _traces(authenticated_context, cells, transform=transform)
+    await _traces(authenticated_context, cells, transform={"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["cell"], "outputAxes": ["cell_id"], "affine": [[2.0, 1.0]]}]})
 
     (hop,) = _array_hops(await _plan(authenticated_context, mask))
     assert hop["lookup"]["keyMap"] == {"scale": 0.5, "offset": -0.5}, "id 5 is position 2; id 4 is no position at all, and the worker can tell"
@@ -163,7 +155,7 @@ async def test_a_bare_by_dimension_maps_ids_onto_positions_unchanged(authenticat
     """An edge that names the two axes and states no numbers says they count alike."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
-    await _traces(authenticated_context, cells, transform={"kind": "BY_DIMENSION", "inputAxes": ["cell"], "outputAxes": ["cell_id"]})
+    await _traces(authenticated_context, cells, transform={"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["cell"], "outputAxes": ["cell_id"]}]})
 
     (hop,) = _array_hops(await _plan(authenticated_context, mask))
     assert hop["lookup"]["keyMap"] == {"scale": 1.0, "offset": 0.0}
@@ -179,7 +171,7 @@ async def test_a_channel_axis_can_carry_the_ids(authenticated_context: HttpConte
         authenticated_context,
         cells,
         axes=[{"name": "c", "type": "CHANNEL"}, {"name": "t", "type": "TIME"}],
-        transform={"kind": "BY_DIMENSION", "inputAxes": ["c"], "outputAxes": ["cell_id"], "affine": [[1.0, 1.0]]},
+        transform={"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["c"], "outputAxes": ["cell_id"], "affine": [[1.0, 1.0]]}]},
     )
 
     (hop,) = _array_hops(await _plan(authenticated_context, mask))
@@ -207,7 +199,7 @@ async def test_a_measuring_axis_is_never_a_key(authenticated_context: HttpContex
         authenticated_context,
         cells,
         axes=[{"name": "x", "type": "SPACE"}, {"name": "t", "type": "TIME"}],
-        transform={"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["cell_id"]},
+        transform={"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["x"], "outputAxes": ["cell_id"]}]},
     )
 
     assert not made.errors, made.errors

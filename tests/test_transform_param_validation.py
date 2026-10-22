@@ -21,7 +21,7 @@ from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.input_unions import parse_union_member
-from core.inputs.coords import TRANSFORM_MEMBERS, FieldTransformInputModel, MapAxisTransformInputModel
+from core.inputs.coords import TRANSFORM_MEMBERS, ByDimensionTransformInputModel, MapAxisTransformInputModel
 from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
@@ -89,16 +89,18 @@ async def _create(ctx: HttpContext, input_id: str, output_id: str, transform: di
         # Axis names on a kind that acts on every axis: the silently-wrong case.
         ({"kind": "SCALE", "scale": [1.0, 1.0], "inputAxes": ["y", "x"]}, "A SCALE transformation does not read `inputAxes`"),
         ({"kind": "AFFINE", "affine": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], "outputAxes": ["y", "x"]}, "An AFFINE transformation does not read `outputAxes`"),
-        # `reason` belongs to UNMAPPABLE, `field` to FIELD.
+        # `reason` belongs to UNMAPPABLE.
         ({"kind": "SCALE", "scale": [1.0, 1.0], "reason": "because"}, "A SCALE transformation does not read `reason`"),
         ({"kind": "UNMAPPABLE", "scale": [1.0, 1.0]}, "An UNMAPPABLE transformation does not read `scale`"),
         # Missing the one parameter the kind requires.
         ({"kind": "SCALE"}, "A SCALE transformation requires `scale`"),
         ({"kind": "AFFINE"}, "An AFFINE transformation requires `affine`"),
         ({"kind": "ROTATION"}, "A ROTATION transformation requires `affine`"),
-        ({"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}, "A FIELD transformation requires `field`"),
+        ({"kind": "BY_DIMENSION"}, "A BY_DIMENSION transformation requires `parts`"),
         ({"kind": "MAP_AXIS", "inputAxes": ["y", "x"]}, "A MAP_AXIS transformation requires `outputAxes`"),
-        ({"kind": "BY_DIMENSION", "outputAxes": ["y"]}, "A BY_DIMENSION transformation must name the axes it acts on"),
+        ({"kind": "BY_DIMENSION", "parts": [], "outputAxes": ["y"]}, "A BY_DIMENSION transformation does not read `outputAxes`"),
+        ({"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y"], "outputAxes": ["y"]}]}, "A SCALE part requires `scale`"),
+        ({"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y"], "outputAxes": ["y"], "scale": [2.0]}]}, "An IDENTITY part does not read `scale`"),
     ],
 )
 async def test_a_parameter_that_contradicts_the_kind_is_an_error_not_a_drop(authenticated_context: HttpContext, transform: dict, phrase: str) -> None:
@@ -125,7 +127,7 @@ async def test_a_parameter_that_contradicts_the_kind_is_an_error_not_a_drop(auth
         # `inverted: true` step it could not honour.
         ({"kind": "SCALE", "scale": [0.0, 1.0]}, "no factor may be zero"),
         ({"kind": "SCALE", "scale": [0.0, 0.0]}, "no factor may be zero"),
-        ({"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [1.0, 0.0]}, "no factor may be zero"),
+        ({"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [1.0, 0.0]}]}, "no factor may be zero"),
         # A row whose linear part is all zeros sends every input to one value. The last
         # column is the translation and is excluded: an offset does not un-collapse a row.
         ({"kind": "AFFINE", "affine": [[0.0, 0.0, 5.0], [0.0, 1.0, 0.0]]}, "no row's linear part may be all zeros"),
@@ -217,7 +219,7 @@ async def test_a_per_axis_edge_cannot_cross_a_rank_boundary(authenticated_contex
     assert result.errors and "relates spaces of equal rank" in str(result.errors[0]), str(result.errors and result.errors[0])
 
     # The same pair, said the way the model provides for: name the axes it acts on.
-    result = await _create(ctx, intrinsic, world, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.1, 0.1]})
+    result = await _create(ctx, intrinsic, world, {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.1, 0.1]}]})
     assert not result.errors, result.errors
 
     # And a whole matrix crosses ranks unbothered: 4 rows out, 2+1 columns in.
@@ -228,10 +230,11 @@ async def test_a_per_axis_edge_cannot_cross_a_rank_boundary(authenticated_contex
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_scale_edge_also_gets_a_field_named_as_not_its_own(authenticated_context: HttpContext) -> None:
-    """`field` is the FIELD member's alone; on any other kind it is a named stray."""
+    """`parts` are a BY_DIMENSION's, a FIELD among them; on any other kind they are a named stray."""
     intrinsic, world = await _dataset_and_world(authenticated_context)
-    result = await _create(authenticated_context, intrinsic, world, {"kind": "SCALE", "scale": [1.0, 1.0], "field": world})
-    assert result.errors and "A SCALE transformation does not read `field`" in str(result.errors[0]), str(result.errors and result.errors[0])
+    field = {"kind": "FIELD", "inputAxes": ["y"], "outputAxes": ["y"], "field": {"system": world}}
+    result = await _create(authenticated_context, intrinsic, world, {"kind": "SCALE", "scale": [1.0, 1.0], "parts": [field]})
+    assert result.errors and "A SCALE transformation does not read `parts`" in str(result.errors[0]), str(result.errors and result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
@@ -310,10 +313,10 @@ async def test_each_member_persists_exactly_its_own_shape(authenticated_context:
     edge = await sync_to_async(models.Transformation.objects.get)(pk=result.data["createTransformation"]["id"])
     assert edge.params == {} and edge.input_axes == ["y", "x"] and edge.output_axes == ["x", "y"]
 
-    result = await _create(ctx, intrinsic, world, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[2.0, 0.0, 0.0], [0.0, 2.0, 0.0]]})
+    result = await _create(ctx, intrinsic, world, {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[2.0, 0.0, 0.0], [0.0, 2.0, 0.0]]}]})
     assert not result.errors, result.errors
     edge = await sync_to_async(models.Transformation.objects.get)(pk=result.data["createTransformation"]["id"])
-    assert edge.params == {"affine": [[2.0, 0.0, 0.0], [0.0, 2.0, 0.0]]}, "a BY_DIMENSION's optional matrix rides in params"
+    assert edge.params == {} and edge.parts[0]["params"] == {"affine": [[2.0, 0.0, 0.0], [0.0, 2.0, 0.0]]}, "a BY_DIMENSION's matrix rides in its part"
 
     result = await _create(ctx, intrinsic, world, {"kind": "UNMAPPABLE", "reason": "one row per object"})
     assert not result.errors, result.errors
@@ -360,7 +363,7 @@ async def test_a_refinement_must_match_the_edges_kind(authenticated_context: Htt
         ({"kind": "ROTATION", "affine": [[1.0, 1.0, 0.0], [1.0, 1.0, 0.0]]}, "is singular"),
         # The case most worth catching: a BY_DIMENSION maps its named axes one for one, so
         # its matrix is always square and a childless one is invertible *by kind*.
-        ({"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[1.0, 1.0, 0.0], [2.0, 2.0, 0.0]]}, "is singular"),
+        ({"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[1.0, 1.0, 0.0], [2.0, 2.0, 0.0]]}]}, "is singular"),
     ],
 )
 async def test_a_singular_map_is_refused_though_no_row_of_it_is_zero(authenticated_context: HttpContext, transform: dict, phrase: str) -> None:
@@ -445,7 +448,7 @@ async def test_a_map_axis_between_different_axis_sets_is_refused(authenticated_c
     assert "permutes the axes of one coordinate vector" in str(result.errors[0]), str(result.errors[0])
 
     # The same pair, stated as what it actually is, is accepted.
-    ok = await _create(authenticated_context, intrinsic, elsewhere, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["a", "b"]})
+    ok = await _create(authenticated_context, intrinsic, elsewhere, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["a", "b"]}]})
     assert not ok.errors, ok.errors
 
 
@@ -498,23 +501,22 @@ def test_the_logic_layer_holds_the_same_line_for_internal_callers(authenticated_
     with pytest.raises(ValueError, match="permutes the axes of one coordinate vector"):
         graph_logic.build_registration_edge(input_system=a, output_system=three, kind="MAP_AXIS", input_axes=["y", "x"], output_axes=["y", "x"], ctx=ctx)
 
-    # The one deliberate loosening: a BY_DIMENSION derivation's optional parameters now
-    # persist, exactly as the registration path always stored them.
+    # A BY_DIMENSION derivation's parts persist, exactly as the registration path stores them.
     edge = graph_logic.write_relation_edge(
         name="projection",
         input_system=a,
         output_system=b,
         kind="BY_DIMENSION",
-        input_axes=["y", "x"],
-        output_axes=["y", "x"],
-        scale=[2.0, 2.0],
+        parts=[{"kind": "SCALE", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "scale": [2.0, 2.0]}],
         ctx=ctx,
     )
-    assert edge.params == {"scale": [2.0, 2.0]}
+    assert edge.params == {} and edge.parts[0]["params"] == {"scale": [2.0, 2.0]}
+    with pytest.raises(ValueError, match="takes no `inputAxes`"):
+        graph_logic.write_relation_edge(name="flat", input_system=a, output_system=b, kind="BY_DIMENSION", input_axes=["y", "x"], output_axes=["y", "x"], ctx=ctx)
 
 
 def test_a_derivation_may_state_any_creatable_kind() -> None:
-    """The derivation subset is gone: one union, and MAP_AXIS/FIELD parse like any member.
+    """The derivation subset is gone: one union, and MAP_AXIS/BY_DIMENSION parse like any member.
 
     This is the parse every ``TransformInput.to_pydantic`` runs -- derivations included,
     since ``DerivationInput``/``DerivedFromInput`` carry the same union now.
@@ -522,8 +524,12 @@ def test_a_derivation_may_state_any_creatable_kind() -> None:
     member = parse_union_member(TRANSFORM_MEMBERS, {"kind": "MAP_AXIS", "input_axes": ["x", "y"], "output_axes": ["y", "x"]}, noun="transformation")
     assert isinstance(member, MapAxisTransformInputModel)
 
-    member = parse_union_member(TRANSFORM_MEMBERS, {"kind": "FIELD", "field": "1", "input_axes": ["y", "x"], "output_axes": ["i"]}, noun="transformation")
-    assert isinstance(member, FieldTransformInputModel)
+    member = parse_union_member(
+        TRANSFORM_MEMBERS,
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "input_axes": ["y", "x"], "output_axes": ["i"], "field": {"system": "1"}}]},
+        noun="transformation",
+    )
+    assert isinstance(member, ByDimensionTransformInputModel)
 
 
 def test_the_union_is_published_for_codegen() -> None:
@@ -547,7 +553,6 @@ def test_the_union_is_published_for_codegen() -> None:
         "ByDimensionTransformInput",
         "UnmappableTransformInput",
         "MapAxisTransformInput",
-        "FieldTransformInput",
     ]:
         start = sdl.find(f"input {member} ")
         assert start >= 0, f"{member} missing from the SDL"
@@ -567,6 +572,9 @@ def test_the_union_is_published_for_codegen() -> None:
     assert "transform: TransformInput" in sdl
     creatable = sdl[sdl.find("enum CreatableTransformKind") : sdl.find("}", sdl.find("enum CreatableTransformKind"))]
     assert "SEQUENCE" not in creatable, "wrapper kinds stay out of the creatable enum"
+    assert "FIELD" not in creatable and "FieldTransformInput" not in sdl, "a field is a part of a BY_DIMENSION, never an edge of its own"
+    part_kinds = sdl[sdl.find("enum PartKind") : sdl.find("}", sdl.find("enum PartKind"))]
+    assert "FIELD" in part_kinds
     assert "BIJECTION" not in creatable and "BIJECTION" not in sdl, "the deleted kind is gone from the whole published schema"
 
 
@@ -616,14 +624,13 @@ async def test_a_sequence_is_not_refined_step_by_step(authenticated_context: Htt
     ids=["rank-differs", "names-differ"],
 )
 async def test_a_by_dimension_refinement_answers_to_the_named_subset_not_the_whole_space(authenticated_context: HttpContext, world_axes: list[str]) -> None:
-    """The anti-regression test: a BY_DIMENSION's parameters are bound to the axes it names.
+    """The anti-regression test: a part's parameters are bound to the axes it names.
 
-    `_sub_matrix` composes them at `len(acts_on_input)` and `_by_dimension_forms` labels the
-    rows by `acts_on_output`, so a refinement is checked against that subset, not the full
-    space. Checking it against the endpoints' whole systems would reject a perfectly good
-    two-entry scale over `["y", "x"]` inside a three-axis wrapper -- for a rank it does not
-    answer to, and (second case) for names it does not touch. Relating two spaces of
-    different rank and different names is what BY_DIMENSION is *for*.
+    `_by_dimension_forms` composes each part over its own axes, so a refinement is checked
+    against the part, not the full space. Checking it against the endpoints' whole systems
+    would reject a perfectly good two-entry scale over `["y", "x"]` inside a three-axis
+    wrapper -- for a rank it does not answer to, and (second case) for names it does not touch.
+    Relating two spaces of different rank and different names is what BY_DIMENSION is *for*.
     """
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
@@ -651,6 +658,7 @@ async def test_a_by_dimension_refinement_answers_to_the_named_subset_not_the_who
             input_axes=["y", "x"],
             output_axes=["y", "x"],
             params={},
+            parts=[{"kind": "SCALE", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"scale": [1.0, 1.0]}}],
             creator=creation.user,
             organization=creation.organization,
         )
@@ -659,10 +667,10 @@ async def test_a_by_dimension_refinement_answers_to_the_named_subset_not_the_who
     wrapper = await build_sync(build)
 
     # Two entries, for the two named axes -- not the three the system has.
-    result = await schema.execute(UPDATE_TRANSFORM, context_value=ctx, variable_values={"input": {"id": str(wrapper.pk), "scale": [2.0, 2.0]}})
+    result = await schema.execute(UPDATE_TRANSFORM, context_value=ctx, variable_values={"input": {"id": str(wrapper.pk), "part": 0, "scale": [2.0, 2.0]}})
     assert not result.errors, f"a subset-rank scale must be accepted: {result.errors}"
 
-    result = await schema.execute(UPDATE_TRANSFORM, context_value=ctx, variable_values={"input": {"id": str(wrapper.pk), "scale": [2.0, 2.0, 2.0]}})
+    result = await schema.execute(UPDATE_TRANSFORM, context_value=ctx, variable_values={"input": {"id": str(wrapper.pk), "part": 0, "scale": [2.0, 2.0, 2.0]}})
     assert result.errors, "three entries is the whole space, not the named subset"
     assert "expected 2, got 3" in str(result.errors[0]), str(result.errors[0])
 
@@ -797,6 +805,7 @@ async def test_a_by_dimension_is_not_refused_for_an_index_axis_it_left_alone(aut
             input_axes=["y", "x"],
             output_axes=["y", "x"],
             params={},
+            parts=[{"kind": "SCALE", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"scale": [1.0, 1.0]}}],
             creator=creation.user,
             organization=creation.organization,
         )
@@ -804,8 +813,8 @@ async def test_a_by_dimension_is_not_refused_for_an_index_axis_it_left_alone(aut
 
     wrapper = await build_sync(build)
 
-    result = await schema.execute(UPDATE_TRANSFORM, context_value=ctx, variable_values={"input": {"id": str(wrapper.pk), "scale": [0.5, 0.5]}})
-    assert not result.errors, f"the child scales y and x, and touches no INDEX axis: {result.errors}"
+    result = await schema.execute(UPDATE_TRANSFORM, context_value=ctx, variable_values={"input": {"id": str(wrapper.pk), "part": 0, "scale": [0.5, 0.5]}})
+    assert not result.errors, f"the part scales y and x, and touches no INDEX axis: {result.errors}"
 
 
 def test_the_deleted_kind_is_gone_from_both_enums() -> None:
@@ -884,18 +893,18 @@ async def test_a_correspondence_may_not_cross_axis_kinds(authenticated_context: 
 
     with pytest.raises(ValueError, match="relates two different kinds of axis"):
         await sync_to_async(graph_logic.build_registration_edge)(
-            input_system=channelled, output_system=volume, kind="BY_DIMENSION", input_axes=["c"], output_axes=["z"], ctx=ctx
+            input_system=channelled, output_system=volume, kind="BY_DIMENSION", parts=[{"kind": "IDENTITY", "input_axes": ["c"], "output_axes": ["z"]}], ctx=ctx
         )
 
     # Same-kind correspondences are unaffected, whatever the axes are named.
     await sync_to_async(graph_logic.build_registration_edge)(
-        input_system=channelled, output_system=volume, kind="BY_DIMENSION", input_axes=["y", "x"], output_axes=["y", "x"], ctx=ctx
+        input_system=channelled, output_system=volume, kind="BY_DIMENSION", parts=[{"kind": "IDENTITY", "input_axes": ["y", "x"], "output_axes": ["y", "x"]}], ctx=ctx
     )
 
     # An INDEX axis is the deliberate wildcard: this is the ordinary product-space placement.
     objects = await sync_to_async(space)("Objects", [seed.axis("i", enums.AxisType.INDEX)])
     await sync_to_async(graph_logic.build_registration_edge)(
-        input_system=objects, output_system=volume, kind="BY_DIMENSION", input_axes=["i"], output_axes=["z"], ctx=ctx
+        input_system=objects, output_system=volume, kind="BY_DIMENSION", parts=[{"kind": "IDENTITY", "input_axes": ["i"], "output_axes": ["z"]}], ctx=ctx
     )
 
 
@@ -943,5 +952,5 @@ async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offs
         await sync_to_async(graph_logic.build_registration_edge)(input_system=morning, output_system=scaled, kind="SCALE", scale=[1.000012], ctx=ctx)
     with pytest.raises(ValueError, match="states no offset"):
         await sync_to_async(graph_logic.build_registration_edge)(
-            input_system=morning, output_system=scaled, kind="BY_DIMENSION", input_axes=["t"], output_axes=["t"], scale=[1.000012], ctx=ctx
+            input_system=morning, output_system=scaled, kind="BY_DIMENSION", parts=[{"kind": "SCALE", "input_axes": ["t"], "output_axes": ["t"], "scale": [1.000012]}], ctx=ctx
         )

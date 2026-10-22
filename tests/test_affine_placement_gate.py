@@ -117,15 +117,15 @@ async def _mask_field_into(ctx: HttpContext, world, validity: str | None = None)
     objects = await seed.create_array_dataset(ctx, "Objects", axes=[seed.axis("i", enums.AxisType.INDEX)], shapes=[[128]])
     mask_system, object_system = await sync_to_async(lambda: (mask.intrinsic_coordinate_system, objects.intrinsic_coordinate_system))()
 
-    field_id = await _register(ctx, mask_system.pk, object_system.pk, {"kind": "FIELD", "field": str(mask_system.pk), "inputAxes": ["y", "x"], "outputAxes": ["i"]}, validity=validity)
-    await _register(ctx, object_system.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["i"], "outputAxes": ["z"]}, validity=validity)
+    field_id = await _register(ctx, mask_system.pk, object_system.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}]}, validity=validity)
+    await _register(ctx, object_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["i"], "outputAxes": ["z"]}]}, validity=validity)
     return mask, mask_system, field_id
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_layer_reachable_only_through_a_field_is_refused(authenticated_context: HttpContext):
-    """A route exists, it composes into nothing, and creation says exactly that.
+    """A route exists, it runs through a key (a mask's ids), it composes into nothing, and creation says exactly that.
 
     ABLATION: drop `require_affine=True` from `assert_placeable_in` and this layer is created,
     `pathToWorld` returns the field route, and `asAffine` raises -- the shape the gate exists
@@ -140,12 +140,12 @@ async def test_a_layer_reachable_only_through_a_field_is_refused(authenticated_c
     assert made.errors, "a route with no closed form places nothing a renderer can draw"
 
     message = str(made.errors[0])
-    assert "affinely" in message, message
-    assert f"{field_id} (FIELD)" in message, ("the blocking edge is named, or the reader has nothing to go and fix", message)
+    assert "composably" in message and "A key from pixels" in message, message
+    assert f"{field_id} (BY_DIMENSION)" in message, ("the blocking edge is named, or the reader has nothing to go and fix", message)
     # The two older verdicts are both wrong here, and saying either would send the reader
     # somewhere there is nothing to do.
     assert "Author the registration" not in message, ("the registration exists", message)
-    assert "UNMAPPABLE" not in message, ("a FIELD asserts a correspondence; it just has no matrix", message)
+    assert "UNMAPPABLE" not in message, ("a key asserts a correspondence; it just places nothing", message)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -160,7 +160,7 @@ async def test_the_same_source_is_accepted_once_an_affine_route_exists(authentic
     refused = await _make_layer(authenticated_context, scene.pk, lens)
     assert refused.errors
 
-    await _register(authenticated_context, mask_system.pk, world.pk, {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]})
+    await _register(authenticated_context, mask_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]}]})
 
     made = await _make_layer(authenticated_context, scene.pk, lens)
     assert not made.errors, made.errors
@@ -196,7 +196,7 @@ async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(authen
         authenticated_context,
         mask_system.pk,
         world.pk,
-        {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]},
+        {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]}]},
         validity="INFERRED",
     )
 
@@ -231,12 +231,12 @@ async def test_a_field_only_placement_still_reports_its_route(authenticated_cont
 
     result = await schema.execute(PLACEMENT, context_value=_fresh_request(authenticated_context), variable_values={"id": str(scene.pk)})
     assert result.errors, "asAffine has no matrix to give and says so rather than returning null"
-    assert f"transformation {field_id} (FIELD)" in str(result.errors[0]), result.errors[0]
+    assert f"transformation {field_id} (BY_DIMENSION)" in str(result.errors[0]), result.errors[0]
 
     (layer,) = result.data["scene"]["layers"]
     assert layer["placement"] == "PLACED", "it is placed -- by a map that is not a matrix"
     assert layer["placementInvariance"] == "DIFFEOMORPHIC", layer
-    assert "FIELD" in [step["transformation"]["kind"] for step in layer["pathToWorld"]], layer["pathToWorld"]
+    assert field_id in [step["transformation"]["id"] for step in layer["pathToWorld"]], layer["pathToWorld"]
 
 
 @pytest.mark.django_db(transaction=True)

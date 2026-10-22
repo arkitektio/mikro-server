@@ -74,7 +74,7 @@ async def test_a_series_reads_through_its_lens_windows(authenticated_context: Ht
     ctx = authenticated_context
     chart = await _chart(ctx)
     table = await _table(ctx, "measurements", _MEASUREMENTS)
-    await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "inputAxes": ["x"], "outputAxes": ["d"], "affine": [[0.001, 0.0]]})
+    await _register(ctx, table["coordinateSystem"]["id"], chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["x"], "outputAxes": ["d"], "affine": [[0.001, 0.0]]}]})
     row = await models.TableDataset.objects.aget(pk=table["id"])
     window = await seed.create_windowed_lens(ctx, row, [{"axis": "x", "min": 100.0, "max": 400.0}])
 

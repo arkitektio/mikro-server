@@ -32,7 +32,6 @@ fragment Edge on Transformation {
   ... on ScaleTransformation { scale }
   ... on TranslationTransformation { translation }
   ... on AffineTransformation { affine }
-  ... on FieldTransformation { field { id name } }
 }
 """
 
@@ -44,7 +43,7 @@ query Dataset($id: ID!) {
       toParent {
         ...Edge
         ... on SequenceTransformation { steps { kind scale translation } }
-        ... on ByDimensionTransformation { scale translation affine }
+        ... on ByDimensionTransformation { parts { kind scale translation affine field { field { id name } } } }
       }
     }
   }

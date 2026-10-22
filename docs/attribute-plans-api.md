@@ -169,7 +169,7 @@ rows = con.execute(build_lookup_sql(landing.lookup), params).fetchall()
 
 ## Hops: the chain past the landing
 
-`hops[0]` is where the FIELD edge's id lands. Every later hop crosses **one declared
+`hops[0]` is where the key's id lands. Every later hop crosses **one declared
 reference** from a parent hop and lands one container further — and the server describes
 the whole chain, up to `maxJoinDepth` (default 1, at most 4, `0` for the landing alone):
 
@@ -250,11 +250,11 @@ function onHover(t, c, y, x) {                       // image-space coordinates
 
 Three things to rely on, and one to know:
 
-- **`passthrough` is stated in the plan's own space** (the FIELD edge's input system),
+- **`passthrough` is stated in the plan's own space** (the key's input system),
   never yours: the image's `c` will not appear in the mask plan's key.
 - **Local plans sort first.** A client that only wants what is rooted where it probed
   filters `path.length === 0` and reads a stable prefix.
-- **The cache key grew:** a plan is stale when its FIELD edge *or any path step* is
+- **The cache key grew:** a plan is stale when its key *or any path step* is
   deleted or version-bumped — cache against all of their `(id, version)` pairs.
 - **Unreachable is honest.** A mask whose derivation drops an axis without naming the kept
   ones (a rank-changing edge), or whose relation is UNMAPPABLE, is simply absent — there
@@ -276,9 +276,9 @@ highlight = (pixel) => pixel === clickedRow.i;        // a shader, not a query
 
 A plan names columns and stores, never values — so the parquet's contents changing does not
 stale it (returning new values is the point), and its schema cannot move (a table's store
-and columns are written once). The staleness vectors are the **edges**: the FIELD edge the
+and columns are written once). The staleness vectors are the **edges**: the key the
 plan was built from, and every `path` step on the way to it — deleted, or refined with a
-`version` bump. Cache plans keyed on the full set of `(id, version)` pairs (the FIELD edge
+`version` bump. Cache plans keyed on the full set of `(id, version)` pairs (the key
 plus each `path.transformation`); refetch on a miss.
 
 ## Declaring the references a hop follows

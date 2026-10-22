@@ -534,8 +534,8 @@ def resolve_render_axes(axes: Sequence[AxisSpec]) -> RenderAxes:
     ``(x, y, z)`` are both well-formed, only one is meant, and the second derived ``x=z, z=x``
     -- transposed, silently, on both sides. Nothing raised because nothing could: the
     derivation had no evidence to raise *on*. A name that follows the convention is that
-    evidence, and it is the same evidence `core.types.array_dataset._coordinate_column_named`
-    already uses for a table's coordinate columns, for the same stated reason.
+    evidence. (A table's coordinate columns need none of this: they are its coordinate system's
+    axes, and a viewer reads which faces the screen off the placement stated over them.)
 
     **All-or-nothing, and that is the whole subtlety.** A set like ``(x, y, q)`` matches neither
     entry of `_SCREEN_AXIS_NAMES` and falls back *wholly* to position. Binding the two it
@@ -1092,7 +1092,7 @@ def vectors_bbox(vectors: Sequence[Sequence[float]]) -> tuple[list[float], list[
 class AxedStep:
     """One edge of a path, with both endpoints' axis names -- what a rank-changing map needs.
 
-    ``acts_on_input`` / ``acts_on_output`` are the *named subset* a BY_DIMENSION or MAP_AXIS
+    ``acts_on_input`` / ``acts_on_output`` are the *named subset* a MAP_AXIS
     edge acts on, and ``input_axes`` / ``output_axes`` are the endpoints' full orders. Both
     are needed and neither substitutes for the other: the subset says which axes the
     parameters apply to, the full orders say which of the rest pass through and which the
@@ -1116,41 +1116,76 @@ class AxedStep:
     #: edge that relates the two spaces, not of either axis alone.
     input_units: tuple[str | None, ...] = ()
     output_units: tuple[str | None, ...] = ()
-    #: A BY_DIMENSION's per-axis lookup: one axis whose output is read from an array's values
-    #: rather than computed from the parameters. None on every other step.
-    lookup: "StepLookup | None" = None
+    #: A BY_DIMENSION's parts, side by side: each maps its own axes by one kind. Empty on every
+    #: other step. An axis no part names is one the step says nothing about.
+    parts: tuple["StepPart", ...] = ()
 
 
 @dataclass(frozen=True)
-class StepLookup:
-    """One axis of a BY_DIMENSION edge whose output is the value of a 1-D array at the input index.
+class StepPart:
+    """One part of a BY_DIMENSION: its own input axes onto its own output axes, by one kind.
 
-    ``factor`` converts the array's values into the output axis' unit -- a lookup states its
-    values' unit, so unlike a bare FIELD it can convert (seconds stored, milliseconds read).
+    ``field`` is set exactly on a FIELD part: the array, already resolved to its pk and with
+    its values' unit already turned into a factor.
     """
 
-    input_axis: str
-    output_axis: str
+    kind: str
+    input_axes: tuple[str, ...]
+    output_axes: tuple[str, ...]
+    params: dict
+    field: "StepField | None" = None
+
+
+@dataclass(frozen=True)
+class StepField:
+    """The axes of one edge whose output is the value of an array at the input position.
+
+    ``input_axes`` are the axes the array is indexed by, in the array's own order;
+    ``output_axes`` are the axes its values give, in value-axis order -- one for a scalar field
+    (a 1-D times array, a label mask), one per component for a COORDINATE or DISPLACEMENT field.
+    ``factor`` converts the values into the output axes' unit: a field map states its values'
+    unit, so it can convert (seconds stored, milliseconds read). ``displacement`` says the
+    values are offsets from the input position rather than positions.
+    """
+
+    input_axes: tuple[str, ...]
+    output_axes: tuple[str, ...]
     field: int
     factor: float = 1.0
+    vector: bool = False
+    displacement: bool = False
 
 
 @dataclass(frozen=True)
-class LookupForm:
-    """One destination axis given by a lookup: ``scale * field[inner_scale * source + inner_offset] + offset``.
+class FieldForm:
+    """One destination axis given by a field: ``scale * field[inner](component) + base``.
 
-    ``field`` is the pk of the 1-D array's coordinate system. The field is read at a
-    *fractional* index between samples by linear interpolation of the sample centres, which is
-    what makes a pyramid level's inner form (``f * i + (f - 1) / 2``) meaningful without a
-    field per level. Evaluating it is the client's: the server never reads array values.
+    ``field`` is the pk of the array's coordinate system. ``inner`` holds one affine functional
+    of the source coordinates per axis the array is indexed by: the (fractional) position read.
+    ``component`` is the value-axis position for a vector field and None for a scalar one.
+    ``base`` is the affine part added to the value: the constant offset of whatever came after
+    the field for a positions field, and the input position too for a DISPLACEMENT field.
+
+    The array is read at a *fractional* index by linear interpolation of the sample centres,
+    which is what makes a pyramid level's inner form (``f * i + (f - 1) / 2``) meaningful
+    without a field per level. Evaluating it is the client's: the server never reads array values.
     """
 
     field: int
-    source_axis: str
-    inner_scale: float
-    inner_offset: float
+    inner: tuple["AxedForm", ...]
+    base: "AxedForm"
+    component: int | None = None
     scale: float = 1.0
-    offset: float = 0.0
+
+    def single_term(self) -> tuple[int, float, float] | None:
+        """``(source index, inner scale, inner offset)`` when this is a 1-D field read along one source axis -- a lookup."""
+        if len(self.inner) != 1 or self.component is not None or any(value != 0.0 for value in self.base.coefficients):
+            return None
+        term = _single_term(self.inner[0])
+        if term is None:
+            return None
+        index, factor = term
+        return index, factor, self.inner[0].constant
 
 
 @dataclass(frozen=True)
@@ -1231,80 +1266,53 @@ def unit_factor(source: str | None, target: str | None) -> float | None:
 
 
 def _by_dimension_forms(step: AxedStep) -> dict[str, AxedForm]:
-    """A BY_DIMENSION edge's functionals: its named axes mapped, the rest passed through by name.
+    """A BY_DIMENSION edge's functionals: each part's map over its own axes, and nothing else.
 
-    Three populations, and the third is the one that matters. The axes it *names* are mapped
-    by its parameters. The axes it does not name but both systems have
-    pass through unchanged -- that is the rule `edge_axis_names` and `assert_edge_rank`
-    already state. Everything else -- an output axis the edge never mentions and the input
-    does not have -- gets **no form at all**, because the edge genuinely says nothing about
-    where the data sits along it. Absent is not zero: zero would pin a (c,y,x) dataset at
-    z=0 in a (z,y,x) world and cull it out of every other slice.
+    A part maps its own input axes onto its own output axes by one kind, so its functionals are
+    exactly what that kind would say between two systems holding only those axes -- built by
+    the same `step_forms`, then laid into the edge's full input order. An IDENTITY part is the
+    pass-through, stated: each input axis onto the output axis in the same place, converted
+    between their units, and dropped where they have no conversion, because a number that
+    means nothing places nothing. A FIELD part has no functional: `compose_placement` carries
+    its axes as `FieldForm`s.
+
+    **Nothing passes through implicitly.** An output axis no part names gets no form at all,
+    because the edge says nothing about where the data sits along it. Absent is not zero:
+    zero would pin a (c,y,x) dataset at z=0 in a (z,y,x) world and cull it out of every
+    other slice.
     """
-    acts_in = list(step.acts_on_input or ())
-    acts_out = list(step.acts_on_output or ())
     rank = len(step.input_axes)
-
     forms: dict[str, AxedForm] = {}
 
-    if acts_in and acts_out:
-        sub = _sub_matrix(step)
-        for row, out_axis in enumerate(acts_out):
-            if row >= len(sub):
-                continue
+    def lay(part: StepPart, local: dict[str, AxedForm]) -> None:
+        for out_axis, form in local.items():
             coefficients = [0.0] * rank
-            for column, in_axis in enumerate(acts_in):
-                if in_axis in step.input_axes:
-                    coefficients[step.input_axes.index(in_axis)] = float(sub[row][column])
-            forms[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=float(sub[row][len(acts_in)]))
+            for column, in_axis in enumerate(part.input_axes):
+                if column < len(form.coefficients) and in_axis in step.input_axes:
+                    coefficients[step.input_axes.index(in_axis)] = float(form.coefficients[column])
+            forms[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=float(form.constant))
 
-    # A looked-up axis is neither mapped by the parameters nor passed through: its value is the
-    # array's, which `compose_placement` carries beside the forms. Its input is consumed too.
-    looked_up = {step.lookup.input_axis, step.lookup.output_axis} if step.lookup else set()
-
-    for out_axis in step.output_axes:
-        if out_axis in forms or out_axis in acts_out or out_axis in looked_up:
+    for part in step.parts:
+        if part.kind == enums.PartKind.FIELD.value:
             continue
-        if out_axis in step.input_axes and out_axis not in acts_in:
-            factor = _pass_through_factor(step, out_axis)
-            if factor is None:
-                # The two sides give this axis units with no conversion between them, so it is
-                # not passing through anything -- and a form here would place the data by a
-                # number that means nothing. No form: the edge says nothing about this axis.
-                continue
-            forms[out_axis] = _identity_form(out_axis, step.input_axes, factor)
+        if part.kind == enums.PartKind.IDENTITY.value:
+            for in_axis, out_axis in zip(part.input_axes, part.output_axes):
+                factor = unit_factor(_unit_of(step.input_axes, step.input_units, in_axis), _unit_of(step.output_axes, step.output_units, out_axis))
+                if factor is not None:
+                    forms[out_axis] = _identity_form(in_axis, step.input_axes, factor)
+            continue
+        lay(part, step_forms(AxedStep(kind=part.kind, params=part.params, input_axes=part.input_axes, output_axes=part.output_axes)))
 
     return forms
-
-
-def _params_matrix(params: dict, rank_in: int, rank_out: int) -> list[list[float]]:
-    """The sub-matrix a BY_DIMENSION carries in its own parameters.
-
-    Scale then translation, the order `to_matrix` already uses for a SEQUENCE, because a
-    BY_DIMENSION is what `build_registration_edge` writes and
-    ``_OPTIONAL_PARAMS_BY_KIND`` lets it carry both.
-    """
-    if "affine" in params:
-        matrix = identity_matrix(max(rank_in, rank_out))
-        for i, row in enumerate(params["affine"]):
-            for j, value in enumerate(row):
-                matrix[i][j] = float(value)
-        return matrix
-
-    matrix = identity_matrix(rank_in)
-    if "scale" in params:
-        matrix = matmul(to_matrix(enums.TransformKindChoices.SCALE.value, params, rank_in), matrix)
-    if "translation" in params:
-        matrix = matmul(to_matrix(enums.TransformKindChoices.TRANSLATION.value, params, rank_in), matrix)
-    return matrix
 
 
 def step_forms(step: AxedStep) -> dict[str, AxedForm]:
     """One affine functional per output axis this edge constrains, over its input axes.
 
-    An output axis is absent exactly when the edge says nothing about it. Raises
-    :class:`NonAffineTransformError` for the kinds with no closed form at all -- a FIELD,
-    whose map is an array, and an UNMAPPABLE, which denies the correspondence outright.
+    An output axis is absent exactly when the edge says nothing about it -- and an axis a
+    FIELD part gives has no affine functional either: `compose_placement` carries it as a
+    `FieldForm`. Raises :class:`NonAffineTransformError` for an UNMAPPABLE, which denies the
+    correspondence outright.
     """
     if step.kind == enums.TransformKindChoices.BY_DIMENSION.value:
         return _by_dimension_forms(step)
@@ -1387,7 +1395,7 @@ def compose_forms(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> dict
 
     A destination axis whose functional would need a source axis some earlier step stopped
     constraining is dropped: once the path has let go of an axis, nothing downstream can
-    take hold of it again. A looked-up axis has no functional and is absent here; callers
+    take hold of it again. An axis a field gives has no functional and is absent here; callers
     that can use it ask :func:`compose_placement`.
     """
     return compose_placement(steps, source_axes)[0]
@@ -1399,34 +1407,41 @@ def _single_term(form: AxedForm) -> tuple[int, float] | None:
     return used[0] if len(used) == 1 else None
 
 
-def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> tuple[dict[str, AxedForm], dict[str, LookupForm]]:
-    """Compose a path into its affine functionals **and** the axes given by a lookup.
+def _scaled_form(form: AxedForm, factor: float, constant: float = 0.0) -> AxedForm:
+    """``factor * form + constant``."""
+    return AxedForm(coefficients=tuple(factor * value for value in form.coefficients), constant=factor * form.constant + constant)
 
-    A lookup takes the place of a functional on exactly one axis and leaves every other axis
-    affine, which is the point: a movie timed by an array of instants still has a pixel size,
-    and a FIELD anywhere in its path used to cost it both.
 
-    The lookup's *inner* index must read exactly one source axis (a lens slice offset, a pyramid
-    stride), and later steps may only scale and offset it on its own axis (a session offset
-    onto an experiment clock). Anything that mixes it with another axis, or looks it up a
-    second time, has no form this can state and drops the axis -- absent, not wrong.
+def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> tuple[dict[str, AxedForm], dict[str, FieldForm]]:
+    """Compose a path into its affine functionals **and** the axes given by a field.
+
+    A field map takes the place of a functional on the axes it gives and leaves every other
+    axis affine, which is the point: a movie timed by an array of instants still has a pixel
+    size, and a warped volume still has its channels.
+
+    The field's *inner* position is the composed functional of every axis the array is indexed
+    by -- any affine map of the source (a lens slice offset, a pyramid stride, a rotation), but
+    it must be affine: an axis an earlier field gave, or one the path let go of, has no
+    functional to read the array at, so the field's axes drop -- absent, not wrong. Later steps
+    may only scale and offset a field's axis on its own (a session offset onto an experiment
+    clock); anything that mixes it with another axis has no form this can state and drops it.
     """
     current: dict[str, AxedForm] = {axis: _identity_form(axis, source_axes) for axis in source_axes}
-    lookups: dict[str, LookupForm] = {}
+    fields: dict[str, FieldForm] = {}
     rank = len(source_axes)
 
     for step in steps:
         produced = step_forms(step)
         composed: dict[str, AxedForm] = {}
-        carried: dict[str, LookupForm] = {}
+        carried: dict[str, FieldForm] = {}
         for out_axis, form in produced.items():
             reads = [step.input_axes[index] for index, factor in enumerate(form.coefficients) if factor != 0.0 and index < len(step.input_axes)]
-            if any(axis in lookups for axis in reads):
+            if any(axis in fields for axis in reads):
                 term = _single_term(form)
                 if term is not None:
                     index, factor = term
-                    lookup = lookups[step.input_axes[index]]
-                    carried[out_axis] = replace(lookup, scale=factor * lookup.scale, offset=factor * lookup.offset + form.constant)
+                    field = fields[step.input_axes[index]]
+                    carried[out_axis] = replace(field, scale=factor * field.scale, base=_scaled_form(field.base, factor, form.constant))
                 continue
 
             coefficients = [0.0] * rank
@@ -1446,35 +1461,34 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
                 continue
             composed[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=constant)
 
-        if step.lookup is not None:
-            inner = current.get(step.lookup.input_axis)
-            term = _single_term(inner) if inner is not None else None
-            if term is not None:
-                index, factor = term
-                carried[step.lookup.output_axis] = LookupForm(
-                    field=step.lookup.field,
-                    source_axis=source_axes[index],
-                    inner_scale=factor,
-                    inner_offset=inner.constant,
-                    scale=step.lookup.factor,
+        for part in step.parts:
+            step_field = part.field
+            if step_field is None:
+                continue
+            inner = tuple(current.get(axis) for axis in step_field.input_axes)
+            if not all(form is not None for form in inner):
+                continue
+            zero = AxedForm(coefficients=(0.0,) * rank, constant=0.0)
+            for component, out_axis in enumerate(step_field.output_axes):
+                base = zero
+                if step_field.displacement:
+                    # An offset is added to the position it is read at: the input axis of the
+                    # same name, or the one in the same place when the names differ.
+                    position = out_axis if out_axis in step_field.input_axes else (step_field.input_axes[component] if component < len(step_field.input_axes) else None)
+                    if position is None:
+                        continue
+                    base = current[position]
+                carried[out_axis] = FieldForm(
+                    field=step_field.field,
+                    inner=inner,  # type: ignore[arg-type] - checked all-present above
+                    base=base,
+                    component=component if step_field.vector else None,
+                    scale=step_field.factor,
                 )
 
-        current, lookups = composed, carried
+        current, fields = composed, carried
 
-    return current, lookups
-
-
-def _sub_matrix(step: AxedStep) -> list[list[float]]:
-    """The square map a BY_DIMENSION carries over the axes it names, as a homogeneous matrix.
-
-    The same expression `_by_dimension_forms` builds its `sub` from, factored out so the
-    inverse below cannot compose the forward map differently from the way it is read.
-    """
-    rank = len(step.acts_on_input or ())
-    # The map is the params and nothing else: an `affine`, or a `scale` and a `translation`,
-    # or none of them, which is the identity on the named axes (`_params_matrix`).
-    return _params_matrix(step.params, rank, len(step.acts_on_output or ()))
-
+    return current, fields
 
 
 def _matrix_step(step: AxedStep, matrix: list[list[float]], *, kind: str | None = None) -> AxedStep:
@@ -1546,16 +1560,23 @@ def invert_step(step: AxedStep) -> AxedStep:
         # also what makes `permutation_matrix` total.
         return AxedStep(kind=kind, params={}, acts_on_input=step.acts_on_output, acts_on_output=step.acts_on_input, **swapped)
 
-    if kind == enums.TransformKindChoices.BY_DIMENSION.value and step.lookup is not None:
-        # `is_invertible` excludes a BY_DIMENSION carrying a lookup, so the walk never flags
-        # one; inverting it would mean searching an array this module never reads.
-        raise NonAffineTransformError("A BY_DIMENSION edge with a lookup is walked forwards only: its inverse is a search through the array's values")
+    if any(part.kind == enums.PartKind.FIELD.value for part in step.parts):
+        # `is_invertible` excludes every edge with a FIELD part, so the walk never flags one;
+        # inverting it would mean searching an array this module never reads.
+        raise NonAffineTransformError(f"A {kind} edge with a FIELD part is walked forwards only: its inverse is a search through the array's values")
 
     if kind == enums.TransformKindChoices.BY_DIMENSION.value:
-        # Square over the *named subset*, which `assert_edge_rank` maps one for one -- not
-        # over the endpoints, which a BY_DIMENSION is free to relate across a rank change.
-        # The axes it does not name pass through, and passing through inverts to itself.
-        return _matrix_step(step, invert_matrix(_sub_matrix(step)))
+        # Part by part, each through its own kind's inverse, its axes swapped: the parts are
+        # disjoint, so undoing each undoes the edge. `is_reverse_traversable` offers a
+        # BY_DIMENSION backwards only when every part is square, so each of these is well posed.
+        parts = []
+        for part in step.parts:
+            if part.kind == enums.PartKind.IDENTITY.value:
+                parts.append(StepPart(kind=part.kind, input_axes=part.output_axes, output_axes=part.input_axes, params={}))
+                continue
+            inverse = invert_step(AxedStep(kind=part.kind, params=part.params, input_axes=part.input_axes, output_axes=part.output_axes))
+            parts.append(StepPart(kind=inverse.kind, input_axes=part.output_axes, output_axes=part.input_axes, params=inverse.params))
+        return AxedStep(kind=kind, params={}, parts=tuple(parts), **swapped)
 
     if kind in (enums.TransformKindChoices.AFFINE.value, enums.TransformKindChoices.ROTATION.value, enums.TransformKindChoices.SEQUENCE.value):
         rank = len(step.input_axes)

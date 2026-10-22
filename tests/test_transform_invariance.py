@@ -157,9 +157,16 @@ async def test_an_affine_reads_affine_even_when_its_matrix_is_rigid(authenticate
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_field_is_diffeomorphic_at_best(authenticated_context: HttpContext):
-    """A map given by an array's values has a position-dependent Jacobian: nothing local transfers."""
-    assert await _classify(authenticated_context, "FIELD") == "DIFFEOMORPHIC"
+async def test_a_field_part_along_space_is_diffeomorphic_at_best(authenticated_context: HttpContext):
+    """A map given by an array's values has a position-dependent Jacobian along the axes it gives: nothing local transfers.
+
+    Along time it bends no straight line in space, so the edge stays as rigid as its other parts.
+    """
+    def part(spatial: bool) -> dict:
+        return {"kind": "FIELD", "input_axes": ["t"], "output_axes": ["t"], "params": {"values": "SCALAR", "spatial": spatial, "dereference": False}, "field": "self"}
+
+    assert await _classify(authenticated_context, "BY_DIMENSION", parts=[part(True)]) == "DIFFEOMORPHIC"
+    assert await _classify(authenticated_context, "BY_DIMENSION", parts=[part(False)]) == "ISOMETRY"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -200,25 +207,22 @@ async def test_a_sequence_is_the_weakest_of_its_steps(authenticated_context: Htt
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_childless_wrapper_reads_the_map_it_carries(authenticated_context: HttpContext):
-    """A BY_DIMENSION with no children carries its map in its own params, and is read that way.
+async def test_a_by_dimension_reads_the_maps_its_parts_carry(authenticated_context: HttpContext):
+    """A BY_DIMENSION's map is its parts, and it is read off them.
 
-    The one place this must not mirror `is_invertible`, which answers True for a childless
-    wrapper because invertibility does not depend on which params ride along. Invariance is
-    nothing but that -- and a childless BY_DIMENSION carrying an `affine` is the ordinary
-    shape `build_registration_edge` writes for a registration crossing a rank boundary.
-
-    ABLATION: return ISOMETRY for a childless wrapper and every sheared registration in the
-    system reads as rigid.
+    ABLATION: return ISOMETRY for a BY_DIMENSION and every sheared registration in the system
+    reads as rigid.
     """
-    assert await _classify(authenticated_context, "BY_DIMENSION", {"affine": [[1.0, 0.5, 10.0], [0.0, 1.0, 20.0]]}) == "AFFINE"
+    shear = {"kind": "AFFINE", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"affine": [[1.0, 0.5, 10.0], [0.0, 1.0, 20.0]]}}
+    assert await _classify(authenticated_context, "BY_DIMENSION", parts=[shear]) == "AFFINE"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_childless_wrapper_with_no_map_is_an_isometry(authenticated_context: HttpContext):
-    """Naming axes and nothing else is the identity on the axes named."""
-    assert await _classify(authenticated_context, "BY_DIMENSION") == "ISOMETRY"
+async def test_an_identity_part_is_an_isometry(authenticated_context: HttpContext):
+    """The same positions said twice, on the axes named."""
+    same = {"kind": "IDENTITY", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {}}
+    assert await _classify(authenticated_context, "BY_DIMENSION", parts=[same]) == "ISOMETRY"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -227,13 +231,17 @@ async def test_a_childless_wrapper_with_no_map_is_an_isometry(authenticated_cont
     ("scale", "expected"),
     [([2.0, 2.0], "SIMILARITY"), ([2.0, 3.0], "AFFINE")],
 )
-async def test_a_childless_wrapper_takes_the_weakest_map_it_carries(authenticated_context: HttpContext, scale: list, expected: str):
-    """`_OPTIONAL_PARAMS_BY_KIND` lets one BY_DIMENSION carry several params: the weakest decides.
+async def test_a_by_dimension_takes_the_weakest_of_its_parts(authenticated_context: HttpContext, scale: list, expected: str):
+    """Several parts side by side: the weakest decides.
 
-    ABLATION: return the first match rather than the minimum and an anisotropic scale riding
+    ABLATION: return the first part's class rather than the minimum and an anisotropic scale
     beside a translation reads ISOMETRY, from the translation alone.
     """
-    assert await _classify(authenticated_context, "BY_DIMENSION", {"scale": scale, "translation": [1.0, 1.0]}) == expected
+    parts = [
+        {"kind": "TRANSLATION", "input_axes": ["t"], "output_axes": ["t"], "params": {"translation": [1.0]}},
+        {"kind": "SCALE", "input_axes": ["y", "x"], "output_axes": ["y", "x"], "params": {"scale": scale}},
+    ]
+    assert await _classify(authenticated_context, "BY_DIMENSION", parts=parts) == expected
 
 
 # --- the path aggregate -----------------------------------------------------------

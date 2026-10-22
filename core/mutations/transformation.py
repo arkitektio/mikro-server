@@ -89,7 +89,6 @@ def create_transformation(info: Info, input: CreateTransformationInput) -> types
     lowered = model.transform.lower()
     input_system = get_for_org(models.CoordinateSystem, info, id=model.input)
     output_system = get_for_org(models.CoordinateSystem, info, id=model.output)
-    field = get_for_org(models.CoordinateSystem, info, id=lowered.field) if lowered.field else None
 
     return graph_logic.build_registration_edge(
         input_system=input_system,
@@ -102,9 +101,8 @@ def create_transformation(info: Info, input: CreateTransformationInput) -> types
         selector=model.selector.model_dump() if model.selector else None,
         input_axes=lowered.input_axes,
         output_axes=lowered.output_axes,
-        field=field,
+        parts=graph_logic.resolve_part_fields(lowered.parts, lambda id: get_for_org(models.CoordinateSystem, info, id=id)),
         reason=lowered.reason,
-        lookup=lowered.lookup,
         validity=model.validity,
         value_relation=model.value_relation,
         ctx=ctx,
@@ -114,6 +112,7 @@ def create_transformation(info: Info, input: CreateTransformationInput) -> types
 class UpdateTransformationInputModel(BaseModel):
     id: str
     name: str | None = None
+    part: int | None = None
     scale: list[float] | None = None
     translation: list[float] | None = None
     affine: list[list[float]] | None = None
@@ -127,6 +126,7 @@ class UpdateTransformationInput:
 
     id: strawberry.ID = strawberry.field(description="The ID of the transformation to refine")
     name: str | None = strawberry.field(default=None, description="A new name for the transformation")
+    part: int | None = strawberry.field(default=None, description="(BY_DIMENSION) The index of the part to refine: its parameters are refined, its kind and axes stay -- a different map over different axes is a new edge")
     scale: list[float] | None = strawberry.field(default=None, description="(SCALE) The refined per-axis scale factors")
     translation: list[float] | None = strawberry.field(default=None, description="(TRANSLATION) The refined per-axis offsets")
     affine: list[list[float]] | None = strawberry.field(default=None, description="(AFFINE / ROTATION) The refined matrix")
@@ -156,42 +156,14 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
         # after all, the edge was the wrong kind, and changing the kind is the honest fix.
         raise ValueError(f"An UNMAPPABLE transformation declares that no point of one space corresponds to a point of the other, so there is nothing to refine: it has no `{supplied[0]}`. If a correspondence does exist, replace the edge with one whose kind can express it.")
 
-    # The kinds gate refinement exactly as they gate creation: a parameter the kind never
-    # reads would be written and never read back -- and worse, `invariance_of` classifies a
-    # childless composite by its params keys, so a stray `affine` would demote what clients
-    # are told survives the map.
-    allowed = graph_logic.updatable_params(transformation.kind)
-    offending = [field for field in supplied if field not in allowed]
-    if offending:
-        if transformation.kind == enums.TransformKind.SEQUENCE.value:
-            raise ValueError(f"A {transformation.kind} transformation carries its map as `steps`, written by the ingest from the data's own shapes and slices, so there is no `{offending[0]}` here to refine.")
-        reads_clause = "it reads " + ", ".join(f"`{param}`" for param in allowed) if allowed else "it takes no parameters at all"
-        raise ValueError(f"A {transformation.kind} transformation does not read `{offending[0]}`: {reads_clause}, so refining it would write a number nothing reads.")
-
-    params = dict(transformation.params)
-    for field in ("scale", "translation", "affine"):
-        value = getattr(model, field)
-        if value is not None:
-            params[field] = value
-
-    # A refinement is a write like any other, so it answers to both creation gates. The
-    # values gate is easy to miss here because this mutation takes its parameters flat --
-    # there is no `TransformInput`, so the union members' validators never run -- and the
-    # params dict is assembled by hand rather than through `_assemble_edge_params`. Without
-    # this line, refining a SCALE edge to `[0, 0]` is the one way left to store a map that
-    # collapses an axis.
-    graph_logic.assert_edge_values(params)
-
-    # The rank it lands on is the rank the endpoints already fix, and an update that
-    # silently changed it would be a back door around the check `create_transformation` makes.
-    graph_logic.assert_edge_rank(
-        kind=transformation.kind,
-        params=params,
-        input_axes=transformation.input_axes,
-        output_axes=transformation.output_axes,
-        input_system=transformation.input,
-        output_system=transformation.output,
-    )
+    if transformation.kind == enums.TransformKind.BY_DIMENSION.value:
+        # Only parameters live in a part: a rename or a new validity is the edge's own.
+        if supplied or model.part is not None:
+            _refine_part(transformation, model, supplied)
+    elif model.part is not None:
+        raise ValueError(f"A {transformation.kind} transformation has no parts: only a BY_DIMENSION is refined part by part, so drop `part`.")
+    else:
+        _refine_params(transformation, model, supplied)
 
     if model.name is not None:
         transformation.name = model.name
@@ -199,11 +171,10 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     if model.validity is not None:
         transformation.validity = model.validity.value
 
-    transformation.params = params
     # The save is the record. `provenance` writes a history row for it, which is what
     # `graph_logic.transform_version` counts and what tells an ROI its chain has moved --
     # there is no counter here to bump, and so none to forget.
-    transformation.save(update_fields=["params", "name", "validity"])
+    transformation.save(update_fields=["params", "parts", "name", "validity"])
 
 
     return transformation
@@ -308,3 +279,69 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
         deleted.append(strawberry.ID(str(edge.pk)))
         edge.delete()
     return deleted
+
+
+def _refine_params(transformation: models.Transformation, model: UpdateTransformationInputModel, supplied: list[str]) -> None:
+    """Refine a whole-edge map's parameters, held to the same gates creation is."""
+    # The kinds gate refinement exactly as they gate creation: a parameter the kind never
+    # reads would be written and never read back.
+    allowed = graph_logic.updatable_params(transformation.kind)
+    offending = [field for field in supplied if field not in allowed]
+    if offending:
+        if transformation.kind == enums.TransformKind.SEQUENCE.value:
+            raise ValueError(f"A {transformation.kind} transformation carries its map as `steps`, written by the ingest from the data's own shapes and slices, so there is no `{offending[0]}` here to refine.")
+        reads_clause = "it reads " + ", ".join(f"`{param}`" for param in allowed) if allowed else "it takes no parameters at all"
+        raise ValueError(f"A {transformation.kind} transformation does not read `{offending[0]}`: {reads_clause}, so refining it would write a number nothing reads.")
+
+    params = dict(transformation.params)
+    for field in ("scale", "translation", "affine"):
+        value = getattr(model, field)
+        if value is not None:
+            params[field] = value
+
+    # A refinement is a write like any other, so it answers to both creation gates. The
+    # values gate is easy to miss here because this mutation takes its parameters flat --
+    # there is no `TransformInput`, so the union members' validators never run. Without
+    # this line, refining a SCALE edge to `[0, 0]` is the one way left to store a map that
+    # collapses an axis.
+    graph_logic.assert_edge_values(params)
+
+    # The rank it lands on is the rank the endpoints already fix, and an update that
+    # silently changed it would be a back door around the check `create_transformation` makes.
+    graph_logic.assert_edge_rank(
+        kind=transformation.kind,
+        params=params,
+        input_axes=transformation.input_axes,
+        output_axes=transformation.output_axes,
+        input_system=transformation.input,
+        output_system=transformation.output,
+    )
+    transformation.params = params
+
+
+def _refine_part(transformation: models.Transformation, model: UpdateTransformationInputModel, supplied: list[str]) -> None:
+    """Refine one BY_DIMENSION part's parameters, the whole edge re-validated as a write."""
+    parts = list(transformation.parts or [])
+    if model.part is None or not 0 <= model.part < len(parts):
+        raise ValueError(f"A BY_DIMENSION is refined part by part: name the part in `part`, an index below {len(parts)}.")
+    target = parts[model.part]
+    allowed = graph_logic.updatable_params(target["kind"])
+    offending = [field for field in supplied if field not in allowed]
+    if offending:
+        reads_clause = "it reads " + ", ".join(f"`{param}`" for param in allowed) if allowed else "it takes no parameters to refine"
+        raise ValueError(f"Part {model.part} is {target['kind']}, which does not read `{offending[0]}`: {reads_clause}.")
+
+    lowered = []
+    for index, part in enumerate(parts):
+        params = dict(part.get("params") or {})
+        if index == model.part:
+            params.update({field: getattr(model, field) for field in supplied})
+        entry = {"kind": part["kind"], "input_axes": part["input_axes"], "output_axes": part["output_axes"]}
+        if part["kind"] == enums.PartKind.FIELD.value:
+            entry.update(field=transformation.field_of(part), unit=params.get("unit"), min=params.get("min"), max=params.get("max"))
+        else:
+            entry.update({field: params.get(field) for field in ("scale", "translation", "affine")})
+        lowered.append(entry)
+    stored, _links = graph_logic.assert_parts(lowered, input_system=transformation.input, output_system=transformation.output)
+    transformation.parts = stored
+

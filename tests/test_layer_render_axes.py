@@ -1,8 +1,10 @@
-"""`renderAxes` belongs to the view: every lens-backed layer kind answers it, and the lens does not.
+"""`suggestedRenderAxes`: the server's convention for which lens axis faces which screen axis.
 
-Which axis faces screen x, y, z, time and intensity is a convention of how data is looked
-at, so it is a field of the layer. A lens is a selection and chooses nothing about how it
-is looked at, so it carries no such field.
+Which axis faces screen x, y, z is a convention of how data is looked at. A layer states
+no such field: a viewer reads it off the layer's placement (`asAffine`) under its own view,
+and the non-spatial roles off the lens' axis types. What the server still answers is the
+convention itself, on the lens, for a viewer opening a lens nothing places yet -- and the
+same rule decides what a layer kind may be created over.
 """
 
 import pytest
@@ -12,7 +14,7 @@ from core import enums, models
 from mikro_server.schema import schema
 from tests import seed
 
-RENDER_AXES = "renderAxes { x y z t intensity phasor vector }"
+RENDER_AXES = "lens { suggestedRenderAxes { x y z t intensity phasor vector } }"
 
 QUERY = f"""
 query Layers($id: ID!) {{
@@ -53,7 +55,7 @@ _CASES = {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(authenticated_context: HttpContext):
+async def test_every_lens_backed_layers_lens_suggests_render_axes_from_its_axes(authenticated_context: HttpContext):
     """One layer per lens-backed kind, each over a lens whose axes fill that kind's slot, each answering the mapping its axes imply."""
     assert set(_CASES) == set(enums.ARRAY_LAYER_KINDS), "an array-lens kind this test does not build a layer for"
 
@@ -72,13 +74,13 @@ async def test_every_lens_backed_layer_answers_render_axes_from_its_lens_axes(au
     expected_by_kind = {kind: expected for kind, (_, _, expected) in _CASES.items()}
     for layer in layers:
         kind = layer["__typename"].removesuffix("Layer").lower()
-        assert layer["renderAxes"] == expected_by_kind[kind], layer["__typename"]
+        assert layer["lens"]["suggestedRenderAxes"] == expected_by_kind[kind], layer["__typename"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_bare_lens_suggests_the_render_axes_a_layer_over_it_would_carry(authenticated_context: HttpContext):
-    """Before any layer exists a viewer still needs a convention to open with: the lens suggests what a layer would answer, and once the layer exists the two agree."""
+    """Before any layer exists a viewer still needs a convention to open with: the lens suggests one from its axis types and names."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Bare", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
     lens = await seed.create_lens(ctx, dataset)
@@ -86,9 +88,10 @@ async def test_a_bare_lens_suggests_the_render_axes_a_layer_over_it_would_carry(
     assert not suggested.errors, suggested.errors
     assert suggested.data["lens"]["suggestedRenderAxes"] == {"x": "x", "y": "y", "z": None, "t": None, "intensity": "c", "phasor": None, "vector": None}
 
-    scene = await seed.create_scene(ctx, "Opened")
-    await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=lens, order=0)
-    result = await schema.execute(QUERY, context_value=ctx, variable_values={"id": str(scene.pk)})
-    assert not result.errors, result.errors
-    (layer,) = result.data["scene"]["layers"]
-    assert layer["renderAxes"] == suggested.data["lens"]["suggestedRenderAxes"]
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_layer_no_longer_states_render_axes(authenticated_context: HttpContext):
+    """Which axis faces the screen is the viewer's, read off the placement under its view: no layer kind carries it."""
+    result = await schema.execute("query { scenes { layers { ... on ImageLayer { renderAxes { x } } } } }", context_value=authenticated_context)
+    assert result.errors and "renderAxes" in result.errors[0].message

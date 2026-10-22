@@ -91,8 +91,7 @@ class TransformKindChoices(TextChoices):
     AFFINE = "AFFINE", "Affine"
     ROTATION = "ROTATION", "Rotation"
     SEQUENCE = "SEQUENCE", "Sequence"
-    BY_DIMENSION = "BY_DIMENSION", "By Dimension"
-    FIELD = "FIELD", "Field (a map given by the values of an array)"
+    BY_DIMENSION = "BY_DIMENSION", "By Dimension (parts, side by side, over named axes)"
     UNMAPPABLE = "UNMAPPABLE", "Unmappable (a declared non-correspondence)"
 
 
@@ -455,7 +454,7 @@ _describe(
     TRACK="A track layer rendering trajectories from columns of a table, grouped by a track id.",
     MESH="A mesh layer rendering a 3D surface reconstruction.",
     NETWORK="A network layer rendering a node/edge graph from a konnektion collection -- a traced arbor, a vessel tree, a connectome. Distinct from TRACK, which draws trajectories from a table and can only express a path: a network is a graph, so it carries branch points, and a dividing cell or a dendrite is not a trajectory. Its segments are drawn as camera-facing quads, which is also why `lineWidth` and `nodeSizeColumn` mean something only from SIMILARITY up.",
-    VECTOR="A vector layer rendering a vector-valued lens -- an optical flow, a deformation field, an orientation map -- as glyphs sampled from the grid. The sixth lens-backed kind, and the value axis is what makes it one: the lens carries a DISPLACEMENT axis whose positions are the components of a per-point offset, so the axis is read as geometry rather than composited as channels. Which axis that is is derived (`renderAxes.vector`), never stored; what the layer carries is view state -- a glyph style, a sampling stride, a magnitude scale and a magnitude colormap window. `glyphScale` maps a magnitude in the component axis's unit to a drawn length in scene units, so like `pointSize` it means something only from SIMILARITY up.",
+    VECTOR="A vector layer rendering a vector-valued lens -- an optical flow, a deformation field, an orientation map -- as glyphs sampled from the grid. The sixth lens-backed kind, and the value axis is what makes it one: the lens carries a DISPLACEMENT axis whose positions are the components of a per-point offset, so the axis is read as geometry rather than composited as channels. Which axis that is is derived from the axis types (`vectorAxis`), never stored; what the layer carries is view state -- a glyph style, a sampling stride, a magnitude scale and a magnitude colormap window. `glyphScale` maps a magnitude in the component axis's unit to a drawn length in scene units, so like `pointSize` it means something only from SIMILARITY up.",
 )
 
 
@@ -851,7 +850,6 @@ class TransformKind(str, Enum):
     ROTATION = "ROTATION"
     SEQUENCE = "SEQUENCE"
     BY_DIMENSION = "BY_DIMENSION"
-    FIELD = "FIELD"
     UNMAPPABLE = "UNMAPPABLE"
 
 
@@ -864,8 +862,7 @@ _describe(
     AFFINE="A general affine map, given as an M x (N+1) matrix with rows outermost.",
     ROTATION="A rotation, given as an orthonormal matrix.",
     SEQUENCE="An ordered composition of steps, applied first to last. The steps are carried on the edge itself.",
-    BY_DIMENSION="A map acting on a named subset of the axes, and the identity on the rest.",
-    FIELD="A non-affine map given by the values of an array rather than by a formula. The array is a `field`: a coordinate system, and so a node of this graph, not a payload on this edge. Whether its values are absolute POSITIONS or per-point OFFSETS is read from the value axis of that node -- COORDINATE or DISPLACEMENT -- never restated here. A label mask is the case where the field IS the input: its own pixels are the map. Not invertible in closed form, so a placement path never walks it backwards -- which is also the right semantics for a dereference, an object being a set of pixels.",
+    BY_DIMENSION="Parts side by side, each mapping its own input axes onto its own output axes by one kind (`PartKind`) -- a pixel size on (y, x), the instants of each frame read from an array on t. An axis no part names is one the edge says nothing about: nothing passes through implicitly.",
     UNMAPPABLE="A declared NON-correspondence: the two systems are related — one was derived from the other — and no point of either maps to a point of the other. It carries no parameters, is constrained by no rank, has no matrix, and is never walked by a placement search, in either direction. Recording an IDENTITY instead would be a lie; recording nothing would lose the lineage.",
 )
 
@@ -881,7 +878,6 @@ class CreatableTransformKind(str, Enum):
     AFFINE = "AFFINE"
     ROTATION = "ROTATION"
     BY_DIMENSION = "BY_DIMENSION"
-    FIELD = "FIELD"
     UNMAPPABLE = "UNMAPPABLE"
 
 
@@ -893,9 +889,35 @@ _describe(
     MAP_AXIS="A permutation of axes, mapping each input axis to an output axis by name. Takes `inputAxes` and `outputAxes`; the matrix is synthesized from them.",
     AFFINE="A general affine map. Takes `affine`, an M x (N+1) matrix with rows outermost.",
     ROTATION="A rotation. Takes `affine`: the orthonormal matrix, in the same layout an AFFINE uses.",
-    BY_DIMENSION="A map acting on a named subset of the axes and saying nothing about the rest. Takes `inputAxes` and `outputAxes`, and optionally `scale`, `translation` or `affine` acting on the named axes.",
-    FIELD="A non-affine map given by the values of an array rather than by a formula. Takes `field` (the array's coordinate system), `inputAxes` and `outputAxes`.",
+    BY_DIMENSION="Parts side by side over named axes. Takes `parts`, each naming its `inputAxes` and `outputAxes` and mapping them by one `PartKind`; the axes no part names it says nothing about.",
     UNMAPPABLE="A declared NON-correspondence: no point of either space maps to a point of the other. Takes only an optional `reason`.",
+)
+
+
+@strawberry.enum(description="The kind of one part of a BY_DIMENSION: how it maps its own input axes onto its own output axes.")
+class PartKind(str, Enum):
+    """The kind of one BY_DIMENSION part."""
+
+    IDENTITY = "IDENTITY"
+    SCALE = "SCALE"
+    TRANSLATION = "TRANSLATION"
+    AFFINE = "AFFINE"
+    ROTATION = "ROTATION"
+    FIELD = "FIELD"
+
+
+_describe(
+    PartKind,
+    IDENTITY="The same positions, said twice: each input axis onto the output axis in the same place, converted between their units.",
+    SCALE="A per-axis multiplication. Takes `scale`, one entry per input axis of the part.",
+    TRANSLATION="A per-axis offset. Takes `translation`, one entry per input axis of the part.",
+    AFFINE="A general affine map. Takes `affine`, one row per output axis of the part and one column per input axis plus the offset.",
+    ROTATION="A rotation. Takes `affine`: the orthonormal matrix, in the layout an AFFINE uses.",
+    FIELD=(
+        "A map given by the values of an array rather than by a formula. Takes `field`: the array's coordinate system (a node of this graph), and the unit and declared range of its values. "
+        "Whether the values are absolute POSITIONS or per-point OFFSETS is read from the array's value axis -- COORDINATE or DISPLACEMENT -- and a scalar array gives one axis: a time, or an id. "
+        "Values landing on an INDEX axis are ids, so the part is a key -- a label mask, whose own pixels are the map -- and places nothing. Not invertible in closed form, so a path never walks it backwards."
+    ),
 )
 
 
@@ -1219,7 +1241,7 @@ _describe(
     KNOWN="The extent is stated, over the axes it names and only those.",
     CONDITIONAL="The source reaches this space only across a selector-scoped edge — a per-channel or per-timepoint correction — so where it sits depends on a coordinate this query did not fix. The source is returned, because it genuinely is in the space; `extent` is empty because there is no single box, not because none could be computed. Ask again with `at` to get one.",
     UNREADABLE="The source's geometry is not something the server holds: a mesh collection's vertices and a table dataset's rows live in Parquet it never opens. `extent` is null because there is no box to push, not because the path failed -- and the source is returned anyway, because refusing to bound something is not the same as knowing it is out of view.",
-    NON_AFFINE="A FIELD edge on the path gives the map as the values of an array rather than as a formula, so there is no closed form to push a box through. The path is real and is returned; `invariance` reads DIFFEOMORPHIC.",
+    NON_AFFINE="A step on the path has no form to push a box through -- a key from pixels to a table's rows, or a FIELD inside a SEQUENCE. The path is real and is returned. A field map that places composes instead: its axes are left unbounded in the extent, which says nothing about them rather than something wrong.",
     INVERTED="The path walks an edge against its stored direction, and the extent walk composes forward only -- it pushes a box, and re-bounding one through an inverted step is a different calculation. The step *is* invertible: a placement search offers a backwards step only for a map that has an inverse, which is why `Layer.asAffine` composes such a path without difficulty. So compose `path` yourself, inverting the flagged step, or read the layer's `asAffine`.",
 )
 

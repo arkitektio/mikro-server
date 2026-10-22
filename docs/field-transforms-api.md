@@ -4,10 +4,11 @@
 > `tests/test_field_transforms.py::test_the_documented_sequence_runs_end_to_end`, so this
 > page cannot rot into fiction without a red test.
 
-A `FIELD` edge is a map given by the **values of an array** rather than by a formula. The
-array is a `field`: a coordinate system, and so a node of the graph — not a payload on the
-edge. This is what lets a label mask key a table of per-object measurements, and it is the
-same kind that carries a displacement field.
+A `FIELD` part of a BY_DIMENSION is a map given by the **values of an array** rather than by
+a formula. The array is a `field`: a coordinate system, and so a node of the graph — not a
+payload on the edge. This is what lets a label mask key a table of per-object measurements
+(a **key**: its values are ids), and it is the same part kind that carries a displacement
+field. The part model in general: [`by-dimension-parts.md`](by-dimension-parts.md).
 
 Everything below is lineage. None of it is about rendering: a table whose only coordinate
 is an `INDEX` axis cannot reach a layer, because both layer paths filter coordinate columns
@@ -129,10 +130,10 @@ mutation {
 }
 ```
 
-Note there is **no `derivedFrom` here**. The lineage is the `FIELD` edge in step 4, which
+Note there is **no `derivedFrom` here**. The lineage is the key in step 4, which
 says strictly more than the `UNMAPPABLE` edge you would otherwise write. If you want the
 provenance recorded *as well* — so `lineageGraph` shows the table hanging off the mask
-without anyone reading a FIELD edge — add
+without anyone reading the key — add
 `derivedFrom: [{kind: DATASET, dataset: "<mask id>"}]`, which is UNMAPPABLE by default and
 claims no geometry. See `docs/derivation-api.md`.
 
@@ -146,45 +147,49 @@ claims no geometry. See `docs/derivation-api.md`.
 
 ## 4. The dereference
 
-The mask's own system is both the `input` and the `field`. That coincidence is what a label
-mask *is*: the array being mapped is the array doing the mapping.
+A key is a BY_DIMENSION with a FIELD part whose values are ids. The mask's own system is both
+the `input` and the part's `field`. That coincidence is what a label mask *is*: the array being
+mapped is the array doing the mapping.
 
 ```graphql
 mutation {
   createTransformation(input: {
-    kind: FIELD
     input:  "<mask intrinsic system id>"     # (y, x)
     output: "<table coordinate system id>"   # (i)
-    field:  "<mask intrinsic system id>"     # the same id: its pixels ARE the map
-    inputAxes:  ["y", "x"]                   # consumed by the lookup
-    outputAxes: ["i"]                        # produced by the value
+    transform: {
+      kind: BY_DIMENSION
+      parts: [{
+        kind: FIELD
+        inputAxes:  ["y", "x"]                         # read by the field
+        outputAxes: ["i"]                              # given by the value: an INDEX axis, so a key
+        field: {system: "<mask intrinsic system id>"}  # the same id: its pixels ARE the map
+      }]
+    }
     validity: VALIDATED
     name: "nuclei labels -> morphology"
   }) {
     id
     kind
-    ... on FieldTransformation { field { id name axes { name type } } }
+    ... on ByDimensionTransformation { parts { kind field { dereference field { id name axes { name type } } } } }
   }
 }
 ```
 
-### The rank rule
+### The accounting rule
 
-```
-output_axes(system) == (input_axes(system) − consumed) ∪ produced
-```
+A key must account for **every axis of what it keys**: each is given by a part -- the FIELD
+part's ids, or an IDENTITY part for an axis the two share -- or identified by the table itself
+(`references`), never both. Nothing passes through unless a part says so. This is checked:
 
-The axes you do not consume **pass through by name**. This is checked, not assumed:
+| mask | parts | ⇒ table must be |
+|---|---|---|
+| `(y,x)` | FIELD `y,x → i` | `(i)` |
+| `(t,y,x)` | IDENTITY `t`, FIELD `y,x → i` | `(t,i)` |
+| `(t,i)` | FIELD `t,i → instance_id` | `(instance_id)` |
 
-| input | consumed | produced | ⇒ output must be |
-|---|---|---|---|
-| `(y,x)` | `y,x` | `i` | `(i)` |
-| `(t,y,x)` | `y,x` | `i` | `(t,i)` |
-| `(t,i)` | `t,i` | `instance_id` | `(instance_id)` |
-
-A `(t,y,x)` mask consuming `(y,x)` into a bare `(i)` table is **refused**: `t` survives
-because the edge did not name it. Deliberately not `BY_DIMENSION`'s one-for-one rule — a
-`FIELD` is many-to-one on purpose.
+A `(t,y,x)` mask keying a `(t,i)` table with the FIELD part alone is **refused**: `t` is the
+table's, and no part gives it. The FIELD part is many-to-one on purpose -- `(y,x)` collapsing
+to one object id.
 
 ---
 
@@ -211,17 +216,24 @@ mutation {
 ```graphql
 mutation {
   createTransformation(input: {
-    kind: FIELD
     input:  "<mask system>"      # (t, y, x)
     output: "<table system>"     # (t, i)
-    field:  "<mask system>"
-    inputAxes:  ["y", "x"]       # t is not named, so t passes through
-    outputAxes: ["i"]
+    transform: {
+      kind: BY_DIMENSION
+      parts: [
+        {kind: IDENTITY, inputAxes: ["t"], outputAxes: ["t"]}  # t, stated
+        {kind: FIELD, inputAxes: ["y", "x"], outputAxes: ["i"], field: {system: "<mask system>"}}
+      ]
+    }
   }) { id }
 }
 ```
 
 ## Displacement fields: the same kind, a different field
+
+Unlike a mask's ids, a warp's values land on SPACE axes, so it **places** rather than keys: a
+layer over the atlas composes through it into `asAffine.fields` (see
+[`by-dimension-parts.md`](by-dimension-parts.md)).
 
 A warp field is the case where the field is **not** the input: it is indexed by the input
 space but is a separate array. Its value axis is what says its numbers are offsets rather
@@ -231,12 +243,17 @@ split, now stated once, on the array.
 ```graphql
 mutation {
   createTransformation(input: {
-    kind: FIELD
     input:  "<atlas system>"
     output: "<intrinsic system>"
-    field:  "<warp field's system>"   # its axes: (y, x, d) where d is DISPLACEMENT
-    inputAxes:  ["y", "x"]
-    outputAxes: ["y", "x"]
+    transform: {
+      kind: BY_DIMENSION
+      parts: [{
+        kind: FIELD
+        inputAxes:  ["y", "x"]
+        outputAxes: ["y", "x"]
+        field: {system: "<warp field's system>"}   # its axes: (d, y, x) where d is DISPLACEMENT
+      }]
+    }
   }) { id }
 }
 ```
@@ -277,7 +294,7 @@ The edge states the map; nothing here executes it. The read side is **`attribute
 value up in this parquet — and a zarr+duckdb worker runs it locally. Walkthrough with
 worker code: `docs/attribute-plans-api.md`; design and its resolved questions:
 `docs/rfc7-attribute-plans.md`. Relations *between* tables (an `instance_id` column keying
-a table of tracks) are deliberately **not** FIELD edges — they are declared foreign keys,
+a table of tracks) are deliberately **not** keys — they are declared foreign keys,
 `TableColumn.references`; the boundary principle is argued in RFC-7's "References, not
 joins", and worked through a nuclei/cells/tracks experiment in
 `docs/field-vs-references.md` — which is the page to read if you are deciding which of the

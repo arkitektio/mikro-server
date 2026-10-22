@@ -61,7 +61,7 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str) -> str:
                         "dataset": str(dataset.pk),
                         # The ordinary shape of a rank-changing derivation: the shapes were
                         # drawn on the y/x plane and say nothing about which channel.
-                        "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]},
+                        "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]},
                     }
                 ],
             }
@@ -221,7 +221,6 @@ _PARAMS_FOR_KIND = {
     enums.TransformKindChoices.ROTATION.value: {"affine": [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]]},
     enums.TransformKindChoices.SEQUENCE.value: {"scale": [2.0, 2.0], "translation": [1.0, 1.0]},
     enums.TransformKindChoices.BY_DIMENSION.value: {},
-    enums.TransformKindChoices.FIELD.value: {},
     enums.TransformKindChoices.UNMAPPABLE.value: {},
 }
 

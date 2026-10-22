@@ -440,7 +440,7 @@ async def test_a_projection_drops_an_axis_as_by_dimension(authenticated_context:
         lens=source_lens,
         axes=flat_axes,
         shape=[2, 32, 32],
-        transform={"kind": "BY_DIMENSION", "inputAxes": ["c", "y", "x"], "outputAxes": ["c", "y", "x"]},
+        transform={"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["c", "y", "x"], "outputAxes": ["c", "y", "x"]}]},
     )
     assert not derived.errors, derived.errors
 
@@ -471,7 +471,7 @@ async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registratio
         lens=movie_lens,
         axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
         shape=[64, 64],
-        transform={"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]},
+        transform={"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]},
         valueRelation="CATEGORIZED",
     )
     assert not derived.errors, derived.errors
@@ -487,7 +487,7 @@ async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registratio
             "input": {
                 "input": str(movie_system.pk),
                 "output": str(scene.world_id),
-                "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.25]},
+                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.25]}]},
             }
         },
     )
@@ -759,15 +759,15 @@ async def test_a_derivation_may_be_a_map_axis(authenticated_context: HttpContext
 
 
 @pytest.mark.django_db(transaction=True)
-def test_a_derivation_may_be_a_field(authenticated_context: HttpContext):
-    """A FIELD derivation writes through the same guards a registration FIELD does.
+def test_a_derivation_may_have_a_field_part(authenticated_context: HttpContext):
+    """A derivation with a FIELD part writes through the same guards a registration does.
 
     Written through the writer directly: at ingest a self-field is unrepresentable (the
     derived system is created in the same mutation), so the API-facing case is a
-    pre-existing array system -- and the self-field PROTECT normalization must still
-    hold when a direct caller states one, which is what the `field is None` pin proves.
+    pre-existing array system -- and the self-field normalization must still hold when a
+    direct caller states one, which is what the `"self"` / no-link pin proves.
 
-    The mask space carries a dataset because a FIELD's map is *the values of an array*:
+    The mask space carries a dataset because a FIELD part's map is *the values of an array*:
     `assert_field_is_dereferenceable` refuses a bare space, which is what makes a table-to-table
     relation a `Column.references` rather than an edge. "Pre-existing array system" is
     what the paragraph above already says the API-facing case is; this just builds one.
@@ -786,17 +786,15 @@ def test_a_derivation_may_be_a_field(authenticated_context: HttpContext):
             name="mask <- objects",
             input_system=mask_space,
             output_system=objects_space,
-            kind="FIELD",
-            field=mask_space,
-            input_axes=["y", "x"],
-            output_axes=["i"],
+            kind="BY_DIMENSION",
+            parts=[{"kind": "FIELD", "input_axes": ["y", "x"], "output_axes": ["i"], "field": mask_space}],
             ctx=ctx,
         )
 
     edge = build()
-    assert edge.kind == enums.TransformKindChoices.FIELD.value
+    assert edge.kind == enums.TransformKindChoices.BY_DIMENSION.value
     assert edge.input_axes == ["y", "x"] and edge.output_axes == ["i"]
-    assert edge.field is None, "a self-field is stored as null, or PROTECT would make the mask undeletable"
+    assert edge.parts[0]["field"] == "self" and not edge.field_links.exists(), "a self field links nothing, or PROTECT would make the mask undeletable"
     assert edge.validity == enums.PlacementValidityChoices.MANUAL.value
     assert graph_logic.is_traversable(edge) and not graph_logic.is_reverse_traversable(edge), "a FIELD derivation places one way, forwards"
 
@@ -1223,7 +1221,7 @@ async def test_lens_not_derived_judges_array_lenses_only(authenticated_context: 
             "input": {
                 "name": "Drawn",
                 "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                "derivedFrom": [{"kind": "DATASET", "dataset": str(source.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+                "derivedFrom": [{"kind": "DATASET", "dataset": str(source.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
             }
         },
     )

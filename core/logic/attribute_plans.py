@@ -296,17 +296,17 @@ def field_edges_from(
     max_depth: int | None = None,
     excluding: "Iterable[int]" = (),
 ) -> tuple[dict, Iterable["models.Transformation"]]:
-    """The FIELD edges rooted anywhere fact-reachable from ``system``, and the paths that reached them.
+    """The keys (edges with a dereferencing FIELD part) rooted anywhere fact-reachable from ``system``, and the paths that reached them.
 
     Discovery first (:func:`core.logic.graph.fact_paths`), then one query for the edges.
-    Filtered on **input**, not ``field``: a self-dereference stores ``field`` as NULL (read
-    through ``effective_field``), and an edge pointing *at* a warp field via ``field`` must
-    not be followed -- its output is a pixel grid, which callers skip by asking for a table.
+    Filtered on **input**: a key's array is its own input when it is a self field (a mask; read
+    through `Transformation.field_of`), and an edge whose FIELD part merely *reads* a separate
+    array places rather than keys, so it is no plan.
     Pure over ``Transformation`` rows: nothing here reads a store, which is what makes it
     testable for real, unlike every other parquet path in this codebase.
 
     ``excluding`` answers a hypothetical rather than a fact: *would* these tables still be
-    reachable if those edges were gone. Deleting a FIELD edge is the one operation that can
+    reachable if those edges were gone. Deleting a key is the one operation that can
     strand a picker entry which was valid when it was written, and the only honest way to know
     is to ask the walk without the edge -- guessing from the edge alone is wrong the moment a
     rival edge (RFC-9 allows them) still provides the crossing.
@@ -315,12 +315,12 @@ def field_edges_from(
 
     edges = (
         models.Transformation.objects.filter(
+            graph_logic.dereference_q(),
             input_id__in=paths.keys(),
-            kind=enums.TransformKindChoices.FIELD.value,
             organization=organization,
         )
         .exclude(pk__in=list(excluding))
-        .select_related("field", "input", "output").prefetch_related("output__table_datasets__store")
+        .select_related("input", "output").prefetch_related("output__table_datasets__store")
         .prefetch_related("input__axes", "output__axes")
         .order_by("id")
     )
@@ -400,7 +400,7 @@ def build_attribute_plans(
     max_depth: int | None = None,
     max_join_depth: int = 1,
 ) -> list[AttributePlanSpec]:
-    """Every attribute plan reachable from ``system``: one per FIELD edge landing on a table or a matrix.
+    """Every attribute plan reachable from ``system``: one per key landing on a table or a matrix.
 
     Each plan is its landing plus every hop the schema allows from it, up to ``max_join_depth``
     (clamped to :data:`core.logic.join_walk.MAX_JOIN_DEPTH`; ``0`` walks nothing). The hops are
@@ -424,15 +424,16 @@ def build_attribute_plans(
         if table is None and matrix is None:
             continue  # a warp-field target: a pixel grid, and neither record-land nor a matrix
 
-        field_system = edge.effective_field
+        key = next(part for part in graph_logic.field_parts_of(edge) if (part.get("params") or {}).get("dereference"))
+        field_system = edge.field_of(key)
         store = resolve_field_store(field_system)
 
-        consumes = list(edge.input_axes or [])
-        produces = list(edge.output_axes or [])
-        # Off the EDGE's input system, never the probed one: a discovered plan's root can
-        # have different axes than where the caller stands (a (t,c,y,x) image's (t,y,x)
-        # mask must pass `t` through, and must not invent a `c`).
-        passthrough = [axis.name for axis in edge.input.axes.all() if axis.name not in consumes]
+        consumes = list(key["input_axes"])
+        produces = list(key["output_axes"])
+        # Off the EDGE's own IDENTITY parts, never the probed system: a discovered plan's root
+        # can have different axes than where the caller stands (a (t,c,y,x) image's (t,y,x)
+        # mask passes `t` through, as a part says, and must not invent a `c`).
+        passthrough = [axis for part in edge.parts or [] if part.get("kind") == enums.PartKind.IDENTITY.value for axis in part.get("input_axes") or []]
 
         if matrix is not None:
             # **The id selects a slice, not a row.** One read of `indptr` at the id, one of the

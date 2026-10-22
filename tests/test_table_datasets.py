@@ -176,7 +176,7 @@ async def test_an_identity_across_mismatched_rank_is_rejected(authenticated_cont
             {"name": "y", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
             {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
         ],
-        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
     )
     assert not good.errors, good.errors
     assert good.data["createTableDataset"]["derivedFrom"][0]["kind"] == "BY_DIMENSION"
@@ -406,7 +406,7 @@ async def test_a_point_layer_over_a_table_dataset_reaches_world(authenticated_co
             {"name": "y", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
             {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
         ],
-        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
     )
     assert not created.errors, created.errors
     table_id = created.data["createTableDataset"]["id"]
@@ -427,16 +427,17 @@ async def test_a_point_layer_over_a_table_dataset_reaches_world(authenticated_co
     made = await schema.execute(
         """
         mutation Make($input: CreatePointLayerInput!) {
-          createPointLayer(input: $input) { id xColumn yColumn }
+          createPointLayer(input: $input) { id tableDataset { coordinateSystem { axes { name type } } } }
         }
         """,
         context_value=authenticated_context,
         variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.TableDataset, table_id)}},
     )
     assert not made.errors, made.errors
-    # The mappings come from the declared columns, by name.
-    assert made.data["createPointLayer"]["xColumn"] == "x"
-    assert made.data["createPointLayer"]["yColumn"] == "y"
+    # What a viewer finds the screen columns from: the declared coordinate columns are the
+    # table's coordinate-system axes, typed, and the placement is stated over them.
+    axes = made.data["createPointLayer"]["tableDataset"]["coordinateSystem"]["axes"]
+    assert {axis["name"] for axis in axes if axis["type"] == "SPACE"} >= {"x", "y"}
 
     placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
     assert not placement.errors, placement.errors
@@ -447,8 +448,8 @@ async def test_a_point_layer_over_a_table_dataset_reaches_world(authenticated_co
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_column_mappings_are_by_name_not_position(authenticated_context: HttpContext):
-    """A table declared (x, y, z) must not have x and z silently swapped by array-order logic."""
+async def test_a_point_layers_placement_names_its_columns(authenticated_context: HttpContext):
+    """A table declared (x, y, z) is placed over axes named for its columns, so a viewer reading the placement cannot swap x and z by array order."""
     created = await _create(
         authenticated_context,
         "xyz",
@@ -468,7 +469,7 @@ async def test_column_mappings_are_by_name_not_position(authenticated_context: H
     made = await schema.execute(
         """
         mutation Make($input: CreatePointLayerInput!) {
-          createPointLayer(input: $input) { id xColumn yColumn zColumn }
+          createPointLayer(input: $input) { id asAffine { inputAxes } tableDataset { coordinateSystem { axes { name type } } } }
         }
         """,
         context_value=authenticated_context,
@@ -476,9 +477,8 @@ async def test_column_mappings_are_by_name_not_position(authenticated_context: H
     )
     assert not made.errors, made.errors
     layer = made.data["createPointLayer"]
-    assert layer["xColumn"] == "x", "x must be the column named x, not the last spatial column"
-    assert layer["yColumn"] == "y"
-    assert layer["zColumn"] == "z"
+    assert [axis["name"] for axis in layer["tableDataset"]["coordinateSystem"]["axes"]] == ["x", "y", "z"], "the columns are the axes, in declared order"
+    assert set(layer["asAffine"]["inputAxes"]) == {"x", "y", "z"}, "the placement is stated over the columns by name"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -498,7 +498,7 @@ async def test_an_unregistered_derived_table_layer_is_rejected(authenticated_con
         "loc-unreg",
         name="molecules",
         columns=[{"name": "y", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"}, {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"}],
-        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
     )
     assert not created.errors, created.errors
     scene = await seed.create_scene(authenticated_context, "Composition")  # world (z, y, x), shares y/x
@@ -619,7 +619,7 @@ async def test_a_point_layer_colours_by_its_own_table_without_an_edge(authentica
             {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
             {"name": "intensity", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
         ],
-        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
     )
     assert not created.errors, created.errors
     table_id = created.data["createTableDataset"]["id"]
@@ -692,7 +692,7 @@ async def test_a_point_layer_refuses_a_table_it_cannot_reach(authenticated_conte
             {"name": "y", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
             {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
         ],
-        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}}],
+        derivedFrom=[{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
     )
     table_id = created.data["createTableDataset"]["id"]
     scene = await seed.create_scene(authenticated_context, "Composition")
