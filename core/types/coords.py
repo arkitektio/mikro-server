@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     # Only for the lazy annotations below (`scenes`, and the owner union's members):
     # importing them at runtime would be a cycle, since both of these modules import
     # this one's CoordinateSystem.
-    from core.types.array_dataset import AnnotationLens, ArrayDataset, ArrayLens, Annotation, AnnotationCollection, CadModelLens, CoordinateAnchor, DataArray, MeshLens, NetworkLens, Scene, SparseLens, TableLens
+    from core.types.array_dataset import AnnotationLens, ArrayDataset, ArrayLens, Annotation, AnnotationCollection, FixtureLens, CoordinateAnchor, DataArray, MeshLens, NetworkLens, Scene, SparseLens, TableLens
     from core.types.file_link import FileLink
     from core.types.folder import Folder
     from core.types.table_dataset import TableDataset
@@ -95,10 +95,10 @@ Resident = Annotated[
         Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["AnnotationLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["CadModelLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["MeshCollection", strawberry.lazy("core.types.coords")],
         Annotated["NetworkCollection", strawberry.lazy("core.types.coords")],
-        Annotated["CadModel", strawberry.lazy("core.types.coords")],
+        Annotated["Fixture", strawberry.lazy("core.types.coords")],
         Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")],
         Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")],
         Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")],
@@ -1169,18 +1169,18 @@ class NetworkCollection(OrgScoped):
 
 
 @kante.django_type(
-    models.CadModel,
-    filters=filters.CadModelFilter,
+    models.Fixture,
+    filters=filters.FixtureFilter,
     pagination=True,
-    description="A CAD model of hardware around the sample -- a coverslip, a dish, a holder -- stored as one binary glTF. Ask its `store` for a `presignedUrl` and load the file whole; its space's axes carry the units its vertices are in",
+    description="A piece of hardware around the sample -- a coverslip, a dish, a holder -- stored as one binary glTF. Ask its `store` for a `presignedUrl` and load the file whole; its space's axes carry the units its vertices are in",
 )
-class CadModel(OrgScoped):
-    """A CAD model, backed by one glTF file rather than rows."""
+class Fixture(OrgScoped):
+    """A fixture, backed by one glTF file rather than rows."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
     @kante.django_field(description="The lenses over this model, oldest first: its whole lens and every clip box someone has cut. `windowed: true` keeps the clip boxes, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["CadModelLens", strawberry.lazy("core.types.array_dataset")]]:
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")]]:
         """The model's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
@@ -1188,7 +1188,7 @@ class CadModel(OrgScoped):
         return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
 
     @kante.django_field(description="The lens that selects this whole model: what a layer draws through, and the handle to pass wherever a `Lens` is asked for. Every model is created with one")
-    def full_lens(self, info: Info) -> Optional[Annotated["CadModelLens", strawberry.lazy("core.types.array_dataset")]]:
+    def full_lens(self, info: Info) -> Optional[Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")]]:
         """The whole lens over this model."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 

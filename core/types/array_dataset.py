@@ -24,7 +24,7 @@ from core.types.coords import (
     AffinePlacement,
     PlacementField,
     CoordinateSystem,
-    CadModel,
+    Fixture,
     MeshCollection,
     NetworkCollection,
     PlacementStep,
@@ -922,12 +922,12 @@ class NetworkLens(Lens, OrgScoped):
         return self.windows_list
 
 
-@kante.django_type(models.CadModelLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a CAD model by windows in its own space: a clip box, or the whole model")
-class CadModelLens(Lens, OrgScoped):
-    """A selection over a CAD model."""
+@kante.django_type(models.FixtureLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a fixture by windows in its own space: a clip box, or the whole model")
+class FixtureLens(Lens, OrgScoped):
+    """A selection over a fixture."""
 
     id: auto
-    cad_model: Annotated["CadModel", strawberry.lazy("core.types.coords")]
+    fixture: Annotated["Fixture", strawberry.lazy("core.types.coords")] = kante.django_field(description="The fixture this lens selects over")
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
     def windows(self, info: Info) -> List[Window]:
@@ -1979,13 +1979,13 @@ class MeshLayer(Layer):
     filters=filters.LayerFilter,
     ordering=order.LayerOrder,
     pagination=True,
-    description="A layer that renders a CAD model -- a coverslip, a dish, a holder -- placed in a scene. The model's own materials are drawn unless `materialColor` overrides them.",
+    description="A layer that renders a fixture -- a coverslip, a dish, a holder -- placed in a scene. The model's own materials are drawn unless `materialColor` overrides them.",
 )
-class CadModelLayer(Layer):
-    """A layer that renders a CAD model, placed and styled in a scene."""
+class FixtureLayer(Layer):
+    """A layer that renders a fixture, placed and styled in a scene."""
 
     id: auto
-    lens: CadModelLens = kante.django_field(disable_optimization=True, description="The CAD model lens this layer draws through")
+    lens: FixtureLens = kante.django_field(disable_optimization=True, description="The fixture lens this layer draws through")
 
     @kante.django_field(description=_CLIP_DESCRIPTION)
     def clip(self, info: Info) -> List[Window]:
@@ -1993,17 +1993,17 @@ class CadModelLayer(Layer):
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The CAD model this layer renders: the container of the lens. Its geometry is the glTF file in the model's `store`, fetched whole rather than through this API")
-    def model(self, info: Info) -> CadModel | None:
-        """The lens' model."""
-        return self.lens.cad_model
+    @kante.django_field(description="The fixture this layer renders: the container of the lens. Its geometry is the glTF file in the model's `store`, fetched whole rather than through this API")
+    def fixture(self, info: Info) -> Fixture | None:
+        """The lens' fixture."""
+        return self.lens.fixture
 
     material_color: list[int] | None = kante.django_field(description="One RGBA colour replacing every material of the model, each component 0..255. Null draws the model's own materials as authored")
     wireframe: bool = kante.django_field(description="Whether the model is drawn as a wireframe instead of solid surfaces")
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.CAD_MODEL.value
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.FIXTURE.value
 
 
 @kante.django_type(

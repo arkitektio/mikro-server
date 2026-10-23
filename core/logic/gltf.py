@@ -32,7 +32,7 @@ def read_glb_json(read: Callable[[int, int], bytes], *, where: str) -> dict:
     """
     head = read(0, HEADER_BYTES + CHUNK_HEADER_BYTES)
     if len(head) < HEADER_BYTES + CHUNK_HEADER_BYTES or head[:4] != _MAGIC:
-        raise ValueError(f"{where} is not a binary glTF: it does not start with the `glTF` magic. Export the model as a `.glb` -- a `.gltf` with separate buffers is several files, and a CAD model is one.")
+        raise ValueError(f"{where} is not a binary glTF: it does not start with the `glTF` magic. Export the model as a `.glb` -- a `.gltf` with separate buffers is several files, and a fixture is one.")
     version, total = struct.unpack_from("<II", head, 4)
     if version != 2:
         raise ValueError(f"{where} is a glTF {version}.0 file. Only glTF 2.0 is read: re-export it from a current exporter.")

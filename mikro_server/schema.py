@@ -250,8 +250,8 @@ class Query:
     mesh_collection: types.MeshCollection = field(description="Get a single mesh collection by ID")
     network_collections: list[types.NetworkCollection] = field(description="List network collections (immutable Parquet-backed node/edge networks, each in a coordinate system of its own)")
     network_collection: types.NetworkCollection = field(description="Get a single network collection by ID")
-    cad_models: list[types.CadModel] = field(description="List CAD models (binary glTF scenes of hardware around the sample, each in a unit-carrying coordinate system of its own)")
-    cad_model: types.CadModel = field(description="Get a single CAD model by ID")
+    fixtures: list[types.Fixture] = field(description="List fixtures (binary glTF scenes of hardware around the sample, each in a unit-carrying coordinate system of its own)")
+    fixture: types.Fixture = field(description="Get a single fixture by ID")
 
     sparse_datasets: list[types.SparseDataset] = field(description="List sparse datasets (matrices over two enumerated axes, stored as anndata-spelled zarr groups)")
     sparse_dataset: types.SparseDataset = field(description="Get a single sparse dataset by ID")
@@ -549,7 +549,7 @@ class Mutation:
     )
     create_table_lens = mutation(resolver=mutations.create_table_lens, description="The lens keeping these windows of a table dataset's coordinate columns: the one that exists, or a new one. It lives in the table's own space")
     create_sparse_lens = mutation(resolver=mutations.create_sparse_lens, description="The lens keeping these windows of a sparse dataset's axes: the one that exists, or a new one. A subset of positions, never a re-indexing")
-    create_cad_model_lens = mutation(resolver=mutations.create_cad_model_lens, description="The lens keeping these windows of a CAD model's own space -- a clip box: the one that exists, or a new one")
+    create_fixture_lens = mutation(resolver=mutations.create_fixture_lens, description="The lens keeping these windows of a fixture's own space -- a clip box: the one that exists, or a new one")
     create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
     create_network_lens = mutation(resolver=mutations.create_network_lens, description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one")
     create_annotation_lens = mutation(resolver=mutations.create_annotation_lens, description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one")
@@ -650,11 +650,11 @@ class Mutation:
         description="Register an immutable network collection from an uploaded konnektion store, in a coordinate system of its own",
     )
     delete_network_collection = mutation(resolver=mutations.delete_network_collection, description="Delete an existing network collection")
-    create_cad_model = mutation(
-        resolver=mutations.create_cad_model,
-        description="Register a CAD model -- a coverslip, a dish, a holder -- from an uploaded binary glTF, in a unit-carrying coordinate system of its own",
+    create_fixture = mutation(
+        resolver=mutations.create_fixture,
+        description="Register a fixture -- a coverslip, a dish, a holder -- from an uploaded binary glTF, in a unit-carrying coordinate system of its own",
     )
-    delete_cad_model = mutation(resolver=mutations.delete_cad_model, description="Delete an existing CAD model")
+    delete_fixture = mutation(resolver=mutations.delete_fixture, description="Delete an existing fixture")
     create_sparse_dataset = mutation(
         resolver=mutations.create_sparse_dataset,
         description=(
@@ -756,13 +756,13 @@ class Mutation:
         resolver=mutations.update_mesh_layer,
         description="Retune how a mesh layer is drawn: its material, wireframe, compositing, and which table column colours its objects. A patch -- an omitted field keeps its value",
     )
-    create_cad_model_layer = mutation(
-        resolver=mutations.create_cad_model_layer,
-        description="Create a layer that renders a CAD model in a scene",
+    create_fixture_layer = mutation(
+        resolver=mutations.create_fixture_layer,
+        description="Create a layer that renders a fixture in a scene",
     )
-    update_cad_model_layer = mutation(
-        resolver=mutations.update_cad_model_layer,
-        description="Retune how a CAD model layer is drawn: its material override, wireframe and compositing. A patch -- an omitted field keeps its value",
+    update_fixture_layer = mutation(
+        resolver=mutations.update_fixture_layer,
+        description="Retune how a fixture layer is drawn: its material override, wireframe and compositing. A patch -- an omitted field keeps its value",
     )
     create_network_layer = mutation(
         resolver=mutations.create_network_layer,
@@ -839,10 +839,10 @@ class Mutation:
         resolver=mutations.release_mesh_collections_from_folder,
         description="Unfile mesh collections from a folder. They are not deleted, only unfiled",
     )
-    put_cad_models_in_folder = mutation(resolver=mutations.put_cad_models_in_folder, description="File CAD models in a folder")
-    release_cad_models_from_folder = mutation(
-        resolver=mutations.release_cad_models_from_folder,
-        description="Unfile CAD models from a folder. They are not deleted, only unfiled",
+    put_fixtures_in_folder = mutation(resolver=mutations.put_fixtures_in_folder, description="File fixtures in a folder")
+    release_fixtures_from_folder = mutation(
+        resolver=mutations.release_fixtures_from_folder,
+        description="Unfile fixtures from a folder. They are not deleted, only unfiled",
     )
     put_annotation_collections_in_folder = mutation(resolver=mutations.put_annotation_collections_in_folder, description="File annotation collections in a folder")
     release_annotation_collections_from_folder = mutation(

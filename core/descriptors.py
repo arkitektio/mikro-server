@@ -147,9 +147,9 @@ def mesh_descriptors(collection: models.MeshCollection, *, is_whole: bool = True
     return {**axis_count_descriptors([axis.type for axis in collection.coordinate_system.axes.all()], GEOMETRY_AXIS_TYPES), IS_WHOLE: is_whole}
 
 
-def cad_model_descriptors(cad_model: models.CadModel, *, is_whole: bool = True) -> Descriptors:
-    """A CAD model's descriptors: the axes of its space."""
-    return {**axis_count_descriptors([axis.type for axis in cad_model.coordinate_system.axes.all()], GEOMETRY_AXIS_TYPES), IS_WHOLE: is_whole}
+def fixture_descriptors(fixture: models.Fixture, *, is_whole: bool = True) -> Descriptors:
+    """A fixture's descriptors: the axes of its space."""
+    return {**axis_count_descriptors([axis.type for axis in fixture.coordinate_system.axes.all()], GEOMETRY_AXIS_TYPES), IS_WHOLE: is_whole}
 
 
 def network_descriptors(collection: models.NetworkCollection, *, is_whole: bool = True) -> Descriptors:
@@ -212,8 +212,8 @@ def lens_descriptors(lens: models.Lens) -> Descriptors:
         return mesh_descriptors(lens.mesh_collection, is_whole=lens.is_whole)
     if isinstance(lens, models.NetworkLens):
         return network_descriptors(lens.network_collection, is_whole=lens.is_whole)
-    if isinstance(lens, models.CadModelLens):
-        return cad_model_descriptors(lens.cad_model, is_whole=lens.is_whole)
+    if isinstance(lens, models.FixtureLens):
+        return fixture_descriptors(lens.fixture, is_whole=lens.is_whole)
     if isinstance(lens, models.AnnotationLens):
         return annotation_descriptors(lens.annotation_collection, lens.windows_list, is_whole=lens.is_whole)
     return {}

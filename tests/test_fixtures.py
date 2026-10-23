@@ -1,4 +1,4 @@
-"""A CAD model: one binary glTF, living in a unit-carrying space of its own.
+"""A fixture: one binary glTF, living in a unit-carrying space of its own.
 
 What is on trial is the part of a model that is not a file. Its space carries the unit the
 exporter wrote, so an IDENTITY registration into a micrometre world comes out a thousand
@@ -21,8 +21,8 @@ from tests import seed
 from tests.test_condensed_placement import _fresh_request
 
 CREATE_MODEL = """
-mutation Create($input: CreateCadModelInput!) {
-  createCadModel(input: $input) {
+mutation Create($input: CreateFixtureInput!) {
+  createFixture(input: $input) {
     id
     label
     bounds
@@ -33,20 +33,20 @@ mutation Create($input: CreateCadModelInput!) {
 """
 
 CREATE_LAYER = """
-mutation Create($input: CreateCadModelLayerInput!) {
-  createCadModelLayer(input: $input) {
+mutation Create($input: CreateFixtureLayerInput!) {
+  createFixtureLayer(input: $input) {
     id
     materialColor
     wireframe
-    model { id }
+    fixture { id }
     asAffine { matrix }
   }
 }
 """
 
 UPDATE_LAYER = """
-mutation Update($input: UpdateCadModelLayerInput!) {
-  updateCadModelLayer(input: $input) { id materialColor wireframe opacity }
+mutation Update($input: UpdateFixtureLayerInput!) {
+  updateFixtureLayer(input: $input) { id materialColor wireframe opacity }
 }
 """
 
@@ -92,7 +92,7 @@ def serve_glb(monkeypatch):
     """Make registration read these bytes as the uploaded file."""
 
     def serve(data: bytes) -> None:
-        monkeypatch.setattr("core.mutations.cad_model.get_current_datalayer", lambda: _FakeDatalayer(data))
+        monkeypatch.setattr("core.mutations.fixture.get_current_datalayer", lambda: _FakeDatalayer(data))
 
     return serve
 
@@ -152,7 +152,7 @@ async def test_a_model_lives_in_a_space_carrying_its_units(authenticated_context
     result = await _create_model(authenticated_context, name="Coverslip")
     assert not result.errors, result.errors
 
-    created = result.data["createCadModel"]
+    created = result.data["createFixture"]
     assert created["label"] == "Coverslip"
     assert created["bounds"] == {"min": [-2.0, -12.0, 0.0], "max": [22.0, 12.0, 0.17]}
     assert created["fullLens"] is not None
@@ -165,7 +165,7 @@ async def test_a_non_glb_upload_is_refused(authenticated_context: HttpContext, s
     serve_glb(b"solid coverslip\nendsolid coverslip\n")
     result = await _create_model(authenticated_context)
     assert result.errors and "not a binary glTF" in result.errors[0].message
-    assert await models.CadModel.objects.acount() == 0
+    assert await models.Fixture.objects.acount() == 0
 
 
 @pytest.mark.django_db(transaction=True)
@@ -181,15 +181,15 @@ async def test_only_three_spatial_axes_are_a_model_space(authenticated_context: 
 async def test_an_identity_registration_converts_by_the_units(authenticated_context: HttpContext, serve_glb):
     """Millimetres into a micrometre world: a factor of 1000 nobody stated."""
     serve_glb(glb(COVERSLIP))
-    created = (await _create_model(authenticated_context)).data["createCadModel"]
+    created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Stage")
     await _register(authenticated_context, created["coordinateSystem"]["id"], scene)
 
     result = await schema.execute(CREATE_LAYER, context_value=_fresh_request(authenticated_context), variable_values={"input": {"scene": str(scene.pk), "lens": created["fullLens"]["id"]}})
     assert not result.errors, result.errors
-    layer = result.data["createCadModelLayer"]
-    assert layer["materialColor"] is None, "a CAD model draws its own materials unless told otherwise"
-    assert layer["model"]["id"] == created["id"]
+    layer = result.data["createFixtureLayer"]
+    assert layer["materialColor"] is None, "a fixture draws its own materials unless told otherwise"
+    assert layer["fixture"]["id"] == created["id"]
     # The world is (z, y, x) and the model (x, y, z): the map reverses them, and scales each by 1000.
     matrix = layer["asAffine"]["matrix"]
     assert [[round(value, 6) for value in row[:3]] for row in matrix[:3]] == [[0.0, 0.0, 1000.0], [0.0, 1000.0, 0.0], [1000.0, 0.0, 0.0]]
@@ -199,7 +199,7 @@ async def test_an_identity_registration_converts_by_the_units(authenticated_cont
 @pytest.mark.asyncio
 async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpContext, serve_glb):
     serve_glb(glb(COVERSLIP))
-    created = (await _create_model(authenticated_context)).data["createCadModel"]
+    created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Unregistered")
     result = await schema.execute(CREATE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": created["fullLens"]["id"]}})
     assert result.errors
@@ -209,37 +209,37 @@ async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_clearing_the_colour_returns_to_the_models_materials(authenticated_context: HttpContext, serve_glb):
     serve_glb(glb(COVERSLIP))
-    created = (await _create_model(authenticated_context)).data["createCadModel"]
+    created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Stage")
     await _register(authenticated_context, created["coordinateSystem"]["id"], scene)
-    layer = (await schema.execute(CREATE_LAYER, context_value=_fresh_request(authenticated_context), variable_values={"input": {"scene": str(scene.pk), "lens": created["fullLens"]["id"], "materialColor": [200, 220, 255, 255]}})).data["createCadModelLayer"]
+    layer = (await schema.execute(CREATE_LAYER, context_value=_fresh_request(authenticated_context), variable_values={"input": {"scene": str(scene.pk), "lens": created["fullLens"]["id"], "materialColor": [200, 220, 255, 255]}})).data["createFixtureLayer"]
 
     kept = await schema.execute(UPDATE_LAYER, context_value=authenticated_context, variable_values={"input": {"id": layer["id"], "wireframe": True}})
-    assert kept.data["updateCadModelLayer"]["materialColor"] == [200, 220, 255, 255], "an omitted colour is kept"
+    assert kept.data["updateFixtureLayer"]["materialColor"] == [200, 220, 255, 255], "an omitted colour is kept"
 
     cleared = await schema.execute(UPDATE_LAYER, context_value=authenticated_context, variable_values={"input": {"id": layer["id"], "materialColor": None}})
-    assert cleared.data["updateCadModelLayer"]["materialColor"] is None
-    assert cleared.data["updateCadModelLayer"]["wireframe"] is True
+    assert cleared.data["updateFixtureLayer"]["materialColor"] is None
+    assert cleared.data["updateFixtureLayer"]["wireframe"] is True
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_clip_box_is_a_lens_in_the_models_own_units(authenticated_context: HttpContext, serve_glb):
-    """A window over a CAD model is stated in its axes and unit, and asked again finds the same lens."""
+    """A window over a fixture is stated in its axes and unit, and asked again finds the same lens."""
     serve_glb(glb(COVERSLIP))
-    created = (await _create_model(authenticated_context)).data["createCadModel"]
-    mutation = "mutation Cut($input: CreateCadModelLensInput!) { createCadModelLens(input: $input) { id windows { axis min max } cadModel { id } } }"
-    variables = {"input": {"cadModel": created["id"], "windows": [{"axis": "x", "min": 0.0, "max": 5.0}]}}
+    created = (await _create_model(authenticated_context)).data["createFixture"]
+    mutation = "mutation Cut($input: CreateFixtureLensInput!) { createFixtureLens(input: $input) { id windows { axis min max } fixture { id } } }"
+    variables = {"input": {"fixture": created["id"], "windows": [{"axis": "x", "min": 0.0, "max": 5.0}]}}
 
     first = await schema.execute(mutation, context_value=authenticated_context, variable_values=variables)
     assert not first.errors, first.errors
-    lens = first.data["createCadModelLens"]
-    assert lens["cadModel"]["id"] == created["id"]
+    lens = first.data["createFixtureLens"]
+    assert lens["fixture"]["id"] == created["id"]
     assert lens["windows"] == [{"axis": "x", "min": 0.0, "max": 5.0}]
     assert lens["id"] != created["fullLens"]["id"]
 
     again = await schema.execute(mutation, context_value=authenticated_context, variable_values=variables)
-    assert again.data["createCadModelLens"]["id"] == lens["id"]
+    assert again.data["createFixtureLens"]["id"] == lens["id"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -247,14 +247,14 @@ async def test_a_clip_box_is_a_lens_in_the_models_own_units(authenticated_contex
 async def test_a_model_is_a_resident_of_its_space(authenticated_context: HttpContext, serve_glb):
     """Its space answers `residents` with the model, and not with its whole lens beside it."""
     serve_glb(glb(COVERSLIP))
-    created = (await _create_model(authenticated_context, name="Coverslip")).data["createCadModel"]
+    created = (await _create_model(authenticated_context, name="Coverslip")).data["createFixture"]
     result = await schema.execute(
-        "query Space($id: ID!) { coordinateSystem(id: $id) { residents { __typename ... on CadModel { id } } } }",
+        "query Space($id: ID!) { coordinateSystem(id: $id) { residents { __typename ... on Fixture { id } } } }",
         context_value=authenticated_context,
         variable_values={"id": created["coordinateSystem"]["id"]},
     )
     assert not result.errors, result.errors
-    assert result.data["coordinateSystem"]["residents"] == [{"__typename": "CadModel", "id": created["id"]}]
+    assert result.data["coordinateSystem"]["residents"] == [{"__typename": "Fixture", "id": created["id"]}]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -263,10 +263,10 @@ async def test_a_model_is_filed_and_listed_by_its_files_name(authenticated_conte
     """Unnamed, a model sorts and searches by the name of the file it was uploaded as."""
     serve_glb(glb(COVERSLIP))
     folder = await seed.create_folder(authenticated_context, "Hardware")
-    created = (await _create_model(authenticated_context, folder=str(folder.pk))).data["createCadModel"]
+    created = (await _create_model(authenticated_context, folder=str(folder.pk))).data["createFixture"]
     assert created["label"] == "coverslip.glb"
 
-    query = "query Children($parent: ID!, $filters: FolderChildrenFilter, $order: ChildrenOrder) { children(parent: $parent, filters: $filters, order: $order) { __typename ... on CadModel { id label } } }"
+    query = "query Children($parent: ID!, $filters: FolderChildrenFilter, $order: ChildrenOrder) { children(parent: $parent, filters: $filters, order: $order) { __typename ... on Fixture { id label } } }"
     listed = await schema.execute(query, context_value=authenticated_context, variable_values={"parent": str(folder.pk), "order": {"field": "NAME", "direction": "ASC"}})
     assert not listed.errors, listed.errors
-    assert listed.data["children"] == [{"__typename": "CadModel", "id": created["id"], "label": "coverslip.glb"}]
+    assert listed.data["children"] == [{"__typename": "Fixture", "id": created["id"], "label": "coverslip.glb"}]

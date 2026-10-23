@@ -42,7 +42,7 @@ from .coords import (
     TransformationField,
     MeshCollection,
     NetworkCollection,
-    CadModel,
+    Fixture,
 )
 from .table_dataset import (
     TableDataset,
@@ -78,7 +78,7 @@ from .array_dataset import (
     MeshLens,
     NetworkLens,
     AnnotationLens,
-    CadModelLens,
+    FixtureLens,
     Scene,
     SceneSnapshot,
     Animation,
@@ -108,7 +108,7 @@ __all__ = [
     "Transformation",
     "TransformationField",
     "MeshCollection",
-    "CadModel",
+    "Fixture",
     "NetworkCollection",
     # table dataset
     "TableDataset",
@@ -140,7 +140,7 @@ __all__ = [
     "TableLens",
     "SparseLens",
     "MeshLens",
-    "CadModelLens",
+    "FixtureLens",
     "NetworkLens",
     "AnnotationLens",
     "Scene",
@@ -160,7 +160,7 @@ Lens.KIND_BY_CONTAINER.update(
         TableDataset: TableLens,
         SparseDataset: SparseLens,
         MeshCollection: MeshLens,
-        CadModel: CadModelLens,
+        Fixture: FixtureLens,
         NetworkCollection: NetworkLens,
         AnnotationCollection: AnnotationLens,
     }

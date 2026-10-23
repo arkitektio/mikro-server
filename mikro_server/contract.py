@@ -14,7 +14,7 @@ from mikro_server.vocabulary import (
     ANNOTATION_DESCRIPTORS,
     ANNOTATION_SHAPE_DESCRIPTORS,
     ARRAY_DESCRIPTORS,
-    CAD_MODEL_DESCRIPTORS,
+    FIXTURE_DESCRIPTORS,
     CHART_DESCRIPTORS,
     COORDINATE_ANCHOR_DESCRIPTORS,
     COORDINATE_SYSTEM_DESCRIPTORS,
@@ -98,10 +98,10 @@ HOSTS = Hosts(
             descriptors=ANNOTATION_DESCRIPTORS,
         ),
         Structure(
-            identifier="@mikro/cadmodellens",
-            label="CAD Model Lens",
-            description="The part of a CAD model (a coverslip, a dish, a holder) that lies inside given windows of its own space, or the whole model.",
-            descriptors=CAD_MODEL_DESCRIPTORS,
+            identifier="@mikro/fixturelens",
+            label="Fixture Lens",
+            description="The part of a fixture (a coverslip, a dish, a holder) that lies inside given windows of its own space, or the whole model.",
+            descriptors=FIXTURE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/scene",
@@ -139,10 +139,10 @@ HOSTS = Hosts(
             descriptors=NETWORK_DESCRIPTORS,
         ),
         Structure(
-            identifier="@mikro/cadmodel",
-            label="CAD Model",
-            description="A CAD model of hardware around the sample, such as a coverslip, a dish, a holder or an objective housing, stored as one binary glTF in a coordinate space of its own whose axes carry the model's units.",
-            descriptors=CAD_MODEL_DESCRIPTORS,
+            identifier="@mikro/fixture",
+            label="Fixture",
+            description="A piece of hardware around the sample, such as a coverslip, a dish, a holder or an objective housing, stored as one binary glTF in a coordinate space of its own whose axes carry the model's units.",
+            descriptors=FIXTURE_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/file",
@@ -292,10 +292,10 @@ HOSTS = Hosts(
             description="A part of an annotation collection (annotation lens) was selected, renamed or deleted, with how many annotations it holds and whether it selects the whole collection.",
         ),
         Signal(
-            identifier="@mikro/cadmodellens",
+            identifier="@mikro/fixturelens",
             kinds=["CREATED", "UPDATED", "DELETED"],
-            descriptors=_keys(CAD_MODEL_DESCRIPTORS),
-            description="A part of a CAD model (CAD model lens) was selected, renamed or deleted, with its axes and whether it selects the whole model.",
+            descriptors=_keys(FIXTURE_DESCRIPTORS),
+            description="A part of a fixture (fixture lens) was selected, renamed or deleted, with its axes and whether it selects the whole model.",
         ),
         Signal(
             identifier="@mikro/arraydataset",
@@ -333,10 +333,10 @@ HOSTS = Hosts(
             descriptors=_keys(MESH_DESCRIPTORS),
         ),
         Signal(
-            identifier="@mikro/cadmodel",
+            identifier="@mikro/fixture",
             kinds=["CREATED", "DELETED"],
-            description="A CAD model (a coverslip, a dish, a holder) was created or deleted.",
-            descriptors=_keys(CAD_MODEL_DESCRIPTORS),
+            description="A fixture (a coverslip, a dish, a holder) was created or deleted.",
+            descriptors=_keys(FIXTURE_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/networkcollection",

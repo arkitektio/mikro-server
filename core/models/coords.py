@@ -696,8 +696,8 @@ class NetworkCollection(Described):
         return f"NetworkCollection {self.label}"
 
 
-class CadModel(Described):
-    """A CAD model -- a glTF scene of hardware around the sample -- addressed by its file.
+class Fixture(Described):
+    """A fixture -- a glTF scene of hardware around the sample -- addressed by its file.
 
     A coverslip, a dish, a holder, an objective housing: geometry somebody drew rather than
     measured, kept so a scene can show where the sample sits. It is not data and carries none:
@@ -706,7 +706,7 @@ class CadModel(Described):
 
     **It lives in a space of its own, and that space carries units.** A collection's vertices
     are in the pixel grid they were extracted from, so its axes are unitless and an edge states
-    the scale. A CAD model's vertices are already lengths -- glTF is metres by specification,
+    the scale. A fixture's vertices are already lengths -- glTF is metres by specification,
     and an exporter that wrote millimetres says so -- so its axes carry that unit, and an
     IDENTITY edge into a micrometre world converts by the units alone. A stated factor would be
     the same fact twice, free to disagree.
@@ -722,8 +722,8 @@ class CadModel(Described):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="cad_models",
-        help_text="The folder this CAD model is filed in. Organisational only -- it says nothing about where the model sits in space",
+        related_name="fixtures",
+        help_text="The folder this fixture is filed in. Organisational only -- it says nothing about where the model sits in space",
     )
 
     # **Required**, as a collection's store is: a model with no bytes is a row describing
@@ -731,7 +731,7 @@ class CadModel(Described):
     store = models.ForeignKey(
         "datalayer.MediaStore",
         on_delete=models.CASCADE,
-        related_name="cad_models",
+        related_name="fixtures",
         help_text="The media store holding this model's binary glTF (`.glb`). Checked to be one when the model is registered",
     )
     bounds = models.JSONField(
@@ -747,23 +747,23 @@ class CadModel(Described):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="cad_models",
+        related_name="fixtures",
         help_text="The unit-carrying coordinate system this model's vertices are expressed in. A registration edge relates it to the world the model is placed in",
     )
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this CAD model belongs to")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this CAD model")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this CAD model was created")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this fixture belongs to")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this fixture")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this fixture was created")
 
     provenance = ProvenanceField()
 
     class Meta:
-        """Meta options for the CAD model."""
+        """Meta options for the fixture."""
 
         ordering = ["-created_at"]
         indexes = [
-            GinIndex(fields=["stored_descriptors"], name="cad_model_desc_gin", opclasses=["jsonb_path_ops"]),
-            models.Index(fields=["organization", "-created_at"], name="cad_model_org_newest_idx"),
+            GinIndex(fields=["stored_descriptors"], name="fixture_desc_gin", opclasses=["jsonb_path_ops"]),
+            models.Index(fields=["organization", "-created_at"], name="fixture_org_newest_idx"),
         ]
 
     @property
@@ -773,4 +773,4 @@ class CadModel(Described):
 
     def __str__(self) -> str:
         """The model's label."""
-        return f"CadModel {self.label}"
+        return f"Fixture {self.label}"

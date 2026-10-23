@@ -15,5 +15,5 @@ lens_types = [
     types.MeshLens,
     types.NetworkLens,
     types.AnnotationLens,
-    types.CadModelLens,
+    types.FixtureLens,
 ]

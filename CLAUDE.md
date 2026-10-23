@@ -83,6 +83,11 @@ system, a derivation edge, a refusal). `specVersion` is read off the store's man
 stored on the collection. `Axis.long_name` stays beside `description` on purpose: a label and
 a prose field.
 
+**A fixture is hardware around the sample** -- a coverslip, a dish, a holder -- as one binary
+glTF (`GltfLike`) in a unit-carrying space of its own: `Fixture`, `FixtureLens`, `FixtureLayer`.
+10.2.0 shipped it as a "CAD model"; `core/0005`-`0006` delete those rows and drop their tables,
+so nothing of that name is left.
+
 ## Metrics
 
 A **metric** (`metric/`, an app like `chart/`; core never imports it) is one value recorded about

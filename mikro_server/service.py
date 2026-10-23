@@ -32,7 +32,7 @@ from core.descriptors import (
     lens_descriptors,
     mesh_descriptors,
     network_descriptors,
-    cad_model_descriptors,
+    fixture_descriptors,
     scene_descriptors,
     sparse_descriptors,
     table_descriptors,
@@ -55,7 +55,7 @@ service = Service("mikro", hosts=contract.description.hosts, description="Micros
 # annotations) is in a collaboration with it by itself. These name the rest: what it points at to render.
 
 #: The field by which each lens kind names the container it selects from.
-_CONTAINERS = ("dataset", "table_dataset", "sparse_dataset", "mesh_collection", "network_collection", "annotation_collection", "cad_model")
+_CONTAINERS = ("dataset", "table_dataset", "sparse_dataset", "mesh_collection", "network_collection", "annotation_collection", "fixture")
 
 
 def _container_of(lens: models.Lens) -> object:
@@ -99,7 +99,7 @@ sparselens = service.structure(models.SparseLens, "@mikro/sparselens", describe=
 meshlens = service.structure(models.MeshLens, "@mikro/meshlens", describe=lens_descriptors)
 networklens = service.structure(models.NetworkLens, "@mikro/networklens", describe=lens_descriptors)
 annotationlens = service.structure(models.AnnotationLens, "@mikro/annotationlens", describe=lens_descriptors)
-cadmodellens = service.structure(models.CadModelLens, "@mikro/cadmodellens", describe=lens_descriptors)
+fixturelens = service.structure(models.FixtureLens, "@mikro/fixturelens", describe=lens_descriptors)
 scene = service.structure(models.Scene, "@mikro/scene", describe=scene_descriptors, depends=_scene_needs)
 
 
@@ -114,7 +114,7 @@ scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
 tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset", describe=table_descriptors, depends=_stored_needs)
 meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection", describe=mesh_descriptors, depends=_stored_needs)
 networkcollection = service.structure(models.NetworkCollection, "@mikro/networkcollection", describe=network_descriptors, depends=_stored_needs)
-cadmodel = service.structure(models.CadModel, "@mikro/cadmodel", describe=cad_model_descriptors, depends=_stored_needs)
+fixture = service.structure(models.Fixture, "@mikro/fixture", describe=fixture_descriptors, depends=_stored_needs)
 file = service.structure(models.File, "@mikro/file", describe=file_descriptors)
 folder = service.structure(models.Folder, "@mikro/folder")
 annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection", describe=annotation_descriptors, depends=_collection_needs)
@@ -152,14 +152,14 @@ service.model_signal(sparselens, organization=org)
 service.model_signal(meshlens, organization=org)
 service.model_signal(networklens, organization=org)
 service.model_signal(annotationlens, organization=org)
-service.model_signal(cadmodellens, organization=org)
+service.model_signal(fixturelens, organization=org)
 service.model_signal(scene, organization=org)
 service.model_signal(chart, organization=org)
 service.model_signal(scenesnapshot, organization=org)
 service.model_signal(tabledataset, organization=org)
 service.model_signal(meshcollection, organization=org)
 service.model_signal(networkcollection, organization=org)
-service.model_signal(cadmodel, organization=org)
+service.model_signal(fixture, organization=org)
 service.model_signal(file, organization=org)
 service.model_signal(folder, organization=org)
 service.model_signal(annotationcollection, organization=org)

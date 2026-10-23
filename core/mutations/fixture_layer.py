@@ -1,6 +1,6 @@
-"""Mutations for CAD model layers.
+"""Mutations for fixture layers.
 
-Its own module in the way ``mesh_layer.py`` is, and much the smaller: a CAD model carries no
+Its own module in the way ``mesh_layer.py`` is, and much the smaller: a fixture carries no
 data, so a layer over one publishes no pickers and caps no octree. What it has is the mesh
 layer's two surface settings, read differently -- a null ``materialColor`` keeps the model's
 own materials rather than meaning white.
@@ -22,7 +22,7 @@ from core.scoping import get_for_org
 _MATERIAL_DESCRIPTION = "One RGBA colour replacing every material of the model, each component 0..255. Null draws the model's own materials as authored"
 
 
-class CreateCadModelLayerInputModel(BaseModel):
+class CreateFixtureLayerInputModel(BaseModel):
     scene: str
     lens: str
     material_color: list[int] | None = None
@@ -35,10 +35,10 @@ class CreateCadModelLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateCadModelLayerInputModel, description="Create a layer that renders a CAD model in a scene. The model's own coordinate system is the layer's space, so it must already have a path to the scene's world")
-class CreateCadModelLayerInput:
+@kante.pydantic_input(CreateFixtureLayerInputModel, description="Create a layer that renders a fixture in a scene. The model's own coordinate system is the layer's space, so it must already have a path to the scene's world")
+class CreateFixtureLayerInput:
     scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The CAD model lens to draw through. A model's whole lens is its `fullLens`")
+    lens: strawberry.ID = strawberry.field(description="The fixture lens to draw through. A model's whole lens is its `fullLens`")
     material_color: list[int] | None = strawberry.field(default=None, description=f"{_MATERIAL_DESCRIPTION} (the default)")
     wireframe: bool | None = strawberry.field(default=None, description="Whether to draw the model as a wireframe (default false)")
     blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
@@ -48,16 +48,16 @@ class CreateCadModelLayerInput:
     name: str | None = strawberry.field(default=None, description="What to call the layer. Null leaves it to the model's label")
 
 
-def create_cad_model_layer(info: Info, input: CreateCadModelLayerInput) -> types.CadModelLayer:
-    """Place a CAD model in a scene, refusing one with no path into its world."""
+def create_fixture_layer(info: Info, input: CreateFixtureLayerInput) -> types.FixtureLayer:
+    """Place a fixture in a scene, refusing one with no path into its world."""
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
-    lens = lens_of_kind(info, kind=models.CadModelLens, lens=model.lens)
-    graph_logic.assert_placeable_in(scene.world, getattr(lens.cad_model, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")
+    lens = lens_of_kind(info, kind=models.FixtureLens, lens=model.lens)
+    graph_logic.assert_placeable_in(scene.world, getattr(lens.fixture, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")
 
     return models.Layer.objects.create(
-        kind=enums.LayerKind.CAD_MODEL,
+        kind=enums.LayerKind.FIXTURE,
         scene=scene,
         lens=lens,
         name=model.name,
@@ -70,7 +70,7 @@ def create_cad_model_layer(info: Info, input: CreateCadModelLayerInput) -> types
     )
 
 
-class UpdateCadModelLayerInputModel(BaseModel):
+class UpdateFixtureLayerInputModel(BaseModel):
     id: str
     material_color: list[int] | None = None
     wireframe: bool | None = None
@@ -82,12 +82,12 @@ class UpdateCadModelLayerInputModel(BaseModel):
 
 @prose_errors
 @strawberry.input(
-    description="Retune how a CAD model layer is drawn. A patch: an omitted field keeps its value, and an explicit `null` for `materialColor` returns to the model's own materials. The model and the scene are not editable",
+    description="Retune how a fixture layer is drawn. A patch: an omitted field keeps its value, and an explicit `null` for `materialColor` returns to the model's own materials. The model and the scene are not editable",
 )
-class UpdateCadModelLayerInput:
+class UpdateFixtureLayerInput:
     """Plain `@strawberry.input`, for `UpdateMeshLayerInput`'s reason: an `UNSET` must survive to tell an omitted colour from a cleared one."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the CAD model layer to update")
+    id: strawberry.ID = strawberry.field(description="The ID of the fixture layer to update")
     material_color: list[int] | None = strawberry.field(default=strawberry.UNSET, description=f"{_MATERIAL_DESCRIPTION}. Omit to keep the current one")
     wireframe: bool | None = strawberry.field(default=None, description="Whether to draw the model as a wireframe")
     blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
@@ -95,7 +95,7 @@ class UpdateCadModelLayerInput:
     visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
     order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
 
-    def to_pydantic(self) -> UpdateCadModelLayerInputModel:
+    def to_pydantic(self) -> UpdateFixtureLayerInputModel:
         """Drop what the caller did not name, so `model_fields_set` records what it did."""
         supplied = {
             "id": self.id,
@@ -106,14 +106,14 @@ class UpdateCadModelLayerInput:
             "visible": self.visible,
             "order": self.order,
         }
-        return UpdateCadModelLayerInputModel(**{name: value for name, value in supplied.items() if value is not strawberry.UNSET})
+        return UpdateFixtureLayerInputModel(**{name: value for name, value in supplied.items() if value is not strawberry.UNSET})
 
 
-def update_cad_model_layer(info: Info, input: UpdateCadModelLayerInput) -> types.CadModelLayer:
-    """Patch a CAD model layer's settings, leaving the ones not named alone."""
+def update_fixture_layer(info: Info, input: UpdateFixtureLayerInput) -> types.FixtureLayer:
+    """Patch a fixture layer's settings, leaving the ones not named alone."""
     model = input.to_pydantic()
     layer = get_for_org(models.Layer, info, id=model.id)
-    assert_kind(layer, enums.LayerKind.CAD_MODEL, mutation="updateCadModelLayer")
+    assert_kind(layer, enums.LayerKind.FIXTURE, mutation="updateFixtureLayer")
 
     if "material_color" in model.model_fields_set:
         layer.material_color = model.material_color

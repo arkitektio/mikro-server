@@ -42,7 +42,7 @@ FolderChild = Annotated[
         types.TableDataset,
         types.MeshCollection,
         types.AnnotationCollection,
-        types.CadModel,
+        types.Fixture,
     ],
     strawberry.union("FolderChild", description="Anything filed in a folder: a sub-folder, a file, or one of the four containers"),
 ]
@@ -64,7 +64,7 @@ _CHILD_SOURCES = [
     ("annotation_collections", "name", "description", True),
     # Labelled like a mesh collection, by its file's name when it has none of its own. Not a
     # container a `FileLink` names, so nothing hides it as converted.
-    ("cad_models", "sort_label", None, False),
+    ("fixtures", "sort_label", None, False),
 ]
 
 
@@ -94,7 +94,7 @@ def children(
             # A collection's label is its name or, failing that, its store's key: an annotation,
             # so an unnamed collection is searchable and sorts by what identifies it.
             # `output_field`: the name is text and the key a varchar, and Django will not pick between them.
-            fallbacks = ("store__original_file_name", "store__key") if accessor == "cad_models" else ("store__key",)
+            fallbacks = ("store__original_file_name", "store__key") if accessor == "fixtures" else ("store__key",)
             queryset = queryset.annotate(sort_label=Coalesce("name", *fallbacks, output_field=TextField()))
 
         # A container converted from a file is that file again in another form, and the file is

@@ -241,8 +241,8 @@ release_table_datasets_from_folder = _make_release_from_folder(models.TableDatas
 put_mesh_collections_in_folder = _make_put_in_folder(models.MeshCollection)
 release_mesh_collections_from_folder = _make_release_from_folder(models.MeshCollection)
 
-put_cad_models_in_folder = _make_put_in_folder(models.CadModel)
-release_cad_models_from_folder = _make_release_from_folder(models.CadModel)
+put_fixtures_in_folder = _make_put_in_folder(models.Fixture)
+release_fixtures_from_folder = _make_release_from_folder(models.Fixture)
 
 put_annotation_collections_in_folder = _make_put_in_folder(models.AnnotationCollection)
 release_annotation_collections_from_folder = _make_release_from_folder(models.AnnotationCollection)

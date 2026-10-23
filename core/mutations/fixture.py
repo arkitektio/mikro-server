@@ -1,4 +1,4 @@
-"""Mutations for CAD models.
+"""Mutations for fixtures.
 
 A model is one uploaded binary glTF in a media store, living in a unit-carrying space of its
 own. Registering it is naming that file and the axes its vertices are in; the box it occupies
@@ -25,7 +25,7 @@ from core.scoping import get_for_org
 from datalayer.datalayer import get_current_datalayer
 
 
-class CreateCadModelInputModel(BaseModel):
+class CreateFixtureInputModel(BaseModel):
     name: str | None = None
     store: str
     axes: list[PhysicalAxisInputModel]
@@ -35,9 +35,9 @@ class CreateCadModelInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateCadModelInputModel, description="Input for registering a CAD model: one binary glTF, in a unit-carrying coordinate system of its own")
-class CreateCadModelInput:
-    """Input for registering a CAD model."""
+@kante.pydantic_input(CreateFixtureInputModel, description="Input for registering a fixture: one binary glTF, in a unit-carrying coordinate system of its own")
+class CreateFixtureInput:
+    """Input for registering a fixture."""
 
     name: str | None = strawberry.field(default=None, description="What to call this model. Optional: it is labelled by this or, failing that, by the uploaded file's name")
     store: scalars.GltfLike = strawberry.field(description="The uploaded **binary glTF** (`.glb`). Request it with `requestMediaUpload`, write the file, then `finishMediaUpload`. Its header is read here: a file that is not glTF 2.0 is refused")
@@ -75,14 +75,14 @@ def _read_bounds(store: "models.MediaStore") -> dict | None:
 def _assert_spatial_axes(axes: list[PhysicalAxisInputModel]) -> None:
     """Refuse anything but three spatial axes: a glTF vertex has exactly three components, all lengths."""
     if len(axes) != 3:
-        raise ValueError(f"A CAD model's space has exactly three axes, one per vertex component, but {len(axes)} were declared. Declare x, y and z in the order the file stores them.")
+        raise ValueError(f"A fixture's space has exactly three axes, one per vertex component, but {len(axes)} were declared. Declare x, y and z in the order the file stores them.")
     others = [axis.name for axis in axes if str(getattr(axis.type, "value", axis.type)).upper() != "SPACE"]
     if others:
-        raise ValueError(f"Every axis of a CAD model's space is spatial -- a vertex is a position -- but {others} are not SPACE axes.")
+        raise ValueError(f"Every axis of a fixture's space is spatial -- a vertex is a position -- but {others} are not SPACE axes.")
 
 
-def create_cad_model(info: Info, input: CreateCadModelInput) -> types.CadModel:
-    """Register a CAD model, in a unit-carrying coordinate system of its own.
+def create_fixture(info: Info, input: CreateFixtureInput) -> types.Fixture:
+    """Register a fixture, in a unit-carrying coordinate system of its own.
 
     Atomic, for `_write_collection`'s reason: the row is written before its axes are checked
     and before its edges are, and a refusal in between must not leave an orphan behind.
@@ -95,7 +95,7 @@ def create_cad_model(info: Info, input: CreateCadModelInput) -> types.CadModel:
     bounds = _read_bounds(store)
 
     with transaction.atomic():
-        cad_model = models.CadModel.objects.create(
+        fixture = models.Fixture.objects.create(
             name=model.name,
             store=store,
             bounds=bounds,
@@ -105,25 +105,25 @@ def create_cad_model(info: Info, input: CreateCadModelInput) -> types.CadModel:
             organization=ctx.organization,
         )
         # Unit-carrying, unlike a collection's pixel space: the vertices are lengths already.
-        system = models.CoordinateSystem.objects.create(name=f"{cad_model.label}/model", creator=ctx.user, organization=ctx.organization)
+        system = models.CoordinateSystem.objects.create(name=f"{fixture.label}/model", creator=ctx.user, organization=ctx.organization)
         graph_logic.create_physical_axes(system, model.axes)
-        cad_model.coordinate_system = system
-        cad_model.save(update_fields=["coordinate_system"])
-        coordinate_system_logic.write_derivation_edges(info, name=cad_model.label, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
+        fixture.coordinate_system = system
+        fixture.save(update_fields=["coordinate_system"])
+        coordinate_system_logic.write_derivation_edges(info, name=fixture.label, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
         # The lens selecting all of it, from the start: what a layer draws through.
-        coordinate_system_logic.whole_lens(cad_model)
-    return cad_model
+        coordinate_system_logic.whole_lens(fixture)
+    return fixture
 
 
-class DeleteCadModelInputModel(BaseModel):
-    id: str = Field(description="The ID of the CAD model to delete")
+class DeleteFixtureInputModel(BaseModel):
+    id: str = Field(description="The ID of the fixture to delete")
 
 
-@kante.pydantic_input(DeleteCadModelInputModel, description="Input for deleting a CAD model by ID")
-class DeleteCadModelInput:
-    """Input for deleting a CAD model by ID."""
+@kante.pydantic_input(DeleteFixtureInputModel, description="Input for deleting a fixture by ID")
+class DeleteFixtureInput:
+    """Input for deleting a fixture by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the CAD model to delete")
+    id: strawberry.ID = strawberry.field(description="The ID of the fixture to delete")
 
 
-delete_cad_model = make_delete(models.CadModel, DeleteCadModelInput, owner=self_owner)
+delete_fixture = make_delete(models.Fixture, DeleteFixtureInput, owner=self_owner)

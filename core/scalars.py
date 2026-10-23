@@ -15,7 +15,7 @@ from strawberry.types.scalar import ScalarDefinition
 ArrayLike = NewType("ArrayLike", str)
 FileLike = NewType("FileLike", str)
 ImageFileLike = NewType("ImageFileLike", str)
-# A CAD model's one file. A media object like a snapshot's, and a scalar of its own because
+# A fixture's one file. A media object like a snapshot's, and a scalar of its own because
 # registration reads it as a binary glTF and refuses anything else.
 GltfLike = NewType("GltfLike", str)
 ParquetLike = NewType("ParquetLike", str)
@@ -50,7 +50,7 @@ SCALAR_MAP: dict[object, ScalarDefinition] = {
     ImageFileLike: _definition("ImageFileLike", "The `ImageFileLike` scalar type represents a reference to a snapshot image previously created by the user on a datalayer"),
     GltfLike: _definition(
         "GltfLike",
-        "A reference to an uploaded **binary glTF** (`.glb`) media object: one file holding a CAD model's scene, materials and buffers. Upload it with `requestMediaUpload` / `finishMediaUpload`; `createCadModel` reads its header and refuses anything that is not glTF 2.0",
+        "A reference to an uploaded **binary glTF** (`.glb`) media object: one file holding a fixture's scene, materials and buffers. Upload it with `requestMediaUpload` / `finishMediaUpload`; `createFixture` reads its header and refuses anything that is not glTF 2.0",
     ),
     ParquetLike: _definition("ParquetLike", "The `ParquetLike` scalar type represents a reference to a parquet object previously created by the user on a datalayer"),
     FabriksLike: _definition(

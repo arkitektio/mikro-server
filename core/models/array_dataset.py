@@ -16,7 +16,7 @@ from core import base_models
 from core.logic import acquisition
 from core.logic import coords as coords_logic
 from core.derived import DerivedDateTimeField
-from core.models.coords import CoordinateSystem, Transformation, MeshCollection, NetworkCollection, CadModel  # noqa: F401  (re-exported via core.models)
+from core.models.coords import CoordinateSystem, Transformation, MeshCollection, NetworkCollection, Fixture  # noqa: F401  (re-exported via core.models)
 from polymorphic.managers import PolymorphicManager
 from polymorphic.models import PolymorphicModel
 from polymorphic.query import PolymorphicQuerySet
@@ -1137,16 +1137,16 @@ class NetworkLens(WindowedLens, Lens):
         constraints = [models.UniqueConstraint(fields=["network_collection", "windows"], name="one_network_lens_per_selection")]
 
 
-class CadModelLens(WindowedLens, Lens):
-    """A selection over a CAD model: the part of it inside the windows of its own space -- a clip box, empty for the whole model."""
+class FixtureLens(WindowedLens, Lens):
+    """A selection over a fixture: the part of it inside the windows of its own space -- a clip box, empty for the whole model."""
 
-    CONTAINER_FIELD = "cad_model"
-    KIND = "CAD_MODEL"
+    CONTAINER_FIELD = "fixture"
+    KIND = "FIXTURE"
 
-    cad_model = models.ForeignKey(CadModel, on_delete=models.CASCADE, related_name="lenses")
+    fixture = models.ForeignKey(Fixture, on_delete=models.CASCADE, related_name="lenses")
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["cad_model", "windows"], name="one_cad_model_lens_per_selection")]
+        constraints = [models.UniqueConstraint(fields=["fixture", "windows"], name="one_fixture_lens_per_selection")]
 
 
 class AnnotationLens(WindowedLens, Lens):
@@ -1558,8 +1558,8 @@ class Layer(models.Model):
     color_by_column = models.CharField(max_length=100, null=True, blank=True, help_text="(track) The table column used to color tracks (used with colormap)")
     line_width = models.FloatField(null=True, blank=True, help_text="(track) The width of the track lines, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
 
-    # --- mesh render settings (and a CAD model's, which takes the same two) ---
-    material_color = models.JSONField(default=None, null=True, blank=True, help_text="(mesh/cad model) The material (surface) color, RGBA. For a CAD model null keeps the model's own materials, and a colour overrides all of them")
+    # --- mesh render settings (and a fixture's, which takes the same two) ---
+    material_color = models.JSONField(default=None, null=True, blank=True, help_text="(mesh/cad model) The material (surface) color, RGBA. For a fixture null keeps the model's own materials, and a colour overrides all of them")
     wireframe = models.BooleanField(default=False, help_text="(mesh/cad model) Whether the surface is rendered as a wireframe instead of a solid")
     shading = TextChoicesField(
         choices_enum=enums.MeshShadingChoices,
