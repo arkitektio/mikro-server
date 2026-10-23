@@ -16,11 +16,14 @@ caller.
 
 import datetime
 import math
+import re
 from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, cast
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+
+from kanne_server import scalars as kanne_scalars
 
 from core import base_models, enums, models
 from core import descriptors as descriptors_logic
@@ -42,6 +45,7 @@ def create_world_space(
     name: str,
     axes: list | None = None,
     epoch: datetime.datetime | None = None,
+    reference: str | None = None,
     ctx: CreationContext,
 ) -> "models.CoordinateSystem":
     """Mint an ownerless shared space with physical axes, for a scene to adopt.
@@ -54,16 +58,11 @@ def create_world_space(
 
     The epoch lands on this system, not on the scene adopting it: it is the origin of the
     *space's* time axis, and two compositions over one space cannot disagree about it.
+    A ``reference`` makes it get-or-create, as in :func:`create_coordinate_system`.
     """
     axes = axes or DEFAULT_WORLD_AXES
     with transaction.atomic():
-        world = models.CoordinateSystem.objects.create(
-            name=name,
-            epoch=epoch,
-            creator=ctx.user,
-            organization=ctx.organization,
-        )
-        graph_logic.create_physical_axes(world, axes)
+        world, _ = _get_or_create_space(name=name, axes=axes, epoch=epoch, reference=reference, ctx=ctx)
     return world
 
 
@@ -72,6 +71,7 @@ def create_coordinate_system(
     name: str,
     axes: list,
     epoch: datetime.datetime | None = None,
+    reference: str | None = None,
     registrations: Sequence[tuple["models.CoordinateSystem", "models.ZarrStore | None", object]] = (),
     ctx: CreationContext,
 ) -> "models.CoordinateSystem":
@@ -86,15 +86,13 @@ def create_coordinate_system(
     Every edge points source -> space, the direction a placement path walks, and is
     validated by the same :func:`~core.logic.graph.build_registration_edge` the
     transformation mutation uses.
+
+    With a ``reference`` it is get-or-create: an existing space holding that reference is
+    registered into and returned instead (see :func:`resolve_reference`), so two converters
+    reading the same atlas from two files land in one space rather than two that never compose.
     """
     with transaction.atomic():
-        system = models.CoordinateSystem.objects.create(
-            name=name,
-            epoch=epoch,
-            creator=ctx.user,
-            organization=ctx.organization,
-        )
-        graph_logic.create_physical_axes(system, axes)
+        system, _ = _get_or_create_space(name=name, axes=axes, epoch=epoch, reference=reference, ctx=ctx)
 
         for source_system, parts, spec in registrations:
             lowered = spec.transform.lower() if spec.transform else IDENTITY_TRANSFORM
@@ -115,6 +113,106 @@ def create_coordinate_system(
             )
 
     return system
+
+
+#: A reference with a URI scheme names a frame that means the same thing whoever writes it;
+#: anything else is a key in the calling app's own namespace. The scheme test is RFC 3986's.
+_URI_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:")
+
+
+def resolve_reference(reference: str, app_identifier: str | None) -> tuple[str, str | None]:
+    """The ``(reference, reference_app)`` pair a reference is stored and looked up under.
+
+    The scope is read off the string, so it can never disagree with it: ``nifti:mni152``
+    is global (one space per organization, whoever asks), ``stage`` belongs to the calling
+    app. The app is the token's ``client_app``, never the OAuth client -- a client is
+    re-minted on each fresh login, and keying by it would hand an app a new "stage" every
+    time it logged in.
+    """
+    if not reference or reference != reference.strip() or any(character.isspace() for character in reference):
+        raise ValueError(f"A space reference is a single token with no whitespace, got {reference!r}. Use a URI (`nifti:mni152`) for a frame everyone shares, or a plain key (`stage`) for one of your app's own.")
+    if _URI_SCHEME.match(reference):
+        return reference, None
+    if app_identifier is None:
+        raise ValueError(
+            f"The reference {reference!r} is app-scoped (it has no URI scheme), but this request was not made through an app, "
+            "so there is no namespace to keep it in. Use a URI (`scheme:name`) for a global frame, or call through an app."
+        )
+    return reference, app_identifier
+
+
+def _axis_signature(axes: Iterable) -> list[tuple[str, str, str]]:
+    """Name, type and normalized unit of each axis, in order: what makes two frames the same frame."""
+    return [(axis.name, axis.type.value if hasattr(axis.type, "value") else axis.type, kanne_scalars.parse_unit(axis.unit)) for axis in axes]
+
+
+def _assert_same_frame(system: "models.CoordinateSystem", *, axes: list, epoch: datetime.datetime | None) -> None:
+    """Refuse to hand back a referenced space a caller describes differently.
+
+    Axes are the space's description, so a request with other axes is asking for another
+    frame under the same name -- millimetres where the space has micrometres is not a
+    rescaling to do quietly, it is two claims about one atlas and one of them is wrong. An
+    epoch the space does not have is the same disagreement about its clock; leaving the
+    epoch out claims nothing and is accepted.
+    """
+    have = _axis_signature(system.axes.order_by("order"))
+    want = _axis_signature(axes)
+    if have != want:
+        raise ValueError(
+            f"Coordinate system {system.pk} already holds the reference {system.reference!r} with axes {have}, "
+            f"but this request describes it with {want}. A reference names one frame: create a space under another "
+            "reference, or ask for this one as it is."
+        )
+    if epoch is not None and system.epoch != epoch:
+        raise ValueError(f"Coordinate system {system.pk} already holds the reference {system.reference!r} with epoch {system.epoch}, not {epoch}. A space has one clock.")
+
+
+def _get_or_create_space(*, name: str, axes: list, epoch: datetime.datetime | None, reference: str | None, ctx: CreationContext) -> "tuple[models.CoordinateSystem, bool]":
+    """The space holding ``reference`` if there is one, else a new one; and whether it was created.
+
+    Called inside the caller's transaction. The create runs in a savepoint so that two
+    requests racing for one reference both end on the row the winner wrote: the loser's
+    insert trips the unique constraint, the savepoint rolls back, and the re-read finds it.
+    """
+    if reference is None:
+        system = models.CoordinateSystem.objects.create(name=name, epoch=epoch, creator=ctx.user, organization=ctx.organization)
+        graph_logic.create_physical_axes(system, axes)
+        return system, True
+
+    reference, app = resolve_reference(reference, ctx.app_identifier)
+    lookup = dict(organization=ctx.organization, reference=reference, reference_app=app)
+
+    existing = models.CoordinateSystem.objects.filter(**lookup).first()
+    if existing is None:
+        try:
+            with transaction.atomic():
+                system = models.CoordinateSystem.objects.create(name=name, epoch=epoch, creator=ctx.user, **lookup)
+                graph_logic.create_physical_axes(system, axes)
+            return system, True
+        except IntegrityError:
+            existing = models.CoordinateSystem.objects.get(**lookup)
+
+    _assert_same_frame(existing, axes=axes, epoch=epoch)
+    return existing, False
+
+
+def assign_reference(system: "models.CoordinateSystem", reference: str, ctx: CreationContext) -> None:
+    """Give a space that has none a reference, so later get-or-creates find it.
+
+    Set once: other callers may already be finding the space by it, and renaming it would
+    send them off to mint a fresh one. Taking one some other space already holds is refused
+    -- the reference would then name two frames.
+    """
+    reference, app = resolve_reference(reference, ctx.app_identifier)
+    if system.reference is not None:
+        if (system.reference, system.reference_app) == (reference, app):
+            return
+        raise ValueError(f"Coordinate system {system.pk} already has the reference {system.reference!r}; a reference is set once, because others find the space by it.")
+    holder = models.CoordinateSystem.objects.filter(organization=system.organization, reference=reference, reference_app=app).exclude(pk=system.pk).first()
+    if holder is not None:
+        raise ValueError(f"The reference {reference!r} is already held by coordinate system {holder.pk}; register into that space instead.")
+    system.reference, system.reference_app = reference, app
+    system.save(update_fields=["reference", "reference_app"])
 
 
 def resolve_source_system(

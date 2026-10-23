@@ -154,6 +154,27 @@ def create_mesh_lens(info: Info, input: CreateMeshLensInput) -> types.MeshLens:
     return _windowed(info, kind=models.MeshLens, container_model=models.MeshCollection, container=model.mesh_collection, lens=model.lens, windows=model.windows, what="meshCollection")
 
 
+class CreateCadModelLensInputModel(BaseModel):
+    cad_model: str | None = Field(default=None, description="The CAD model to select over. Exactly one of this and `lens`")
+    lens: str | None = Field(default=None, description="A lens over the CAD model to select within, in place of the container: the windows then intersect with its own, and the result is the model's lens for what that keeps")
+    windows: list[base_models.WindowInputModel] | None = Field(
+        default=None, description="Windows, one per axis to restrict, in the model's own axes and unit: a clip box. Omit for everything: the model's whole lens, or the lens cut from"
+    )
+
+
+@kante.pydantic_input(CreateCadModelLensInputModel, description="Input for the lens making a selection over a CAD model, by windows in its own space: a clip box")
+class CreateCadModelLensInput:
+    cad_model: strawberry.ID | None = strawberry.field(default=None, description="The CAD model to select over. Exactly one of this and `lens`")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)
+    windows: list[inputs.WindowInput] | None = strawberry.field(default=None, description=_WINDOWS)
+
+
+def create_cad_model_lens(info: Info, input: CreateCadModelLensInput) -> types.CadModelLens:
+    """The CAD model lens keeping these windows: the one that exists, or a new one."""
+    model = input.to_pydantic()
+    return _windowed(info, kind=models.CadModelLens, container_model=models.CadModel, container=model.cad_model, lens=model.lens, windows=model.windows, what="cadModel")
+
+
 class CreateNetworkLensInputModel(BaseModel):
     network_collection: str | None = Field(default=None, description="The network collection to select over. Exactly one of this and `lens`")
     lens: str | None = Field(default=None, description="A lens over the network collection to select within, in place of the container: the windows then intersect with its own, and the result is the network collection's lens for what that keeps")

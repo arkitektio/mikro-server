@@ -109,8 +109,9 @@ async def _create_table(ctx: HttpContext, name: str, folder=None, derived_from=N
 
 
 async def _create_mesh(ctx: HttpContext, name: str, folder=None, derived_from=None) -> dict[str, Any]:
-    store = await seed.create_fabriks_store(ctx)
-    payload = {"axes": _YX, "name": name, "store": str(store.pk)}
+    # A mesh names all three vertex slots; a plane would leave one unnamed.
+    store = await seed.create_fabriks_store(ctx, axes=["z", "y", "x"])
+    payload = {"axes": [{"name": "z", "type": "SPACE"}, *_YX], "name": name, "store": str(store.pk)}
     if folder is not None:
         payload["folder"] = str(folder.pk)
     if derived_from is not None:

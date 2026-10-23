@@ -14,6 +14,7 @@ from mikro_server.vocabulary import (
     ANNOTATION_DESCRIPTORS,
     ANNOTATION_SHAPE_DESCRIPTORS,
     ARRAY_DESCRIPTORS,
+    CAD_MODEL_DESCRIPTORS,
     CHART_DESCRIPTORS,
     COORDINATE_ANCHOR_DESCRIPTORS,
     COORDINATE_SYSTEM_DESCRIPTORS,
@@ -97,6 +98,12 @@ HOSTS = Hosts(
             descriptors=ANNOTATION_DESCRIPTORS,
         ),
         Structure(
+            identifier="@mikro/cadmodellens",
+            label="CAD Model Lens",
+            description="The part of a CAD model (a coverslip, a dish, a holder) that lies inside given windows of its own space, or the whole model.",
+            descriptors=CAD_MODEL_DESCRIPTORS,
+        ),
+        Structure(
             identifier="@mikro/scene",
             label="Scene",
             description="A view that overlays images, label images, points, tracks, annotations, meshes and networks as layers in one shared world coordinate system, displayed in 2D or 3D. It is what a viewer opens to look at registered data together.",
@@ -130,6 +137,12 @@ HOSTS = Hosts(
             label="Network Collection",
             description="An immutable collection of node/edge networks with positions: traced neurons and skeletons, vessel trees, connectomes, or tracking graphs with divisions.",
             descriptors=NETWORK_DESCRIPTORS,
+        ),
+        Structure(
+            identifier="@mikro/cadmodel",
+            label="CAD Model",
+            description="A CAD model of hardware around the sample, such as a coverslip, a dish, a holder or an objective housing, stored as one binary glTF in a coordinate space of its own whose axes carry the model's units.",
+            descriptors=CAD_MODEL_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/file",
@@ -279,6 +292,12 @@ HOSTS = Hosts(
             description="A part of an annotation collection (annotation lens) was selected, renamed or deleted, with how many annotations it holds and whether it selects the whole collection.",
         ),
         Signal(
+            identifier="@mikro/cadmodellens",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(CAD_MODEL_DESCRIPTORS),
+            description="A part of a CAD model (CAD model lens) was selected, renamed or deleted, with its axes and whether it selects the whole model.",
+        ),
+        Signal(
             identifier="@mikro/arraydataset",
             kinds=["CREATED", "UPDATED", "DELETED"],
             descriptors=_keys(ARRAY_DESCRIPTORS),
@@ -312,6 +331,12 @@ HOSTS = Hosts(
             kinds=["CREATED", "DELETED"],
             description="A collection of 3D surface meshes was created or deleted.",
             descriptors=_keys(MESH_DESCRIPTORS),
+        ),
+        Signal(
+            identifier="@mikro/cadmodel",
+            kinds=["CREATED", "DELETED"],
+            description="A CAD model (a coverslip, a dish, a holder) was created or deleted.",
+            descriptors=_keys(CAD_MODEL_DESCRIPTORS),
         ),
         Signal(
             identifier="@mikro/networkcollection",

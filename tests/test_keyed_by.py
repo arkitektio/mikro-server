@@ -435,7 +435,7 @@ async def test_a_second_object_space_is_a_reference_not_an_axis(authenticated_co
 
 async def _mesh_collection(ctx: HttpContext, axes: list[dict], *, name: str = "v1") -> models.MeshCollection:
     """A mesh collection in a space of its own, derived from nothing."""
-    store = await seed.create_fabriks_store(ctx)
+    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in axes])
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id coordinateSystem { id } } }",
         context_value=ctx,
@@ -592,7 +592,7 @@ async def test_a_collection_keyed_to_its_own_table_still_reaches_its_masks(authe
     mask_system = await sync_to_async(lambda: mask.intrinsic_coordinate_system)()
     await _create(authenticated_context, "nuclei morphology", OBJECT_COLUMNS, identified_by={"i": [{"kind": "DATASET", "dataset": str(mask.pk)}]})
 
-    store = await seed.create_fabriks_store(authenticated_context)
+    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in TYX_MESH_AXES])
     created = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id coordinateSystem { id } } }",
         context_value=authenticated_context,

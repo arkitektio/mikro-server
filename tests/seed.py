@@ -312,8 +312,12 @@ def _seed_fabriks_store_sync(ctx: HttpContext, *, axes: list[str] | None, popula
     )
 
 
-async def create_fabriks_store(ctx: HttpContext, *, axes: list[str] | None = None, populated: bool = True):
-    """A finished fabriks store, ready to be registered as a collection."""
+async def create_fabriks_store(ctx: HttpContext, *, axes: list[str] | None, populated: bool = True):
+    """A finished fabriks store, ready to be registered as a collection.
+
+    ``axes`` is what its manifest says the vertex slots are, and has no default: a collection
+    is refused unless it declares exactly these. ``None`` seeds a store whose writer named none.
+    """
     return await sync_to_async(_seed_fabriks_store_sync)(ctx, axes=axes, populated=populated)
 
 
@@ -367,7 +371,7 @@ def _seed_konnektion_store_sync(ctx: HttpContext, *, axes: list[str] | None, att
 async def create_konnektion_store(
     ctx: HttpContext,
     *,
-    axes: list[str] | None = None,
+    axes: list[str] | None,
     attributes: "list[dict] | None" = KONNEKTION_ATTRIBUTES,
     encoding: dict | None = None,
     populated: bool = True,

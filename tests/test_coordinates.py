@@ -929,7 +929,7 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     dataset = await seed.create_array_dataset(authenticated_context, "Labels")
 
     system = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
-    store = await seed.create_fabriks_store(authenticated_context)
+    store = await seed.create_fabriks_store(authenticated_context, axes=["c", "y", "x"])
 
     create = """
     mutation Create($input: CreateMeshCollectionInput!) {

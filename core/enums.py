@@ -201,6 +201,7 @@ class LayerKindChoices(TextChoices):
     MESH = "mesh", "Mesh (3D surface)"
     NETWORK = "network", "Network (node/edge graph)"
     VECTOR = "vector", "Vector (per-voxel vectors drawn as glyphs)"
+    CAD_MODEL = "cad_model", "CAD model (a glTF scene: a coverslip, a dish, a holder)"
 
 
 #: The kinds that draw an *array* lens: the ones with a pyramid to walk, axes to face the
@@ -440,6 +441,7 @@ class LayerKind(str, Enum):
     MESH = "mesh"
     NETWORK = "network"
     VECTOR = "vector"
+    CAD_MODEL = "cad_model"
 
 
 _describe(
@@ -454,6 +456,7 @@ _describe(
     TRACK="A track layer rendering trajectories from columns of a table, grouped by a track id.",
     MESH="A mesh layer rendering a 3D surface reconstruction.",
     NETWORK="A network layer rendering a node/edge graph from a konnektion collection -- a traced arbor, a vessel tree, a connectome. Distinct from TRACK, which draws trajectories from a table and can only express a path: a network is a graph, so it carries branch points, and a dividing cell or a dendrite is not a trajectory. Its segments are drawn as camera-facing quads, which is also why `lineWidth` and `nodeSizeColumn` mean something only from SIMILARITY up.",
+    CAD_MODEL="A layer rendering a CAD model -- a glTF scene of hardware around the sample: a coverslip, a dish, a holder, an objective housing. Not data: the model's own materials are drawn as authored, optionally overridden by one `materialColor` or shown as a `wireframe`. Its vertices are in the model's own unit-carrying space, so a registration into the world converts millimetres into micrometres by the axes' units rather than by a stated factor.",
     VECTOR="A vector layer rendering a vector-valued lens -- an optical flow, a deformation field, an orientation map -- as glyphs sampled from the grid. The sixth lens-backed kind, and the value axis is what makes it one: the lens carries a DISPLACEMENT axis whose positions are the components of a per-point offset, so the axis is read as geometry rather than composited as channels. Which axis that is is derived from the axis types (`vectorAxis`), never stored; what the layer carries is view state -- a glyph style, a sampling stride, a magnitude scale and a magnitude colormap window. `glyphScale` maps a magnitude in the component axis's unit to a drawn length in scene units, so like `pointSize` it means something only from SIMILARITY up.",
 )
 
@@ -574,7 +577,7 @@ _describe(
 )
 
 
-@strawberry.enum(description="What a lens selects over: an array (by index slices, re-indexing into a space of its own), or a table, a sparse dataset, a mesh collection, a network collection or an annotation collection (by value windows, in the container's own space).")
+@strawberry.enum(description="What a lens selects over: an array (by index slices, re-indexing into a space of its own), or a table, a sparse dataset, a mesh collection, a network collection, an annotation collection or a CAD model (by value windows, in the container's own space).")
 class LensKind(str, Enum):
     """The container kind a lens is a selection over. Derived from the row's concrete model, never stored."""
 
@@ -584,6 +587,7 @@ class LensKind(str, Enum):
     MESH = "MESH"
     NETWORK = "NETWORK"
     ANNOTATION = "ANNOTATION"
+    CAD_MODEL = "CAD_MODEL"
 
 
 @strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation; an array lens answers the same vocabulary over the shape its slices cut out, so one plane of a stack is an IMAGE and one row of an image a TRACE. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds; the others are modifiers: one per non-spatial axis type the dataset has more than one position along, and TRACE for a dataset that is a curve along one measured axis.")

@@ -117,6 +117,28 @@ class CoordinateSystem(Described):
         ),
     )
 
+    reference = models.TextField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The frame this space *is*, so two callers asking for it get the same row: the spatial "
+            "counterpart of the epoch, an identity rather than a value. A URI (`nifti:mni152`, "
+            "`templateflow:MNI152NLin2009cAsym`) names a frame that means the same thing to everyone, "
+            "so one space per organization holds it; a plain key (`stage`) is the calling app's own, "
+            "namespaced by `reference_app`. Null for a space nobody needs to find again"
+        ),
+    )
+
+    reference_app = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text=(
+            "The identifier of the app an app-scoped `reference` belongs to -- the app, never its OAuth "
+            "client, which rotates on re-login. Null for a URI reference, which belongs to nobody"
+        ),
+    )
+
     # A space has no foreign key to anything now, so `core.scoping._find_org_path` has no
     # path to follow and every scoped read would raise LookupError without this column. It
     # was already required when the owner FKs existed, because all seven were nullable and
@@ -129,6 +151,21 @@ class CoordinateSystem(Described):
 
     class Meta:
         indexes = [GinIndex(fields=["stored_descriptors"], name="coord_system_desc_gin", opclasses=["jsonb_path_ops"])]
+        constraints = [
+            # Two constraints, not one over all three columns: a unique index treats NULLs as
+            # distinct, so `(org, reference, NULL)` would never collide with itself and two
+            # converters would mint two MNI152 spaces -- the bug the reference exists to end.
+            models.UniqueConstraint(
+                fields=["organization", "reference"],
+                condition=models.Q(reference__isnull=False, reference_app__isnull=True),
+                name="one_space_per_global_reference",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "reference_app", "reference"],
+                condition=models.Q(reference__isnull=False, reference_app__isnull=False),
+                name="one_space_per_app_reference",
+            ),
+        ]
 
     def __str__(self) -> str:
         """The space's name."""
@@ -657,3 +694,83 @@ class NetworkCollection(Described):
     def __str__(self) -> str:
         """The collection's label."""
         return f"NetworkCollection {self.label}"
+
+
+class CadModel(Described):
+    """A CAD model -- a glTF scene of hardware around the sample -- addressed by its file.
+
+    A coverslip, a dish, a holder, an objective housing: geometry somebody drew rather than
+    measured, kept so a scene can show where the sample sits. It is not data and carries none:
+    no ids to colour by, no octree to stream. One binary glTF (`.glb`) in a media store is the
+    whole of it, read in one request by the viewer.
+
+    **It lives in a space of its own, and that space carries units.** A collection's vertices
+    are in the pixel grid they were extracted from, so its axes are unitless and an edge states
+    the scale. A CAD model's vertices are already lengths -- glTF is metres by specification,
+    and an exporter that wrote millimetres says so -- so its axes carry that unit, and an
+    IDENTITY edge into a micrometre world converts by the units alone. A stated factor would be
+    the same fact twice, free to disagree.
+
+    Like a collection it may be derived from nothing (a coverslip belongs to no dataset), and
+    it is placed by an ordinary registration edge from its space into a world.
+    """
+
+    name = models.TextField(null=True, blank=True, help_text="What someone called this model. Optional: a model is identified by its file, and labelled by this or, failing that, by the file's original name")
+
+    folder = models.ForeignKey(
+        "Folder",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cad_models",
+        help_text="The folder this CAD model is filed in. Organisational only -- it says nothing about where the model sits in space",
+    )
+
+    # **Required**, as a collection's store is: a model with no bytes is a row describing
+    # geometry nothing can address.
+    store = models.ForeignKey(
+        "datalayer.MediaStore",
+        on_delete=models.CASCADE,
+        related_name="cad_models",
+        help_text="The media store holding this model's binary glTF (`.glb`). Checked to be one when the model is registered",
+    )
+    bounds = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="The model's axis-aligned bounding box in its own space, as {'min': [x, y, z], 'max': [x, y, z]}, read from the glTF's position accessors at registration. Null when the file declares none",
+    )
+    provenance_metadata = models.JSONField(default=dict, help_text="How this model was produced (the CAD source, the exporter and its settings)")
+
+    coordinate_system = models.ForeignKey(
+        "CoordinateSystem",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cad_models",
+        help_text="The unit-carrying coordinate system this model's vertices are expressed in. A registration edge relates it to the world the model is placed in",
+    )
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this CAD model belongs to")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this CAD model")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this CAD model was created")
+
+    provenance = ProvenanceField()
+
+    class Meta:
+        """Meta options for the CAD model."""
+
+        ordering = ["-created_at"]
+        indexes = [
+            GinIndex(fields=["stored_descriptors"], name="cad_model_desc_gin", opclasses=["jsonb_path_ops"]),
+            models.Index(fields=["organization", "-created_at"], name="cad_model_org_newest_idx"),
+        ]
+
+    @property
+    def label(self) -> str:
+        """What to call this model in prose: its name, or its file's original name, or its key."""
+        return self.name or self.store.original_file_name or self.store.key
+
+    def __str__(self) -> str:
+        """The model's label."""
+        return f"CadModel {self.label}"

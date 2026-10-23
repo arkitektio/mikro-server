@@ -409,3 +409,169 @@ async def test_a_shared_space_takes_its_axes_as_given_but_must_have_some(authent
     )
     assert empty.errors and "no axes" in str(empty.errors[0])
     assert not await sync_to_async(models.CoordinateSystem.objects.filter(name="Empty").exists)(), "the rollback leaves no permanent zero-axis space"
+
+
+# --- References: the spatial counterpart of the epoch ----------------------------------------
+#
+# A reference is what lets two callers ask for the *same* frame. A URI names a frame that
+# means the same to everyone (one space per organization), a plain key is the calling app's
+# own -- keyed by the token's app, never its OAuth client, which is re-minted on re-login.
+
+REFERENCED_CS = """
+mutation CreateCS($input: CreateCoordinateSystemInput!) {
+  createCoordinateSystem(input: $input) { id name epoch reference referenceApp }
+}
+"""
+
+REFERENCE_UPDATE = """
+mutation UpdateCS($input: UpdateCoordinateSystemInput!) {
+  updateCoordinateSystem(input: $input) { id name reference referenceApp }
+}
+"""
+
+BY_REFERENCE = """
+query Systems($reference: String!) {
+  coordinateSystems(filters: { reference: $reference }) { id reference referenceApp }
+}
+"""
+
+REFERENCED_SCENE = """
+mutation S($input: CreateSceneInput!) { createScene(input: $input) { id world: worldCoordinateSystem { id reference } } }
+"""
+
+MM_AXES = [
+    {"name": "y", "type": "SPACE", "unit": "millimeter"},
+    {"name": "x", "type": "SPACE", "unit": "millimeter"},
+]
+
+
+async def _referenced(ctx: HttpContext, reference: str, name: str = "Atlas", axes=None, **extra):
+    return await schema.execute(
+        REFERENCED_CS,
+        context_value=ctx,
+        variable_values={"input": {"name": name, "axes": axes if axes is not None else ATLAS_AXES, "reference": reference, **extra}},
+    )
+
+
+async def _space_for(ctx: HttpContext, reference: str, name: str = "Atlas", axes=None, **extra) -> dict:
+    result = await _referenced(ctx, reference, name, axes, **extra)
+    assert not result.errors, result.errors
+    return result.data["createCoordinateSystem"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_uri_reference_is_one_space_whoever_asks(authenticated_context: HttpContext, other_app_context: HttpContext, no_app_context: HttpContext):
+    """Two converters reading MNI152 from two files land in one space, not two that never compose."""
+    first = await _space_for(authenticated_context, "nifti:mni152", "MNI152 (first)")
+    again = await _space_for(other_app_context, "nifti:mni152", "MNI152 (second)")
+    bare = await _space_for(no_app_context, "nifti:mni152", "MNI152 (third)")
+
+    assert first["id"] == again["id"] == bare["id"], "a URI names a frame that means the same thing to every app"
+    assert again["name"] == "MNI152 (first)", "the existing space is handed back as it is"
+    assert first["referenceApp"] is None, "a global reference belongs to no app"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_plain_key_is_the_calling_apps_own(authenticated_context: HttpContext, other_app_context: HttpContext):
+    """`stage` is per app: the same app gets its own back, another app gets another space."""
+    mine = await _space_for(authenticated_context, "stage")
+    mine_again = await _space_for(authenticated_context, "stage")
+    theirs = await _space_for(other_app_context, "stage")
+
+    assert mine["id"] == mine_again["id"]
+    assert theirs["id"] != mine["id"], "two apps' stages are two frames"
+    assert (mine["referenceApp"], theirs["referenceApp"]) == ("static_app", "other_app")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_app_key_needs_an_app(no_app_context: HttpContext):
+    """Without an app there is no namespace to keep `stage` in; refused rather than made global."""
+    result = await _referenced(no_app_context, "stage")
+    assert result.errors and "not made through an app" in str(result.errors[0])
+
+    result = await _referenced(no_app_context, "two words")
+    assert result.errors and "no whitespace" in str(result.errors[0])
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_referenced_space_is_refused_when_described_differently(authenticated_context: HttpContext):
+    """Other axes or another clock under the same reference is a second frame, never a quiet rescale."""
+    await _space_for(authenticated_context, "nifti:mni152", epoch="2026-01-01T00:00:00+00:00")
+
+    result = await _referenced(authenticated_context, "nifti:mni152", axes=MM_AXES)
+    assert result.errors and "already holds the reference" in str(result.errors[0]) and "millimeter" in str(result.errors[0])
+
+    result = await _referenced(authenticated_context, "nifti:mni152", epoch="2026-06-01T00:00:00+00:00")
+    assert result.errors and "one clock" in str(result.errors[0])
+
+    # Leaving the epoch out claims nothing about the clock.
+    assert (await _space_for(authenticated_context, "nifti:mni152"))["epoch"] is not None
+    assert await sync_to_async(models.CoordinateSystem.objects.filter(reference="nifti:mni152").count)() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_global_reference_is_materialized_per_organization(authenticated_context: HttpContext, other_org_context: HttpContext):
+    """The URI is global; the row is not -- a space is org-scoped like everything a scene composes."""
+    ours = await _space_for(authenticated_context, "nifti:mni152")
+    theirs = await _space_for(other_org_context, "nifti:mni152")
+    assert ours["id"] != theirs["id"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_registrations_go_into_the_space_already_holding_the_reference(authenticated_context: HttpContext):
+    dataset = await seed.create_array_dataset(authenticated_context, "A", axes=seed.YX_AXES, shapes=[[64, 64]])
+    registration = {"dataset": str(dataset.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}
+
+    space = await _space_for(authenticated_context, "atlas:demo")
+    again = await _space_for(authenticated_context, "atlas:demo", registrations=[registration])
+
+    assert again["id"] == space["id"]
+    edges = await sync_to_async(lambda: models.Transformation.objects.filter(output_id=space["id"]).count())()
+    assert edges == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_reference_is_set_once(authenticated_context: HttpContext):
+    """An existing space may be given a reference, but not have it changed or take another's."""
+    plain = await _create_space(authenticated_context, "Plain")
+    held = await _space_for(authenticated_context, "atlas:held")
+
+    result = await schema.execute(REFERENCE_UPDATE, context_value=authenticated_context, variable_values={"input": {"id": plain["id"], "reference": "atlas:plain"}})
+    assert not result.errors, result.errors
+    assert result.data["updateCoordinateSystem"]["reference"] == "atlas:plain"
+
+    result = await schema.execute(REFERENCE_UPDATE, context_value=authenticated_context, variable_values={"input": {"id": plain["id"], "reference": "atlas:other", "name": "Renamed"}})
+    assert result.errors and "set once" in str(result.errors[0])
+    assert await sync_to_async(lambda: models.CoordinateSystem.objects.get(pk=plain["id"]).name)() == "Plain", "a refused reference applies nothing"
+
+    other = await _create_space(authenticated_context, "Other")
+    result = await schema.execute(REFERENCE_UPDATE, context_value=authenticated_context, variable_values={"input": {"id": other["id"], "reference": "atlas:held"}})
+    assert result.errors and f"held by coordinate system {held['id']}" in str(result.errors[0])
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_reference_filter_resolves_the_callers_scope(authenticated_context: HttpContext, other_app_context: HttpContext):
+    mine = await _space_for(authenticated_context, "stage")
+    theirs = await _space_for(other_app_context, "stage")
+
+    for ctx, expected in ((authenticated_context, mine["id"]), (other_app_context, theirs["id"])):
+        result = await schema.execute(BY_REFERENCE, context_value=ctx, variable_values={"reference": "stage"})
+        assert not result.errors, result.errors
+        assert [system["id"] for system in result.data["coordinateSystems"]] == [expected]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_scenes_asking_for_one_reference_adopt_one_world(authenticated_context: HttpContext):
+    first = await schema.execute(REFERENCED_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "One", "reference": "stage"}})
+    second = await schema.execute(REFERENCED_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "Two", "reference": "stage"}})
+    assert not first.errors and not second.errors, (first.errors, second.errors)
+    assert first.data["createScene"]["world"]["id"] == second.data["createScene"]["world"]["id"]

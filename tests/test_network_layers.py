@@ -78,7 +78,7 @@ VOCABULARY = ["strahler", "degree", "depth", "component", "radius"]
 
 async def _collection(ctx: HttpContext, **store_kwargs: object) -> models.NetworkCollection:
     """A network collection in a space of its own."""
-    store = await seed.create_konnektion_store(ctx, **store_kwargs)
+    store = await seed.create_konnektion_store(ctx, **{"axes": [axis["name"] for axis in XYZ_AXES], **store_kwargs})
     result = await schema.execute(
         "mutation Create($input: CreateNetworkCollectionInput!) { createNetworkCollection(input: $input) { id } }",
         context_value=ctx,

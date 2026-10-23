@@ -20,6 +20,7 @@ class LineageNodeKind(str, Enum):
     MESH_COLLECTION = "meshcollection"
     NETWORK_COLLECTION = "networkcollection"
     ANNOTATION_COLLECTION = "annotationcollection"
+    CAD_MODEL = "cadmodel"
     FILE = "file"
 
 

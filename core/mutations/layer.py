@@ -349,6 +349,7 @@ _KIND_VOCABULARY: "dict[str, tuple[str, str]]" = {
     enums.LayerKind.MESH.value: ("a material, shading and its pickers", "updateMeshLayer"),
     enums.LayerKind.NETWORK.value: ("a colour, its segment widths, whether direction and nodes are drawn, and its pickers", "updateNetworkLayer"),
     enums.LayerKind.VECTOR.value: ("a glyph style, a sampling stride, a magnitude scale and a magnitude colormap window", "updateVectorLayer"),
+    enums.LayerKind.CAD_MODEL.value: ("a material override and a wireframe toggle", "updateCadModelLayer"),
 }
 
 

@@ -226,7 +226,7 @@ async def test_create_scene_adopts_any_space(authenticated_context: HttpContext)
     # axes or epoch alongside coordinateSystem: the space already has both.
     for extra in ({"axes": [{"name": "y", "type": "SPACE", "unit": "micrometer"}]}, {"epoch": "2026-07-15T12:00:00Z"}):
         result = await schema.execute(CREATE_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "nope", "coordinateSystem": str(space.pk), **extra}})
-        assert result.errors and "takes its axes and epoch from it" in str(result.errors[0])
+        assert result.errors and "takes its axes, epoch and reference from it" in str(result.errors[0])
 
     # Another scene's world is nobody's property: a second scene composes right over it.
     first = await seed.create_scene(authenticated_context, "First")

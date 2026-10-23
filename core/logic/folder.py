@@ -41,7 +41,7 @@ from kante.types import Info
 
 #: Anything fileable that can also be derived: the four containers. `Image`, `File` and
 #: `Table` are fileable but have no lineage, so nothing here ever sees one.
-Container = models.ArrayDataset | models.TableDataset | models.MeshCollection | models.AnnotationCollection
+Container = models.ArrayDataset | models.TableDataset | models.MeshCollection | models.AnnotationCollection | models.CadModel
 
 #: The models a `derivedFrom` entry can name, by its source kind. `LENS` is absent on
 #: purpose: a lens is a selection over a dataset, not a filed thing, so a child derived
@@ -55,7 +55,7 @@ _SOURCE_MODELS: dict[str, type] = {
 
 #: The container keys that name something fileable. `container_map` also returns
 #: `("system", pk)` for a space owned by nothing, which has no folder to inherit.
-_FILEABLE_KEYS = frozenset({"dataset", "tabledataset", "meshcollection", "annotationcollection"})
+_FILEABLE_KEYS = frozenset({"dataset", "tabledataset", "meshcollection", "annotationcollection", "cadmodel"})
 
 _DERIVED_REFUSAL = "{label} was computed from {parent}, so it is filed with it and cannot be filed on its own. Derived data follows its primary parent's folder: move {parent} instead, and everything derived from it moves with it"
 

@@ -131,6 +131,10 @@ class OpticalElementInput:
         supplied = {name: getattr(self, name) for name in _ELEMENT_WIRE_FIELDS}
         data = {name: value for name, value in supplied.items() if value is not None}
         data["ports"] = [port.to_pydantic() for port in (self.ports or [])]
+        # The one nested input among the wire fields: a strawberry instance here would
+        # fail `model_validate` ("Input should be a valid dictionary").
+        if self.pose is not None:
+            data["pose"] = self.pose.to_pydantic()
         return parse_union_member(models.ELEMENT_MEMBERS, data, noun="optical element")
 
 

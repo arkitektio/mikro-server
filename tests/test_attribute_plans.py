@@ -616,7 +616,7 @@ async def _mesh_collection(ctx: HttpContext, source_system: models.CoordinateSys
     negative test below exists to pin.
     """
 
-    store = await seed.create_fabriks_store(ctx)
+    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in axes])
     entry: dict = {"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(source_system.pk)}
     if transform is not None:
         entry["transform"] = transform

@@ -27,7 +27,7 @@ from embeddings.strawberry import Embedding, embedding_of
 if TYPE_CHECKING:
     # Runtime imports here would cycle: each of these modules imports this one back.
     from core.types.array_dataset import AnnotationCollection, ArrayDataset
-    from core.types.coords import MeshCollection
+    from core.types.coords import CadModel, MeshCollection
     from core.types.file_link import FileLink
     from core.types.table_dataset import TableDataset
 
@@ -145,6 +145,7 @@ class Folder(OrgScoped):
     table_datasets: List[Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(description="The table datasets filed in this folder")
     mesh_collections: List[Annotated["MeshCollection", strawberry.lazy("core.types.coords")]] = kante.django_field(description="The mesh collections filed in this folder")
     annotation_collections: List[Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(description="The annotation collections filed in this folder")
+    cad_models: List[Annotated["CadModel", strawberry.lazy("core.types.coords")]] = kante.django_field(description="The CAD models filed in this folder")
     parent: Optional["Folder"]
     children: List["Folder"]
     description: str | None

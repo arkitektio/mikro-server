@@ -15,6 +15,8 @@ from .folder import (
     release_table_datasets_from_folder,
     put_mesh_collections_in_folder,
     release_mesh_collections_from_folder,
+    put_cad_models_in_folder,
+    release_cad_models_from_folder,
     put_annotation_collections_in_folder,
     release_annotation_collections_from_folder,
 )
@@ -29,7 +31,7 @@ from .unstructured_meta import attach_unstructured_meta
 from .array_dataset import create_array_dataset, update_array_dataset, set_default_scene, delete_array_dataset, create_phasor_histogram, create_phasor_calibration
 from .coordinate_anchor import create_coordinate_anchor
 from .coordinate_system import clear_coordinate_system, create_coordinate_system, delete_coordinate_system, delete_orphaned_coordinate_systems, update_coordinate_system
-from .lens import create_lens, create_table_lens, create_sparse_lens, create_mesh_lens, create_network_lens, create_annotation_lens, update_lens, delete_lens, set_lens_default_scene
+from .lens import create_lens, create_table_lens, create_sparse_lens, create_mesh_lens, create_cad_model_lens, create_network_lens, create_annotation_lens, update_lens, delete_lens, set_lens_default_scene
 from .scene import clear_scene, create_scene, create_scene_from_coordinate_system, create_scene_from_lens, update_scene, delete_scene
 from .transformation import (
     create_transformation,
@@ -41,12 +43,14 @@ from .sparse_dataset import create_sparse_dataset, update_sparse_dataset, delete
 from .table_dataset import create_table_dataset, update_table_dataset, delete_table_dataset
 from .mesh_collection import create_mesh_collection, delete_mesh_collection
 from .network_collection import create_network_collection, delete_network_collection
+from .cad_model import create_cad_model, delete_cad_model
 from .layer import create_layer, update_layer, create_rgb_layer, update_rgb_layer, create_intensity_layer, update_intensity_layer, create_label_layer, update_label_layer, create_volume_layer, create_phasor_layer, update_phasor_layer, delete_layer
 from .vector_layer import create_vector_layer, update_vector_layer
 from .annotation_layer import create_annotation_layer
 from .table_layer import create_point_layer, create_track_layer, update_point_layer, update_track_layer
 from .mesh_layer import create_mesh_layer, update_mesh_layer
 from .network_layer import create_network_layer, update_network_layer
+from .cad_model_layer import create_cad_model_layer, update_cad_model_layer
 from .annotation_collection import create_annotation_collection, delete_annotation_collection
 from .annotation import create_annotation, create_annotations, update_annotation, delete_annotation
 from .collaboration import add_many_to_collaboration

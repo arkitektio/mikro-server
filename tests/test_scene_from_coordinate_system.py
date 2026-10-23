@@ -241,7 +241,7 @@ async def test_include_meshes_gates_mesh_layers(authenticated_context: HttpConte
     system = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     axes = await sync_to_async(lambda: [{"name": axis.name, "type": axis.type} for axis in system.axes.all()])()
 
-    store = await seed.create_fabriks_store(authenticated_context)
+    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in axes])
     created = await schema.execute(
         """
         mutation Create($input: CreateMeshCollectionInput!) {

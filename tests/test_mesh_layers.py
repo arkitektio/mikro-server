@@ -77,7 +77,7 @@ SHAPE_COLUMNS = [
 
 async def _collection(ctx: HttpContext) -> models.MeshCollection:
     """A mesh collection in a space of its own, registered into a scene's world."""
-    store = await seed.create_fabriks_store(ctx)
+    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in ZYX_MESH_AXES])
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id } }",
         context_value=ctx,

@@ -47,7 +47,7 @@ async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(authen
     They come back off the API anyway, because a renderer configures its decoder from what it
     queries, so what is stored is what the writer wrote rather than what nobody typed.
     """
-    store = await seed.create_fabriks_store(authenticated_context)
+    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in AXES])
 
     result = await _create(authenticated_context, {"name": "v20260814-fabriks", "axes": AXES, "store": str(store.pk)})
     assert not result.errors, result.errors
@@ -87,7 +87,7 @@ async def test_an_unfinished_store_is_refused(authenticated_context: HttpContext
     so a store that never reached it is a half-written upload as far as anything here can tell.
     Registering it would record a collection whose grid and encoding are simply unknown.
     """
-    store = await seed.create_fabriks_store(authenticated_context, populated=False)
+    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in AXES], populated=False)
 
     result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)})
     assert result.errors
@@ -127,7 +127,7 @@ async def test_a_store_from_another_organization_is_not_registerable(authenticat
     lookup were unscoped, a collection could point at another organization's bytes and the
     access grant would follow.
     """
-    foreign = await seed.create_fabriks_store(other_org_context)
+    foreign = await seed.create_fabriks_store(other_org_context, axes=[axis["name"] for axis in AXES])
 
     result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(foreign.pk)})
     assert result.errors
@@ -137,7 +137,7 @@ async def test_a_store_from_another_organization_is_not_registerable(authenticat
 @pytest.mark.asyncio
 async def test_deleting_a_collection_leaves_its_store_collectable(authenticated_context: HttpContext):
     """One collection, one prefix -- and the sweep needs no special case for it."""
-    store = await seed.create_fabriks_store(authenticated_context)
+    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in AXES])
     created = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)})
     assert not created.errors, created.errors
 
@@ -186,7 +186,7 @@ async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticate
     """
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Source", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    store = await seed.create_fabriks_store(ctx)
+    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in AXES])
 
     result = await schema.execute(
         """
@@ -209,7 +209,7 @@ async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticate
     derivation = await models.Transformation.objects.aget(input_id=collection["coordinateSystem"]["id"], output_id=await sync_to_async(lambda: dataset.coordinate_system_id)())
     assert derivation.name == f"{store.key} <- Source", "the derivation edge is named by the label too"
 
-    konnektion = await seed.create_konnektion_store(ctx)
+    konnektion = await seed.create_konnektion_store(ctx, axes=["x", "y", "z"])
     network = await schema.execute(
         "mutation Create($input: CreateNetworkCollectionInput!) { createNetworkCollection(input: $input) { name label specVersion coordinateSystem { name } } }",
         context_value=ctx,

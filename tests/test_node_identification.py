@@ -78,7 +78,7 @@ def node_axes(collection_id: str, columns: list[dict]) -> dict[str, list[dict]]:
 
 
 async def _collection(ctx: HttpContext) -> models.NetworkCollection:
-    store = await seed.create_konnektion_store(ctx)
+    store = await seed.create_konnektion_store(ctx, axes=[axis["name"] for axis in XYZ_AXES])
     result = await schema.execute(
         "mutation Create($input: CreateNetworkCollectionInput!) { createNetworkCollection(input: $input) { id } }",
         context_value=ctx,

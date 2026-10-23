@@ -21,4 +21,5 @@ layer_types = [
     types.MeshLayer,
     types.NetworkLayer,
     types.VectorLayer,
+    types.CadModelLayer,
 ]

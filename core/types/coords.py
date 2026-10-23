@@ -31,7 +31,7 @@ from strawberry.scalars import JSON
 from kante.types import Info
 
 from kanne_server import scalars as kanne_scalars
-from datalayer.types import FabriksStore, KonnektionStore
+from datalayer.types import FabriksStore, KonnektionStore, MediaStore
 
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     # Only for the lazy annotations below (`scenes`, and the owner union's members):
     # importing them at runtime would be a cycle, since both of these modules import
     # this one's CoordinateSystem.
-    from core.types.array_dataset import AnnotationLens, ArrayDataset, ArrayLens, Annotation, AnnotationCollection, CoordinateAnchor, DataArray, MeshLens, NetworkLens, Scene, SparseLens, TableLens
+    from core.types.array_dataset import AnnotationLens, ArrayDataset, ArrayLens, Annotation, AnnotationCollection, CadModelLens, CoordinateAnchor, DataArray, MeshLens, NetworkLens, Scene, SparseLens, TableLens
     from core.types.file_link import FileLink
     from core.types.folder import Folder
     from core.types.table_dataset import TableDataset
@@ -95,8 +95,10 @@ Resident = Annotated[
         Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["AnnotationLens", strawberry.lazy("core.types.array_dataset")],
+        Annotated["CadModelLens", strawberry.lazy("core.types.array_dataset")],
         Annotated["MeshCollection", strawberry.lazy("core.types.coords")],
         Annotated["NetworkCollection", strawberry.lazy("core.types.coords")],
+        Annotated["CadModel", strawberry.lazy("core.types.coords")],
         Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")],
         Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")],
         Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")],
@@ -147,6 +149,12 @@ class CoordinateSystem(OrgScoped):
     axes: List[Axis] = kante.django_field(description="The system's axes, in the order the data has them: for a system backed by an array, its store's dimension order; for a table, its coordinate columns as declared. No ordering by type is imposed on either. What matters downstream is that the *spatial* axes are in array order, which is what the render axes are derived from")
     epoch: datetime.datetime | None = kante.django_field(
         description="The wall-clock instant this system's time axis has its origin at: `wall_clock = epoch + t * unit`. A property of the space, not of any composition over it. Meaningful only for a unit-carrying system with a TIME axis (a shared world space); null when the clock is unanchored -- the time axis is still a perfectly composable relative coordinate"
+    )
+    reference: str | None = kante.django_field(
+        description="The frame this space is, by which callers find it again instead of minting a second one: a URI (`nifti:mni152`) names a frame shared by everyone in the organization, a plain key (`stage`) one of `referenceApp`'s own. The spatial counterpart of `epoch`, an identity rather than a value. Null for a space nobody needs to find again"
+    )
+    reference_app: str | None = kante.django_field(
+        description="The identifier of the app an app-scoped `reference` belongs to; null for a URI reference, which belongs to nobody"
     )
     scenes: List[Annotated["Scene", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(
         filters=filters.SceneFilter,
@@ -1156,6 +1164,60 @@ class NetworkCollection(OrgScoped):
     )
     def derived_from(self, info: Info) -> List["Transformation"]:
         """The edges relating this collection's space to the ones it came from."""
+        system = getattr(self, "coordinate_system", None)
+        return graph_logic.collection_derivation_edges(system) if system else []
+
+
+@kante.django_type(
+    models.CadModel,
+    filters=filters.CadModelFilter,
+    pagination=True,
+    description="A CAD model of hardware around the sample -- a coverslip, a dish, a holder -- stored as one binary glTF. Ask its `store` for a `presignedUrl` and load the file whole; its space's axes carry the units its vertices are in",
+)
+class CadModel(OrgScoped):
+    """A CAD model, backed by one glTF file rather than rows."""
+
+    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+
+    @kante.django_field(description="The lenses over this model, oldest first: its whole lens and every clip box someone has cut. `windowed: true` keeps the clip boxes, `windowed: false` the whole lens, which is also `fullLens`")
+    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["CadModelLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The model's lenses, optionally only the windowed or only the whole one."""
+        lenses = self.lenses.order_by("pk")
+        if windowed is None:
+            return list(lenses)
+        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(description="The lens that selects this whole model: what a layer draws through, and the handle to pass wherever a `Lens` is asked for. Every model is created with one")
+    def full_lens(self, info: Info) -> Optional[Annotated["CadModelLens", strawberry.lazy("core.types.array_dataset")]]:
+        """The whole lens over this model."""
+        return self.lenses.filter(windows=[]).order_by("pk").first()
+
+    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
+        description="The folder this model is filed in. Organisational only: it says where a user keeps the model, never where it sits in space -- that is `coordinateSystem` and the edges out of it"
+    )
+
+    id: auto
+    name: str | None
+    created_at: datetime.datetime = kante.django_field(description="When the model was registered")
+
+    @kante.django_field(select_related=["store"], description="What to call this model: its name, or its file's original name when it has none")
+    def label(self, info: Info) -> str:
+        """The model's label."""
+        return self.label
+
+    coordinate_system: CoordinateSystem = kante.django_field(
+        description="The unit-carrying coordinate system the model's vertices are expressed in. Its axes carry the unit the exporter wrote, so an IDENTITY registration into a micrometre world converts by the units"
+    )
+    store: MediaStore = kante.django_field(description="The media store holding the binary glTF. Ask it for a `presignedUrl` and fetch the file whole: a viewer loads a model in one request")
+
+    @kante.django_field(description="The model's axis-aligned bounding box in its own space, as `{min: [x, y, z], max: [x, y, z]}` in the axes' order and unit, read from the file's accessor bounds at registration. Null when the file declares none")
+    def bounds(self, info: Info) -> scalars.Any | None:
+        """The stored box."""
+        return self.bounds
+
+    @kante.django_field(description="Every edge from this model's space back into data it was made from, in declared order. Usually empty: a model of hardware derives from nothing and is placed by a registration instead")
+    def derived_from(self, info: Info) -> List["Transformation"]:
+        """The edges relating this model's space to the ones it came from."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
 

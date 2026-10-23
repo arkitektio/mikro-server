@@ -19,6 +19,7 @@ from core.render.layer.types import LabelFilterBy
 from core.types.coords import AffinePlacement, PlacementField, PlacementStep
 from core.types._shared import DESCRIPTORS_DESCRIPTION, OrgScoped, build_prescoped_queryset, resolve_descriptors
 from core.types.auth import User
+from core.type_gen import create_stats_type
 from kanne_server import scalars as kanne_scalars
 
 
@@ -284,4 +285,12 @@ class AnnotationChartLayer(ChartLayer):
 #: be handed to the schema's ``types=`` list or strawberry drops them from the SDL.
 chart_layer_types = [TraceChartLayer, SeriesChartLayer, AnnotationChartLayer]
 
-__all__ = ["AnnotationChartLayer", "Chart", "ChartLayer", "SeriesChartLayer", "TraceChartLayer", "chart_layer_types"]
+# The home page's count of charts, like the core kinds' in `core.types.stats`.
+ChartStats, ChartStatsResolver = create_stats_type(
+    models.Chart,
+    allowed_fields={"pk": "id"},
+    allowed_datetime_fields={"created_at": "created_at"},
+    filters=filters.ChartFilter,
+)
+
+__all__ = ["AnnotationChartLayer", "Chart", "ChartLayer", "ChartStats", "ChartStatsResolver", "SeriesChartLayer", "TraceChartLayer", "chart_layer_types"]

@@ -69,6 +69,7 @@ CONTAINERS: tuple[Container, ...] = (
     Container(model=models.NetworkCollection, related_name="network_collections", root_field="pk", key="networkcollection", is_collection=True),
     Container(model=models.TableDataset, related_name="table_datasets", root_field="pk", key="tabledataset", is_collection=True),
     Container(model=models.AnnotationCollection, related_name="annotation_collections", root_field="pk", key="annotationcollection", is_collection=True),
+    Container(model=models.CadModel, related_name="cad_models", root_field="pk", key="cadmodel", is_collection=True),
     # The seventh, and it was missing rather than excluded. `SparseDataset.coordinate_system`
     # has always existed and is read by `identified_axes` and by the attribute-plan walk -- but
     # the model was in none of the six hand-written lists this class replaced, so its space was

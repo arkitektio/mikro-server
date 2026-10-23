@@ -48,6 +48,11 @@ AUTHENTIKATE = {
         "editortest": {"sub": "3", "roles": ["editor"]},
         # A "viewer": in the org, but holding no role that may write or upload.
         "viewertest": {"sub": "4", "roles": ["viewer"]},
+        # The user of "test" calling through a different app: app-scoped space references
+        # (tests/test_coordinate_system_api.py) are namespaced by the app, not the user.
+        "otherapptest": {"sub": "1", "client_id": "other_app_client", "client_app": "other_app"},
+        # The same user through a token naming no release, so its client belongs to no app.
+        "noapptest": {"sub": "1", "client_id": "bare_client", "client_release": ""},
     },
 }
 

@@ -32,6 +32,7 @@ class CreateSceneInputModel(BaseModel):
     background_color: list[float] | None = None
     axes: list[PhysicalAxisInputModel] | None = None
     epoch: datetime.datetime | None = None
+    reference: str | None = None
     coordinate_system: str | None = None
     default_for: list[str] | None = None
 
@@ -63,6 +64,10 @@ class CreateSceneInput:
     epoch: datetime.datetime | None = strawberry.field(
         default=None,
         description="Optional wall-clock instant the world's time axis has its origin at, so `wall_clock = epoch + t * unit`. Leave null when the acquisition time is unknown: the time axis composes either way. Mutually exclusive with `coordinateSystem`",
+    )
+    reference: str | None = strawberry.field(
+        default=None,
+        description="The reference of the world to create, making it get-or-create: a URI (`nifti:mni152`) for a frame everyone in the organization shares, a plain key (`stage`) for one of the calling app's own. An existing world holding it is adopted as it is, and refused if `axes` or `epoch` disagree with it. Mutually exclusive with `coordinateSystem`",
     )
     coordinate_system: strawberry.ID | None = strawberry.field(
         default=None,
@@ -103,6 +108,7 @@ def create_scene(
         preferred_view=model.preferred_view,
         background_color=model.background_color,
         epoch=model.epoch,
+        reference=model.reference,
         world=world,
         ctx=ctx,
     )

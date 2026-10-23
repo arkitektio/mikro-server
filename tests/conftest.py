@@ -303,3 +303,20 @@ def same_user_other_org_context(db, backend_stack) -> HttpContext:
 
     return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer test-other-org"}, type="http")
 
+
+
+def _token_context(token: str) -> HttpContext:
+    """A context authenticated by static ``token`` alone; the extension fills in who that is."""
+    return HttpContext(request=UniversalRequest(_extensions={"token": token}), response=TemporalResponse(), headers={"Authorization": f"Bearer {token}"}, type="http")
+
+
+@pytest.fixture(scope="function")
+def other_app_context(db, backend_stack) -> HttpContext:
+    """The user of ``authenticated_context`` in its org, calling through another app ("otherapptest")."""
+    return _token_context("otherapptest")
+
+
+@pytest.fixture(scope="function")
+def no_app_context(db, backend_stack) -> HttpContext:
+    """The user of ``authenticated_context`` through a token naming no app ("noapptest")."""
+    return _token_context("noapptest")

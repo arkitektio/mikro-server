@@ -8,13 +8,13 @@ from strawberry_django.filters import FilterLookup
 from typing import Optional
 
 from chart import models
-from core.filters import REQUIRES_DESCRIPTION, IdsFilterMixin
+from core.filters import REQUIRES_DESCRIPTION, CreatedAtFilterMixin, IdsFilterMixin
 from core.logic import descriptor_filter
 from core.logic.descriptor_filter import DescriptorConstraintInput
 
 
 @kante.filter_type(models.Chart)
-class ChartFilter(IdsFilterMixin):
+class ChartFilter(IdsFilterMixin, CreatedAtFilterMixin):
     id: auto
     name: Optional[FilterLookup[str]]
 

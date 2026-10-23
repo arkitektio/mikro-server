@@ -144,3 +144,22 @@ def test_every_member_declares_the_parents_common_fields() -> None:
     enum_body = sdl[sdl.find("enum ElementKind") : sdl.find("}", sdl.find("enum ElementKind"))]
     for kind in ElementKind:
         assert kind.value in enum_body
+
+
+def test_a_posed_element_converts_from_the_wire_input() -> None:
+    """`pose` is the one nested input among the flat wire fields.
+
+    The round trip above validates dicts, so it never met the strawberry instance the wire
+    hands over. Passed through raw, `model_validate` refused it ("`pose`: Input should be a
+    valid dictionary or instance of Pose3DInputModel") and every posed element was rejected.
+    """
+    from lightpath.inputs.types import Pose3DInput, Vec3Input
+
+    element = OpticalElementInput(
+        label="a lens",
+        kind=ElementKind.LENS,
+        pose=Pose3DInput(position=Vec3Input(x=1.0, y=0.0, z=-0.3)),
+        ports=[],
+    ).to_pydantic()
+
+    assert element.pose is not None and element.pose.position.z == -0.3

@@ -250,6 +250,8 @@ class Query:
     mesh_collection: types.MeshCollection = field(description="Get a single mesh collection by ID")
     network_collections: list[types.NetworkCollection] = field(description="List network collections (immutable Parquet-backed node/edge networks, each in a coordinate system of its own)")
     network_collection: types.NetworkCollection = field(description="Get a single network collection by ID")
+    cad_models: list[types.CadModel] = field(description="List CAD models (binary glTF scenes of hardware around the sample, each in a unit-carrying coordinate system of its own)")
+    cad_model: types.CadModel = field(description="Get a single CAD model by ID")
 
     sparse_datasets: list[types.SparseDataset] = field(description="List sparse datasets (matrices over two enumerated axes, stored as anndata-spelled zarr groups)")
     sparse_dataset: types.SparseDataset = field(description="Get a single sparse dataset by ID")
@@ -276,6 +278,15 @@ class Query:
         description="Get available permissions for a specific identifier",
     )
     array_datasets_stats: types.ArrayDatasetStats = field(resolver=types.ArrayDatasetStatsResolver, description="Get statistics about array datasets: counts and time-bucketed series over the datasets of the current organization")
+    lenses_stats: types.LensStats = field(resolver=types.LensStatsResolver, description="Get statistics about lenses: counts and time-bucketed series over the lenses of the current organization")
+    coordinate_systems_stats: types.CoordinateSystemStats = field(resolver=types.CoordinateSystemStatsResolver, description="Get statistics about coordinate systems: counts and time-bucketed series over the coordinate systems of the current organization")
+    table_datasets_stats: types.TableDatasetStats = field(resolver=types.TableDatasetStatsResolver, description="Get statistics about table datasets: counts and time-bucketed series over the table datasets of the current organization")
+    sparse_datasets_stats: types.SparseDatasetStats = field(resolver=types.SparseDatasetStatsResolver, description="Get statistics about sparse datasets: counts and time-bucketed series over the sparse datasets of the current organization")
+    folders_stats: types.FolderStats = field(resolver=types.FolderStatsResolver, description="Get statistics about folders: counts and time-bucketed series over the folders of the current organization")
+    files_stats: types.FileStats = field(resolver=types.FileStatsResolver, description="Get statistics about files: counts and time-bucketed series over the files of the current organization")
+    annotations_stats: types.AnnotationStats = field(resolver=types.AnnotationStatsResolver, description="Get statistics about annotations: counts over the annotations of the current organization")
+    scenes_stats: types.SceneStats = field(resolver=types.SceneStatsResolver, description="Get statistics about scenes: counts over the scenes of the current organization")
+    charts_stats: chart_types.ChartStats = field(resolver=chart_types.ChartStatsResolver, description="Get statistics about charts: counts and time-bucketed series over the charts of the current organization")
 
     @field(description="List the memberships of the current organization (excluding bots)")
     def members(self, info: Info) -> list[types.Membership]:
@@ -538,6 +549,7 @@ class Mutation:
     )
     create_table_lens = mutation(resolver=mutations.create_table_lens, description="The lens keeping these windows of a table dataset's coordinate columns: the one that exists, or a new one. It lives in the table's own space")
     create_sparse_lens = mutation(resolver=mutations.create_sparse_lens, description="The lens keeping these windows of a sparse dataset's axes: the one that exists, or a new one. A subset of positions, never a re-indexing")
+    create_cad_model_lens = mutation(resolver=mutations.create_cad_model_lens, description="The lens keeping these windows of a CAD model's own space -- a clip box: the one that exists, or a new one")
     create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
     create_network_lens = mutation(resolver=mutations.create_network_lens, description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one")
     create_annotation_lens = mutation(resolver=mutations.create_annotation_lens, description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one")
@@ -638,6 +650,11 @@ class Mutation:
         description="Register an immutable network collection from an uploaded konnektion store, in a coordinate system of its own",
     )
     delete_network_collection = mutation(resolver=mutations.delete_network_collection, description="Delete an existing network collection")
+    create_cad_model = mutation(
+        resolver=mutations.create_cad_model,
+        description="Register a CAD model -- a coverslip, a dish, a holder -- from an uploaded binary glTF, in a unit-carrying coordinate system of its own",
+    )
+    delete_cad_model = mutation(resolver=mutations.delete_cad_model, description="Delete an existing CAD model")
     create_sparse_dataset = mutation(
         resolver=mutations.create_sparse_dataset,
         description=(
@@ -739,6 +756,14 @@ class Mutation:
         resolver=mutations.update_mesh_layer,
         description="Retune how a mesh layer is drawn: its material, wireframe, compositing, and which table column colours its objects. A patch -- an omitted field keeps its value",
     )
+    create_cad_model_layer = mutation(
+        resolver=mutations.create_cad_model_layer,
+        description="Create a layer that renders a CAD model in a scene",
+    )
+    update_cad_model_layer = mutation(
+        resolver=mutations.update_cad_model_layer,
+        description="Retune how a CAD model layer is drawn: its material override, wireframe and compositing. A patch -- an omitted field keeps its value",
+    )
     create_network_layer = mutation(
         resolver=mutations.create_network_layer,
         description="Create a layer that renders a node/edge network -- a traced arbor, a vessel tree, a connectome -- in a scene",
@@ -813,6 +838,11 @@ class Mutation:
     release_mesh_collections_from_folder = mutation(
         resolver=mutations.release_mesh_collections_from_folder,
         description="Unfile mesh collections from a folder. They are not deleted, only unfiled",
+    )
+    put_cad_models_in_folder = mutation(resolver=mutations.put_cad_models_in_folder, description="File CAD models in a folder")
+    release_cad_models_from_folder = mutation(
+        resolver=mutations.release_cad_models_from_folder,
+        description="Unfile CAD models from a folder. They are not deleted, only unfiled",
     )
     put_annotation_collections_in_folder = mutation(resolver=mutations.put_annotation_collections_in_folder, description="File annotation collections in a folder")
     release_annotation_collections_from_folder = mutation(

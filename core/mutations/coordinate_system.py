@@ -44,6 +44,7 @@ class CreateCoordinateSystemInputModel(BaseModel):
     name: str
     axes: list[PhysicalAxisInputModel]
     epoch: datetime.datetime | None = None
+    reference: str | None = None
     registrations: list[RegistrationPathInputModel] = []
 
 
@@ -57,6 +58,7 @@ class CreateCoordinateSystemInput:
     name: str = strawberry.field(description="The name of the shared coordinate system")
     axes: list[PhysicalAxisInput] = strawberry.field(description="The space's axes, with their physical units. Sources registered into it are mapped onto these axes")
     epoch: datetime.datetime | None = strawberry.field(default=None, description="Optional wall-clock instant the space's time axis has its origin at, so `wall_clock = epoch + t * unit`")
+    reference: str | None = strawberry.field(default=None, description="What frame this space *is*, so asking again finds it instead of minting a second one: get-or-create. A URI (`nifti:mni152`, `templateflow:MNI152NLin2009cAsym`) names a frame that means the same to everyone, so every caller in the organization gets the one space holding it; a plain key (`stage`) is the calling app's own. An existing space is returned and registered into as it is (its name kept), and refused if these axes or this epoch disagree with it")
     registrations: list[RegistrationPathInput] = strawberry.field(default_factory=list, description="The sources to register into the space, each with the edge that places it. Each edge points from the source's own coordinate system to the shared space")
 
 
@@ -84,6 +86,7 @@ def create_coordinate_system(info: Info, input: CreateCoordinateSystemInput) -> 
         name=model.name,
         axes=model.axes,
         epoch=model.epoch,
+        reference=model.reference,
         registrations=resolved,
         ctx=ctx,
     )
@@ -109,11 +112,12 @@ class UpdateCoordinateSystemInputModel(BaseModel):
     id: str
     name: str | None = None
     epoch: datetime.datetime | None = None
+    reference: str | None = None
 
 
 @kante.pydantic_input(
     UpdateCoordinateSystemInputModel,
-    description="Input for renaming a shared coordinate system or anchoring its clock. Shared spaces only: every other system is named by the container that owns it",
+    description="Input for renaming a shared coordinate system, anchoring its clock or giving it a reference. Shared spaces only: every other system is named by the container that owns it",
 )
 class UpdateCoordinateSystemInput:
     """Input for updating a shared coordinate system."""
@@ -121,12 +125,13 @@ class UpdateCoordinateSystemInput:
     id: strawberry.ID = strawberry.field(description="The ID of the shared coordinate system to update")
     name: str | None = strawberry.field(default=None, description="A new name for the space")
     epoch: datetime.datetime | None = strawberry.field(default=None, description="A new wall-clock instant for the space's time axis to have its origin at, so `wall_clock = epoch + t * unit`")
+    reference: str | None = strawberry.field(default=None, description="A reference for a space that has none, so later get-or-creates find it (same URI-or-app-key rule as on create). Set once: a space that already has one, or a reference another space holds, is refused")
 
 
 def update_coordinate_system(info: Info, input: UpdateCoordinateSystemInput) -> types.CoordinateSystem:
-    """Rename a shared space or anchor its clock.
+    """Rename a shared space, anchor its clock, or give it the reference it is found by.
 
-    Only the two fields that are the *space's* own description. Its axes are not here:
+    Only the fields that are the *space's* own description. Its axes are not here:
     ``Axis.order`` is written by enumeration and the rest of the graph is measured against
     it, so an axis edit is a different space -- make a new one. And nothing about where
     data *sits* is here either: that is an edge, and refining one is
@@ -136,6 +141,10 @@ def update_coordinate_system(info: Info, input: UpdateCoordinateSystemInput) -> 
 
     system = get_for_org(models.CoordinateSystem, info, id=model.id)
     _assert_shared(system, "updated")
+
+    # First, so a refused reference leaves the name and the epoch as they were.
+    if model.reference is not None:
+        coordinate_system_logic.assign_reference(system, model.reference, CreationContext.from_info(info))
 
     if model.name is not None:
         system.name = model.name

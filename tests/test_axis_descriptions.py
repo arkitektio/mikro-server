@@ -110,7 +110,7 @@ async def test_a_mesh_collection_states_its_own_axis_descriptions(authenticated_
     UNMAPPABLE, and so nothing would have caught axes copied off a space just declared
     unrelated. `axes` is required now, and this pins that its metadata survives the trip.
     """
-    store = await seed.create_fabriks_store(authenticated_context)
+    store = await seed.create_fabriks_store(authenticated_context, axes=["z", "y", "x"])
 
     result = await schema.execute(
         """
@@ -122,6 +122,7 @@ async def test_a_mesh_collection_states_its_own_axis_descriptions(authenticated_
         variable_values={
             "input": {
                 "axes": [
+                    {"name": "z", "type": "SPACE"},
                     {"name": "y", "type": "SPACE", "longName": "slow axis", "description": "distance from the coverslip"},
                     {"name": "x", "type": "SPACE"},
                 ],

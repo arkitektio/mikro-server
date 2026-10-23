@@ -24,6 +24,7 @@ from core.types.coords import (
     AffinePlacement,
     PlacementField,
     CoordinateSystem,
+    CadModel,
     MeshCollection,
     NetworkCollection,
     PlacementStep,
@@ -914,6 +915,19 @@ class NetworkLens(Lens, OrgScoped):
 
     id: auto
     network_collection: Annotated["NetworkCollection", strawberry.lazy("core.types.coords")]
+
+    @kante.django_field(description=_WINDOWS_DESCRIPTION)
+    def windows(self, info: Info) -> List[Window]:
+        """The stored windows."""
+        return self.windows_list
+
+
+@kante.django_type(models.CadModelLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a CAD model by windows in its own space: a clip box, or the whole model")
+class CadModelLens(Lens, OrgScoped):
+    """A selection over a CAD model."""
+
+    id: auto
+    cad_model: Annotated["CadModel", strawberry.lazy("core.types.coords")]
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
     def windows(self, info: Info) -> List[Window]:
@@ -1958,6 +1972,38 @@ class MeshLayer(Layer):
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.MESH.value
+
+
+@kante.django_type(
+    models.Layer,
+    filters=filters.LayerFilter,
+    ordering=order.LayerOrder,
+    pagination=True,
+    description="A layer that renders a CAD model -- a coverslip, a dish, a holder -- placed in a scene. The model's own materials are drawn unless `materialColor` overrides them.",
+)
+class CadModelLayer(Layer):
+    """A layer that renders a CAD model, placed and styled in a scene."""
+
+    id: auto
+    lens: CadModelLens = kante.django_field(disable_optimization=True, description="The CAD model lens this layer draws through")
+
+    @kante.django_field(description=_CLIP_DESCRIPTION)
+    def clip(self, info: Info) -> List[Window]:
+        """The lens' windows as a clip box."""
+        del info
+        return self.lens.windows_list
+
+    @kante.django_field(description="The CAD model this layer renders: the container of the lens. Its geometry is the glTF file in the model's `store`, fetched whole rather than through this API")
+    def model(self, info: Info) -> CadModel | None:
+        """The lens' model."""
+        return self.lens.cad_model
+
+    material_color: list[int] | None = kante.django_field(description="One RGBA colour replacing every material of the model, each component 0..255. Null draws the model's own materials as authored")
+    wireframe: bool = kante.django_field(description="Whether the model is drawn as a wireframe instead of solid surfaces")
+
+    @classmethod
+    def is_type_of(cls, obj, info) -> bool:
+        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.CAD_MODEL.value
 
 
 @kante.django_type(

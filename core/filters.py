@@ -1,6 +1,7 @@
 import datetime
 import strawberry
 from core import enums, models
+from core.creation import app_identifier_of
 from core.inputs.coords import BoundingBoxInput, CoordinateInput
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
@@ -838,6 +839,10 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     def annotation_collection(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}annotationlens__annotation_collection_id": value})
 
+    @kante.filter_field(description="Filter to the lenses over this CAD model")
+    def cad_model(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}cadmodellens__cad_model_id": value})
+
     @kante.filter_field(
         description=(
             "Filter by whether the lens cuts anything out of its container. True keeps the crops, sub-volumes and windows; false the whole lenses, one per container -- a list meant for "
@@ -882,6 +887,8 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
             | Q(**{f"{prefix}networklens__network_collection__name__icontains": value})
             | Q(**{f"{prefix}networklens__network_collection__store__key__icontains": value})
             | Q(**{f"{prefix}annotationlens__annotation_collection__name__icontains": value})
+            | Q(**{f"{prefix}cadmodellens__cad_model__name__icontains": value})
+            | Q(**{f"{prefix}cadmodellens__cad_model__store__original_file_name__icontains": value})
         )
 
     @kante.filter_field(
@@ -1045,6 +1052,11 @@ class CoordinateSystemFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterM
     id: auto
     name: Optional[FilterLookup[str]]
 
+    @kante.filter_field(description="Filter to the space holding this reference, in the scope it resolves to: a URI (`nifti:mni152`) finds the organization's one space for that frame, a plain key (`stage`) finds the calling app's own -- never another app's space under the same key")
+    def reference(self, info: Info, value: str, prefix: str) -> Q:
+        reference, app = coordinate_system_logic.resolve_reference(value, app_identifier_of(getattr(info.context.request, "_client", None)))
+        return Q(**{f"{prefix}reference": reference, f"{prefix}reference_app": app})
+
     # `kind` is gone with ownership (RFC-9). What a space *is* follows from what lives in it,
     # and "nothing lives here" -- a pure reference frame, a world -- is the only distinction
     # the old four-value label was really carrying.
@@ -1137,6 +1149,30 @@ class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
     @kante.filter_field(description="Filter by the dataset the meshes were extracted from, following the derivation edge")
     def dataset(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}coordinate_system__in": _systems_derived_from_dataset(value)})
+
+
+@kante.filter_type(models.CadModel)
+class CadModelFilter(IdsFilterMixin, OwnedFilterMixin):
+    @kante.filter_field(description=REQUIRES_DESCRIPTION)
+    def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.requires(models.CadModel, queryset, value, prefix)
+
+    id: auto
+    name: Optional[FilterLookup[str]]
+
+    @kante.filter_field(description="Search by the model's label: its name, or its file's original name (case-insensitive substring)")
+    def search(self, info: Info, value: str, prefix: str) -> Q:
+        """Match the model by its name or by the name of the file it was uploaded as."""
+        return Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}store__original_file_name__icontains": value})
+
+    @kante.filter_field(description="Filter by the folder this CAD model is filed in")
+    def folder(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        """Match CAD models filed in the folder with this ID."""
+        return Q(**{f"{prefix}folder_id": value})
+
+    @kante.filter_field(description="Filter by the coordinate system the model's vertices are expressed in (the model's own)")
+    def coordinate_system(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
+        return Q(**{f"{prefix}coordinate_system__id": value})
 
 
 @kante.filter_type(models.NetworkCollection)
@@ -1324,6 +1360,7 @@ _COLLECTION_LAYER_KINDS: "dict[enums.LayerKind, Callable[[dict[type, set[int]]],
     enums.LayerKind.MESH: lambda placeable: (models.MeshLens, placeable[models.MeshCollection]),
     enums.LayerKind.NETWORK: lambda placeable: (models.NetworkLens, placeable[models.NetworkCollection]),
     enums.LayerKind.ANNOTATION: lambda placeable: (models.AnnotationLens, placeable[models.AnnotationCollection]),
+    enums.LayerKind.CAD_MODEL: lambda placeable: (models.CadModelLens, placeable[models.CadModel]),
 }
 
 

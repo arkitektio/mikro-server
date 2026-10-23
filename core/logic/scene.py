@@ -88,6 +88,7 @@ def create_scene(
     preferred_view: "enums.PreferredView | None" = None,
     background_color: list[float] | None = None,
     epoch: datetime.datetime | None = None,
+    reference: str | None = None,
     world: "models.CoordinateSystem | None" = None,
 ) -> "models.Scene":
     """Create a scene over a world: an adopted existing system, or one created for convenience.
@@ -101,11 +102,12 @@ def create_scene(
     Without ``world``, an ordinary ownerless SHARED space is created first and
     adopted -- pure convenience, nothing scene-owned: the space can be adopted by
     other scenes, outlives every scene over it, and is deleted only explicitly
-    (``deleteCoordinateSystem``), never by a scene going away.
+    (``deleteCoordinateSystem``), never by a scene going away. With a ``reference`` that
+    space is get-or-create, so scenes asking for the same frame adopt the same world.
     """
     if world is not None:
-        if axes is not None or epoch is not None:
-            raise ValueError("A scene adopting an existing coordinate system takes its axes and epoch from it; do not pass `axes` or `epoch` alongside `coordinateSystem`.")
+        if axes is not None or epoch is not None or reference is not None:
+            raise ValueError("A scene adopting an existing coordinate system takes its axes, epoch and reference from it; do not pass `axes`, `epoch` or `reference` alongside `coordinateSystem`.")
         if not world.axes.filter(type__in=coordinate_system_logic.NAVIGABLE_TYPES).exists():
             raise ValueError(f"World '{world.name}' has no navigable (time/space) axes, so nothing could be placed in a scene over it.")
         return models.Scene.objects.create(
@@ -120,7 +122,7 @@ def create_scene(
     # convenience path calls the space module and then adopts what it gets back, which is
     # exactly the shape of the two-call version a client can write itself.
     with transaction.atomic():
-        world = coordinate_system_logic.create_world_space(name=f"{name}/world", axes=axes, epoch=epoch, ctx=ctx)
+        world = coordinate_system_logic.create_world_space(name=f"{name}/world", axes=axes, epoch=epoch, reference=reference, ctx=ctx)
         scene = models.Scene.objects.create(
             name=name,
             world=world,

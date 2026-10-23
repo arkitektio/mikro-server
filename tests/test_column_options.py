@@ -69,7 +69,7 @@ def _object_columns(tracks: str | None) -> list[dict]:
 
 
 async def _collection(ctx: HttpContext) -> models.MeshCollection:
-    store = await seed.create_fabriks_store(ctx)
+    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in ZYX_MESH_AXES])
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id } }",
         context_value=ctx,

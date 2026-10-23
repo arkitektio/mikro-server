@@ -211,6 +211,24 @@ class Datalayer:
         bucket_name, key = path.removeprefix("s3://").split("/", 1)
         return bucket_name, key
 
+    def read_media_range(self, store: "models.MediaStore", start: int, length: int) -> bytes:
+        """Read ``length`` bytes of a media object from ``start``, without fetching the rest.
+
+        For readers that only need a file's header -- a binary glTF's JSON chunk is a few
+        kilobytes in front of megabytes of buffers. Fewer bytes come back when the object ends
+        first.
+
+        Raises:
+            FileNotFoundError: If the object is missing.
+        """
+        path = store.path or self.build_store_path("media", store.key)
+        bucket_name, key = self._parse_s3_path(path)
+        try:
+            response = self._s3.get_object(Bucket=bucket_name, Key=key, Range=f"bytes={start}-{start + length - 1}")
+        except Exception as exc:
+            raise FileNotFoundError(f"No media object at s3://{bucket_name}/{key}, so there is nothing to read. Finish the upload before registering what it holds.") from exc
+        return response["Body"].read()
+
     def _new_key(self) -> str:
         """Generate a new opaque storage key.
 

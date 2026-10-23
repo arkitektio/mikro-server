@@ -112,6 +112,8 @@ NETWORK_DESCRIPTORS = [
     Descriptor(key="@mikro/has_attributes", type="BOOL", description="Whether its manifest declares per-node value columns"),
     _IS_WHOLE,
 ]
+#: A CAD model and its lens: the axes of its space. It carries no data to count.
+CAD_MODEL_DESCRIPTORS = [*_axis_counts(GEOMETRY_AXIS_TYPES), _IS_WHOLE]
 ANNOTATION_DESCRIPTORS = [
     *_axis_counts(GEOMETRY_AXIS_TYPES),
     Descriptor(key=N_ANNOTATIONS, type="INT", description="How many annotations the selection holds: every one of the collection's, or, for a windowed lens, those whose extent lies in its windows"),
@@ -133,6 +135,7 @@ DESCRIPTORS_BY_KIND: dict[str, list[Descriptor]] = {
     "MESH": MESH_DESCRIPTORS,
     "NETWORK": NETWORK_DESCRIPTORS,
     "ANNOTATION": ANNOTATION_DESCRIPTORS,
+    "CAD_MODEL": CAD_MODEL_DESCRIPTORS,
 }
 
 

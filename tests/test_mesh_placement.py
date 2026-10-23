@@ -45,9 +45,9 @@ _AFFINE_3D = [
 async def _mesh_collection(ctx: HttpContext, dataset: models.ArrayDataset) -> models.MeshCollection:
     """A collection over a dataset's meshes, through the real mutation."""
 
-    store = await seed.create_fabriks_store(ctx)
     system = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     axes = await sync_to_async(lambda: [{"name": axis.name, "type": axis.type} for axis in system.axes.all()])()
+    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in axes])
 
     result = await schema.execute(
         """
