@@ -9,11 +9,11 @@ with a ``ValidationError`` if they are not supplied via config or environment.
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ByteSize, Field
 
 from arkitekt_service.server import settings as shared
 from arkitekt_service.server.settings import DjangoSettings, InstanceSettings, PostgresSettings, ServiceSettings
-from arkitekt_datalayer.configuration import DatalayerBucket, DatalayerSettings
+from arkitekt_datalayer.configuration import DatalayerBucket, DatalayerSettings, KulissePolicySettings
 from authentikate.base_models import AuthentikateSettings
 
 class RedisSettings(shared.RedisSettings):
@@ -22,8 +22,15 @@ class RedisSettings(shared.RedisSettings):
     channel_prefix: str = Field(default="mikro", description="Key prefix for the channels_redis channel layer. Must be unique per service: every service on a shared redis used to send under the same prefix, so identically-named groups (e.g. \"files\") delivered one service's events to another's subscribers.")
 
 
+def _fixture_policy() -> KulissePolicySettings:
+    """Fixtures are CAD exports -- a stage, a dish, a holder -- far larger than a device model."""
+    return KulissePolicySettings(max_size=ByteSize(2 * 1024**3), max_json=ByteSize(64 * 1024**2), max_nodes=100_000, max_triangles=100_000_000)
+
+
 class MikroDatalayerSettings(DatalayerSettings):
     """The datalayer block, with the four buckets mikro cannot run without."""
+
+    kulisse_policy: KulissePolicySettings = Field(default_factory=_fixture_policy, description="The limits a fixture's model is held to when its upload is finished. Larger than the package default: fixtures are CAD exports.")
 
     session_name: str = Field(default="mikro", description="Prefix of every STS session mikro assumes, so an object store's audit log names it.")
     media: DatalayerBucket = Field(description="Bucket for media / general file storage. Required for this service.")
