@@ -105,8 +105,8 @@ wheels = [
 
 [[package]]
 name = "arkitekt-datalayer"
-version = "0.0.0"
-source = { editable = "../../../../packages/arkitekt-datalayer" }
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authentikate" },
     { name = "boto3" },
@@ -117,32 +117,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "strawberry-graphql" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "authentikate", specifier = ">=5.1.0" },
-    { name = "boto3", specifier = ">=1.38.9" },
-    { name = "django", specifier = ">=5.2" },
-    { name = "django-polymorphic", specifier = ">=4.11.2" },
-    { name = "duckdb", specifier = ">=1.2.2" },
-    { name = "kante", specifier = ">=2.4.1" },
-    { name = "pydantic", specifier = ">2,<3" },
-    { name = "strawberry-graphql", specifier = ">=0.260" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "basedpyright", specifier = ">=1.39.8" },
-    { name = "django-types", specifier = ">=0.24.0" },
-    { name = "dokker", specifier = ">=2.8" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-asyncio", specifier = ">=1.1.0" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
-    { name = "pytest-django", specifier = ">=4.11.1" },
-    { name = "python-semantic-release", specifier = ">=9.21.0" },
-    { name = "ruff", specifier = ">=0.15.8" },
-    { name = "types-boto3", extras = ["s3", "sts"], specifier = ">=1.38" },
+sdist = { url = "https://files.pythonhosted.org/packages/a3/2f/0c3d654a5cc830352cb2ca3e611b997e51076c8ceea392a69a85bd671e20/arkitekt_datalayer-1.0.0.tar.gz", hash = "sha256:1370799eb30893ea0a009f3b120fcab92a96b8075261f515c0d44b813d063867", size = 65640, upload-time = "2026-10-24T13:30:35.823Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/86/bcb089495d2b203fc58018e5dccc061a1ef4f5d0809461c0558db6b288f7/arkitekt_datalayer-1.0.0-py3-none-any.whl", hash = "sha256:420658991aa01d78a04a33761e79a36c902ed71745a19630276bb82a48fb7010", size = 83659, upload-time = "2026-10-24T13:30:34.772Z" },
 ]
 
 [[package]]
@@ -1282,7 +1259,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
-    { name = "arkitekt-datalayer", editable = "../../../../packages/arkitekt-datalayer" },
+    { name = "arkitekt-datalayer", specifier = ">=1.0.0" },
     { name = "arkitekt-service", specifier = ">=7.0.0" },
     { name = "authentikate", specifier = ">=5.1.0" },
     { name = "boto3", specifier = ">=1.38.9" },
