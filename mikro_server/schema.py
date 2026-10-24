@@ -423,6 +423,22 @@ class Mutation:
         description="Request temporary S3 read credentials for fabriks stores in the organization",
         resolver=datalayer_mutations.request_general_fabriks_access,
     )
+    request_kulisse_upload = upload_mutation(
+        description="Request an upload grant for a kulisse store: one device or scene model, a self-contained binary glTF",
+        resolver=datalayer_mutations.request_kulisse_upload,
+    )
+    finish_kulisse_upload = upload_mutation(
+        description="Finalize a kulisse upload. This reads the model's header and JSON chunk, records what it says (bounds, nodes, joints) and refuses a file that is not a self-contained glTF 2.0 model",
+        resolver=datalayer_mutations.finish_kulisse_upload,
+    )
+    request_kulisse_access = kante.django_mutation(
+        description="Request temporary S3 read credentials for a kulisse model",
+        resolver=datalayer_mutations.request_kulisse_access,
+    )
+    request_general_kulisse_access = kante.django_mutation(
+        description="Request temporary S3 read credentials for kulisse models in the organization",
+        resolver=datalayer_mutations.request_general_kulisse_access,
+    )
     request_konnektion_upload = upload_mutation(
         description="Request an upload grant for a konnektion store. The grant covers the whole prefix, so one request authorizes the manifest, both catalogs and every level",
         resolver=datalayer_mutations.request_konnektion_upload,

@@ -84,7 +84,9 @@ stored on the collection. `Axis.long_name` stays beside `description` on purpose
 a prose field.
 
 **A fixture is hardware around the sample** -- a coverslip, a dish, a holder -- as one binary
-glTF (`GltfLike`) in a unit-carrying space of its own: `Fixture`, `FixtureLens`, `FixtureLayer`.
+kulisse model (`KulisseLike`, a `KulisseStore` from arkitekt-datalayer: one self-contained binary
+glTF, read and checked when `finishKulisseUpload` runs) in a unit-carrying space of its own:
+`Fixture`, `FixtureLens`, `FixtureLayer`. The box is the store's, never declared or re-read here.
 10.2.0 shipped it as a "CAD model"; nothing of that name is left.
 
 ## Metrics

@@ -729,16 +729,16 @@ class Fixture(Described):
     # **Required**, as a collection's store is: a model with no bytes is a row describing
     # geometry nothing can address.
     store = models.ForeignKey(
-        "datalayer.MediaStore",
+        "datalayer.KulisseStore",
         on_delete=models.CASCADE,
         related_name="fixtures",
-        help_text="The media store holding this model's binary glTF (`.glb`). Checked to be one when the model is registered",
+        help_text="The kulisse store holding this model: one self-contained binary glTF, read and checked when its upload was finished",
     )
     bounds = models.JSONField(
         null=True,
         blank=True,
         default=None,
-        help_text="The model's axis-aligned bounding box in its own space, as {'min': [x, y, z], 'max': [x, y, z]}, read from the glTF's position accessors at registration. Null when the file declares none",
+        help_text="The model's axis-aligned bounding box in its own space, as {'min': [x, y, z], 'max': [x, y, z]}, copied from its kulisse store at registration. Null when the file declares none",
     )
     provenance_metadata = models.JSONField(default=dict, help_text="How this model was produced (the CAD source, the exporter and its settings)")
 

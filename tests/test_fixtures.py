@@ -1,21 +1,17 @@
-"""A fixture: one binary glTF, living in a unit-carrying space of its own.
+"""A fixture: one kulisse model (a self-contained binary glTF), living in a unit-carrying space of its own.
 
 What is on trial is the part of a model that is not a file. Its space carries the unit the
 exporter wrote, so an IDENTITY registration into a micrometre world comes out a thousand
-times larger for a millimetre model without anyone stating the factor; its box is read off
-the file rather than declared; and a layer over it obeys the same placement gate every other
+times larger for a millimetre model without anyone stating the factor; its box is the one
+its kulisse store read off the file rather than one declared; and a layer over it obeys the same placement gate every other
 layer does.
 """
-
-import json
-import struct
 
 import pytest
 from kante.context import HttpContext
 
 from core import models
-from core.logic import gltf as gltf_logic
-from arkitekt_datalayer.models import MediaStore
+from arkitekt_datalayer.models import KulisseStore
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_condensed_placement import _fresh_request
@@ -59,53 +55,23 @@ mutation Create($input: CreateTransformationInput!) {
 MM_AXES = [{"name": axis, "type": "SPACE", "unit": "millimeter"} for axis in ("x", "y", "z")]
 
 
-def glb(document: dict) -> bytes:
-    """A binary glTF holding only a JSON chunk -- all registration ever reads of one."""
-    chunk = json.dumps(document).encode()
-    chunk += b" " * (-len(chunk) % 4)
-    return struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(chunk)) + struct.pack("<II", len(chunk), 0x4E4F534A) + chunk
+#: What a kulisse store read off a 24 x 24 x 0.17 mm coverslip moved 10 mm along x: the box is
+#: computed by the datalayer's reader when the upload is finished, never here.
+COVERSLIP_BOUNDS = {"min": [-2.0, -12.0, 0.0], "max": [22.0, 12.0, 0.17]}
 
 
-#: A 24 x 24 x 0.17 mm coverslip, one box primitive, moved by its node.
-COVERSLIP = {
-    "asset": {"version": "2.0"},
-    "scene": 0,
-    "scenes": [{"nodes": [0]}],
-    "nodes": [{"mesh": 0, "translation": [10.0, 0.0, 0.0]}],
-    "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
-    "accessors": [{"componentType": 5126, "count": 8, "type": "VEC3", "min": [-12.0, -12.0, 0.0], "max": [12.0, 12.0, 0.17]}],
-}
-
-
-class _FakeDatalayer:
-    """Serves one object's bytes by range, as S3 would."""
-
-    def __init__(self, data: bytes) -> None:
-        self.data = data
-
-    def read_media_range(self, store: MediaStore, start: int, length: int) -> bytes:
-        return self.data[start : start + length]
-
-
-@pytest.fixture
-def serve_glb(monkeypatch):
-    """Make registration read these bytes as the uploaded file."""
-
-    def serve(data: bytes) -> None:
-        monkeypatch.setattr("core.mutations.fixture.get_current_datalayer", lambda: _FakeDatalayer(data))
-
-    return serve
-
-
-async def _media_store(ctx: HttpContext, key: str = "coverslip.glb") -> MediaStore:
-    return await MediaStore.objects.acreate(
+async def _kulisse_store(ctx: HttpContext, key: str = "coverslip.glb", populated: bool = True) -> KulisseStore:
+    return await KulisseStore.objects.acreate(
         organization=ctx.request.organization,
-        path=f"s3://media/{key}",
+        path=f"s3://kulisse/{key}",
         key=key,
-        bucket="media",
+        bucket="kulisse",
         content_type="model/gltf-binary",
         original_file_name=key,
-        populated=True,
+        populated=populated,
+        bounds=COVERSLIP_BOUNDS if populated else None,
+        nodes=["coverslip"] if populated else None,
+        joints=[] if populated else None,
     )
 
 
@@ -120,35 +86,14 @@ async def _register(ctx: HttpContext, system_id: str, scene: models.Scene) -> No
     assert not result.errors, result.errors
 
 
-async def _create_model(ctx: HttpContext, **extra: object):
-    store = await _media_store(ctx)
+async def _create_model(ctx: HttpContext, populated: bool = True, **extra: object):
+    store = await _kulisse_store(ctx, populated=populated)
     return await schema.execute(CREATE_MODEL, context_value=ctx, variable_values={"input": {"store": str(store.pk), "axes": MM_AXES, **extra}})
-
-
-def test_bounds_follow_the_node_transform():
-    """A part is boxed where it is drawn, not where its vertices were written."""
-    bounds = gltf_logic.scene_bounds(COVERSLIP)
-    assert bounds == {"min": [-2.0, -12.0, 0.0], "max": [22.0, 12.0, 0.17]}
-
-
-def test_a_rotated_node_is_boxed_by_its_corners():
-    """A quarter turn about z swaps the x and y extents."""
-    document = {**COVERSLIP, "nodes": [{"mesh": 0, "rotation": [0.0, 0.0, 0.7071067811865476, 0.7071067811865476]}], "accessors": [{"min": [0.0, 0.0, 0.0], "max": [4.0, 1.0, 1.0]}]}
-    bounds = gltf_logic.scene_bounds(document)
-    assert bounds is not None
-    assert [round(value, 6) for value in bounds["min"]] == [-1.0, 0.0, 0.0]
-    assert [round(value, 6) for value in bounds["max"]] == [0.0, 4.0, 1.0]
-
-
-def test_a_file_that_is_not_glb_is_refused():
-    with pytest.raises(ValueError, match="not a binary glTF"):
-        gltf_logic.read_glb_json(lambda start, length: b'{"asset": {}}'[start : start + length], where="The file")
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_model_lives_in_a_space_carrying_its_units(authenticated_context: HttpContext, serve_glb):
-    serve_glb(glb(COVERSLIP))
+async def test_a_model_lives_in_a_space_carrying_its_units(authenticated_context: HttpContext):
     result = await _create_model(authenticated_context, name="Coverslip")
     assert not result.errors, result.errors
 
@@ -161,26 +106,24 @@ async def test_a_model_lives_in_a_space_carrying_its_units(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_non_glb_upload_is_refused(authenticated_context: HttpContext, serve_glb):
-    serve_glb(b"solid coverslip\nendsolid coverslip\n")
-    result = await _create_model(authenticated_context)
-    assert result.errors and "not a binary glTF" in result.errors[0].message
+async def test_a_store_whose_upload_was_not_finished_is_refused(authenticated_context: HttpContext):
+    """A kulisse store is read and checked when its upload is finished; one that was not may hold anything."""
+    result = await _create_model(authenticated_context, populated=False)
+    assert result.errors and "has not been finished" in result.errors[0].message
     assert await models.Fixture.objects.acount() == 0
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_only_three_spatial_axes_are_a_model_space(authenticated_context: HttpContext, serve_glb):
-    serve_glb(glb(COVERSLIP))
+async def test_only_three_spatial_axes_are_a_model_space(authenticated_context: HttpContext):
     result = await _create_model(authenticated_context, axes=[*MM_AXES[:2], {"name": "t", "type": "TIME", "unit": "second"}])
     assert result.errors and "not SPACE axes" in result.errors[0].message
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_identity_registration_converts_by_the_units(authenticated_context: HttpContext, serve_glb):
+async def test_an_identity_registration_converts_by_the_units(authenticated_context: HttpContext):
     """Millimetres into a micrometre world: a factor of 1000 nobody stated."""
-    serve_glb(glb(COVERSLIP))
     created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Stage")
     await _register(authenticated_context, created["coordinateSystem"]["id"], scene)
@@ -197,8 +140,7 @@ async def test_an_identity_registration_converts_by_the_units(authenticated_cont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpContext, serve_glb):
-    serve_glb(glb(COVERSLIP))
+async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpContext):
     created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Unregistered")
     result = await schema.execute(CREATE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": created["fullLens"]["id"]}})
@@ -207,8 +149,7 @@ async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_clearing_the_colour_returns_to_the_models_materials(authenticated_context: HttpContext, serve_glb):
-    serve_glb(glb(COVERSLIP))
+async def test_clearing_the_colour_returns_to_the_models_materials(authenticated_context: HttpContext):
     created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Stage")
     await _register(authenticated_context, created["coordinateSystem"]["id"], scene)
@@ -224,9 +165,8 @@ async def test_clearing_the_colour_returns_to_the_models_materials(authenticated
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_clip_box_is_a_lens_in_the_models_own_units(authenticated_context: HttpContext, serve_glb):
+async def test_a_clip_box_is_a_lens_in_the_models_own_units(authenticated_context: HttpContext):
     """A window over a fixture is stated in its axes and unit, and asked again finds the same lens."""
-    serve_glb(glb(COVERSLIP))
     created = (await _create_model(authenticated_context)).data["createFixture"]
     mutation = "mutation Cut($input: CreateFixtureLensInput!) { createFixtureLens(input: $input) { id windows { axis min max } fixture { id } } }"
     variables = {"input": {"fixture": created["id"], "windows": [{"axis": "x", "min": 0.0, "max": 5.0}]}}
@@ -244,9 +184,8 @@ async def test_a_clip_box_is_a_lens_in_the_models_own_units(authenticated_contex
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_model_is_a_resident_of_its_space(authenticated_context: HttpContext, serve_glb):
+async def test_a_model_is_a_resident_of_its_space(authenticated_context: HttpContext):
     """Its space answers `residents` with the model, and not with its whole lens beside it."""
-    serve_glb(glb(COVERSLIP))
     created = (await _create_model(authenticated_context, name="Coverslip")).data["createFixture"]
     result = await schema.execute(
         "query Space($id: ID!) { coordinateSystem(id: $id) { residents { __typename ... on Fixture { id } } } }",
@@ -259,9 +198,8 @@ async def test_a_model_is_a_resident_of_its_space(authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_model_is_filed_and_listed_by_its_files_name(authenticated_context: HttpContext, serve_glb):
+async def test_a_model_is_filed_and_listed_by_its_files_name(authenticated_context: HttpContext):
     """Unnamed, a model sorts and searches by the name of the file it was uploaded as."""
-    serve_glb(glb(COVERSLIP))
     folder = await seed.create_folder(authenticated_context, "Hardware")
     created = (await _create_model(authenticated_context, folder=str(folder.pk))).data["createFixture"]
     assert created["label"] == "coverslip.glb"

@@ -31,7 +31,7 @@ from strawberry.scalars import JSON
 from kante.types import Info
 
 from kanne_server import scalars as kanne_scalars
-from arkitekt_datalayer.types import FabriksStore, KonnektionStore, MediaStore
+from arkitekt_datalayer.types import FabriksStore, KonnektionStore, KulisseStore, MediaStore
 
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map
@@ -1208,7 +1208,7 @@ class Fixture(OrgScoped):
     coordinate_system: CoordinateSystem = kante.django_field(
         description="The unit-carrying coordinate system the model's vertices are expressed in. Its axes carry the unit the exporter wrote, so an IDENTITY registration into a micrometre world converts by the units"
     )
-    store: MediaStore = kante.django_field(description="The media store holding the binary glTF. Ask it for an `accessGrant` and fetch the file whole: a viewer loads a model in one request")
+    store: KulisseStore = kante.django_field(description="The kulisse store holding the model: one self-contained binary glTF and what it says about itself (nodes, joints, bounds). Ask it for an `accessGrant` and fetch the file whole: a viewer loads a model in one request")
 
     @kante.django_field(description="The model's axis-aligned bounding box in its own space, as `{min: [x, y, z], max: [x, y, z]}` in the axes' order and unit, read from the file's accessor bounds at registration. Null when the file declares none")
     def bounds(self, info: Info) -> scalars.Any | None:

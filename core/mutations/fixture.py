@@ -1,8 +1,8 @@
 """Mutations for fixtures.
 
-A model is one uploaded binary glTF in a media store, living in a unit-carrying space of its
-own. Registering it is naming that file and the axes its vertices are in; the box it occupies
-is read from the file, never declared. Like a collection it is immutable: a revised drawing is
+A model is one kulisse store -- a self-contained binary glTF, read and checked when its upload
+was finished -- living in a unit-carrying space of its own. Registering it is naming that store
+and the axes its vertices are in; the box it occupies was read from the file, never declared. Like a collection it is immutable: a revised drawing is
 a new model over a new file.
 """
 
@@ -18,11 +18,11 @@ from core.input_unions import prose_errors
 from core.inputs.coords import DerivedFromInput, DerivedFromSpec, PhysicalAxisInput, PhysicalAxisInputModel
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import folder as folder_logic
-from core.logic import gltf as gltf_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org
-from arkitekt_datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.models import KulisseStore
+from arkitekt_datalayer.scalars import KulisseLike
 
 
 class CreateFixtureInputModel(BaseModel):
@@ -40,7 +40,7 @@ class CreateFixtureInput:
     """Input for registering a fixture."""
 
     name: str | None = strawberry.field(default=None, description="What to call this model. Optional: it is labelled by this or, failing that, by the uploaded file's name")
-    store: scalars.GltfLike = strawberry.field(description="The uploaded **binary glTF** (`.glb`). Request it with `requestMediaUpload`, write the file, then `finishMediaUpload`. Its header is read here: a file that is not glTF 2.0 is refused")
+    store: KulisseLike = strawberry.field(description="The model: a kulisse store (one self-contained binary glTF). Request it with `requestKulisseUpload`, write the file, then `finishKulisseUpload`, which reads and checks it")
     axes: list[PhysicalAxisInput] = strawberry.field(
         description=(
             "The three spatial axes of the model's own space, in the order its vertex components are stored, each with the unit the exporter wrote. Required and never defaulted, as a "
@@ -56,20 +56,12 @@ class CreateFixtureInput:
     provenance_metadata: scalars.Any | None = strawberry.field(default=None, description="How this model was produced: the CAD source, the exporter and its settings")
 
 
-def _resolve_gltf_store(info: Info, store_id: str) -> "models.MediaStore":
-    """The finished media store holding the model's file."""
-    store = get_for_org(models.MediaStore, info, id=store_id)
+def _resolve_kulisse_store(info: Info, store_id: str) -> KulisseStore:
+    """The finished kulisse store holding the model: read and checked when its upload was finished."""
+    store = get_for_org(KulisseStore, info, id=store_id)
     if not store.populated:
-        raise ValueError(f"Media store {store.pk} has not been finished, so the file may still be arriving. Call `finishMediaUpload` once it is written, then register it.")
+        raise ValueError(f"Kulisse store {store.pk} has not been finished, so the model may still be arriving or was refused. Call `finishKulisseUpload` once it is written, then register it.")
     return store
-
-
-def _read_bounds(store: "models.MediaStore") -> dict | None:
-    """The model's box, read off its file's JSON chunk. Refuses a file that is not glTF 2.0."""
-    datalayer = get_current_datalayer()
-    where = f"The uploaded file '{store.original_file_name or store.key}'"
-    document = gltf_logic.read_glb_json(lambda start, length: datalayer.read_media_range(store, start, length), where=where)
-    return gltf_logic.scene_bounds(document)
 
 
 def _assert_spatial_axes(axes: list[PhysicalAxisInputModel]) -> None:
@@ -91,14 +83,13 @@ def create_fixture(info: Info, input: CreateFixtureInput) -> types.Fixture:
     _assert_spatial_axes(model.axes)
 
     ctx = CreationContext.from_info(info)
-    store = _resolve_gltf_store(info, model.store)
-    bounds = _read_bounds(store)
+    store = _resolve_kulisse_store(info, model.store)
 
     with transaction.atomic():
         fixture = models.Fixture.objects.create(
             name=model.name,
             store=store,
-            bounds=bounds,
+            bounds=store.bounds,
             provenance_metadata=model.provenance_metadata or {},
             folder=folder_logic.folder_for_new_container(info, ctx, model.folder, model.derived_from),
             creator=ctx.user,

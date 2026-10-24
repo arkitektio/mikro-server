@@ -53,6 +53,7 @@ EXPECTED = {
     "@mikro/zarrstore": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/parquetstore": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/fabriksstore": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/kulissestore": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/konnektionstore": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/sparsestore": ["CREATED", "UPDATED", "DELETED"],
 }

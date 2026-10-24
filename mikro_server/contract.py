@@ -241,6 +241,11 @@ HOSTS = Hosts(
             description="The stored octree of surface meshes behind a mesh collection: a fabriks manifest and its parquet files, in object storage.",
         ),
         Structure(
+            identifier="@mikro/kulissestore",
+            label="Kulisse Store",
+            description="The stored device or scene model behind a fixture: one self-contained binary glTF (GLB) with its nodes, joints and bounds, in object storage.",
+        ),
+        Structure(
             identifier="@mikro/konnektionstore",
             label="Konnektion Store",
             description="The stored octree of node/edge networks behind a network collection: a konnektion manifest and its parquet files, in object storage.",
@@ -439,6 +444,11 @@ HOSTS = Hosts(
             description="The storage of a mesh collection (fabriks store) was requested, filled or deleted.",
         ),
         Signal(
+            identifier="@mikro/kulissestore",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            description="The storage of a device or scene model (kulisse store) was requested, filled or deleted.",
+        ),
+        Signal(
             identifier="@mikro/konnektionstore",
             kinds=["CREATED", "UPDATED", "DELETED"],
             description="The storage of a network collection (konnektion store) was requested, filled or deleted.",
@@ -468,7 +478,7 @@ contract = Contract(
         name="mikro",
         identifier="live.arkitekt.mikro",
         summary="Images and their metadata.",
-        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "zarr", "parquet", "bigfile", "fabriks", "konnektion"], instance_key=True, peers=["rekuest"]),
+        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "zarr", "parquet", "bigfile", "fabriks", "konnektion", "kulisse"], instance_key=True, peers=["rekuest"]),
         # No `rekuest_hook`: the hook agent (`mikro_server.hook_agent`) has no action in this
         # release, and an agent with nothing to do is not offered to a hub.
         # `feed`: the change feed of metrics, read by kraph with its instance key (internal network only).
