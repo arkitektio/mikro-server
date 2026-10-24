@@ -16,7 +16,7 @@ from kante.types import Info
 from pydantic import BaseModel, ConfigDict, Field
 
 import kante
-from datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.datalayer import get_current_datalayer
 from kanne_server import scalars as kanne_scalars
 
 from core import enums, models, scalars, types

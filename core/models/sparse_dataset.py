@@ -53,7 +53,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 from authentikate.models import Organization
-from datalayer.models import SparseStore
+from arkitekt_datalayer.models import SparseStore
 from koherent.fields import ProvenanceField
 
 from core.logic import coords as coords_logic

@@ -24,7 +24,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 
 from authentikate.models import Organization
-from datalayer.models import ParquetStore
+from arkitekt_datalayer.models import ParquetStore
 from koherent.fields import ProvenanceField
 from embeddings.models import EmbeddedDescriptionMixin
 from django_choices_field import TextChoicesField

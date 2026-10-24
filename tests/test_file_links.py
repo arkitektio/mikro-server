@@ -52,7 +52,7 @@ async def _big_file_store(ctx: HttpContext, key: str = "scan") -> "models.BigFil
 async def _create_array_dataset_with_sources(ctx: HttpContext, source_files: list) -> dict:
     """Run the real ingest mutation, naming the files the arrays were converted from."""
     store = await _zarr(ctx)
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             """
             mutation D($input: CreateArrayDatasetInput!) {
@@ -172,7 +172,7 @@ async def test_naming_one_file_twice_is_refused_with_a_sentence(db, authenticate
     file = await create_file(ctx, "scan.czi", folder)
 
     store = await _zarr(ctx)
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             "mutation D($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,
@@ -230,8 +230,8 @@ async def test_a_file_records_the_dataset_it_was_written_from(db, authenticated_
     store = await _big_file_store(ctx, "export")
 
     with (
-        patch("datalayer.models.BigFileStore.fill_info", return_value=None),
-        patch("datalayer.datalayer.Datalayer.get_object_size", return_value=42),
+        patch("arkitekt_datalayer.models.BigFileStore.fill_info", return_value=None),
+        patch("arkitekt_datalayer.datalayer.Datalayer.get_object_size", return_value=42),
     ):
         result = await schema.execute(
             """
@@ -383,7 +383,7 @@ async def test_a_file_from_another_organization_is_refused(db, authenticated_con
     foreign_file = await create_file(other_org_context, "theirs.czi", foreign_folder)
 
     store = await _zarr(ctx)
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             "mutation D($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,

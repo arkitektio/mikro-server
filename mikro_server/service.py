@@ -40,7 +40,7 @@ from core.descriptors import (
 )
 from arkitekt_service.service import Service, organization_of
 from arkitekt_service.collaborations import items as collaboration_items
-from datalayer import models as datalayer_models
+from arkitekt_datalayer import models as datalayer_models
 from django.db.models.signals import post_save
 
 from mikro_server.contract import contract

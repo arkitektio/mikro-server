@@ -21,7 +21,7 @@ from django.db.models import Prefetch
 from core import enums, filters, models, order
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.types.auth import Organization, ProvenanceEntry, Task, User
-from datalayer.types import BigFileStore
+from arkitekt_datalayer.types import BigFileStore
 from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:

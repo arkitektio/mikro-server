@@ -9,7 +9,7 @@ import kante
 from strawberry.scalars import JSON
 from kante.types import Info
 
-from datalayer.types import SparseStore
+from arkitekt_datalayer.types import SparseStore
 
 from core import enums, filters, models, order, scalars
 from core.logic import file_link as file_link_logic

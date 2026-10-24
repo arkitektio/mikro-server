@@ -22,7 +22,7 @@ from core.logic import gltf as gltf_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org
-from datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.datalayer import get_current_datalayer
 
 
 class CreateFixtureInputModel(BaseModel):

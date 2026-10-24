@@ -17,8 +17,8 @@ import json
 
 import pytest
 from authentikate.models import Organization
-from datalayer import base_models
-from datalayer.models import ZarrStore
+from arkitekt_datalayer import base_models
+from arkitekt_datalayer.models import ZarrStore
 
 # See test_upload_accounting for why the fixture is shared rather than copied.
 from tests.test_store_purging import buckets  # noqa: F401

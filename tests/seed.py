@@ -8,7 +8,7 @@ from authentikate.models import Membership, User
 from kante.context import HttpContext
 
 from core.models import Folder, File, SparseStore
-from datalayer.models import sparse_layout_path
+from arkitekt_datalayer.models import sparse_layout_path
 
 
 async def create_folder(ctx: HttpContext, name: str, **kwargs) -> Folder:
@@ -296,7 +296,7 @@ def _seed_fabriks_store_sync(ctx: HttpContext, *, axes: list[str] | None, popula
     write a tree to -- and what the tests are about is what the server does with a *finished*
     store, not how the bytes got there.
     """
-    from datalayer.models import FabriksStore
+    from arkitekt_datalayer.models import FabriksStore
 
     key = f"fabriks-{FabriksStore.objects.count()}"
     return FabriksStore.objects.create(
@@ -351,7 +351,7 @@ def _seed_konnektion_store_sync(ctx: HttpContext, *, axes: list[str] | None, att
     ``attributes=None`` is a store filled before attributes existed (or a collection built
     without them), which the picker paths must treat exactly as declaring none.
     """
-    from datalayer.models import KonnektionStore
+    from arkitekt_datalayer.models import KonnektionStore
 
     key = f"konnektion-{KonnektionStore.objects.count()}"
     return KonnektionStore.objects.create(
@@ -392,7 +392,7 @@ def _seed_parquet_store_sync(ctx: HttpContext, *, key: str, columns: list[tuple[
     tests, because they are about placement and edges rather than about the file. Pass the pairs
     when the test is about the schema itself.
     """
-    from datalayer.models import ParquetStore
+    from arkitekt_datalayer.models import ParquetStore
 
     return ParquetStore.objects.create(
         path=f"s3://parquet/{key}",

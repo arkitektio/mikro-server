@@ -19,8 +19,8 @@ rather than a memory.
 
 from django.core.management.base import BaseCommand
 
-from datalayer.datalayer import Datalayer
-from datalayer.models import ParquetStore
+from arkitekt_datalayer.datalayer import Datalayer
+from arkitekt_datalayer.models import ParquetStore
 
 
 class Command(BaseCommand):

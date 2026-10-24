@@ -12,7 +12,7 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import models
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_task_provenance import attach_provenance, clear_provenance, make_provenance
@@ -74,7 +74,7 @@ async def test_a_whole_lens_carries_its_containers_provenance(authenticated_cont
     attach_provenance(ctx, make_provenance(task_id="ingest-task"))
     try:
         # Through the mutation: the seed builds its context without a task, and the task is the point.
-        with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+        with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
             result = await schema.execute(
                 "mutation C($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
                 context_value=ctx,

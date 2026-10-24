@@ -19,7 +19,7 @@ for free.
 from unittest.mock import patch
 
 import pytest
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from mikro_server.schema import schema
@@ -58,7 +58,7 @@ async def _create(ctx: HttpContext, key: str, dimension_names: list | None, axes
     # `fill_info` would overwrite `dimension_names` from an S3 the unit tests do not
     # have; the row is the point here, so it is patched out exactly as every other
     # array test does.
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         return await schema.execute(
             CREATE,
             context_value=ctx,
@@ -225,7 +225,7 @@ async def test_a_pyramid_level_is_checked_against_the_same_axes(authenticated_co
         populated=True,
     )
 
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             CREATE,
             context_value=authenticated_context,
@@ -262,7 +262,7 @@ async def test_a_pyramid_level_that_agrees_is_accepted(authenticated_context: Ht
         populated=True,
     )
 
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             CREATE,
             context_value=authenticated_context,

@@ -501,7 +501,7 @@ async def test_the_documented_sequence_runs_end_to_end(authenticated_context: Ht
     stack_store = await _zarr("raw", [3, 512, 512])
     mask_store = await _zarr("nuclei-labels", [512, 512])
 
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         # 1. The stack: c,y,x, in canonical order.
         stack = await schema.execute(
             CREATE_ADATASET,

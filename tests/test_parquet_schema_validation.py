@@ -21,9 +21,9 @@ store-to-SQL wiring is stubbed, because DuckDB reads S3 over its own HTTP client
 import pytest
 
 from core.logic import tables as tables_logic
-from datalayer import base_models
-from datalayer.datalayer import Datalayer
-from datalayer.duck import DuckLayer
+from arkitekt_datalayer import base_models
+from arkitekt_datalayer.datalayer import Datalayer
+from arkitekt_datalayer.duck import DuckLayer
 
 
 def test_the_duck_layer_offers_the_query_method_its_callers_use():
@@ -70,7 +70,7 @@ class _FakeDuck:
 
 def _stub_duck(monkeypatch, rows, captured):
     """Point `Datalayer.get_parquet_schema` at a fake DuckDB, wherever it imports it from."""
-    import datalayer.duck as duck_module
+    import arkitekt_datalayer.duck as duck_module
 
     monkeypatch.setattr(duck_module, "get_current_duck", lambda: _FakeDuck(rows, captured))
 
@@ -124,7 +124,7 @@ def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_con
     Nothing on the create path goes back to S3 for it -- which is why `create_table_dataset`
     now calls `fill_info` only when the finish never ran.
     """
-    from datalayer import models
+    from arkitekt_datalayer import models
 
     monkeypatch.setattr(
         Datalayer,
@@ -146,7 +146,7 @@ def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_con
 @pytest.mark.django_db
 def test_columns_for_store_reads_the_row_rather_than_the_file(monkeypatch, authenticated_context):
     """A described store is never re-described; the answer is already on it."""
-    from datalayer import models
+    from arkitekt_datalayer import models
 
     def _refuse(self, store):
         raise AssertionError("a store that recorded its schema must not be described again")
@@ -167,7 +167,7 @@ def test_columns_for_store_reads_the_row_rather_than_the_file(monkeypatch, authe
 @pytest.mark.django_db
 def test_a_store_written_before_the_field_existed_falls_back_to_describing(monkeypatch, authenticated_context):
     """`columns` is null on every store finished before this field, and those still work."""
-    from datalayer import models
+    from arkitekt_datalayer import models
 
     monkeypatch.setattr(
         Datalayer,
@@ -226,7 +226,7 @@ def test_the_connection_outlives_the_relation_it_returns(monkeypatch):
             # not keep its connection alive from Python's side.
             return ClosingRelation(self._state, [("object_id", "BIGINT", "YES", None, None, None)])
 
-    import datalayer.duck as duck_module
+    import arkitekt_datalayer.duck as duck_module
 
     monkeypatch.setattr(duck_module, "get_current_duck", lambda: ClosingDuck({"closed": False}))
     monkeypatch.setattr(Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123")

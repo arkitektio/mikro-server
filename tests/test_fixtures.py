@@ -15,7 +15,7 @@ from kante.context import HttpContext
 
 from core import models
 from core.logic import gltf as gltf_logic
-from datalayer.models import MediaStore
+from arkitekt_datalayer.models import MediaStore
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_condensed_placement import _fresh_request

@@ -15,7 +15,7 @@ migrations, which reference e.g. ``core.models.create_default_color``).
 # of the domain on top of it. All
 # runtime storage I/O goes through ``datalayer.datalayer.get_current_datalayer()``,
 # never through boto3/zarr directly.
-from datalayer.models import (
+from arkitekt_datalayer.models import (
     SparseStore,
     ZarrStore,
     BigFileStore,

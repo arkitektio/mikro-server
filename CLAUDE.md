@@ -85,8 +85,7 @@ a prose field.
 
 **A fixture is hardware around the sample** -- a coverslip, a dish, a holder -- as one binary
 glTF (`GltfLike`) in a unit-carrying space of its own: `Fixture`, `FixtureLens`, `FixtureLayer`.
-10.2.0 shipped it as a "CAD model"; `core/0005`-`0006` delete those rows and drop their tables,
-so nothing of that name is left.
+10.2.0 shipped it as a "CAD model"; nothing of that name is left.
 
 ## Metrics
 
@@ -108,6 +107,15 @@ only the readers named there may read). The feed is what a reader relies on; the
 one transaction) is a bulk insert and announces nothing. Keep each write's transaction short --
 the feed hands out nothing past the oldest transaction open in the whole Postgres cluster.
 
+## Datalayer
+
+S3-backed stores (`MediaStore`, `ZarrStore`, ... ) come from the shared `arkitekt-datalayer`
+package (`arkitekt_datalayer`, app label `datalayer`), not from this repository. mikro wires
+its mutations in `mikro_server/schema.py`, declares the stores in `mikro_server/service.py`,
+and narrows the config in `MikroDatalayerSettings`. A change to a store, a grant or the purge is
+a change to that package. Its migration history and every app's here restart at `0001` with a
+breaking release; `core/0001` carries the `cube` and `vector` extensions by hand.
+
 ## Migrations and jobs
 
 A container of this image only serves. An installer (konstruktor) prepares the database with
@@ -123,8 +131,7 @@ anything is recreated — and runs everything else as a job the image offers by 
   writes and the one that drops what it read. Postgres will not alter or index a table in the
   transaction that just rewrote its rows under deferred constraints, and Django defers index
   creation to the end of a migration -- so a data step beside any `AddField` or `RemoveField`
-  fails on a populated hub and passes on an empty one. The lens migrations (`core/0003`-`0007`,
-  `chart/0002`-`0003`) are the pattern.
+  fails on a populated hub and passes on an empty one.
 - Within a major, a migration leaves a schema the previous release still runs on: a failed
   update, and a rollback, start the old build on the migrated database. What cannot do that
   is a `feat!:`.
@@ -147,7 +154,7 @@ What this service declares:
   every lens the spec its selection denotes (`Lens.stored_spec`); the
   database refuses duplicates since the lens tables were split, so it is a guard for rows
   written by hand. It changes nothing the second time and reports what it leaves in place.
-- Other jobs: `purge_orphaned_stores`, `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe
+- Other jobs: `purge_orphaned_stores` (from `arkitekt_datalayer`), `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe
   beside a serving release and reports what is still owed; it is not in the setup, so an
   operator runs it.
 

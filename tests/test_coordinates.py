@@ -924,7 +924,7 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    from datalayer.models import FabriksStore
+    from arkitekt_datalayer.models import FabriksStore
 
     dataset = await seed.create_array_dataset(authenticated_context, "Labels")
 

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from django.core.management import call_command
 
 from core import enums
@@ -386,7 +386,7 @@ async def test_the_spec_of_a_created_dataset_is_read_off_its_stores_shape(db, au
     store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key="one-plane", bucket="zarr", shape=[1, 13, 23], chunks=[1, 13, 23], version="3", dtype="uint8", populated=True)
 
     # fill_info() reads zarr metadata from S3; stub it so the pre-set shape stays intact.
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             "mutation M($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id spec } }",
             context_value=ctx,

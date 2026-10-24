@@ -3,7 +3,7 @@ import strawberry
 
 from core import enums, types, models, scalars
 from core import derived
-from datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.datalayer import get_current_datalayer
 import json
 
 import kante
@@ -336,7 +336,7 @@ def assert_axes_describe_the_store(axes: list, store: "models.ZarrStore") -> Non
     else. Declare the type, and the name is checked for free.
 
     Entry-wise, skipping nulls: zarr v3 permits a null per dimension, which
-    :class:`~datalayer.base_models.ZarrMetadata` types as ``list[str | None] | None``. A null
+    :class:`~arkitekt_datalayer.base_models.ZarrMetadata` types as ``list[str | None] | None``. A null
     is the store declining to name that dimension, not a disagreement. A store with no
     ``dimension_names`` at all -- zarr v2, or written before the field existed -- is skipped
     entirely rather than refused: the check is on what the bytes say, and those bytes say

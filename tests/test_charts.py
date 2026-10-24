@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
 
@@ -733,7 +733,7 @@ async def test_a_profile_derived_from_an_image_is_charted_in_micrometres_with_a_
     image_lens = await seed.create_lens(ctx, image)
     store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key="cells-profile", bucket="zarr", shape=[64], chunks=[64], version="3", dtype="uint16", populated=True)
     # fill_info() reads zarr metadata from S3; stub it so the pre-set shape stays intact.
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         derived = await _ok(
             ctx,
             DERIVE,
@@ -798,7 +798,7 @@ _SECOND_AXIS = {"name": "t", "type": "TIME", "unit": "second"}
 
 async def _derive_array(ctx: HttpContext, name: str, *, axes: list[dict], shape: list[int], derived_from: list[dict]) -> dict:
     store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key=f"derived-{name}", bucket="zarr", shape=shape, chunks=shape, version="3", dtype="float32", populated=True)
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         return (await _ok(ctx, DERIVE, {"name": name, "data": str(store.id), "scales": [], "axes": axes, "derivedFrom": derived_from}))["createArrayDataset"]
 
 

@@ -24,10 +24,10 @@ import logging
 import pytest
 from django.conf import settings
 
-import datalayer.datalayer as datalayer_module
+import arkitekt_datalayer.datalayer as datalayer_module
 from authentikate.models import Organization
-from datalayer import base_models
-from datalayer.models import ZarrStore
+from arkitekt_datalayer import base_models
+from arkitekt_datalayer.models import ZarrStore
 
 # The moto-backed datalayer with every configured bucket created. Shared rather than copied:
 # the fixture encodes two non-obvious things (moto ignores a client pointed at a real endpoint,
@@ -119,7 +119,7 @@ def test_an_upload_over_its_advertised_budget_is_recorded_not_rejected(buckets, 
     # what makes an unenforced cap acceptable, so it is worth asserting rather than assuming.
     logging.disable(logging.NOTSET)
     try:
-        with caplog.at_level(logging.WARNING, logger="datalayer.datalayer"):
+        with caplog.at_level(logging.WARNING, logger="arkitekt_datalayer.datalayer"):
             buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
     finally:
         logging.disable(logging.CRITICAL)
@@ -199,7 +199,7 @@ def test_a_measured_store_reports_both_numbers_to_clients(buckets, organization)
 
     `maxBytes` alone reads as a guarantee. Beside `sizeBytes` it reads as what it is.
     """
-    from datalayer import types
+    from arkitekt_datalayer import types
 
     assert {"max_bytes", "size_bytes"} <= set(types.ZarrStore.__annotations__)
     assert settings.DATALAYER is not None
@@ -271,7 +271,7 @@ def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organiz
     A bigfile is one key, so its size is a HEAD. Worth pinning beside the zarr case because the
     two take entirely different calls and only one of them is forgiving about a trailing slash.
     """
-    from datalayer.models import BigFileStore
+    from arkitekt_datalayer.models import BigFileStore
 
     grant = buckets.generate_bigfile_upload_grant(organization.id, base_models.RequestBigFileUploadInput(original_file_name="cells.czi"))
     store = BigFileStore.objects.get(id=grant.store)

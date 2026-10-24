@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from core import enums, models
@@ -117,7 +117,7 @@ async def _derive(ctx: HttpContext, name: str, *, axes, shape, lens=None, entrie
         entries = [entry]
 
     # fill_info() reads zarr metadata from S3; stub it so the pre-set shape stays intact.
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         return await schema.execute(
             """
             mutation Derive($input: CreateArrayDatasetInput!) {
@@ -848,7 +848,7 @@ async def _create_with_pyramid(ctx: HttpContext, name: str, *, axes: list, shape
     if derived_from is not None:
         payload["derivedFrom"] = derived_from
 
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         return await schema.execute(
             "mutation Derive($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,

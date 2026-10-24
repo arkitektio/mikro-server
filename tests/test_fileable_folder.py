@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from core import models
@@ -84,7 +84,7 @@ async def _create_array_dataset(ctx: HttpContext, name: str, folder=None, derive
         payload["folder"] = str(folder.pk)
     if derived_from is not None:
         payload["derivedFrom"] = derived_from
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(CREATE_ADATASET, context_value=ctx, variable_values={"input": payload})
     assert not result.errors, result.errors
     assert result.data

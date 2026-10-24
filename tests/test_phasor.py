@@ -474,7 +474,7 @@ async def test_ingest_may_carry_the_phasor_spokes(db, authenticated_context: Htt
     """
     from unittest.mock import patch
 
-    from datalayer.models import ZarrStore
+    from arkitekt_datalayer.models import ZarrStore
 
     store = await ZarrStore.objects.acreate(
         organization=authenticated_context.request.organization,
@@ -507,7 +507,7 @@ async def test_ingest_may_carry_the_phasor_spokes(db, authenticated_context: Htt
             ],
         }
     }
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(mutation, context_value=authenticated_context, variable_values=variables)
     assert not result.errors, result.errors
 

@@ -63,7 +63,7 @@ INSTALLED_APPS = [
     "django_probes",
     "kanne_server",
     "core",
-    "datalayer",
+    "arkitekt_datalayer",
     "chart",
     "metric",
     # The change feed: what mikro changed, written with the change, for kraph to read in order.
@@ -81,11 +81,6 @@ INSTALLED_APPS = [
 
 AUTH_USER_MODEL = "authentikate.User"
 
-AWS_ACCESS_KEY_ID = conf.datalayer.access_key
-AWS_SECRET_ACCESS_KEY = conf.datalayer.secret_key
-AWS_S3_ENDPOINT_URL = f"{conf.datalayer.protocol}://{conf.datalayer.host}:{conf.datalayer.port}"
-AWS_S3_REGION_NAME = conf.datalayer.region
-
 CHANNEL_LAYERS = {
     "default": {
         # This example app uses the Redis channel layer implementation channels_redis
@@ -96,13 +91,6 @@ CHANNEL_LAYERS = {
 
 
 DATALAYER = conf.datalayer.model_dump(exclude_none=True) if conf.datalayer else {}
-
-# How long a store's bytes survive after the last data row referencing them is deleted.
-# `purge_orphaned_stores` (run it from cron) collects anything older; nothing is freed until
-# it does. The window exists so an accidental delete is recoverable -- the same job an S3
-# lifecycle rule would do, kept in Postgres where it is visible and has minute rather than
-# day granularity.
-DATALAYER_STORE_GRACE_DAYS = 7
 
 
 

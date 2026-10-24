@@ -160,7 +160,7 @@ async def _reconstruction(ctx: HttpContext, table: dict, *, transform: dict) -> 
         populated=True,
         organization=ctx.request.organization,
     )
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             "mutation D($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,
@@ -408,7 +408,7 @@ async def _derived(ctx: HttpContext, name: str, *, lens) -> str:  # noqa: ANN001
     store = await sync_to_async(models.ZarrStore.objects.create)(
         path=f"s3://zarr/{name}", bucket="zarr", key=name, shape=[64, 64], chunks=[64, 64], version="3", dtype="uint8", populated=True, organization=ctx.request.organization
     )
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             "mutation D($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,
@@ -445,7 +445,7 @@ async def test_the_documented_sequences_run_end_to_end(authenticated_context: Ht
         )
 
     async def _run(query: str, **variables) -> dict:
-        with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+        with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
             result = await schema.execute(query, context_value=authenticated_context, variable_values=variables)
         assert not result.errors, result.errors
         return result.data

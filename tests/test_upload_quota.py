@@ -9,9 +9,9 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-import datalayer.datalayer as datalayer_module
-from datalayer import quota
-from datalayer.models import MediaStore, ZarrStore
+import arkitekt_datalayer.datalayer as datalayer_module
+from arkitekt_datalayer import quota
+from arkitekt_datalayer.models import MediaStore, ZarrStore
 from mikro_server.schema import schema
 
 GIB = 1024**3

@@ -7,7 +7,7 @@ from koherent.fields import ProvenanceField
 from django_choices_field import TextChoicesField
 from authentikate.models import Organization
 from django.db.models import Q
-from datalayer.models import MediaStore, ZarrStore
+from arkitekt_datalayer.models import MediaStore, ZarrStore
 from enum import Enum
 
 from django.contrib.postgres.indexes import GinIndex

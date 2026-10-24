@@ -22,7 +22,7 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import models
-from datalayer.models import MediaStore
+from arkitekt_datalayer.models import MediaStore
 from mikro_server.schema import schema
 from tests import seed
 

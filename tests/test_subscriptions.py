@@ -18,7 +18,7 @@ from kante.context import HttpContext
 from kante.testing import GraphQLWebSocketTestClient
 
 from core import channels, models
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from mikro_server.schema import schema
 from tests import seed
 from tests.test_windowed_lenses import _CONTAINERS, _create
@@ -215,7 +215,7 @@ async def test_array_datasets_are_followed_by_folder_and_by_organization(db, aut
         store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key=name, bucket="zarr", shape=[64, 64], chunks=[64, 64], version="3", dtype="uint8", populated=True)
         axes = [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]
         # The one thing not real here: reading the array's metadata would reach for an S3.
-        with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+        with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
             created = await _run(ctx, create, {"data": str(store.pk), "name": name, "scales": [], "axes": axes, "folder": str(into.pk)})
         return created["createArrayDataset"]["id"]
 

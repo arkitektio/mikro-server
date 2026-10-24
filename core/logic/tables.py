@@ -12,8 +12,8 @@ could not do locally and costs this server a query whose price is set by someone
 count.
 """
 
-from datalayer import base_models
-from datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer import base_models
+from arkitekt_datalayer.datalayer import get_current_datalayer
 
 
 def parquet_source_for_store(store) -> str:

@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from core import models
@@ -82,7 +82,7 @@ async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(authenticat
             ],
         }
     }
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(CREATE, context_value=authenticated_context, variable_values=variables)
     assert not result.errors, result.errors
 
@@ -152,7 +152,7 @@ async def test_a_setting_holds_exactly_one_value(authenticated_context: HttpCont
             ],
         }
     }
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(CREATE, context_value=authenticated_context, variable_values=variables)
     assert result.errors
     assert "one value" in str(result.errors[0])

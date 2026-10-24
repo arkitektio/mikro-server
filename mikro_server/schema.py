@@ -33,10 +33,9 @@ from typing import Annotated
 from authentikate.strawberry import AuthExtension, AuthSubscribeExtension
 from authentikate import models as ak_models
 from koherent import models as koherent_models
-import datalayer.mutations as datalayer_mutations
-from datalayer.datalayer import DatalayerConfig
-from django.conf import settings
-import datalayer.scalars as datalayer_scalars
+import arkitekt_datalayer.mutations as datalayer_mutations
+from arkitekt_datalayer.datalayer import load_config
+import arkitekt_datalayer.scalars as datalayer_scalars
 import kante
 from core import scalars as core_scalars
 from kanne_server import scalars as kanne_scalars
@@ -88,7 +87,7 @@ def upload_mutation(**kwargs) -> strawberry.mutation:
     Holding any one of the configured roles is enough. Read once, at schema build -- a change to
     the config takes a restart, like every other setting.
     """
-    roles = DatalayerConfig(**getattr(settings, "DATALAYER", {})).upload_roles
+    roles = load_config().upload_roles
     return kante.django_mutation(extensions=[AuthExtension(any_role_of=roles)], **kwargs)
 
 

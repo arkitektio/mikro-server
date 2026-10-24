@@ -4,7 +4,7 @@ import strawberry
 from pydantic import BaseModel, Field
 
 from core import types, models, scalars
-from datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.datalayer import get_current_datalayer
 from core.creation import CreationContext
 from core.inputs.file_link import ExportOfInput, ExportOfSpec
 from core.logic import file_link as file_link_logic

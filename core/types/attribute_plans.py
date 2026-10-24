@@ -11,7 +11,7 @@ from typing import Annotated, List
 import strawberry
 
 import kante
-from datalayer.types import FabriksStore, KonnektionStore, ParquetStore, ZarrStore
+from arkitekt_datalayer.types import FabriksStore, KonnektionStore, ParquetStore, ZarrStore
 
 from core import enums
 from core.types.column_options import ColumnOptionJoinStep

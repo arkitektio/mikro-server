@@ -9,7 +9,7 @@ dataset tests.
 from unittest.mock import patch
 
 import pytest
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from mikro_server.schema import schema
@@ -31,7 +31,7 @@ async def test_dataset_axis_descriptions_round_trip(authenticated_context: HttpC
         populated=True,
     )
 
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             """
             mutation Create($input: CreateArrayDatasetInput!) {

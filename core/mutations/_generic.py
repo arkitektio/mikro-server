@@ -18,7 +18,7 @@ import strawberry
 
 from core import scoping
 from core.logic import compositions as compositions_logic
-from core.logic import storage
+from arkitekt_datalayer import storage
 
 
 def user_is_org_admin(info: Info) -> bool:

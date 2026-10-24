@@ -31,7 +31,7 @@ from strawberry.scalars import JSON
 from kante.types import Info
 
 from kanne_server import scalars as kanne_scalars
-from datalayer.types import FabriksStore, KonnektionStore, MediaStore
+from arkitekt_datalayer.types import FabriksStore, KonnektionStore, MediaStore
 
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map
@@ -1172,7 +1172,7 @@ class NetworkCollection(OrgScoped):
     models.Fixture,
     filters=filters.FixtureFilter,
     pagination=True,
-    description="A piece of hardware around the sample -- a coverslip, a dish, a holder -- stored as one binary glTF. Ask its `store` for a `presignedUrl` and load the file whole; its space's axes carry the units its vertices are in",
+    description="A piece of hardware around the sample -- a coverslip, a dish, a holder -- stored as one binary glTF. Ask its `store` for an `accessGrant` and load the file whole; its space's axes carry the units its vertices are in",
 )
 class Fixture(OrgScoped):
     """A fixture, backed by one glTF file rather than rows."""
@@ -1208,7 +1208,7 @@ class Fixture(OrgScoped):
     coordinate_system: CoordinateSystem = kante.django_field(
         description="The unit-carrying coordinate system the model's vertices are expressed in. Its axes carry the unit the exporter wrote, so an IDENTITY registration into a micrometre world converts by the units"
     )
-    store: MediaStore = kante.django_field(description="The media store holding the binary glTF. Ask it for a `presignedUrl` and fetch the file whole: a viewer loads a model in one request")
+    store: MediaStore = kante.django_field(description="The media store holding the binary glTF. Ask it for an `accessGrant` and fetch the file whole: a viewer loads a model in one request")
 
     @kante.django_field(description="The model's axis-aligned bounding box in its own space, as `{min: [x, y, z], max: [x, y, z]}` in the axes' order and unit, read from the file's accessor bounds at registration. Null when the file declares none")
     def bounds(self, info: Info) -> scalars.Any | None:

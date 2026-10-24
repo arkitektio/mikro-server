@@ -21,10 +21,10 @@ from django.core.management import call_command
 from django.utils import timezone
 from moto import mock_aws
 
-import datalayer.datalayer as datalayer_module
+import arkitekt_datalayer.datalayer as datalayer_module
 from core import models
-from core.logic import storage
-from datalayer.models import DatalayerStore
+from arkitekt_datalayer import storage
+from arkitekt_datalayer.models import DatalayerStore
 from kante.context import HttpContext
 from mikro_server.schema import schema
 

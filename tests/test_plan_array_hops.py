@@ -82,7 +82,7 @@ async def _derived_array(ctx: HttpContext, table: dict, *, transform: dict | Non
     entry: dict = {"kind": "TABLE_DATASET", "tableDataset": table["id"], "valueRelation": "TRANSFORMED"}
     if transform is not None:
         entry["transform"] = transform
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         return await schema.execute(
             "mutation D($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,

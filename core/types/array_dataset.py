@@ -33,7 +33,7 @@ from core.types.coords import (
 )
 import kante
 from strawberry.scalars import JSON
-from datalayer.types import MediaStore, ZarrStore
+from arkitekt_datalayer.types import MediaStore, ZarrStore
 from core.scoping import scope_queryset
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.type_gen import create_stats_type
@@ -1022,7 +1022,7 @@ class SceneSnapshot:
 
     id: auto
     scene: "Scene" = kante.django_field(description="The composition this is a picture of")
-    store: MediaStore = kante.django_field(description="The media store holding the rendered image. Ask it for a presignedUrl or an accessGrant to actually fetch the bytes")
+    store: MediaStore = kante.django_field(description="The media store holding the rendered image. Ask it for an accessGrant to actually fetch the bytes")
     name: str
     created_at: datetime.datetime
     creator: User | None

@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from django.db import IntegrityError
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from chart import models as chart_models
@@ -62,7 +62,7 @@ async def _lens_ids(dataset: models.ArrayDataset) -> list[int]:
 async def test_a_new_dataset_has_exactly_its_whole_lens(authenticated_context: HttpContext):
     """createArrayDataset ends with the lens selecting all of it, in the intrinsic system, and nothing else."""
     store = await ZarrStore.objects.acreate(organization=authenticated_context.request.organization, key="whole", bucket="zarr", shape=[2, 32, 32], chunks=[2, 32, 32], version="3", dtype="uint8", populated=True)
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             CREATE_DATASET,
             context_value=authenticated_context,

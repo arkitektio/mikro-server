@@ -10,7 +10,7 @@ import datetime
 from unittest.mock import patch
 
 import pytest
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from core import derived, models
@@ -71,7 +71,7 @@ async def _create(ctx: HttpContext, name: str, anchors: list[dict]):
             "anchors": anchors,
         }
     }
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         return await schema.execute(CREATE, context_value=ctx, variable_values=variables)
 
 

@@ -16,7 +16,7 @@ nobody made. A rename is enough; so is re-filing it.
 from unittest.mock import patch
 
 import pytest
-from datalayer.models import ZarrStore
+from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
 
 from mikro_server.schema import schema
@@ -48,7 +48,7 @@ async def test_a_json_field_change_does_not_break_the_provenance_query(authentic
         populated=True,
     )
 
-    with patch("datalayer.models.ZarrStore.fill_info", return_value=None):
+    with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         created = await schema.execute(
             "mutation Create($input: CreateArrayDatasetInput!) { createArrayDataset(input: $input) { id } }",
             context_value=ctx,
