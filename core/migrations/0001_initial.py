@@ -38,10 +38,9 @@ class Migration(migrations.Migration):
         # surfaces on a real `migrate` against an empty database. A no-op where the daten init
         # script already created them, a loud failure on a daten image without pgvector.
         #
-        # One file on purpose: generate it with `makemigrations core` *after* the other apps
-        # have theirs. Generated together with them, Django defers every foreign key into a
-        # second migration of some 260 `AddField`s, which takes several seconds to apply on
-        # an empty database for no difference in the schema.
+        # One file per app on purpose: run `makemigrations core` *first*, alone, then
+        # `makemigrations chart metric`. Generated together, Django splits the apps' foreign
+        # keys into a second migration of `AddField`s, for no difference in the schema.
         CreateExtension("cube"),
         VectorExtension(),
         migrations.CreateModel(
