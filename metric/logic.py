@@ -174,7 +174,7 @@ def create_metric(info: Info, spec: MetricSpec) -> models.Metric:
     (row,) = _rows(info, [spec])
     with transaction.atomic():
         row.save()
-        record_change(_change(row, "CREATED", info.context.request.organization.slug))
+        record_change(_change(row, "CREATED", info.context.request.organization.identifier))
     return row
 
 
@@ -190,7 +190,7 @@ def create_metrics(info: Info, specs: Sequence[MetricSpec]) -> list[models.Metri
     with transaction.atomic():
         # Described before the insert: a metric's descriptors are its own columns and its target's.
         created = models.Metric.objects.bulk_create(service.stamp(rows), batch_size=1000)
-        organization = info.context.request.organization.slug
+        organization = info.context.request.organization.identifier
         record_changes([_change(metric, "CREATED", organization) for metric in created])
     return created
 
@@ -202,7 +202,7 @@ def delete_metric(info: Info, id: str) -> str:
     """
     metric = for_org(models.Metric, info).select_related("organization").get(pk=id)
     with transaction.atomic():
-        record_change(_change(metric, "DELETED", metric.organization.slug))
+        record_change(_change(metric, "DELETED", metric.organization.identifier))
         metric.delete()
     return id
 

@@ -98,8 +98,8 @@ running Docker daemon.
   attribute plans and field transforms, and the sparse store format.
 - [kanne_server/DESIGN.md](kanne_server/DESIGN.md): how quantities with units are stored.
 
-`datalayer/`, `kanne_server/` and `embeddings/` are also carried, as copies, by elektro and
-other services.
+`kanne_server/` and `embeddings/` are also carried, as copies, by elektro and other services.
+The datalayer is not: every service imports it from the shared `arkitekt-datalayer` package.
 
 ## Releases
 

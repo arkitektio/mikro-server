@@ -4,7 +4,7 @@ An agent of its own, not a part of the service declared in ``mikro_server.servic
 says what exists, the agent says what can be done. Each has its own entry in the hub's
 configuration (``rekuest.services`` / ``rekuest.hook_agents``) and its own endpoints (``urls.py``).
 
-Every organization has the agent, so an action is handed the slug of the organization a run is
+Every organization has the agent, so an action is handed the identifier of the organization a run is
 for and does that organization's share of the work, nothing else. Nothing is wired: whether and
 when an action runs (a schedule, a trigger, by hand) is the organization's own automation.
 Nothing here loops or waits: each run is one pass rekuest started.

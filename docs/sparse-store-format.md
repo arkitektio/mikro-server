@@ -8,9 +8,9 @@ This file exists to say where the specification lives and why this server does n
 
 ## Why this server reimplements it
 
-`datalayer/` parses a sporadik store with `json` and nothing else — no `sporadik`, no `zarr`. That
-is the same relationship it has with fabriks (`datalayer/fabriks.py`), and for the same three
-reasons:
+The datalayer (the shared `arkitekt-datalayer` package this server imports) parses a sporadik
+store with `json` and nothing else — no `sporadik`, no `zarr`. That is the same relationship it has
+with fabriks (`arkitekt_datalayer/fabriks.py`), and for the same three reasons:
 
 - **A server that imports a writer inherits its dependencies.** Reading one small JSON object needs
   none of them.
@@ -30,11 +30,11 @@ drift; the one that drifts silently is the one nobody runs.
 |---|---|
 | `sporadik/README.md` | the format, normatively |
 | `sporadik/sporadik/spec.py` | the constants and rules, as code |
-| `datalayer/models.py` | this server's independent copy of them |
-| `datalayer/datalayer.py::get_sparse_metadata` | the reader, run at `finishSparseUpload` |
-| `tests/test_sparse_metadata.py` | this reader's conformance, against fabricated trees |
+| `arkitekt_datalayer/models.py` | the datalayer's independent copy of them |
+| `arkitekt_datalayer/datalayer.py::Datalayer.get_sparse_metadata` | the reader, run at `finishSparseUpload` |
+| arkitekt-datalayer's `tests/test_sparse_metadata.py` | this reader's conformance, against fabricated trees |
 
-`tests/test_sparse_metadata.py` asserts this server's constants against its own copy rather than
+That test asserts the datalayer's constants against its own copy rather than
 against sporadik's, deliberately: importing the package to check agreement would be the dependency
 the whole arrangement exists to avoid. What keeps the two honest is that both are checked against
 the same written specification.

@@ -99,5 +99,5 @@ async def test_an_annotation_says_what_shape_it_is_and_the_signal_carries_the_sa
     body = json.loads(received["body"])
     assert (body["kind"], body["object"]) == ("CREATED", drawn.data["createAnnotation"]["id"])
     assert body["descriptors"] == described
-    assert body["organization"] == authenticated_context.request.organization.slug
+    assert body["organization"] == authenticated_context.request.organization.identifier
 

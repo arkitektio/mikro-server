@@ -505,7 +505,7 @@ class MeshCollection(Described):
     The collection resolves to a **Parquet store** and a schema; the client asks the
     datalayer for temporary read credentials and queries the Parquet directly (e.g.
     with DuckDB). It is the same upload path every other Parquet object in the
-    system takes -- the client requests a presigned upload, writes the object, and
+    system takes -- the client requests an upload grant, writes the object, and
     hands back the store id. A bare URL would sit outside the datalayer: nothing
     would grant read access to it, nothing would scope it to an organization, and
     nothing would clean it up.
@@ -701,7 +701,7 @@ class Fixture(Described):
 
     A coverslip, a dish, a holder, an objective housing: geometry somebody drew rather than
     measured, kept so a scene can show where the sample sits. It is not data and carries none:
-    no ids to colour by, no octree to stream. One binary glTF (`.glb`) in a media store is the
+    no ids to colour by, no octree to stream. One binary glTF (`.glb`) in a kulisse store is the
     whole of it, read in one request by the viewer.
 
     **It lives in a space of its own, and that space carries units.** A collection's vertices

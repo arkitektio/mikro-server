@@ -9,6 +9,10 @@ The two safety properties matter more than the feature:
 - a store still referenced by anything is never purged (stores can be shared), and
 - a store that was never flagged is never purged, because an unreferenced store is the normal
   state of an upload in flight rather than a sign of garbage.
+
+The sweeper itself -- uploads in flight, the grace period, `--dry-run` -- is arkitekt-datalayer's
+and tested there (`tests/test_purge.py`). What is tested here is mikro's half: that deleting
+mikro's rows flags the stores they held, and that every way mikro points at a store protects it.
 """
 
 import datetime
@@ -208,64 +212,6 @@ async def test_a_shared_store_is_never_purged(db, authenticated_context: HttpCon
     assert await sync(keys_in)(buckets, "bigfile") == {"shared"}
     refreshed = await DatalayerStore.objects.aget(pk=store.pk)
     assert refreshed.orphaned_at is None, "a re-checked store must be un-flagged, not left as a standing candidate"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_an_upload_in_flight_is_never_touched(db, authenticated_context: HttpContext, buckets):
-    """An unreferenced store is not garbage -- it is the normal state of a live upload.
-
-    `requestFileUpload` creates the row before the client has uploaded anything and long
-    before a data row attaches. Sweeping unreferenced stores would delete uploads in progress,
-    which is why only *flagged* rows are ever collectable.
-    """
-    ctx = authenticated_context
-    store = await models.BigFileStore.objects.acreate(path="s3://bigfile/inflight", bucket="bigfile", key="inflight", populated=False, organization=ctx.request.organization)
-    await sync(put)(buckets, "bigfile", "inflight")
-
-    await sync(purge)(older_than=0)
-
-    assert await sync(keys_in)(buckets, "bigfile") == {"inflight"}
-    assert await DatalayerStore.objects.filter(pk=store.pk).aexists()
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_the_grace_period_holds(db, authenticated_context: HttpContext, buckets):
-    """A store flagged just now survives a default run -- that is the recovery window."""
-    ctx = authenticated_context
-    store = await models.BigFileStore.objects.acreate(path="s3://bigfile/fresh", bucket="bigfile", key="fresh", populated=True, organization=ctx.request.organization)
-    folder = await create_folder(ctx, "DS")
-    file = await create_file(ctx, "fresh.czi", folder, store=store)
-    await sync(put)(buckets, "bigfile", "fresh")
-
-    result = await schema.execute(
-        "mutation D($input: DeleteFileInput!) { deleteFile(input: $input) }",
-        context_value=ctx,
-        variable_values={"input": {"id": str(file.id)}},
-    )
-    assert not result.errors, result.errors
-
-    await sync(purge)()
-    assert await sync(keys_in)(buckets, "bigfile") == {"fresh"}, "the default grace period must protect a fresh delete"
-
-    await sync(purge)(older_than=0)
-    assert await sync(keys_in)(buckets, "bigfile") == set(), "--older-than 0 must collect it"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_dry_run_deletes_nothing(db, authenticated_context: HttpContext, buckets):
-    ctx = authenticated_context
-    store = await models.BigFileStore.objects.acreate(path="s3://bigfile/dry", bucket="bigfile", key="dry", populated=True, organization=ctx.request.organization)
-    await sync(put)(buckets, "bigfile", "dry")
-    await sync(age)(store, 30)
-
-    output = await sync(purge)(dry_run=True)
-
-    assert "would purge" in output
-    assert await sync(keys_in)(buckets, "bigfile") == {"dry"}
-    assert await DatalayerStore.objects.filter(pk=store.pk).aexists()
 
 
 # --------------------------------------------------------------------------------------

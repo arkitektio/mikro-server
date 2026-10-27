@@ -69,7 +69,7 @@ UNSHARDED_MANIFEST = {
 @pytest.fixture()
 def organization(db) -> Organization:
     """The organization every grant in this module is issued in."""
-    org, _ = Organization.objects.get_or_create(slug="static_org")
+    org, _ = Organization.objects.get_or_create(identifier="static_issuer#static_org")
     return org
 
 

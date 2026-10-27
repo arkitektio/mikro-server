@@ -133,7 +133,7 @@ async def test_the_sql_answers_what_the_python_predicates_answer(authenticated_c
     await seed.register_into_scene(authenticated_context, scene, acquired)
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         for dataset in models.ArrayDataset.objects.filter(organization=org):
             got = lineage_logic.lineage(("dataset", dataset.pk), organization=org, up=1, down=1, limit=1000, fanout=200)
             down = {(n.kind, n.pk) for n in got.nodes if n.depth == 1 and n.kind != lineage_logic.FILE}
@@ -171,7 +171,7 @@ async def test_fanout_is_capped_and_says_so(authenticated_context: HttpContext) 
         await _derived(authenticated_context, f"Tile{index}", lens=lens)
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         got = lineage_logic.lineage(("dataset", acquired.pk), organization=org, up=0, down=3, fanout=3)
         root = next(node for node in got.nodes if node.depth == 0)
         assert len([node for node in got.nodes if node.depth == 1]) == 3
@@ -192,7 +192,7 @@ async def test_a_cycle_terminates(authenticated_context: HttpContext) -> None:
     mask = await _derived(authenticated_context, "Mask", lens=lens)
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         child = models.ArrayDataset.objects.get(pk=mask)
         models.Transformation.objects.create(
             kind=enums.TransformKindChoices.UNMAPPABLE.value, input=acquired.coordinate_system, output=child.coordinate_system, organization=org
@@ -215,7 +215,7 @@ async def test_cost_follows_the_lineage_not_the_depth_or_the_organization(authen
         parent = await sync_to_async(models.ArrayDataset.objects.get)(pk=child)
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         counts = []
         for depth in (2, 6):
             with CaptureQueriesContext(connection) as queries:
@@ -249,8 +249,8 @@ async def test_another_organizations_edges_never_appear(authenticated_context: H
     foreign = await seed.create_array_dataset(authenticated_context, "Foreign", axes=seed.YX_AXES, shapes=[[64, 64]])
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
-        other = Organization.objects.create(slug="lineage_other_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
+        other = Organization.objects.create(identifier="static_issuer#lineage_other_org")
         models.ArrayDataset.objects.filter(pk=foreign.pk).update(organization=other)
         models.CoordinateSystem.objects.filter(pk=foreign.coordinate_system_id).update(organization=other)
 
@@ -277,7 +277,7 @@ async def test_each_step_names_the_task_that_made_it(authenticated_context: Http
     ids = await _chain(authenticated_context)
 
     def stamp() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         convert = Task.objects.create(task_id="convert-1", root_task_id="convert-1", token_id="token-convert-1", organization=org)
         segment = Task.objects.create(task_id="segment-1", root_task_id="segment-1", token_id="token-segment-1", organization=org)
         # The converter made the dataset; the link row it wrote carries no task of its own.
@@ -473,7 +473,7 @@ async def test_descendants_say_when_they_were_cut_short(authenticated_context: H
     ids = await _chain(authenticated_context)
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         # Acquired -> Mask -> Objects: one hop leaves Objects out.
         (shallow,) = lineage_logic.descendants([("dataset", ids["acquired"])], organization=org, down=1)
         assert {node.pk for node in shallow.nodes} == {ids["mask"], ids["projection"]}
@@ -499,7 +499,7 @@ async def test_descendants_cost_does_not_grow_with_the_roots(authenticated_conte
         roots.append(("dataset", acquired.pk))
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         counts = []
         for some in (roots[:2], roots):
             with CaptureQueriesContext(connection) as queries:
@@ -527,7 +527,7 @@ async def test_roots_are_the_nodes_nothing_was_made_from(authenticated_context: 
     uploaded = await _table(authenticated_context, "Uploaded", columns=_MEASUREMENT_COLUMNS)
 
     def export() -> int:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         exported = models.File.objects.create(name="export.ome.tif", organization=org, membership=models.File.objects.get(pk=ids["raw"]).membership)
         models.FileLink.objects.create(file=exported, dataset_id=ids["mask"], direction=enums.FileLinkDirectionChoices.RENDITION.value, organization=org)
         return exported.pk
@@ -577,7 +577,7 @@ async def test_roots_narrow_by_creator_collaboration_and_time(authenticated_cont
         models.ArrayDataset.objects.filter(pk=written.pk).update(acquisition_start=day(14), acquisition_end=day(14))
         models.ArrayDataset.objects.filter(pk=ids["acquired"]).update(stored_spec=["VOLUME", "TIMESERIES"])
         models.ArrayDataset.objects.filter(pk=written.pk).update(stored_spec=["IMAGE"])
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         collaboration = Collaboration.objects.create(organization=org, name="Shared")
         # Only the converted series is put in; its file counts as in through it.
         CollaborationItem.objects.create(
@@ -637,7 +637,7 @@ async def test_roots_cost_does_not_grow_with_the_page(authenticated_context: Htt
         await _derived(authenticated_context, f"Mask{index}", lens=lens)
 
     def check() -> None:
-        org = Organization.objects.get(slug="static_org")
+        org = Organization.objects.get(identifier="static_issuer#static_org")
         counts = []
         for limit in (2, 8):
             with CaptureQueriesContext(connection) as queries:

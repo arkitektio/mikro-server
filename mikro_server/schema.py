@@ -330,6 +330,10 @@ class Mutation:
         description="Finalize a media upload after the client has written the object",
         resolver=datalayer_mutations.finish_media_upload,
     )
+    refresh_media_upload = upload_mutation(
+        description="Reissue upload credentials for a media upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_media_upload,
+    )
     request_media_access = kante.django_mutation(
         description="Request temporary S3 read credentials for a media file",
         resolver=datalayer_mutations.request_media_access,
@@ -337,6 +341,10 @@ class Mutation:
     request_general_media_access = kante.django_mutation(
         description="Request temporary S3 read credentials for media files in the organization",
         resolver=datalayer_mutations.request_general_media_access,
+    )
+    refresh_bigfile_upload = upload_mutation(
+        description="Reissue upload credentials for a bigfile upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_bigfile_upload,
     )
 
     request_bigfile_upload = upload_mutation(
@@ -402,6 +410,10 @@ class Mutation:
         description="Request temporary S3 read credentials for a sparse store. Covers the whole prefix, because a lookup needs `indptr` before it knows which range of `data` to fetch",
         resolver=datalayer_mutations.request_sparse_access,
     )
+    refresh_fabriks_upload = upload_mutation(
+        description="Reissue upload credentials for a fabriks upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_fabriks_upload,
+    )
     request_general_sparse_access = kante.django_mutation(
         description="Request temporary S3 read credentials for sparse stores in the organization",
         resolver=datalayer_mutations.request_general_sparse_access,
@@ -410,6 +422,10 @@ class Mutation:
     request_fabriks_upload = upload_mutation(
         description="Request an upload grant for a fabriks store. The grant covers the whole prefix, so one request authorizes the manifest, both catalogs and every level",
         resolver=datalayer_mutations.request_fabriks_upload,
+    )
+    refresh_kulisse_upload = upload_mutation(
+        description="Reissue upload credentials for a kulisse upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_kulisse_upload,
     )
     finish_fabriks_upload = upload_mutation(
         description="Finalize a fabriks upload. This reads the store's `fabriks.json` and refuses a prefix that has none -- which is what an interrupted upload looks like, since the manifest is written last",
@@ -423,6 +439,10 @@ class Mutation:
         description="Request temporary S3 read credentials for fabriks stores in the organization",
         resolver=datalayer_mutations.request_general_fabriks_access,
     )
+    refresh_konnektion_upload = upload_mutation(
+        description="Reissue upload credentials for a konnektion upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_konnektion_upload,
+    )
     request_kulisse_upload = upload_mutation(
         description="Request an upload grant for a kulisse store: one device or scene model, a self-contained binary glTF",
         resolver=datalayer_mutations.request_kulisse_upload,
@@ -430,6 +450,10 @@ class Mutation:
     finish_kulisse_upload = upload_mutation(
         description="Finalize a kulisse upload. This reads the model's header and JSON chunk, records what it says (bounds, nodes, joints) and refuses a file that is not a self-contained glTF 2.0 model",
         resolver=datalayer_mutations.finish_kulisse_upload,
+    )
+    refresh_parquet_upload = upload_mutation(
+        description="Reissue upload credentials for a parquet upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_parquet_upload,
     )
     request_kulisse_access = kante.django_mutation(
         description="Request temporary S3 read credentials for a kulisse model",

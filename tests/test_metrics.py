@@ -82,7 +82,7 @@ class TestRecording:
         assert metric["target"] == {"identifier": "@mikro/arraydataset", "object": str(dataset.id), "uuid": metric["target"]["uuid"]}
 
         (entry,) = await sync_to_async(entries)()
-        assert (entry.kind, entry.object, str(entry.uuid), entry.organization) == ("CREATED", metric["id"], metric["uuid"], "static_org")
+        assert (entry.kind, entry.object, str(entry.uuid), entry.organization) == ("CREATED", metric["id"], metric["uuid"], "static_issuer#static_org")
 
         (signal,) = metric_signals(intake, 1)
         assert (signal["kind"], signal["object"]) == ("CREATED", metric["id"])
@@ -196,7 +196,7 @@ class TestFeed:
         dataset = await seed.create_array_dataset(authenticated_context)
         metric = (await run(authenticated_context, CREATE, {"input": quantity(dataset)}))["createMetric"]
 
-        response = await sync_to_async(self.read)(settings, {"feed": "@mikro/metric", "organization": "static_org", "after": {"xid": "0", "id": 0}, "limit": 10})
+        response = await sync_to_async(self.read)(settings, {"feed": "@mikro/metric", "organization": "static_issuer#static_org", "after": {"xid": "0", "id": 0}, "limit": 10})
         assert response.status_code == 200, response.content
         (entry,) = response.json()["entries"]
         body = entry["body"]

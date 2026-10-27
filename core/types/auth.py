@@ -23,7 +23,7 @@ class Organization:
     """An organization (tenant); every object is scoped to exactly one organization."""
 
     id: strawberry.ID
-    slug: str
+    identifier: str = strawberry_django.field(description="The organization across issuers and services: `<issuer>#<org>`.")
 
 
 @kante.django_type(amodels.User, description="A user account. The sub is the stable subject identifier from the identity provider; creator and assigner fields across the API reference this type.")

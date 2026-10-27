@@ -63,7 +63,7 @@ class _FakeDuck:
         self._rows = rows
         self._captured = captured
 
-    def sql(self, query: str):
+    def sql(self, query: str, params=None):
         self._captured.append(query)
         return _FakeRelation(self._rows)
 
@@ -94,7 +94,8 @@ def test_a_store_is_described_rather_than_read(monkeypatch):
     assert layer.get_parquet_schema(FakeStore()) == [base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=True)]
 
     (query,) = captured
-    assert "DESCRIBE SELECT * FROM read_parquet('s3://tables/abc123')" in query
+    # The location is a bound parameter (arkitekt-datalayer 2), never spliced into the SQL.
+    assert "DESCRIBE SELECT * FROM read_parquet($location)" in query
     assert "LIMIT" not in query.upper(), "a DESCRIBE needs no row limit -- it reads no rows"
 
 
@@ -221,7 +222,7 @@ def test_the_connection_outlives_the_relation_it_returns(monkeypatch):
         def __del__(self):
             self._state["closed"] = True
 
-        def sql(self, query: str):
+        def sql(self, query: str, params=None):
             # The relation deliberately does NOT reference the layer, exactly as duckdb's does
             # not keep its connection alive from Python's side.
             return ClosingRelation(self._state, [("object_id", "BIGINT", "YES", None, None, None)])

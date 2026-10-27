@@ -52,7 +52,7 @@ ZARR_MANIFEST = {
 @pytest.fixture()
 def organization(db) -> Organization:
     """The organization every grant in this module is issued in."""
-    org, _ = Organization.objects.get_or_create(slug="static_org")
+    org, _ = Organization.objects.get_or_create(identifier="static_issuer#static_org")
     return org
 
 
@@ -159,7 +159,7 @@ def test_a_refresh_reissues_credentials_against_the_same_prefix(buckets, organiz
     it never asked for.
     """
     first = buckets.generate_zarr_upload_grant(organization.id, base_models.RequestZarrUploadInput())
-    second = buckets.refresh_zarr_upload_grant(organization.id, first.store)
+    second = buckets.refresh_upload_grant(ZarrStore, organization.id, first.store)
 
     assert (second.store, second.key, second.path, second.bucket) == (first.store, first.key, first.path, first.bucket)
     assert ZarrStore.objects.count() == 1, "a refresh reissues credentials, it does not mint a store"
@@ -169,29 +169,30 @@ def test_a_refresh_reissues_credentials_against_the_same_prefix(buckets, organiz
 def test_a_refresh_refuses_an_upload_that_is_already_finished(buckets, organization):  # noqa: F811
     """A populated store's bytes are referenced, so write credentials for them are an overwrite.
 
-    Distinct from a store finished with ``valid=False``, which is *not* populated and stays
-    refreshable -- that is the retry case this exists to serve.
+    A store finished with ``valid=False`` cannot be refreshed either: that ends the upload, and
+    the sweep collects it.
     """
     store = request_store(buckets, organization)
     write_zarr(buckets, store)
     buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
 
-    with pytest.raises(ValueError, match="already populated"):
-        buckets.refresh_zarr_upload_grant(organization.id, str(store.pk))
+    with pytest.raises(ValueError, match="already finished"):
+        buckets.refresh_upload_grant(ZarrStore, organization.id, str(store.pk))
 
     invalidated = request_store(buckets, organization)
     buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(invalidated.pk), valid=False))
-    assert buckets.refresh_zarr_upload_grant(organization.id, str(invalidated.pk)).store == str(invalidated.pk)
+    with pytest.raises(ValueError, match="abandoned"):
+        buckets.refresh_upload_grant(ZarrStore, organization.id, str(invalidated.pk))
 
 
 def test_a_refresh_cannot_reach_another_organizations_store(buckets, organization):  # noqa: F811
     """Scoped by organization like every other store lookup, and worth pinning: this one hands
     out *write* credentials, so a missed scope is not a leak but a takeover."""
     store = request_store(buckets, organization)
-    other, _ = Organization.objects.get_or_create(slug="other_org")
+    other, _ = Organization.objects.get_or_create(identifier="static_issuer#other_org")
 
     with pytest.raises(ZarrStore.DoesNotExist):
-        buckets.refresh_zarr_upload_grant(other.id, str(store.pk))
+        buckets.refresh_upload_grant(ZarrStore, other.id, str(store.pk))
 
 
 def test_a_measured_store_reports_both_numbers_to_clients(buckets, organization):  # noqa: F811
@@ -273,7 +274,7 @@ def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organiz
     """
     from arkitekt_datalayer.models import BigFileStore
 
-    grant = buckets.generate_bigfile_upload_grant(organization.id, base_models.RequestBigFileUploadInput(original_file_name="cells.czi"))
+    grant = buckets.generate_bigfile_upload_grant(organization.id, base_models.RequestBigFileUploadInput(original_file_name="cells.czi", file_size=2048))
     store = BigFileStore.objects.get(id=grant.store)
     body = b"y" * 2048
     buckets._s3.put_object(Bucket=buckets.get_bucket_config("bigfile").bucket, Key=buckets.build_object_key("bigfile", store.key), Body=body)

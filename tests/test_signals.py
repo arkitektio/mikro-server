@@ -100,7 +100,7 @@ async def test_a_new_scene_is_signalled_with_its_descriptors(intake, authenticat
     (received,) = _of(intake, "@mikro/scene")
     body = received["json"]
     assert (body["kind"], body["object"]) == ("CREATED", str(scene.pk))
-    assert body["organization"] == authenticated_context.request.organization.slug
+    assert body["organization"] == authenticated_context.request.organization.identifier
     assert set(body["descriptors"]) == {"@mikro/blending", "@mikro/preferred_view"}
     assert trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="rekuest").issuer == "mikro"
 
@@ -118,7 +118,7 @@ async def test_the_coordinate_graph_and_the_stores_under_the_data_are_announced(
     assert str(dataset.coordinate_system_id) in systems, "the grid the data lives in"
     store = await seed.create_parquet_store(authenticated_context, key="announced.parquet")
     stores = {r["json"]["object"]: r["json"]["organization"] for r in _of(intake, "@mikro/parquetstore")}
-    assert stores == {str(store.pk): authenticated_context.request.organization.slug}
+    assert stores == {str(store.pk): authenticated_context.request.organization.identifier}
 
     scene = await seed.create_scene(authenticated_context, "Placed")
     elsewhere = await models.Transformation.objects.acreate(

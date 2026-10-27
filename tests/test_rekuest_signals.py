@@ -135,7 +135,7 @@ async def test_a_created_dataset_is_signalled_with_its_task_token(intake, authen
     assert verified.issuer == "mikro"
     body = json.loads(received["body"])
     assert (body["kind"], body["identifier"], body["object"]) == ("CREATED", "@mikro/arraydataset", dataset_id)
-    assert body["organization"] == authenticated_context.request.organization.slug
+    assert body["organization"] == authenticated_context.request.organization.identifier
     assert body["descriptors"]["@mikro/n_channels"] == 2 and body["descriptors"]["@mikro/n_space_axes"] == 2
     assert body["provenance"] == "raw-provenance-token"  # forwarded untouched; rekuest verifies it
 

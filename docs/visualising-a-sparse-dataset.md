@@ -43,7 +43,7 @@ answer than a second renderer — it buys all of the above for free.
 
 ## What a client has to do
 
-The server never opens a chunk (`datalayer/sporadik.py`: *"What this module
+The server never opens a chunk (`arkitekt_datalayer/sporadik.py`: *"What this module
 deliberately does not do: open a chunk"*). A colouring is read by the client,
 directly from the store:
 
