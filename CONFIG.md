@@ -196,7 +196,7 @@ and large binaries here.
 | `zarr` | — (use YAML) | object | **required** | Bucket for Zarr arrays. `{ bucket: <name> }`. |
 | `parquet` | — (use YAML) | object | **required** | Bucket for Parquet tables. `{ bucket: <name> }`. |
 | `bigfile` | — (use YAML) | object | **required** | Bucket for large binary files (BigFileStore). `{ bucket: <name> }`. |
-| `upload_roles` | — (use YAML) | list[str] | `[admin, editor, bot]` | Organization roles allowed to request, refresh and finish upload grants. Holding any one is enough. |
+| `upload_roles` | — (use YAML) | list[str] | `[]` (`mikro_editor`) | Mikro's roles allowed to request, refresh and finish upload grants. Holding any one is enough; when empty, mikro asks for `mikro_editor` (`mikro_admin` holds every role). |
 | `quotas` | — (use YAML) | object | no limits | Per-organization, per-user and per-upload byte quotas. See [Upload quotas](#upload-quotas). |
 
 Each bucket binding is an object:
@@ -246,7 +246,7 @@ toward their organization only.
 
 ```yaml
 datalayer:
-  upload_roles: [admin, editor, bot]
+  upload_roles: [mikro_editor, mikro_annotator]
   quotas:
     default:
       max_upload_bytes: 500GiB
