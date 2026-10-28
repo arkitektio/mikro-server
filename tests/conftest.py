@@ -205,8 +205,7 @@ def authenticated_context(db, backend_stack):
 def bot_context(db, backend_stack) -> HttpContext:
     """A non-admin user (static token "bottest") in the SAME org as authenticated_context.
 
-    Holds the "bot" role: it passes the admin/bot mutation gate but is not an org
-    admin, so the creator/assignee delete guard actually applies to it — the
+    Holds ``mikro_editor``: it passes the write gate but is not mikro's admin, so the creator/assignee delete guard actually applies to it — the
     context used to exercise the denial path.
     """
     user, _ = User.objects.get_or_create(
@@ -217,7 +216,7 @@ def bot_context(db, backend_stack) -> HttpContext:
     membership, _ = Membership.objects.get_or_create(
         user=user,
         organization=org,
-        defaults={"roles": ["bot"]},
+        defaults={"roles": ["mikro_editor"]},
     )
 
     request = UniversalRequest(
@@ -233,7 +232,7 @@ def bot_context(db, backend_stack) -> HttpContext:
 
 @pytest.fixture(scope="function")
 def editor_context(db, backend_stack) -> HttpContext:
-    """A user holding only the "editor" role (static token "editortest") in the SAME org as authenticated_context."""
+    """A user holding only ``mikro_editor`` (static token "editortest") in the SAME org as authenticated_context."""
     user, _ = User.objects.get_or_create(
         sub="3", iss="static_issuer", defaults={"username": "static_issuer_3"}
     )
@@ -242,7 +241,7 @@ def editor_context(db, backend_stack) -> HttpContext:
     membership, _ = Membership.objects.get_or_create(
         user=user,
         organization=org,
-        defaults={"roles": ["editor"]},
+        defaults={"roles": ["mikro_editor"]},
     )
 
     request = UniversalRequest(

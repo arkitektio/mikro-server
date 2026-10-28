@@ -56,7 +56,7 @@ def guest(db, authenticated_context, settings):
         granted = {str(collaboration.pk if isinstance(collaboration, Collaboration) else collaboration): roles for collaboration, roles in collaborations.items()}
         settings.AUTHENTIKATE = {
             **settings.AUTHENTIKATE,
-            "static_tokens": {**settings.AUTHENTIKATE["static_tokens"], "guest": {"sub": "20", "roles": [], "collabs": {"1": granted}}},
+            "static_tokens": {**settings.AUTHENTIKATE["static_tokens"], "guest": {"sub": "20", "roles": [], "collabs": {"1": granted}, "scope": "openid mikro_all"}},
         }
         authentikate_settings.cached_settings = None
         return _context("guest")
@@ -205,7 +205,7 @@ async def test_a_lens_two_scenes_draw_brings_neither_scene_the_others_layers(aut
 async def test_an_editor_in_the_collaboration_draws_there_and_only_there(authenticated_context, guest):
     scene = await seed.create_scene(authenticated_context, "Canvas")
     other = await seed.create_scene(authenticated_context, "Other")
-    ctx = guest({await _collaboration(authenticated_context, scene): ["editor"]})
+    ctx = guest({await _collaboration(authenticated_context, scene): ["mikro_editor"]})
 
     drawn = await _run(ctx, DRAW, **_point(scene=str(scene.id)))
     assert not drawn.errors, drawn.errors
@@ -227,7 +227,7 @@ async def test_a_viewer_draws_nothing_and_no_guest_does_anything_else(authentica
     collaboration = await _collaboration(authenticated_context, scene)
 
     _refused(await _run(guest({collaboration: []}), DRAW, **_point(scene=str(scene.id))), "INSUFFICIENT_ROLE")
-    _refused(await _run(guest({collaboration: ["editor"]}), "mutation ($id: ID!) { deleteScene(id: $id) }", id=str(scene.id)), "SCOPED_READ_ONLY")
+    _refused(await _run(guest({collaboration: ["mikro_editor"]}), "mutation ($id: ID!) { deleteScene(id: $id) }", id=str(scene.id)), "SCOPED_READ_ONLY")
     assert await sync_to_async(models.Annotation.objects.count)() == 0
 
 
@@ -260,4 +260,4 @@ def test_the_schema_says_what_each_type_is_and_who_may_draw():
     sdl = str(schema)
     assert '@identified(by: "@mikro/scene")' in _type_line(sdl, "Scene")
     create = next(line.strip() for line in sdl.splitlines() if line.strip().startswith("createAnnotation("))
-    assert create.endswith('@auth(any_role_of: ["admin", "editor", "bot"], allow_scoped: true)'), create
+    assert create.endswith('@auth(required_scopes: ["mikro_annotate"], any_role_of: ["mikro_editor", "mikro_annotator"], allow_scoped: true)'), create

@@ -18,13 +18,14 @@ import strawberry
 
 from core import scoping
 from core.logic import compositions as compositions_logic
+from mikro_server.contract import ADMIN
 from arkitekt_datalayer import storage
 
 
 def user_is_org_admin(info: Info) -> bool:
-    """True if the request user holds the ``admin`` role in the active organization."""
+    """True if the request user holds mikro's admin role in the active organization."""
     membership = info.context.request.membership
-    return "admin" in (getattr(membership, "roles", None) or [])
+    return ADMIN in (getattr(membership, "roles", None) or [])
 
 
 def assert_can_delete(info: Info, item, owner) -> None:

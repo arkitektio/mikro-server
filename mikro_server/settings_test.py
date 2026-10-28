@@ -27,6 +27,9 @@ DATABASES["default"] = {
 
 # Django forces DEBUG=False under the test runner, and authentikate 3.0 refuses static
 # tokens when DEBUG is False. These are deliberate test fixtures, so opt in explicitly.
+#: What a test token is unless it says otherwise: mikro's admin, through an app granted all of mikro.
+ADMIN_WITH_EVERY_SCOPE = {"roles": ["mikro_admin"], "scope": "openid mikro_all"}
+
 AUTHENTIKATE = {
     **AUTHENTIKATE,
     "allow_static_tokens_in_production": True,
@@ -34,25 +37,30 @@ AUTHENTIKATE = {
     # listed under (tests/test_sharing.py).
     "audience": "1",
     "static_tokens": {
-        "test": {"sub": "1"},
-        # A user in a different organization, for cross-tenant scoping tests.
-        "othertest": {"sub": "9", "org": "other_org"},
-        # The SAME user as "test", acting in the other organization: a user who belongs to
-        # two orgs must only ever see the rows of the org they are acting in.
-        "test-other-org": {"sub": "1", "org": "other_org"},
-        # A non-admin user in the SAME organization, for delete-ownership tests:
-        # "bot" satisfies the admin/bot mutation gate but is not an org admin, so
-        # the creator/assignee guard actually applies to them.
-        "bottest": {"sub": "2", "roles": ["bot"]},
-        # An "editor": writes data and requests upload grants, but is not an org admin.
-        "editortest": {"sub": "3", "roles": ["editor"]},
-        # A "viewer": in the org, but holding no role that may write or upload.
-        "viewertest": {"sub": "4", "roles": ["viewer"]},
-        # The user of "test" calling through a different app: app-scoped space references
-        # (tests/test_coordinate_system_api.py) are namespaced by the app, not the user.
-        "otherapptest": {"sub": "1", "client_id": "other_app_client", "client_app": "other_app"},
-        # The same user through a token naming no release, so its client belongs to no app.
-        "noapptest": {"sub": "1", "client_id": "bare_client", "client_release": ""},
+        name: {**ADMIN_WITH_EVERY_SCOPE, **token}
+        for name, token in {
+            "test": {"sub": "1"},
+            # A user in a different organization, for cross-tenant scoping tests.
+            "othertest": {"sub": "9", "org": "other_org"},
+            # The SAME user as "test", acting in the other organization: a user who belongs to
+            # two orgs must only ever see the rows of the org they are acting in.
+            "test-other-org": {"sub": "1", "org": "other_org"},
+            # A non-admin user in the SAME organization, for delete-ownership tests: an
+            # editor passes the write gate but is not mikro's admin, so the creator/assignee
+            # guard actually applies to them.
+            "bottest": {"sub": "2", "roles": ["mikro_editor"]},
+            # An editor: writes data and requests upload grants, but is not mikro's admin.
+            "editortest": {"sub": "3", "roles": ["mikro_editor"]},
+            # In the org, but holding no role that may write or upload.
+            "viewertest": {"sub": "4", "roles": []},
+            # The user of "test" calling through a different app: app-scoped space references
+            # (tests/test_coordinate_system_api.py) are namespaced by the app, not the user.
+            "otherapptest": {"sub": "1", "client_id": "other_app_client", "client_app": "other_app"},
+            # The same user through a token naming no release, so its client belongs to no app.
+            "noapptest": {"sub": "1", "client_id": "bare_client", "client_release": ""},
+            # An app granted only what it reads, for the scope tests (tests/test_scopes.py).
+            "readertest": {"sub": "1", "scope": "openid mikro_read"},
+        }.items()
     },
 }
 

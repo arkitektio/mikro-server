@@ -27,6 +27,7 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org, get_in_org_unshared
+from mikro_server.contract import ANNOTATOR, EDITOR
 
 
 class _ShapeInputModel(BaseModel):
@@ -191,7 +192,7 @@ def _find_or_mint_scene_collection(scene: "models.Scene", ctx: CreationContext) 
 
 #: Who may draw: the roles of the mutations, held in the organization or, for a guest, in a
 #: collaboration that holds what they draw on (``require_in_collaboration``).
-ANNOTATING_ROLES = ["admin", "editor", "bot"]
+ANNOTATING_ROLES = [EDITOR, ANNOTATOR]
 
 
 # A shape's coordinate pins are deliberately *not* checked against the axes of the space

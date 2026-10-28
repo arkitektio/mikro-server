@@ -2,12 +2,11 @@
 
 Deletion of user-owned rows is guarded (``core.mutations._generic``): a caller
 may delete a row only if they are its ``creator`` or its ``created_through_by``
-assigner, unless they hold the ``admin`` role in the organization.
+assigner, unless they hold mikro's admin role (``mikro_admin``) in the organization.
 
-Because every static test token defaults to ``roles=["admin"]``, the denial
-path is exercised through ``bot_context`` — a same-org user holding only the
-``bot`` role, which passes the admin/bot mutation gate but is not an admin, so
-the guard applies to it.
+Because every static test token defaults to ``mikro_admin``, the denial path is
+exercised through ``bot_context`` — a same-org user holding only ``mikro_editor``,
+which passes the write gate but is not mikro's admin, so the guard applies to it.
 """
 
 import pytest

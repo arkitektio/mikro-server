@@ -44,14 +44,15 @@ from core.scoping import get_for_org
 from arkitekt_service.graphql import CollaborationGate, annotate_schema
 from arkitekt_service.collaborations import graphql as collaboration_types
 from mikro_server.service import service as mikro_service
+from mikro_server.contract import EDITOR, ANNOTATOR
 from embeddings.strawberry import scalar_map as embedding_scalars
 
 ID = Annotated[StrawberryID, strawberry.argument(description="The unique identifier of an object")]
 
 
-def field(**kwargs):
-    "A wrapper for field that adds the auth extension."
-    return strawberry_django.field(extensions=[AuthExtension()], **kwargs)
+def field(scope: str = "mikro_read", **kwargs):
+    "A field an app needs ``scope`` for (``mikro_read``, unless it says otherwise)."
+    return strawberry_django.field(extensions=[AuthExtension(scopes=[scope])], **kwargs)
 
 
 class CreatedByCallerField(StrawberryDjangoField):
@@ -67,14 +68,20 @@ class CreatedByCallerField(StrawberryDjangoField):
         return super().get_queryset(queryset.filter(creator=info.context.request.user), info, **kwargs)
 
 
-def mutation(roles: list[str] | None = None, guests: bool = False, **kwargs) -> strawberry.mutation:
-    """A wrapper for mutation that adds default permission classes and extensions.
+def mutation(scope: str = "mikro_write", roles: list[str] | None = None, guests: bool = False, **kwargs) -> strawberry.mutation:
+    """A write: an app needs ``scope`` for it, a member one of ``roles`` (``mikro_editor`` unless it says
+    otherwise; ``mikro_admin`` holds every role).
 
     ``guests`` opens it to guests of the organization holding the roles in one of their collaborations:
     the resolver then checks its target is in such a collaboration (``require_in_collaboration``).
     """
 
-    return strawberry_django.mutation(extensions=[AuthExtension(any_role_of=roles or ["admin", "editor", "bot"], allow_scoped=guests)], **kwargs)
+    return strawberry_django.mutation(extensions=[AuthExtension(scopes=[scope], any_role_of=roles or [EDITOR], allow_scoped=guests)], **kwargs)
+
+
+def access_mutation(**kwargs) -> strawberry.mutation:
+    """A mutation that hands out read credentials: a read, for whoever may see what it reads."""
+    return kante.django_mutation(extensions=[AuthExtension(scopes=["mikro_read"])], **kwargs)
 
 
 #: The collaborations of mikro's objects, which a guest of the organization is granted.
@@ -87,13 +94,13 @@ def upload_mutation(**kwargs) -> strawberry.mutation:
     Holding any one of the configured roles is enough. Read once, at schema build -- a change to
     the config takes a restart, like every other setting.
     """
-    roles = load_config().upload_roles
-    return kante.django_mutation(extensions=[AuthExtension(any_role_of=roles)], **kwargs)
+    roles = load_config().upload_roles or [EDITOR]
+    return kante.django_mutation(extensions=[AuthExtension(scopes=["mikro_write"], any_role_of=roles)], **kwargs)
 
 
 def subscription(**kwargs) -> strawberry.subscription:
-    """A wrapper for subscription that adds default permission classes and extensions."""
-    return strawberry.subscription(extensions=[AuthSubscribeExtension()], **kwargs)
+    """A subscription: what it streams is read, so an app needs ``mikro_read`` for it."""
+    return strawberry.subscription(extensions=[AuthSubscribeExtension(scopes=["mikro_read"])], **kwargs)
 
 
 @strawberry.type
@@ -316,11 +323,11 @@ class Query:
 @strawberry.type
 class Mutation:
 
-    create_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.create_collaboration, description="Create an empty collaboration, to put objects in and grant a guest")
-    add_to_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.add_to_collaboration, description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw")
-    add_many_to_collaboration = mutation(roles=["admin", "editor"], resolver=mutations.add_many_to_collaboration, description="Put several objects in a collaboration at once, each with what it needs to be seen; all or none. How a dataset goes in with what was derived from it")
-    remove_from_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.remove_from_collaboration, description="Take an object out of a collaboration, with what it brought that nothing else there needs")
-    delete_collaboration = mutation(roles=["admin", "editor"], resolver=collaboration_api.delete_collaboration, description="Delete a collaboration: whoever was granted it sees nothing of it any more")
+    create_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.create_collaboration, description="Create an empty collaboration, to put objects in and grant a guest")
+    add_to_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.add_to_collaboration, description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw")
+    add_many_to_collaboration = mutation(scope="mikro_share", resolver=mutations.add_many_to_collaboration, description="Put several objects in a collaboration at once, each with what it needs to be seen; all or none. How a dataset goes in with what was derived from it")
+    remove_from_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.remove_from_collaboration, description="Take an object out of a collaboration, with what it brought that nothing else there needs")
+    delete_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.delete_collaboration, description="Delete a collaboration: whoever was granted it sees nothing of it any more")
 
     request_media_upload = upload_mutation(
         description="Upload media and return a URL for access",
@@ -334,11 +341,11 @@ class Mutation:
         description="Reissue upload credentials for a media upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
         resolver=datalayer_mutations.refresh_media_upload,
     )
-    request_media_access = kante.django_mutation(
+    request_media_access = access_mutation(
         description="Request temporary S3 read credentials for a media file",
         resolver=datalayer_mutations.request_media_access,
     )
-    request_general_media_access = kante.django_mutation(
+    request_general_media_access = access_mutation(
         description="Request temporary S3 read credentials for media files in the organization",
         resolver=datalayer_mutations.request_general_media_access,
     )
@@ -355,7 +362,7 @@ class Mutation:
         description="Finalize a big file upload after the client has written the object",
         resolver=datalayer_mutations.finish_bigfile_upload,
     )
-    request_bigfile_access = kante.django_mutation(
+    request_bigfile_access = access_mutation(
         description="Request temporary S3 read credentials for a big file",
         resolver=datalayer_mutations.request_bigfile_access,
     )
@@ -376,11 +383,11 @@ class Mutation:
         ),
         resolver=datalayer_mutations.refresh_zarr_upload,
     )
-    request_zarr_access = kante.django_mutation(
+    request_zarr_access = access_mutation(
         description="Request temporary S3 read credentials for a Zarr store",
         resolver=datalayer_mutations.request_zarr_access,
     )
-    request_general_zarr_access = kante.django_mutation(
+    request_general_zarr_access = access_mutation(
         description="Request temporary S3 read credentials for Zarr files in the organization",
         resolver=datalayer_mutations.request_general_zarr_access,
     )
@@ -406,7 +413,7 @@ class Mutation:
         ),
         resolver=datalayer_mutations.refresh_sparse_upload,
     )
-    request_sparse_access = kante.django_mutation(
+    request_sparse_access = access_mutation(
         description="Request temporary S3 read credentials for a sparse store. Covers the whole prefix, because a lookup needs `indptr` before it knows which range of `data` to fetch",
         resolver=datalayer_mutations.request_sparse_access,
     )
@@ -414,7 +421,7 @@ class Mutation:
         description="Reissue upload credentials for a fabriks upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
         resolver=datalayer_mutations.refresh_fabriks_upload,
     )
-    request_general_sparse_access = kante.django_mutation(
+    request_general_sparse_access = access_mutation(
         description="Request temporary S3 read credentials for sparse stores in the organization",
         resolver=datalayer_mutations.request_general_sparse_access,
     )
@@ -431,11 +438,11 @@ class Mutation:
         description="Finalize a fabriks upload. This reads the store's `fabriks.json` and refuses a prefix that has none -- which is what an interrupted upload looks like, since the manifest is written last",
         resolver=datalayer_mutations.finish_fabriks_upload,
     )
-    request_fabriks_access = kante.django_mutation(
+    request_fabriks_access = access_mutation(
         description="Request temporary S3 read credentials covering a fabriks store's whole prefix",
         resolver=datalayer_mutations.request_fabriks_access,
     )
-    request_general_fabriks_access = kante.django_mutation(
+    request_general_fabriks_access = access_mutation(
         description="Request temporary S3 read credentials for fabriks stores in the organization",
         resolver=datalayer_mutations.request_general_fabriks_access,
     )
@@ -455,11 +462,11 @@ class Mutation:
         description="Reissue upload credentials for a parquet upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
         resolver=datalayer_mutations.refresh_parquet_upload,
     )
-    request_kulisse_access = kante.django_mutation(
+    request_kulisse_access = access_mutation(
         description="Request temporary S3 read credentials for a kulisse model",
         resolver=datalayer_mutations.request_kulisse_access,
     )
-    request_general_kulisse_access = kante.django_mutation(
+    request_general_kulisse_access = access_mutation(
         description="Request temporary S3 read credentials for kulisse models in the organization",
         resolver=datalayer_mutations.request_general_kulisse_access,
     )
@@ -471,11 +478,11 @@ class Mutation:
         description="Finalize a konnektion upload. This reads the store's `konnektion.json` and refuses a prefix that has none -- which is what an interrupted upload looks like, since the manifest is written last",
         resolver=datalayer_mutations.finish_konnektion_upload,
     )
-    request_konnektion_access = kante.django_mutation(
+    request_konnektion_access = access_mutation(
         description="Request temporary S3 read credentials covering a konnektion store's whole prefix",
         resolver=datalayer_mutations.request_konnektion_access,
     )
-    request_general_konnektion_access = kante.django_mutation(
+    request_general_konnektion_access = access_mutation(
         description="Request temporary S3 read credentials for konnektion stores in the organization",
         resolver=datalayer_mutations.request_general_konnektion_access,
     )
@@ -488,11 +495,11 @@ class Mutation:
         description="Finalize a Parquet upload after the client has written the object",
         resolver=datalayer_mutations.finish_parquet_upload,
     )
-    request_parquet_access = kante.django_mutation(
+    request_parquet_access = access_mutation(
         description="Request temporary S3 read credentials for a Parquet file",
         resolver=datalayer_mutations.request_parquet_access,
     )
-    request_general_parquet_access = kante.django_mutation(
+    request_general_parquet_access = access_mutation(
         description="Request temporary S3 read credentials for Parquet files in the organization",
         resolver=datalayer_mutations.request_general_parquet_access,
     )
@@ -559,20 +566,26 @@ class Mutation:
     )
 
     create_annotation = mutation(
+        scope="mikro_annotate",
+        roles=[EDITOR, ANNOTATOR],
         guests=True,
         resolver=mutations.create_annotation,
         description="Draw an annotation into a collection, or onto a scene (exactly one of the two). Drawing on a scene finds its annotation collection or mints it on first use: a coordinate system copying the world's axes, an identity registration into the world, and one annotation layer",
     )
     create_annotations = mutation(
+        scope="mikro_annotate",
+        roles=[EDITOR, ANNOTATOR],
         guests=True,
         resolver=mutations.create_annotations,
         description="Draw many annotations in one call, into a collection or onto a scene (exactly one of the two, same semantics as createAnnotation). The transform chain and version resolve once for the whole batch, and the rows insert in bulk",
     )
     update_annotation = mutation(
+        scope="mikro_annotate",
+        roles=[EDITOR, ANNOTATOR],
         resolver=mutations.update_annotation,
         description="Edit an annotation: name, kind, vectors, pins or styling. New vectors re-derive the bounding box against the current transform chain",
     )
-    delete_annotation = mutation(resolver=mutations.delete_annotation, description="Delete an existing annotation")
+    delete_annotation = mutation(scope="mikro_annotate", roles=[EDITOR, ANNOTATOR], resolver=mutations.delete_annotation, description="Delete an existing annotation")
 
     create_annotation_collection = mutation(
         resolver=mutations.create_annotation_collection,
