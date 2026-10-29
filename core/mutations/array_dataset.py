@@ -193,7 +193,7 @@ class ScaleInput:
 
 class CreateDatasetInputModel(BaseModel):
     data: str
-    scales: list[ScaleInputModel]
+    scales: list[ScaleInputModel] = Field(default_factory=list)
     name: str
     axes: list[AxisInputModel]
     folder: str | None = None
@@ -207,7 +207,7 @@ class CreateArrayDatasetInput:
     """Input for creating an array dataset."""
 
     data: scalars.ArrayLike = strawberry.field(description="The array-like object to create the image from")
-    scales: list[ScaleInput] = strawberry.field(description="The lower-resolution pyramid levels. Each level's absolute scale is derived from its actual shape against level 0's -- a pyramid whose axes do not halve cleanly is described correctly, and no caller can supply a wrong factor")
+    scales: list[ScaleInput] = strawberry.field(default_factory=list, description="The lower-resolution pyramid levels. Omit for a single-level dataset. Each level's absolute scale is derived from its actual shape against level 0's -- a pyramid whose axes do not halve cleanly is described correctly, and no caller can supply a wrong factor")
     name: str = strawberry.field(description="The name of the image")
     axes: list[AxisInput] = strawberry.field(
         description="The dataset's structural axes, in array order (slowest-varying first) -- they must describe the store's dimensions, and are checked against its shape. No ordering by type is required beyond that: (z, c, y, x) and (c, z, y, x) are both accepted as given. They carry no units: the intrinsic space is the pixel grid"
