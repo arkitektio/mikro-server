@@ -92,6 +92,41 @@ async def test_drawing_on_a_scene_mints_its_collection(db, authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_drawing_after_the_layer_was_removed_brings_it_back(db, authenticated_context: HttpContext):
+    """Removing the layer leaves the collection; the next draw must not land where nothing draws it."""
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "Canvas")
+
+    async def draw(vector: list[float]) -> dict:
+        result = await schema.execute(
+            CREATE,
+            context_value=ctx,
+            variable_values={"input": {"scene": str(scene.id), "kind": "POINT", "vectors": [vector]}},
+        )
+        assert not result.errors, result.errors
+        return result.data["createAnnotation"]
+
+    first = await draw([1.0, 2.0, 3.0])
+    await models.Layer.objects.filter(scene=scene).adelete()
+
+    second = await draw([4.0, 5.0, 6.0])
+    assert second["collection"]["id"] == first["collection"]["id"], "the shapes drawn before still belong to it"
+
+    counts = await sync_to_async(_counts)(scene)
+    assert counts == {"collections": 1, "systems": 1, "layers": 1, "registrations": 1}
+
+    def drawn_collection() -> int:
+        return models.Layer.objects.get(scene=scene).lens.annotation_collection_id
+
+    assert str(await sync_to_async(drawn_collection)()) == first["collection"]["id"]
+
+    # Once it is back, drawing appends again.
+    await draw([7.0, 8.0, 9.0])
+    assert (await sync_to_async(_counts)(scene))["layers"] == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_a_long_scene_name_does_not_refuse_the_first_draw(db, authenticated_context: HttpContext):
     """The minted names derive from the scene's, and are therefore longer than it.
 

@@ -76,7 +76,7 @@ class CreateAnnotationInputModel(_ShapeInputModel):
 @prose_errors
 @kante.pydantic_input(
     CreateAnnotationInputModel,
-    description="Input for drawing an annotation. Provide exactly one of `collection` (append to it) or `scene` (draw on the scene: its annotation collection is found, or minted on first use together with its coordinate system, its registration into the world, and its layer)",
+    description="Input for drawing an annotation. Provide exactly one of `collection` (append to it) or `scene` (draw on the scene: its annotation collection is found, or minted on first use together with its coordinate system, its registration into the world, and its layer; a layer removed since is added back)",
 )
 class CreateAnnotationInput:
     """Input for drawing an annotation into a collection or onto a scene."""
@@ -84,7 +84,7 @@ class CreateAnnotationInput:
     collection: strawberry.ID | None = strawberry.field(default=None, description="The annotation collection to draw into. Exclusive with `scene`")
     scene: strawberry.ID | None = strawberry.field(
         default=None,
-        description="The scene to draw on. Its annotation collection is reused when it exists; the first annotation mints it -- a coordinate system copying the world's axes, an identity registration into the world, and one annotation layer. Exclusive with `collection`",
+        description="The scene to draw on. Its annotation collection is reused when it exists; the first annotation mints it -- a coordinate system copying the world's axes, an identity registration into the world, and one annotation layer. A layer removed since is added back. Exclusive with `collection`",
     )
     kind: enums.AnnotationKind = strawberry.field(description="The kind of annotation to draw, e.g. 'polygon', 'path', 'point'. This determines how the vectors are interpreted and drawn")
     name: str | None = strawberry.field(default=None, description="Optional name for the annotation. Defaults to a name derived from its collection")
@@ -155,6 +155,11 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     # it stays that way.
     graph_logic.record_bbox_frame(collection, system)
 
+    _add_scene_layer(scene, collection)
+    return collection
+
+
+def _add_scene_layer(scene: "models.Scene", collection: "models.AnnotationCollection") -> None:
     # Minted here like every collection: the whole lens is the collection's handle, and the
     # layer draws through it.
     models.Layer.objects.create(
@@ -166,11 +171,30 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
         visible=True,
         order=0,
     )
-    return collection
+
+
+def _restore_scene_layer(scene: "models.Scene", collection: "models.AnnotationCollection") -> None:
+    """Give a scene's collection its layer back, if the layer was removed.
+
+    Removing a layer leaves the collection and its shapes standing, so the next draw finds
+    the collection and appends to it. With no layer over it, that shape is saved and never
+    drawn, which reads to whoever drew it as a shape that was not saved at all. Drawing on a
+    scene is asking to see the shape, so the layer returns, and the earlier shapes with it.
+
+    The lock is the race the collection's OneToOne settles for a first draw: there is no such
+    constraint on a layer, and two draws at once must not add two.
+    """
+    has_layer = models.Layer.objects.filter(scene=scene, lens__in=collection.lenses.all())
+    if has_layer.exists():
+        return
+    with transaction.atomic():
+        models.Scene.objects.select_for_update().get(pk=scene.pk)
+        if not has_layer.exists():
+            _add_scene_layer(scene, collection)
 
 
 def _find_or_mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
-    """The scene's annotation collection, minting it on first use.
+    """The scene's annotation collection, minting it on first use, and its layer back if removed.
 
     The OneToOne on ``AnnotationCollection.scene`` is what makes this race-safe: a
     concurrent first draw loses on the unique constraint, and the loser re-reads the
@@ -178,6 +202,7 @@ def _find_or_mint_scene_collection(scene: "models.Scene", ctx: CreationContext) 
     """
     existing = getattr(scene, "annotation_collection", None)
     if existing is not None:
+        _restore_scene_layer(scene, existing)
         return existing
     try:
         with transaction.atomic():
