@@ -52,6 +52,12 @@ DESCRIPTORS_DESCRIPTION = (
 )
 
 
+@strawberry.type(description="One descriptor of an object: a fact a port can `require` and a runtime formula can read.")
+class DescriptorValue:
+    key: str = strawberry.field(description="The descriptor's key, e.g. `@mikro/n_channels`.")
+    value: JSON = strawberry.field(description="Its value.")
+
+
 def resolve_descriptors(root) -> JSON:  # noqa: ANN001 - the model instance behind any hosted type
     """The descriptors of a hosted object, from its structure's declaration (``mikro_server.service``)."""
     from mikro_server.service import service  # the declaration imports core.models

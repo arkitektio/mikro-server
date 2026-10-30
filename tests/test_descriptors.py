@@ -47,8 +47,9 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
         "@mikro/n_microtime_axes": 0,
         "@mikro/n_channels": 3,
         "@mikro/n_timepoints": 5,
+        "@mikro/size": 61440,
         "@mikro/value_kind": "intensity",
-        # Seeded without a zarr store, so with no element type to state.
+        # Seeded without a zarr store, so with no element type to state, and no @mikro/dsize.
         "@mikro/dtype": "",
         "@mikro/spec": ["IMAGE", "TIMESERIES", "MULTICHANNEL"],
         "@mikro/is_whole": True,
@@ -57,14 +58,19 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(authenti
     assert {"id": str(dataset.pk), "descriptors": whole} in result.data["arrayDatasets"]
     # The lens keeps every axis of its dataset and narrows the channel axis to one; it is a crop.
     # Its spec is the selection's: one channel is not MULTICHANNEL.
-    assert result.data["lens"]["descriptors"] == {**whole, "@mikro/n_channels": 1, "@mikro/spec": ["IMAGE", "TIMESERIES"], "@mikro/is_whole": False}
+    assert result.data["lens"]["descriptors"] == {**whole, "@mikro/n_channels": 1, "@mikro/size": 20480, "@mikro/spec": ["IMAGE", "TIMESERIES"], "@mikro/is_whole": False}
     # A structure that declares no descriptors has none.
     assert result.data["folder"]["descriptors"] == {}
 
     declared = {s["identifier"]: [d["key"] for d in s["descriptors"]] for s in service.manifest()["structures"]}
     # Every computed key is declared and every declared key is computed: nothing is merely stated.
-    assert set(result.data["arrayDataset"]["descriptors"]) == set(declared["@mikro/arraydataset"])
-    assert set(result.data["lens"]["descriptors"]) == set(declared["@mikro/arraylens"])
+    assert set(result.data["arrayDataset"]["descriptors"]) | {"@mikro/dsize"} == set(declared["@mikro/arraydataset"])
+    assert set(result.data["lens"]["descriptors"]) | {"@mikro/dsize"} == set(declared["@mikro/arraylens"])
+
+    # A formula's frontend asks for the same answer by identifier, and only inside the organization.
+    asked = await schema.execute("query Ask($id: ID!) { describe(identifier: \"@mikro/arraydataset\", id: $id) { key value } }", context_value=authenticated_context, variable_values={"id": str(dataset.pk)})
+    assert not asked.errors, asked.errors
+    assert {each["key"]: each["value"] for each in asked.data["describe"]} == whole
 
 
 @pytest.mark.django_db(transaction=True)

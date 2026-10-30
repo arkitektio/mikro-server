@@ -5,6 +5,7 @@ Every public name is re-exported here so ``from core import types`` /
 ``types.X`` keeps working unchanged.
 """
 
+from core.types._shared import DescriptorValue
 from core.types._shared import build_prescoped_queryset
 from core.types.auth import (
     Client,

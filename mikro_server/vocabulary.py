@@ -47,6 +47,8 @@ RECORD_AXIS_TYPES: tuple[str, ...] = ("SPACE", "TIME", "INDEX")
 GEOMETRY_AXIS_TYPES: tuple[str, ...] = ("SPACE", "TIME")
 
 EXTENT_KEYS = {"@mikro/n_channels": "CHANNEL", "@mikro/n_timepoints": "TIME"}
+SIZE = "@mikro/size"
+DSIZE = "@mikro/dsize"
 
 IS_WHOLE = "@mikro/is_whole"
 #: What the object structurally is, as the values of its kind's spec enum
@@ -80,6 +82,8 @@ def _spec(members: str, selection: str) -> Descriptor:
 ARRAY_DESCRIPTORS = [
     *_axis_counts(ARRAY_AXIS_TYPES),
     *(Descriptor(key=key, type="INT", description=f"Its total extent along its {axis_type} axes") for key, axis_type in EXTENT_KEYS.items()),
+    Descriptor(key=SIZE, type="INT", description="How many elements it has: the product of its shape"),
+    Descriptor(key=DSIZE, type="INT", description="How many bytes one element takes, from its dtype; its uncompressed size in bytes is size * dsize. Absent while it has no store"),
     Descriptor(key=VALUE_KIND, type="STRING", description="What its values mean: categorical (a label image or segmentation mask of object ids, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity"),
     Descriptor(key=DTYPE, type="STRING", description="The element (pixel) type of its values, as numpy spells it (uint8, uint16, float32, ...): an action typed on integers (labels, thresholds) or on floats asks for it"),
     _spec("one spatial member (SCALAR, PROFILE, IMAGE, VOLUME, HYPERVOLUME), a modifier per non-spatial axis it has more than one position along, and TRACE for a curve", "an axis counts only when the lens keeps more than one position along it"),

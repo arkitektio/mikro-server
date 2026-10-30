@@ -6,7 +6,7 @@ from core.inputs.coords import BoundingBoxInput, CoordinateInput
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import descriptor_filter
-from core.logic.descriptor_filter import DescriptorConstraintInput
+from core.logic.descriptor_filter import DescriptorConstraintInput, FitsConstraintInput
 
 #: What a `requires` filter says of itself, on every structure that has one.
 REQUIRES_DESCRIPTION = (
@@ -483,6 +483,10 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
     def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
         return descriptor_filter.requires(models.ArrayDataset, queryset, value, prefix)
 
+    @kante.filter_field(description="Only objects at least one of these implementations can handle: their `Fits` as `Implementation.fits.compiledPath`, with their agent's hardware.")
+    def fits(self, info: Info, queryset: QuerySet, value: list[FitsConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.fits(models.ArrayDataset, queryset, value, prefix)
+
     # Filing, not placement. `dataset` below and `placeableIn` ask where the data *is*;
     # these two ask where a user *keeps* it.
     @kante.filter_field(description="Filter by the folder this dataset is filed in")
@@ -785,6 +789,10 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     )
     def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
         return descriptor_filter.requires(models.Lens, queryset, value, prefix)
+
+    @kante.filter_field(description="Only objects at least one of these implementations can handle: their `Fits` as `Implementation.fits.compiledPath`, with their agent's hardware.")
+    def fits(self, info: Info, queryset: QuerySet, value: list[FitsConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
+        return descriptor_filter.fits(models.Lens, queryset, value, prefix)
 
     @kante.filter_field(description="Filter by the kind of container the lens selects over")
     def kind(self, info: Info, value: enums.LensKind, prefix: str) -> Q:

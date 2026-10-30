@@ -5,6 +5,7 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 from authentikate.strawberry.extension import AuthentikateExtension
 from strawberry import ID as StrawberryID
 from core import types, models, filters, order
+from core.types._shared import build_prescoped_queryset
 from core import mutations
 from core import queries
 from core import subscriptions
@@ -103,8 +104,20 @@ def subscription(**kwargs) -> strawberry.subscription:
     return strawberry.subscription(extensions=[AuthSubscribeExtension(scopes=["mikro_read"])], **kwargs)
 
 
+def describe_object(info: Info, identifier: str, id: ID) -> list[types.DescriptorValue]:
+    declared = mikro_service.structure_for(identifier)
+    if declared is None or not isinstance(declared.model, type):
+        return []
+    hosted = build_prescoped_queryset(info, declared.model.objects.filter(pk=id)).first()
+    if hosted is None:
+        return []
+    return [types.DescriptorValue(key=key, value=value) for key, value in declared.describe(hosted).items()]
+
+
 @strawberry.type
 class Query:
+    describe: list[types.DescriptorValue] = field(resolver=describe_object, description="The descriptors of one object by its structure's identifier, as a port's `requires` and a runtime formula read them. Empty for an unknown identifier, or an object the organization cannot see.")
+
     tasks: list[types.Task] = field(description="List the Rekuest tasks under which objects were created or changed")
     folders: list[types.Folder] = field(description="List folders (collections of images, files and tables)")
     myfolders: list[types.Folder] = field(field_cls=CreatedByCallerField, description="List folders created by the current user")

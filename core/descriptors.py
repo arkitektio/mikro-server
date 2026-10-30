@@ -27,13 +27,16 @@ axes, a table's columns and a sparse dataset's layouts in hand; a *windowed* ann
 reads the collection's annotations to count the ones in its windows.
 """
 
+import math
 from collections import Counter
 from collections.abc import Sequence
+
+import numpy
 
 from core import enums, models
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
-from mikro_server.vocabulary import ANNOTATION_KIND, ARRAY_AXIS_TYPES, CONTAINER_KIND, DTYPE, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, N_ANNOTATIONS, RECORD_AXIS_TYPES, SPEC, VALUE_KIND
+from mikro_server.vocabulary import ANNOTATION_KIND, ARRAY_AXIS_TYPES, CONTAINER_KIND, DSIZE, DTYPE, EXTENT_KEYS, GEOMETRY_AXIS_TYPES, IS_WHOLE, KEY_BY_AXIS_TYPE, N_ANNOTATIONS, RECORD_AXIS_TYPES, SIZE, SPEC, VALUE_KIND
 
 Descriptors = dict[str, int | str | bool | list[str]]
 
@@ -45,12 +48,13 @@ def axis_count_descriptors(axis_types: Sequence[str], counted: Sequence[str]) ->
 
 
 def array_descriptors(axis_types: Sequence[str], shape: Sequence[int]) -> dict[str, int]:
-    """The client's seven array descriptors: per-axis-type counts and the channel and time extents, from the axis types and the (level-0) shape."""
+    """The client's eight array descriptors: per-axis-type counts, the channel and time extents and the element count, from the axis types and the (level-0) shape."""
     if len(axis_types) != len(shape):
         raise ValueError(f"{len(axis_types)} axis types for a {len(shape)}-dimensional shape")
     descriptors = axis_count_descriptors(axis_types, ARRAY_AXIS_TYPES)
     for key, wanted in EXTENT_KEYS.items():
         descriptors[key] = sum(extent for axis_type, extent in zip(axis_types, shape) if axis_type == wanted)
+    descriptors[SIZE] = math.prod(shape)
     return descriptors
 
 
@@ -61,6 +65,14 @@ def array_dtype(dataset: models.ArrayDataset) -> str:
         return ""
     store = min(arrays, key=lambda array: array.level).store
     return (store.dtype if store is not None else None) or ""
+
+
+def element_descriptors(dtype: str) -> Descriptors:
+    """The element type and, when numpy can read it, how many bytes one element takes."""
+    try:
+        return {DTYPE: dtype, DSIZE: numpy.dtype(dtype).itemsize} if dtype else {DTYPE: dtype}
+    except TypeError:  # a dtype another writer spelled its own way
+        return {DTYPE: dtype}
 
 
 def array_value_kind(dataset: models.ArrayDataset) -> str:
@@ -90,7 +102,7 @@ def dataset_descriptors(dataset: models.ArrayDataset) -> Descriptors:
     # From the axes rather than `stored_spec`: the same two facts the counts are read off,
     # so the two agree whenever this is asked.
     spec = [member.value for member in coords_logic.specs_for_axes(dataset.axis_specs, dataset.shape_list)]
-    return {**counted, VALUE_KIND: array_value_kind(dataset), DTYPE: array_dtype(dataset), SPEC: spec, IS_WHOLE: True}
+    return {**counted, VALUE_KIND: array_value_kind(dataset), **element_descriptors(array_dtype(dataset)), SPEC: spec, IS_WHOLE: True}
 
 
 def array_lens_descriptors(lens: models.ArrayLens) -> Descriptors:
@@ -104,7 +116,7 @@ def array_lens_descriptors(lens: models.ArrayLens) -> Descriptors:
         counted = array_descriptors([axis.type for axis in lens.dataset.axes], lens.shape_list)
     except ValueError:
         return {}
-    return {**counted, VALUE_KIND: array_value_kind(lens.dataset), DTYPE: array_dtype(lens.dataset), SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
+    return {**counted, VALUE_KIND: array_value_kind(lens.dataset), **element_descriptors(array_dtype(lens.dataset)), SPEC: [member.value for member in lens.derive_spec()], IS_WHOLE: lens.is_whole}
 
 
 def table_descriptors(table: models.TableDataset, *, is_whole: bool = True, pinned: Sequence[str] = ()) -> Descriptors:
