@@ -146,7 +146,7 @@ async def test_a_snapshot_made_in_a_task_carries_that_tasks_token(intake, authen
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_crop_is_signalled_with_its_descriptors(intake, authenticated_context: HttpContext):  # noqa: F811
-    """The whole lens arrives with its dataset; a crop on its own, saying it is not whole; a rename and a delete follow it."""
+    """The whole lens arrives with its dataset; a crop on its own, saying it is not whole; naming the channel it pins renames it, and a delete follows it."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Signalled", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
     crop = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}])
@@ -157,8 +157,8 @@ async def test_a_crop_is_signalled_with_its_descriptors(intake, authenticated_co
     row = await models.Lens.objects.with_sources().aget(pk=crop.pk)
     assert crop_created["descriptors"] == await sync_to_async(service.describe)(row), "the signal carries what the field answers"
 
-    rename = "mutation R($input: UpdateLensInput!) { updateLens(input: $input) { id } }"
-    result = await schema.execute(rename, context_value=ctx, variable_values={"input": {"id": str(crop.pk), "name": "nucleus"}})
+    rename = "mutation R($input: SetPositionLabelInput!) { setPositionLabel(input: $input) { id } }"
+    result = await schema.execute(rename, context_value=ctx, variable_values={"input": {"lens": str(crop.pk), "label": "nucleus"}})
     assert not result.errors, result.errors
     delete = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }"
     result = await schema.execute(delete, context_value=ctx, variable_values={"input": {"id": str(crop.pk)}})

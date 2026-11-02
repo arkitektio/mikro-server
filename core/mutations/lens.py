@@ -12,6 +12,7 @@ container's whole lens (:func:`core.logic.coordinate_system.assert_lens_deletabl
 from kante.types import Info
 from typing import cast
 import strawberry
+from django.db import transaction
 
 from core import types, models
 
@@ -20,6 +21,8 @@ from pydantic import BaseModel, Field
 from core import base_models, inputs
 from core.creation import CreationContext
 from core.logic import coordinate_system as coordinate_system_logic
+from core.logic import coords as coords_logic
+from core.logic import lens_names as lens_names_logic
 from core.scoping import get_for_org
 from core.mutations._generic import assert_can_delete, make_delete
 from core.mutations._sources import resolve_source_lens
@@ -33,7 +36,6 @@ class CreateLensInputModel(BaseModel):
     )
     box: base_models.LensBoxInputModel | None = Field(default=None, description="In place of `slices`: a box in any coordinate system the dataset reaches, cut to the voxels whose cells it meets. With `dataset` only: a box names its own frame, it is not relative to a crop")
     annotation: str | None = Field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box (crop to the ROI). With `dataset`, of the whole dataset; with `lens`, what that lens selects under the box. The cut is recorded: the annotation lists the lens as one of its `derivedLenses`")
-    name: str | None = Field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name: finding a selection is not a request to rename it, `updateLens` is")
 
 
 _OVER = "Exactly one of `dataset` and `lens`: the array dataset to select over, or an array lens to select *within* -- the slices are then stated in that lens' own index space and composed through it, and the result is the dataset's lens for the voxels that keeps"
@@ -49,7 +51,6 @@ class CreateLensInput:
     box: inputs.LensBoxInput | None = strawberry.field(default=None, description="In place of `slices`: a box in any coordinate system the dataset reaches, cut to the voxels whose cells it meets. With `dataset` only -- a box names its own frame, it is not relative to a crop")
     annotation: strawberry.ID | None = strawberry.field(default=None, description="In place of `slices`: an annotation, cut to the voxels under its stored box -- crop to the ROI. With `dataset`, of the whole dataset; with `lens`, what that lens selects under the box: a channel it pins stays pinned, a range it keeps is intersected, a shape that misses it is refused. The cut is recorded: the annotation lists the lens as one of its `derivedLenses`",
     )
-    name: str | None = strawberry.field(default=None, description="What to call this selection. Applied when the lens has no name yet; a lens that already makes this selection and is named keeps its name -- finding a selection is not a request to rename it, `updateLens` is")
 
 
 def create_lens(
@@ -78,10 +79,6 @@ def create_lens(
     else:
         parent = resolve_source_lens(info, kind=models.ArrayLens, lens=model.lens, container_model=models.ArrayDataset, container=model.dataset, what="dataset", role="a selection by slices is cut from")
         lens = coordinate_system_logic.create_sub_lens(parent, model.slices or [], ctx)
-    name = (model.name or "").strip() or None
-    if name and lens.name is None:
-        lens.name = name
-        lens.save(update_fields=["name"])
     return lens
 
 
@@ -244,31 +241,60 @@ def lens_owner(item: "models.Lens") -> tuple:
 delete_lens = make_delete(models.Lens, DeleteLensInput, owner=lens_owner, delete=coordinate_system_logic.delete_lens)
 
 
-class UpdateLensInputModel(BaseModel):
-    id: str = Field(description="The ID of the lens to update")
-    name: str | None = Field(default=None, description="The new name, or null (or blank) to clear it")
+class SetPositionLabelInputModel(BaseModel):
+    lens: str = Field(description="The lens whose pinned positions to name")
+    label: str | None = Field(default=None, description="What to call them, or null (or blank) to remove the name")
 
 
-@kante.pydantic_input(UpdateLensInputModel, description="Input for renaming a lens -- the whole of what is editable about one")
-class UpdateLensInput:
-    """Input for renaming a lens."""
+@kante.pydantic_input(SetPositionLabelInputModel, description="Input for naming the positions a lens pins -- the way a lens is named")
+class SetPositionLabelInput:
+    """Input for naming the positions a lens pins."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the lens to update")
-    name: str | None = strawberry.field(default=None, description="What to call this selection. Null or blank clears the name, and the lens reads as its selection again")
+    lens: strawberry.ID = strawberry.field(description="The lens whose pinned positions to name: an array lens holding an axis to one index (a channel, a frame), or a table or sparse lens holding a window to one value")
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call the data at those positions, e.g. 'GFP'. Null or blank removes the name, and what ingest recorded there (a channel label) names them again",
+    )
 
 
-def update_lens(info: Info, input: UpdateLensInput) -> types.Lens:
-    """Rename a lens, or clear its name.
+def _container_owner(container: object) -> tuple:
+    """Whoever owns a container: the positions in it are theirs to name."""
+    return (getattr(container, "creator_id", None), getattr(container, "created_through_by_id", None))
 
-    The name is the only thing a lens has that is not derived from its container and its
-    selection, so it is the only thing that can change: a different selection is a different
-    lens. Guarded as the nomination is: the lens' maker or the container's owner.
+
+def set_position_label(info: Info, input: SetPositionLabelInput) -> types.Lens:
+    """Name the positions a lens pins, on its container -- and with them every lens pinning them.
+
+    A lens has no name of its own to edit: it is one row per selection, and a name belongs to
+    what is selected. So the name goes to the coordinate anchor at the lens' pinned positions
+    (made if there is none), as a person's label beside whatever ingest recorded there, and every
+    lens over the container that pins those positions -- this one, a crop of it, the sub-lens a
+    scene draws the channel through -- reads it (:mod:`core.logic.lens_names`). Guarded by the
+    container's owner, or an org admin: it is their data's positions being named.
     """
     model = input.to_pydantic()
-    lens = get_for_org(models.Lens, info, id=model.id)
-    assert_can_delete(info, lens, lens_owner)
-    lens.name = (model.name or "").strip() or None
-    lens.save(update_fields=["name"])
+    lens = get_for_org(models.Lens, info, id=model.lens)._real()
+    if type(lens) not in lens_names_logic.ANCHOR_FIELD:
+        raise ValueError(f"A {type(lens).KIND.lower()} lens has no positions to name: only array, table and sparse datasets carry coordinate anchors. A region is named by the annotation it was cut to.")
+    pinned = coords_logic.pins(lens.selection)
+    if not pinned:
+        raise ValueError(
+            f"Lens {lens.pk} holds no axis to one position, so there is nothing for a name to stand on: a crop is named by the annotation it was cut to, and the whole {type(lens.container).__name__} by its own name. "
+            "Cut a lens that pins the positions to name (a channel, a frame) and name that."
+        )
+    container = lens.container
+    assert_can_delete(info, container, _container_owner)
+    label = (model.label or "").strip() or None
+
+    with transaction.atomic():
+        field = lens_names_logic.ANCHOR_FIELD[type(lens)]
+        if label is None:
+            models.PositionLabel.objects.filter(**{f"anchor__{field}": container, "anchor__coordinates": pinned}).delete()
+        else:
+            anchor, _ = models.CoordinateAnchor.objects.get_or_create(coordinates=pinned, **{field: container})
+            models.PositionLabel.objects.update_or_create(anchor=anchor, defaults={"label": label, "creator": info.context.request.user})
+
+    lens.refresh_from_db(fields=["name"])
     return lens
 
 

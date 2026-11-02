@@ -32,6 +32,7 @@ from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
 from core.logic import compositions as compositions_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
+from core.logic import lens_names as lens_names_logic
 from core.logic import pickers as pickers_logic
 from core.logic import placement as placement_logic
 from core.scoping import get_for_org
@@ -652,10 +653,13 @@ def _mint(kind: "type[models.Lens]", **fields: object) -> "models.Lens":
 
     Every lens is made here, so every lens states what it is from its first moment. The
     spec is a function of the container and the selection, both in hand before the row is; its
-    descriptors are stored when the row is inserted (``mikro_server.service``).
+    descriptors are stored when the row is inserted (``mikro_server.service``). So is its name:
+    a crop through a channel someone called "GFP" is born called that
+    (:mod:`core.logic.lens_names`; a cut to a shape renames it when the cut is recorded).
     """
     lens = kind(**fields)
     lens.stored_spec = [member.value for member in lens.derive_spec()]
+    lens.name = lens_names_logic.resolve_name(lens)
     lens.save()  # and described, once it is inserted
     return lens
 

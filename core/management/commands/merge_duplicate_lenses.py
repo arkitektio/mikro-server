@@ -26,6 +26,10 @@ because it was written around the constraint. It converges them, container by co
    written before lenses stated a spec, the ones a rolled-back release wrote without one, and
    every row after the rule itself changes. A row that only misses descriptors is
    `restore_descriptors`' to give them, which the setup runs before this.
+5. **Name** every lens again (`core.logic.lens_names`): `Lens.name` caches what its pinned
+   positions and its cut are called, and is refreshed by the writers of those; this repairs a row
+   written around them, and every row after the rule itself changes. Written with `update`, so
+   nothing is announced while the service is stopped.
 
 Re-runnable: it finds what is still owed and does nothing when nothing is. Listed in the image's
 setup, so it runs inside `migrate` for every build, before the release serves -- and no row spelled
@@ -46,6 +50,7 @@ from core import descriptors as descriptors_logic
 from core import enums, models
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
+from core.logic import lens_names as lens_names_logic
 
 
 def _key(slices: list[dict[str, int | str]]) -> str:
@@ -76,7 +81,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         """Converge every container's lenses, one transaction per container."""
         self.dry_run = options["dry_run"]
-        self.counts = {"normalized": 0, "edges_repaired": 0, "backfilled": 0, "merged_unsliced": 0, "merged_sliced": 0, "left": 0, "specified": 0}
+        self.counts = {"normalized": 0, "edges_repaired": 0, "backfilled": 0, "merged_unsliced": 0, "merged_sliced": 0, "left": 0, "specified": 0, "named": 0}
 
         datasets = models.ArrayDataset.objects.filter(coordinate_system__isnull=False).order_by("pk").select_related("coordinate_system")
         for dataset in datasets.iterator():
@@ -100,13 +105,15 @@ class Command(BaseCommand):
                         transaction.set_rollback(True)
 
         self._specify()
+        self._name()
 
         verb = "would " if self.dry_run else ""
         self.stdout.write(
             self.style.SUCCESS(
                 f"{verb}normalized {self.counts['normalized']} lens(es), {verb}repaired {self.counts['edges_repaired']} edge(s), "
                 f"{verb}backfilled {self.counts['backfilled']} whole lens(es), {verb}merged {self.counts['merged_unsliced']} unsliced and "
-                f"{self.counts['merged_sliced']} sliced duplicate(s), {verb}stated the spec of {self.counts['specified']} lens(es)"
+                f"{self.counts['merged_sliced']} sliced duplicate(s), {verb}stated the spec of {self.counts['specified']} lens(es), "
+                f"{verb}named {self.counts['named']} lens(es) again"
             )
         )
         if self.counts["left"]:
@@ -126,6 +133,15 @@ class Command(BaseCommand):
                 models.Lens.objects.filter(pk=lens.pk).update(stored_spec=spec)
                 lens.stored_spec = spec
                 descriptors_logic.restore(lens, emit=False)
+
+    def _name(self) -> None:
+        """Give every lens the name its pinned positions and its cut give it, container by container."""
+        for container_model in models.Lens.KIND_BY_CONTAINER:
+            for container in container_model.objects.order_by("pk").iterator():
+                with transaction.atomic():
+                    self.counts["named"] += lens_names_logic.refresh_container(container, announce=False)
+                    if self.dry_run:
+                        transaction.set_rollback(True)
 
     # --- a container that is not an array ------------------------------------------
 

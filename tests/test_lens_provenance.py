@@ -110,7 +110,7 @@ query Provenance($id: ID!) {
   lens(id: $id) { id createdAt creator { sub } createdThrough { id taskId } createdThroughBy { sub } }
 }
 """
-UPDATE_LENS = "mutation U($input: UpdateLensInput!) { updateLens(input: $input) { id name } }"
+NAME_POSITIONS = "mutation N($input: SetPositionLabelInput!) { setPositionLabel(input: $input) { id name } }"
 SET_DEFAULT = "mutation S($input: SetLensDefaultSceneInput!) { setLensDefaultScene(input: $input) { id } }"
 DELETE_LENS = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }"
 
@@ -136,16 +136,17 @@ async def test_a_lens_reports_its_provenance(authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_maker_of_a_crop_over_someone_elses_dataset_may_rename_nominate_and_delete_it(authenticated_context: HttpContext, bot_context: HttpContext):
-    """A crop is its maker's, whoever owns the pixels under it."""
+async def test_the_maker_of_a_crop_over_someone_elses_dataset_may_nominate_and_delete_it_but_not_name_its_positions(authenticated_context: HttpContext, bot_context: HttpContext):
+    """A crop is its maker's, whoever owns the pixels under it; the positions it pins are the dataset's, and naming them names every lens through them."""
     dataset = await seed.create_array_dataset(authenticated_context, "Theirs", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
     made = await schema.execute(CREATE_LENS, context_value=bot_context, variable_values={"input": {"dataset": str(dataset.pk), "slices": CROP}})
     assert not made.errors, made.errors
     crop_id = made.data["createLens"]["id"]
     scene = await seed.create_scene(bot_context, "Mine")
 
-    renamed = await schema.execute(UPDATE_LENS, context_value=bot_context, variable_values={"input": {"id": crop_id, "name": "my nucleus"}})
-    assert not renamed.errors, renamed.errors
+    renamed = await schema.execute(NAME_POSITIONS, context_value=bot_context, variable_values={"input": {"lens": crop_id, "label": "my channel"}})
+    assert renamed.errors, "naming channel 0 renames the owner's lenses too"
+    assert not await models.PositionLabel.objects.aexists()
     nominated = await schema.execute(SET_DEFAULT, context_value=bot_context, variable_values={"input": {"lens": crop_id, "scene": str(scene.pk)}})
     assert not nominated.errors, nominated.errors
     deleted = await schema.execute(DELETE_LENS, context_value=bot_context, variable_values={"input": {"id": crop_id}})
@@ -155,15 +156,15 @@ async def test_the_maker_of_a_crop_over_someone_elses_dataset_may_rename_nominat
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_containers_owner_may_rename_a_crop_someone_else_made(authenticated_context: HttpContext, bot_context: HttpContext):
-    """It is the dataset's cards a lens changes, so the dataset's owner -- not an admin here -- may edit any lens over it."""
+async def test_the_containers_owner_may_name_the_positions_of_a_crop_someone_else_made(authenticated_context: HttpContext, bot_context: HttpContext):
+    """It is the dataset's positions being named, so the dataset's owner -- not an admin here -- may name them through any lens over it."""
     dataset = await seed.create_array_dataset(bot_context, "Bots", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
     crop = await seed.create_lens(authenticated_context, dataset, CROP)
     assert crop.creator_id == authenticated_context.request.user.id
 
-    renamed = await schema.execute(UPDATE_LENS, context_value=bot_context, variable_values={"input": {"id": str(crop.pk), "name": "on my data"}})
+    renamed = await schema.execute(NAME_POSITIONS, context_value=bot_context, variable_values={"input": {"lens": str(crop.pk), "label": "on my data"}})
     assert not renamed.errors, renamed.errors
-    assert renamed.data["updateLens"]["name"] == "on my data"
+    assert renamed.data["setPositionLabel"]["name"] == "on my data"
 
 
 @pytest.mark.django_db(transaction=True)

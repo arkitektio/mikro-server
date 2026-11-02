@@ -484,6 +484,23 @@ class ChannelLabel(models.Model):
     label = models.CharField(max_length=1000, help_text="The label of the channel", null=True, blank=True)
 
 
+class PositionLabel(models.Model):
+    """1:1 Spoke (a person's name for a position): what someone calls the data at an anchor's coordinates.
+
+    The user-authored sibling of :class:`ChannelLabel`, which is what ingest recorded. Kept
+    apart so a rename never overwrites the record: where both hang off one anchor this one
+    wins, and deleting it brings the recorded one back. It is how a lens is named -- a lens
+    is one row per selection and cannot hold a name every lens through the same channel
+    should share, so the name sits at the positions the lens pins and every lens pinning
+    them reads it (:mod:`core.logic.lens_names`, cached on ``Lens.name``).
+    """
+
+    anchor = models.OneToOneField(CoordinateAnchor, related_name="position_label", on_delete=models.CASCADE)
+    label = models.TextField(help_text="What someone calls the data at these coordinates, e.g. 'GFP' or 'after washout'")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="position_labels", help_text="Who gave the name")
+    created_at = models.DateTimeField(auto_now=True, help_text="When the name was last given")
+
+
 class LightPath(models.Model):
     """N:1 Spoke (Light Path Truth)"""
 
@@ -673,7 +690,8 @@ class Lens(PolymorphicModel, Described):
     # carries the container's provenance. `creator` is SET_NULL where a container's is CASCADE:
     # a lens is shared by every composition over its selection, and a user leaving must not
     # empty other people's scenes. No history table: the only edits are the name and the
-    # nomination, and `HistoricalLens` was dropped with the kinds for that reason.
+    # nomination, and `HistoricalLens` was dropped with the kinds for that reason. (The name is
+    # no longer one of them: it is a cache the server writes, below.)
     created_at = models.DateTimeField(auto_now_add=True, help_text="When this selection was first asked for")
     creator = models.ForeignKey(
         get_user_model(),
@@ -700,16 +718,21 @@ class Lens(PolymorphicModel, Described):
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
 
-    # A label, and the one thing here that is not derived and not immutable. It is not a fact
-    # of the selection: two people would compute the same shape from the same slices, but only
-    # one of them knows the cut is "nucleus 3". So it takes no part in deciding whether a lens
-    # already exists (identity is the container and the selection alone) and renaming a lens
-    # changes nothing about what it selects. Null for a lens nobody named, which reads as its
-    # selection -- or as the whole container when it has none.
+    # The name that wins, cached. Nobody writes it: a lens is named by what it selects -- the
+    # labels at the positions it pins (`PositionLabel` over `ChannelLabel`, on its container's
+    # anchors) and, for a crop cut to a shape, that shape's name -- so naming channel 1 "GFP"
+    # names every lens through channel 1 at once, which a column one row per selection never
+    # could. Stored because search and the pickers filter on it in SQL; unlike `stored_spec`
+    # its inputs change, so whoever writes one refreshes it in the same transaction
+    # (`core.logic.lens_names`, wired in `core/signals.py`), and `merge_duplicate_lenses`
+    # repairs drift. Never the container's name: renaming a dataset touches no lens.
     name = models.TextField(
         null=True,
         blank=True,
-        help_text="What someone called this selection, e.g. 'nucleus 3'. Optional, editable, and no part of the lens' identity: a lens is its container and its selection",
+        help_text=(
+            "What this selection is called, derived and cached: the labels at the positions it pins and the name of the shape it was cut to, e.g. 'GFP · nucleus 3'. "
+            "Null when nothing names it. Written by the server only; name a position with `setPositionLabel`, a region through its annotation"
+        ),
     )
 
     # A nomination, and bookkeeping: it says which composition to open for this selection and
@@ -835,18 +858,18 @@ class Lens(PolymorphicModel, Described):
 
     @property
     def label(self) -> str:
-        """What to call this lens in a list: its name, else its container's name and what it selects of it.
+        """What to call this lens in a list: its container's name, its own name when something names it, and what it selects.
 
         Never empty, which is the point: most lenses are never named, and a picker's row has
         to say something. One line, the container first because that is what a person
-        recognises; a whole lens is its container.
+        recognises; a whole lens is its container. The selection stays beside the name: a
+        name is shared by every lens through the same positions, so "GFP" alone would not
+        tell the channel from a crop of it.
         """
-        if self.name and self.name.strip():
-            return self.name.strip()
         real = self._real()
         container = getattr(real.container, "name", None) or f"{type(real).__name__} {self.pk}"
-        selected = selection_label(real.selection)
-        return f"{container} · {selected}" if selected else container
+        parts = [container, (self.name or "").strip(), selection_label(real.selection)]
+        return " · ".join(part for part in parts if part)
 
     @property
     def active_anchors(self):

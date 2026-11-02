@@ -37,6 +37,7 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
+from core.logic import lens_names as lens_names_logic
 from core.render.layer import label as label_models
 
 #: Distinguishable single-hue colormaps for "one source per channel", cycled. Green and
@@ -704,13 +705,22 @@ def _infer_kind(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes,
 
 
 def _channel_labels(dataset: "models.ArrayDataset", axis: str) -> dict[int, str]:
-    """The per-channel labels ingest recorded, keyed by channel index."""
+    """What each channel is called, keyed by channel index: a person's name for it (`setPositionLabel`) over the one ingest recorded.
+
+    An anchor pinning the channel and nothing else is read first -- it is the one the channel's
+    lens is named by (:mod:`core.logic.lens_names`), so a layer and the lens it draws through are
+    called alike -- then, as before, the first other anchor pinning it.
+    """
     labels: dict[int, str] = {}
-    spokes = models.ChannelLabel.objects.filter(anchor__dataset=dataset, anchor__coordinates__has_key=axis).select_related("anchor").order_by("pk")
-    for spoke in spokes:
-        index = spoke.anchor.coordinates.get(axis)
-        if isinstance(index, int) and index not in labels and spoke.label:
-            labels[index] = spoke.label
+    query = models.CoordinateAnchor.objects.filter(dataset=dataset, coordinates__has_key=axis).select_related("position_label", "channel_label").order_by("pk")
+    anchors = sorted(query, key=lambda anchor: len(anchor.coordinates) != 1)
+    for anchor in anchors:
+        index = anchor.coordinates.get(axis)
+        if not isinstance(index, int) or index in labels:
+            continue
+        label = lens_names_logic.anchor_label(anchor)
+        if label:
+            labels[index] = label
     return labels
 
 

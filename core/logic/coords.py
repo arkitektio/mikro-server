@@ -440,6 +440,31 @@ def pinned_axes(windows: Iterable["WindowLike"]) -> list[str]:
     return [window.axis for window in windows if window.min is not None and window.min == window.max]
 
 
+def pins(selection: Iterable[Mapping[str, object]]) -> dict[str, int | float]:
+    """The positions a stored selection holds its axes to, keyed by axis, in the selection's order.
+
+    One rule for both spellings, the one ``derive_spec`` reads: a normalized slice keeps one
+    index when ``stop - start == 1`` (its stop is the first index past the last one kept, so a
+    stepped slice keeping one index is pinned too), a window one value when ``min == max``. An
+    axis kept as a range, or bounded on one side, is not pinned. These are what a lens is
+    *named* by: the anchors at its pinned positions (:mod:`core.logic.lens_names`).
+    """
+    pinned: dict[str, int | float] = {}
+    for entry in selection:
+        axis = entry.get("axis")
+        if not isinstance(axis, str):
+            continue
+        if "start" in entry or "stop" in entry:
+            start, stop = entry.get("start"), entry.get("stop")
+            if isinstance(start, int) and isinstance(stop, int) and stop - start == 1:
+                pinned[axis] = start
+        else:
+            low, high = entry.get("min"), entry.get("max")
+            if isinstance(low, int | float) and not isinstance(low, bool) and low == high:
+                pinned[axis] = low
+    return pinned
+
+
 #: The rank spec each count of free axes denotes. Any count past the table collapses to TENSOR.
 _SPARSE_SPEC_BY_RANK: dict[int, enums.SparseDatasetSpec] = {
     0: enums.SparseDatasetSpec.SCALAR,

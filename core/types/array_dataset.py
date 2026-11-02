@@ -476,6 +476,20 @@ class ChannelLabel:
 
 
 @kante.django_type(
+    models.PositionLabel,
+    pagination=True,
+    description="What a person calls the data at a coordinate anchor's positions, e.g. 'GFP'. Beside the channel label ingest recorded, and read before it: it is how a lens pinning those positions is named",
+)
+class PositionLabel:
+    """What a person calls the data at a coordinate anchor's positions."""
+
+    id: auto
+    label: str = kante.django_field(description="The name")
+    creator: User | None = kante.django_field(description="Who gave the name")
+    created_at: datetime.datetime = kante.django_field(description="When the name was last given")
+
+
+@kante.django_type(
     models.PhasorHistogram,
     pagination=True,
     description="The distribution of a phasor pinned to a coordinate anchor: a 2D (g, s) density plus the summed profile it was computed from. What ValueHistogram is to an intensity channel -- it lets a client pick a sane value range for a phasor overlay without reading the cube",
@@ -538,7 +552,8 @@ class CoordinateAnchor:
     # The reverse accessor from OptikitState.anchor is `microscope`, not `optikit_state`.
     microscope: OptikitState | None = kante.django_field(description="The microscope state recorded at this coordinate")
     value_histogram: ValueHistogram | None
-    channel_label: ChannelLabel | None
+    channel_label: ChannelLabel | None = kante.django_field(description="The channel label ingest recorded at this coordinate")
+    position_label: PositionLabel | None = kante.django_field(description="What a person calls the data at this coordinate (`setPositionLabel`): read before `channelLabel` when a lens is named")
     light_graph: LightPath | None
     acquisition_window: AcquisitionWindow | None = kante.django_field(description="When the data at these coordinates was acquired")
     # Declared below this type, hence the forward reference.
@@ -708,11 +723,35 @@ class Lens:
         return self.coordinate_system
 
     name: str | None = kante.django_field(
-        description="What someone called this selection, or null when nobody has. A label only: it is no part of what the lens selects, and a client shows the selection -- or 'the whole container' -- in its place"
+        description=(
+            "What this selection is called, or null when nothing names it: the labels at the positions it pins (a person's `setPositionLabel` over the channel label ingest recorded) "
+            "and the name of the annotation it was cut to, e.g. 'GFP · nucleus 3'. Derived and kept by the server, never set: naming channel 1 names every lens through channel 1. "
+            "No part of the lens' identity, which is its container and its selection. `nameAnchors` says where it comes from"
+        )
     )
     label: str = kante.django_field(
-        description="What to call this lens in a list, never empty: its `name` when it has one, else its container's name followed by what it selects of it (`cells.zarr · c[0:1]`); a whole lens is called by its container. What a picker shows for an option"
+        description=(
+            "What to call this lens in a list, never empty: its container's name, its `name` when something names it, and what it selects (`cells.zarr · GFP · c[1:2], y[0:32]`); "
+            "a whole lens is called by its container. What a picker shows for an option"
+        )
     )
+
+    @kante.django_field(
+        description=(
+            "The coordinate anchors whose labels make up `name`, in the order they appear in it: those of the container whose every pinned axis this lens holds to the same position, "
+            "the most specific only. Each carries the person's `positionLabel` and the recorded `channelLabel`; the first that says something is the one used. Empty for a lens no "
+            "position names, and for a kind whose container carries no anchors"
+        )
+    )
+    def name_anchors(self, info: Info) -> List["CoordinateAnchor"]:
+        """The anchors naming this lens."""
+        from core.logic import coords as coords_logic, lens_names as lens_names_logic
+
+        real = self._real()
+        pinned = coords_logic.pins(real.selection)
+        if not pinned or type(real) not in lens_names_logic.ANCHOR_FIELD:
+            return []
+        return lens_names_logic.holding_anchors(pinned, lens_names_logic.labelled_anchors(real.container))
     created_at: datetime.datetime = kante.django_field(description="When this selection was first asked for; a whole lens, when its container was made")
     creator: User | None = kante.django_field(
         description="Who made this selection: the first to ask for it. The container's creator for a whole lens, which exists from the container's creation. Asking for a selection that exists hands back the row and changes nothing"

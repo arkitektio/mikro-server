@@ -299,7 +299,7 @@ async def test_a_datasets_lenses_are_followed(db, authenticated_context: HttpCon
     org_room = channels.org_lenses_room(ctx.request.organization.id)
 
     create = "mutation C($input: CreateLensInput!) { createLens(input: $input) { id } }"
-    rename = "mutation R($input: UpdateLensInput!) { updateLens(input: $input) { id } }"
+    rename = "mutation R($input: SetPositionLabelInput!) { setPositionLabel(input: $input) { id } }"
     delete = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }"
     crop = [{"axis": "c", "start": 0, "stop": 1}]
 
@@ -319,7 +319,7 @@ async def test_a_datasets_lenses_are_followed(db, authenticated_context: HttpCon
             assert (created["__typename"], created["id"], created["kind"], created["name"], created["dataset"]["id"]) == ("ArrayLens", lens, "ARRAY", None, str(dataset.pk))
             assert created["descriptors"]["@mikro/is_whole"] is False and created["descriptors"]["@mikro/n_channels"] == 1
 
-        await _run(ctx, rename, {"id": lens, "name": "nucleus"})
+        await _run(ctx, rename, {"lens": lens, "label": "nucleus"})
         for follower in (of_dataset, in_org):
             assert await follower.next() == {"create": None, "update": {"id": lens, "name": "nucleus"}, "delete": None}
 

@@ -13,6 +13,7 @@ from kante.channel import Channel
 from core import channels, models
 from core import derived
 from core import descriptors as descriptors_logic
+from core.logic import lens_names as lens_names_logic
 from core.channel_signals import RowSignal
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,60 @@ def anchor_deleted_handler(sender: type[models.CoordinateAnchor], instance: mode
 for _label in sorted(derived.SOURCES):
     post_save.connect(spoke_written_handler, sender=apps.get_model(_label), dispatch_uid=f"rederive-saved-{_label}")
     post_delete.connect(spoke_written_handler, sender=apps.get_model(_label), dispatch_uid=f"rederive-deleted-{_label}")
+
+
+# --- lens names that follow the labels and shapes they are read from ---------------------
+# `Lens.name` caches what a lens' pinned positions and its cut are called (core.logic.lens_names).
+# A label spoke written or removed names every lens over its container again; a cut recorded or
+# removed, or a shape renamed, names the lenses cut to it. In the same transaction, so the names
+# commit with what they were read from. Not on the way out of a container or a lens: what would
+# be renamed is going too.
+
+_NAME_SOURCES: tuple[type[Model], ...] = (models.CoordinateAnchor, models.PositionLabel, models.ChannelLabel, models.Annotation, models.AnnotationCollection, models.LensCut)
+
+
+def _renaming_write(origin: object) -> bool:
+    """Whether a delete started at a label, an anchor, a cut or a shape, rather than cascading from a container or a lens that is going away."""
+    if origin is None:
+        return True
+    model = origin.model if isinstance(origin, QuerySet) else type(origin)
+    return issubclass(model, _NAME_SOURCES)
+
+
+def label_written_handler(sender: type[Model], instance: models.PositionLabel | models.ChannelLabel, raw: bool = False, origin: object = None, **kwargs: object) -> None:
+    if raw or not _renaming_write(origin):
+        return
+    try:
+        anchor = instance.anchor
+    except models.CoordinateAnchor.DoesNotExist:
+        return
+    container = anchor.container
+    if container is not None:
+        lens_names_logic.refresh_container(container)
+
+
+for _label_model in (models.PositionLabel, models.ChannelLabel):
+    post_save.connect(label_written_handler, sender=_label_model, dispatch_uid=f"lens-names-saved-{_label_model.__name__}")
+    post_delete.connect(label_written_handler, sender=_label_model, dispatch_uid=f"lens-names-deleted-{_label_model.__name__}")
+
+
+@receiver(post_save, sender=models.LensCut)
+@receiver(post_delete, sender=models.LensCut)
+def lens_cut_written_handler(sender: type[models.LensCut], instance: models.LensCut, raw: bool = False, origin: object = None, **kwargs: object) -> None:
+    if raw or not _renaming_write(origin):
+        return
+    lens_names_logic.refresh_lenses([instance.lens_id])
+
+
+@receiver(post_save, sender=models.Annotation)
+def annotation_renamed_handler(sender: type[models.Annotation], instance: models.Annotation, raw: bool = False, created: bool = False, **kwargs: object) -> None:
+    # A shape is saved on every edit and is rarely something a lens was cut to: one indexed
+    # lookup, and only the lenses cut to it are named again.
+    if raw or created:
+        return
+    lens_ids = list(models.LensCut.objects.filter(annotation=instance).values_list("lens_id", flat=True))
+    if lens_ids:
+        lens_names_logic.refresh_lenses(lens_ids)
 
 
 def _relay_rows[M: Model](model: type[M], channel: Channel[RowSignal], rooms: Callable[[M], list[str]]) -> None:

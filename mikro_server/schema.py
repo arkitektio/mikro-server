@@ -618,7 +618,14 @@ class Mutation:
     create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
     create_network_lens = mutation(resolver=mutations.create_network_lens, description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one")
     create_annotation_lens = mutation(resolver=mutations.create_annotation_lens, description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one")
-    update_lens = mutation(resolver=mutations.update_lens, description="Rename a lens, or clear its name. What it selects cannot change: a different selection is a different lens")
+    set_position_label = mutation(
+        resolver=mutations.set_position_label,
+        description=(
+            "Name the positions a lens pins (a channel, a frame), or remove the name: how a lens is named. The name sits at the coordinate anchor of those positions, beside what ingest "
+            "recorded there, and every lens pinning them -- this one, its crops, the sub-lens a scene draws the channel through -- is called by it (`Lens.name`). A crop is named by the "
+            "annotation it was cut to, a container by its own name"
+        ),
+    )
     set_lens_default_scene = mutation(
         resolver=mutations.set_lens_default_scene,
         description="Nominate the scene to open for a lens, and take its thumbnail from. Null clears it. On an unsliced lens this writes its dataset's nomination: the lens is the dataset, looked at whole",

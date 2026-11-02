@@ -300,9 +300,9 @@ async def test_only_the_datasets_owner_nominates_for_its_lens(authenticated_cont
 # what someone called it than by its slices.
 # ---------------------------------------------------------------------------
 
-UPDATE_LENS = """
-mutation UpdateLens($input: UpdateLensInput!) {
-  updateLens(input: $input) { id name }
+SET_POSITION_LABEL = """
+mutation Name($input: SetPositionLabelInput!) {
+  setPositionLabel(input: $input) { id name }
 }
 """
 
@@ -359,54 +359,57 @@ async def test_a_page_of_datasets_names_each_ones_whole_array_lens(authenticated
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_can_be_named_and_renamed(authenticated_context: HttpContext):
+async def test_a_lens_is_named_by_the_positions_it_pins(authenticated_context: HttpContext):
+    """Naming channel 1 names every lens through it -- the crop of it too -- and the name is found, staged and cleared like one."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
+    channel = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}])
+    crop_of_it = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}, *CROP])
 
-    async def create(slices: list, name: str | None) -> dict:
-        payload = {"dataset": str(dataset.pk), "slices": slices}
-        if name is not None:
-            payload["name"] = name
-        result = await schema.execute(
-            "mutation C($input: CreateLensInput!) { createLens(input: $input) { id name } }",
-            context_value=ctx,
-            variable_values={"input": payload},
-        )
-        assert not result.errors, result.errors
-        return result.data["createLens"]
-
-    crop = await create(CROP, "  nucleus 3 ")
-    assert crop["name"] == "nucleus 3"
-
-    again = await create(CROP, "something else")
-    assert again == crop, "the same selection is the same lens, and finding it is not a request to rename it"
-
-    renamed = await schema.execute(UPDATE_LENS, context_value=ctx, variable_values={"input": {"id": crop["id"], "name": "nucleus 4"}})
+    renamed = await schema.execute(SET_POSITION_LABEL, context_value=ctx, variable_values={"input": {"lens": str(channel.pk), "label": "  GFP "}})
     assert not renamed.errors, renamed.errors
-    assert renamed.data["updateLens"]["name"] == "nucleus 4"
+    assert renamed.data["setPositionLabel"]["name"] == "GFP"
+    assert (await models.Lens.objects.aget(pk=crop_of_it.pk)).name == "GFP", "the crop pins channel 1 too, and is called by it"
 
-    found = await schema.execute(NAMED, context_value=ctx, variable_values={"id": str(dataset.pk), "filters": {"search": "nucleus"}})
-    assert [lens["id"] for lens in found.data["lenses"]] == [crop["id"]]
+    later = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}, {"axis": "y", "start": 0, "stop": 4}])
+    assert later.name == "GFP", "a lens through the channel is born named"
+
+    found = await schema.execute(NAMED, context_value=ctx, variable_values={"id": str(dataset.pk), "filters": {"search": "gfp"}})
+    assert sorted(lens["id"] for lens in found.data["lenses"]) == sorted(str(lens.pk) for lens in (channel, crop_of_it, later))
     by_dataset = await schema.execute(NAMED, context_value=ctx, variable_values={"id": str(dataset.pk), "filters": {"search": "tiss"}})
-    whole = by_dataset.data["arrayDataset"]["fullLens"]["id"]
-    assert sorted(lens["id"] for lens in by_dataset.data["lenses"]) == sorted([whole, crop["id"]]), "a lens is also found by the dataset it borrows its name from -- the whole lens too"
+    assert len(by_dataset.data["lenses"]) == 4, "a lens is also found by the dataset it borrows its label from -- the whole lens too"
 
-    staged = await schema.execute(FROM_LENS, context_value=ctx, variable_values={"input": {"lens": crop["id"]}})
-    assert staged.data["createSceneFromLens"]["name"] == "Tissue · nucleus 4", "two crops staged side by side are not two scenes called the same"
+    staged = await schema.execute(FROM_LENS, context_value=ctx, variable_values={"input": {"lens": str(channel.pk)}})
+    assert staged.data["createSceneFromLens"]["name"] == "Tissue · GFP", "two channels staged side by side are not two scenes called the same"
 
-    cleared = await schema.execute(UPDATE_LENS, context_value=ctx, variable_values={"input": {"id": crop["id"], "name": " "}})
-    assert cleared.data["updateLens"]["name"] is None, "blank clears: the lens reads as its slices again"
+    cleared = await schema.execute(SET_POSITION_LABEL, context_value=ctx, variable_values={"input": {"lens": str(crop_of_it.pk), "label": " "}})
+    assert cleared.data["setPositionLabel"]["name"] is None, "blank clears: every lens through the channel reads as its selection again"
+    assert (await models.Lens.objects.aget(pk=channel.pk)).name is None
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_only_the_datasets_owner_renames_its_lens(authenticated_context: HttpContext, bot_context: HttpContext):
-    dataset = await seed.create_array_dataset(authenticated_context, "Tissue")
-    crop = await seed.create_lens(authenticated_context, dataset, CROP)
+async def test_a_lens_that_pins_nothing_has_no_positions_to_name(authenticated_context: HttpContext):
+    """A crop by ranges is named by the shape it was cut to, the whole dataset by its own name."""
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Tissue")
+    crop = await seed.create_lens(ctx, dataset, CROP)
 
-    refused = await schema.execute(UPDATE_LENS, context_value=bot_context, variable_values={"input": {"id": str(crop.pk), "name": "mine now"}})
+    refused = await schema.execute(SET_POSITION_LABEL, context_value=ctx, variable_values={"input": {"lens": str(crop.pk), "label": "nucleus 3"}})
+
+    assert refused.errors and "annotation" in refused.errors[0].message
+    assert (await models.Lens.objects.aget(pk=crop.pk)).name is None
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_only_the_datasets_owner_names_its_positions(authenticated_context: HttpContext, bot_context: HttpContext):
+    dataset = await seed.create_array_dataset(authenticated_context, "Tissue")
+    channel = await seed.create_lens(authenticated_context, dataset, [{"axis": "c", "start": 0, "stop": 1}])
+
+    refused = await schema.execute(SET_POSITION_LABEL, context_value=bot_context, variable_values={"input": {"lens": str(channel.pk), "label": "mine now"}})
 
     assert refused.errors
-    assert (await models.Lens.objects.aget(pk=crop.pk)).name is None
+    assert (await models.Lens.objects.aget(pk=channel.pk)).name is None
 
 

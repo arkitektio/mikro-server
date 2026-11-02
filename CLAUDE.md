@@ -14,6 +14,14 @@ is silent elsewhere (absence, never an infinity, is how a box says nothing about
 so `overlapsAnnotation`, `placeableIn` and `inView` answer for every kind. A lens carries
 `creator`, `created_at` and task provenance (the first to ask for a selection is its creator;
 a whole lens carries its container's) and is owned by its maker or its container's owner.
+**A lens has no name of its own to edit**: it is named by the positions it pins (`coords.pins`:
+a slice keeping one index, a window with `min == max`) -- the labels at its container's anchors
+whose every axis it holds to the same position, most specific only, a person's `PositionLabel`
+(`setPositionLabel`, guarded by the container's owner) over ingest's `ChannelLabel` -- and, for
+a crop cut to a shape, by that shape's name. `Lens.name` caches the result for search; its
+inputs change, so their writers refresh it in the same transaction (`core/logic/lens_names.py`,
+wired in `core/signals.py`; `_mint` names a lens as it is made) and `merge_duplicate_lenses`
+repairs drift. The container's name is never in it; `Lens.label` puts it in front.
 **Every layer and chart layer draws through a lens**, whatever its kind; a layer mutation
 takes the lens or the container (its whole lens), and a point, track or series layer hands
 its lens' windows on as `windowFilters`, a collection layer as `clip` -- derived, never
@@ -153,7 +161,8 @@ What this service declares:
   a key means. The third normalizes stored lens
   selections, gives every container of every kind (array, table, sparse, mesh, network,
   annotation collection) its whole lens, folds duplicate array lenses onto one row and gives
-  every lens the spec its selection denotes (`Lens.stored_spec`); the
+  every lens the spec its selection denotes (`Lens.stored_spec`) and the name its pinned
+  positions and its cut give it (`Lens.name`, announcing nothing); the
   database refuses duplicates since the lens tables were split, so it is a guard for rows
   written by hand. It changes nothing the second time and reports what it leaves in place.
 - Other jobs: `purge_orphaned_stores` (from `arkitekt_datalayer`), `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe
