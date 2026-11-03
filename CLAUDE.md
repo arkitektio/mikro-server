@@ -189,7 +189,10 @@ What this service declares:
   written by hand. It changes nothing the second time and reports what it leaves in place.
 - Other jobs: `purge_orphaned_stores` (from `arkitekt_datalayer`), `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe
   beside a serving release and reports what is still owed; it is not in the setup, so an
-  operator runs it.
+  operator runs it. `prune_organizations` (from arkitekt-service, `-- --only <org> --yes` or
+  `--keep`) deletes everything organizations own -- datasets, lenses, shapes, metrics, stores
+  and their bytes at once -- and keeps the organizations; a metric it deletes gets its DELETED
+  feed entry from the `pruning` signal (`metric.logic.record_pruned`), so kraph hears of it.
 
 `tests/test_prepared.py` holds the contract to this: migrations committed, every job a command
 of this service, the setup run twice. In `deployments/next` the service runs

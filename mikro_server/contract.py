@@ -504,6 +504,7 @@ contract = Contract(
         "backfill_parquet_schemas": Job(("backfill_parquet_schemas",), "Record the columns of parquet stores finished before they were recorded"),
         "merge_duplicate_lenses": Job(("merge_duplicate_lenses",), "Normalize stored lens selections, give every container of every kind its whole lens, merge duplicate lenses onto one row, and state every lens' spec"),
         "restore_descriptors": Job(("restore_descriptors",), "Store the descriptors of every row that misses one its structure declares (--all: of every row)"),
+        "prune_organizations": Job(("prune_organizations",), "Delete all data of the organizations named (--only) or not named (--keep), and keep the organizations; a dry run without --yes"),
     },
     # `merge_duplicate_lenses` runs for every build, before the release serves: a lens row spelled
     # the old way would otherwise escape the lookup `createLens` makes and mint a duplicate.

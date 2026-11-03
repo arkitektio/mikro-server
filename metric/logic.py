@@ -17,6 +17,7 @@ from arkitekt_service.contract import JSON
 from arkitekt_service.feed.api import Change, Entry, record_change, record_changes
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import QuerySet
 from kante.types import Info
 from kanne_server.scalars import parse_unit
 
@@ -205,6 +206,15 @@ def delete_metric(info: Info, id: str) -> str:
         record_change(_change(metric, "DELETED", metric.organization.identifier))
         metric.delete()
     return id
+
+
+def record_pruned(sender: type[models.Metric], rows: QuerySet[models.Metric], **kwargs: object) -> None:
+    """``prune_organizations`` deletes metrics past ``delete_metric``: each still gets its DELETED entry.
+
+    Connected to ``arkitekt_service.server.prune.pruning``, sent inside the transaction that
+    deletes ``rows`` -- so the entries commit with the delete, or not at all.
+    """
+    record_changes([Change(FEED, "DELETED", str(pk), organization, uuid=uuid) for pk, uuid, organization in rows.values_list("pk", "uuid", "organization__identifier")])
 
 
 # --- the feed --------------------------------------------------------------------------------
