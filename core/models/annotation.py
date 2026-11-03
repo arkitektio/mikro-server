@@ -296,19 +296,18 @@ class AnnotationDerivation(models.Model):
     afterwards changes nothing here, and editing a shape in place is its history, never a
     derivation. The order is the creator's: pk order, as ``derivedFrom`` keeps it.
 
-    SET_NULL on the source, as on ``Transformation.annotation``: deleting the source must not
-    delete what was made from it, and the row is left saying that the shape *was* made from
-    one. The child's own CASCADE removes the row with it.
+    RESTRICT on the source: a shape something was made from is not deleted while that stands
+    (``core.logic.deletion`` refuses first, naming it, and ``cascade`` takes the children
+    along). RESTRICT rather than PROTECT, so a source and its child still go together when
+    their collection does. The child's own CASCADE removes the row with it.
     """
 
     child = models.ForeignKey(Annotation, on_delete=models.CASCADE, related_name="derived_from_links", help_text="The shape that was made")
     source = models.ForeignKey(
         Annotation,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.RESTRICT,
         related_name="derived_links",
-        help_text="The shape it was made from, or null once that shape is deleted",
+        help_text="The shape it was made from. It cannot be deleted while this shape stands, unless the delete cascades to it",
     )
     relation = TextChoicesField(choices_enum=enums.AnnotationRelationChoices, help_text="How the child came from the source: refined, converted, split or merged")
     reason = models.TextField(null=True, blank=True, help_text="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's")
@@ -326,10 +325,10 @@ class AnnotationDerivation(models.Model):
     )
 
     class Meta:
-        """One row per (child, source) while the source stands; pk order is the declared order."""
+        """One row per (child, source); pk order is the declared order."""
 
         ordering = ["id"]
-        constraints = [models.UniqueConstraint(fields=["child", "source"], condition=models.Q(source__isnull=False), name="annotation_derived_once")]
+        constraints = [models.UniqueConstraint(fields=["child", "source"], name="annotation_derived_once")]
 
     def __str__(self) -> str:
         """The child and the source it was made from."""

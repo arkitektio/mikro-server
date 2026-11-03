@@ -199,6 +199,43 @@ class Query:
         description="What was made from each of many containers or files, `down` hops deep, in one walk: a page of tiles asks once rather than once per tile. Kind-blind like `lineage` -- a table uploaded on its own is a root just as a converted series is -- but downstream only, and without the edges, lenses and arrays `lineage` carries. `limit` is shared by every root; `fanout` caps the hops per node. A root another organization owns answers nothing, so the result can be shorter than `starts`",
     )
 
+    preflight_delete_array_dataset = field(
+        resolver=queries.preflight_delete_array_dataset,
+        description="What deleting this array dataset would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_table_dataset = field(
+        resolver=queries.preflight_delete_table_dataset,
+        description="What deleting this table dataset would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_sparse_dataset = field(
+        resolver=queries.preflight_delete_sparse_dataset,
+        description="What deleting this sparse dataset would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_mesh_collection = field(
+        resolver=queries.preflight_delete_mesh_collection,
+        description="What deleting this mesh collection would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_network_collection = field(
+        resolver=queries.preflight_delete_network_collection,
+        description="What deleting this network collection would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_annotation_collection = field(
+        resolver=queries.preflight_delete_annotation_collection,
+        description="What deleting this annotation collection (its shapes, and whatever was made from them elsewhere, count) would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_fixture = field(
+        resolver=queries.preflight_delete_fixture,
+        description="What deleting this fixture would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_file = field(
+        resolver=queries.preflight_delete_file,
+        description="What deleting this file (the series converted out of it count) would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+    preflight_delete_annotation = field(
+        resolver=queries.preflight_delete_annotation,
+        description="What deleting this annotation (the shapes refined, converted, split or merged from it count) would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
+    )
+
     attribute_plans = field(
         resolver=queries.attribute_plans,
         description="Every attribute plan reachable from one system: one per FIELD edge landing on a table, discovered across the fact component -- probe a source image and the plans of the instance mask derived from it come back, each carrying the `path` of steps from the probed system to its root. Registrations are never crossed (no scene, no world). A plan is instructions, never attributes -- map along the path, sample this array, look the value up in this parquet -- and takes no coordinate, so a client fetches it once and executes it per hover against the chunks it is already rendering. Cache it against the FIELD edge plus every path step (ids and versions); `maxDepth` bounds the discovery. Each plan is a chain of `hops`: the landing, then every declared reference reachable from it -- `Column.references` into another table, a matrix axis a table identifies, or the same axis walked into the matrix -- up to `maxJoinDepth` (default 1, at most 4; 0 is the landing alone), each bound from the hop before and executed by the client in order. The server reads no store and composes nothing",

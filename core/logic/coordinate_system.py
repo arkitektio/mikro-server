@@ -807,6 +807,20 @@ def create_lens(
     return cast(models.ArrayLens, _get_or_create(models.ArrayLens, container=dataset, selection=normalized, make=make))
 
 
+def lens_space_derived_containers(lens: "models.Lens") -> list:
+    """The containers derived from a lens' own space: a crop's derived data, which dies with the crop's space.
+
+    Only a sliced array lens owns a space; every other lens lives in its container's, and what
+    was derived there is the container's, not the lens'.
+    """
+    container = lens.container
+    if lens.coordinate_system_id is None or lens.coordinate_system_id == container.coordinate_system_id:
+        return []
+    edges = list(models.Transformation.objects.filter(output_id=lens.coordinate_system_id).select_related("input", "output").order_by("pk"))
+    own = ("dataset", container.pk) if isinstance(container, models.ArrayDataset) else (type(container).__name__.lower(), container.pk)
+    return graph_logic._containers_derived_through(edges, own=own)
+
+
 def assert_lens_deletable(lens: "models.Lens") -> None:
     """Refuse to delete a lens something still looks through, and a container's whole lens.
 
@@ -818,6 +832,15 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
     if lens.is_whole:
         container = lens.container
         raise ValueError(f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk} and cannot be deleted on its own: it is the container's handle, and goes with the container.")
+
+    derived = lens_space_derived_containers(lens)
+    if derived:
+        named = ", ".join(f"{type(row).__name__} {row.pk}" for row in derived[:5])
+        more = f" (and {len(derived) - 5} more)" if len(derived) > 5 else ""
+        raise ValueError(
+            f"Lens {lens.pk} cannot be deleted: {len(derived)} container(s) were derived from its selection -- {named}{more} -- and would lose where they came from. "
+            "Delete those first; deleting the dataset it selects over can take them along (`cascade`)."
+        )
 
     drawing = layers_drawing_through(lens)
     layers = list(drawing.select_related("scene").order_by("pk")[:5])

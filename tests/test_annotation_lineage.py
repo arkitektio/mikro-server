@@ -17,7 +17,6 @@ made from it is not.
 """
 
 import pytest
-from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import models
@@ -265,8 +264,8 @@ async def test_a_shape_named_first_cannot_hide_the_lens_that_places_the_data(aut
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_shape_keeps_what_was_made_from_it(authenticated_context: HttpContext):
-    """The cut goes with the shape; the dataset stays, derived from the collection the shape was in."""
+async def test_a_shape_goes_once_what_was_computed_within_it_has(authenticated_context: HttpContext):
+    """Refused while the crop stands (deletes follow lineage); once it is gone, the cut goes with the shape and the lens stays."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
     rectangle = await _draw(ctx, collection["id"], "RECTANGLE", CORNERS)
@@ -282,17 +281,18 @@ async def test_deleting_the_shape_keeps_what_was_made_from_it(authenticated_cont
     assert not made.errors, made.errors
     cropped_id = made.data["createArrayDataset"]["id"]
 
+    refused = await schema.execute(DELETE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"id": rectangle["id"]}})
+    assert refused.errors and "dataset 'Cropped'" in refused.errors[0].message, "the crop would lose the shape it was cut along"
+
+    gone = await schema.execute(
+        "mutation D($input: DeleteArrayDatasetInput!) { deleteArrayDataset(input: $input) }", context_value=_fresh_request(ctx), variable_values={"input": {"id": cropped_id}}
+    )
+    assert not gone.errors, gone.errors
     deleted = await schema.execute(DELETE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"id": rectangle["id"]}})
     assert not deleted.errors, deleted.errors
 
     assert await models.LensCut.objects.acount() == 0
     assert await models.ArrayLens.objects.filter(pk=cut["id"]).aexists(), "the lens is the dataset's row, not the shape's"
-    result = await schema.execute(DERIVED_FROM, context_value=_fresh_request(ctx), variable_values={"id": cropped_id})
-    assert not result.errors, result.errors
-    by_lens, by_shape = result.data["arrayDataset"]["derivedFrom"]
-    assert by_shape["annotation"] is None and by_shape["output"]["id"] == collection["coordinateSystem"]["id"]
-    edges = await sync_to_async(lambda: models.Transformation.objects.filter(annotation__isnull=False).count())()
-    assert edges == 0
 
 
 # --- a shape made from a shape --------------------------------------------------------
@@ -447,26 +447,6 @@ async def test_a_bulk_draw_links_each_shape_after_the_insert(authenticated_conte
     )
     assert refused.errors and "A CONVERTED shape" in refused.errors[0].message, refused.errors
     assert await models.Annotation.objects.acount() == before, "nothing of a refused batch is drawn"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_deleting_either_end_of_a_link(authenticated_context: HttpContext):
-    """The source going leaves the child saying it was made from one; the child going takes the link."""
-    ctx = authenticated_context
-    _, collection = await _drawn_on(ctx)
-    rough = await _draw(ctx, collection["id"], "PATH", PATH)
-    made = await _draw_from(ctx, collection["id"], "PATH", SMOOTHER, [{"annotation": rough["id"], "relation": "REFINED"}])
-    assert not made.errors, made.errors
-    smooth = made.data["createAnnotation"]["id"]
-
-    deleted = await schema.execute(DELETE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"id": rough["id"]}})
-    assert not deleted.errors, deleted.errors
-    assert (await _shape_lineage(ctx, smooth))["derivedFrom"] == [{"relation": "REFINED", "reason": None, "source": None, "child": {"id": smooth}}]
-
-    deleted = await schema.execute(DELETE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"id": smooth}})
-    assert not deleted.errors, deleted.errors
-    assert await models.AnnotationDerivation.objects.acount() == 0
 
 
 @pytest.mark.django_db(transaction=True)

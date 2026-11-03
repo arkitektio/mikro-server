@@ -12,7 +12,7 @@ creation flow stating where a brand-new space sits, once.
 from django.db import IntegrityError, transaction
 from kante.types import Info
 import strawberry
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator, Field
 from simple_history.utils import bulk_create_with_history
 
 import kante
@@ -26,6 +26,7 @@ from core.inputs.validators import assert_rgba, assert_shape_vectors
 from core.logic import annotation_lineage
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org, get_in_org_unshared
 from mikro_server.contract import ANNOTATOR, EDITOR
@@ -500,6 +501,7 @@ def create_annotations(
 
 class DeleteAnnotationInputModel(BaseModel):
     id: str
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteAnnotationInputModel, description="Input for deleting an annotation by ID")
@@ -507,6 +509,7 @@ class DeleteAnnotationInput:
     """Input for deleting an annotation by ID."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the annotation to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-delete_annotation = make_delete(models.Annotation, DeleteAnnotationInput, owner=self_owner)
+delete_annotation = make_delete(models.Annotation, DeleteAnnotationInput, owner=self_owner, lineage_kind="annotation")

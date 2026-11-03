@@ -22,6 +22,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import assert_can_delete, make_delete, self_owner
 from core.scoping import get_for_org
 import logging
@@ -841,6 +842,7 @@ def set_default_scene(info: Info, input: SetDefaultSceneInput) -> types.ArrayDat
 
 class DeleteArrayDatasetInputModel(BaseModel):
     id: str = Field(description="The ID of the array dataset to delete")
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteArrayDatasetInputModel, description="Input for deleting an array dataset by ID")
@@ -848,6 +850,7 @@ class DeleteArrayDatasetInput:
     """Input for deleting an array dataset by ID"""
 
     id: strawberry.ID = strawberry.field(description="The ID of the array dataset to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-delete_array_dataset = make_delete(models.ArrayDataset, DeleteArrayDatasetInput, owner=self_owner)
+delete_array_dataset = make_delete(models.ArrayDataset, DeleteArrayDatasetInput, owner=self_owner, lineage_kind="dataset")

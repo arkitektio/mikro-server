@@ -32,6 +32,7 @@ from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
 from core.logic import identification as identification_logic
 from core.logic import tables as tables_logic
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 from core.mutations.array_dataset import CoordinateAnchorInput, CoordinateAnchorInputModel, _get_or_create_anchor, _write_anchor_spokes, assert_anchors_name_axes
 from core.scoping import get_for_org
@@ -568,6 +569,7 @@ def update_table_dataset(info: Info, input: UpdateTableDatasetInput) -> types.Ta
 
 class DeleteTableDatasetInputModel(BaseModel):
     id: str = Field(description="The ID of the table dataset to delete")
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteTableDatasetInputModel, description="Input for deleting a table dataset by ID")
@@ -575,9 +577,10 @@ class DeleteTableDatasetInput:
     """Input for deleting a table dataset by ID."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the table dataset to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 #: PROTECT: a layer's colour or filter picker names its table by id, inside JSON, so there is no
 #: foreign key to cascade and a deleted table leaves a join nothing can execute. See
 #: :func:`core.logic.pickers.assert_table_not_in_a_picker` for why refusing beats orphaning.
-delete_table_dataset = make_delete(models.TableDataset, DeleteTableDatasetInput, owner=self_owner)
+delete_table_dataset = make_delete(models.TableDataset, DeleteTableDatasetInput, owner=self_owner, lineage_kind="tabledataset")

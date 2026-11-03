@@ -103,6 +103,22 @@ glTF, read and checked when `finishKulisseUpload` runs) in a unit-carrying space
 `Fixture`, `FixtureLens`, `FixtureLayer`. The box is the store's, never declared or re-read here.
 10.2.0 shipped it as a "CAD model"; nothing of that name is left.
 
+## Deletes follow lineage
+
+Nothing is deleted while something made from it stands. A delete of any `lineage` node kind
+(array/table/sparse dataset, mesh/network/annotation collection, fixture, file, annotation)
+walks what is downstream -- the same `descendants` walk the lineage viewer uses
+(`core/logic/deletion.py`) -- and is refused, naming it, unless its input says `cascade: true`;
+then every casualty is held to its own owner and delete guards before anything goes, and all of
+it is deleted in one transaction. `preflightDelete<Model>(id)` (one query per kind, one
+`DeletePreflight` type) answers the same without deleting: casualties, blockers (not yours, a
+guard, a PROTECT/RESTRICT reference from Django's `Collector`) and what else cascades (layers,
+lenses). A closure deeper than 10 hops or over 1000 rows is refused even with `cascade`. An
+annotation collection's own shapes go with it by CASCADE; what was made from them elsewhere is a
+casualty. A sliced lens something was derived from is refused (`assert_lens_deletable`).
+`AnnotationDerivation.source` is RESTRICT as the backstop. Deleting a derivation edge
+(`deleteTransformation`) or a file link edits lineage and deletes no data: those are not guarded.
+
 ## Metrics
 
 A **metric** (`metric/`, an app like `chart/`; core never imports it) is one value recorded about

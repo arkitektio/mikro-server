@@ -1720,7 +1720,7 @@ class AnnotationDerivation:
     creator: User | None = kante.django_field(description="Who made the child, or null when that user is gone")
 
     child: "Annotation" = kante.django_field(description="The shape that was made")
-    source: Optional["Annotation"] = kante.django_field(description="The shape it was made from, or null once that shape has been deleted: the link still says the child was made from one")
+    source: "Annotation" = kante.django_field(description="The shape it was made from. It cannot be deleted while this shape stands, unless the delete cascades to it")
 
 
 @kante.django_type(
@@ -1817,6 +1817,17 @@ class Annotation:
     def derived_from(self, info: Info) -> List[AnnotationDerivation]:
         """The links out of this shape, in declared order."""
         return list(self.derived_from_links.select_related("source", "creator").order_by("pk"))
+
+    @kante.django_field(
+        prefetch_related=["derived_from_links"],
+        description=(
+            "The ids of the shapes this one was made from, in declared order: `derivedFrom` without the links, cheap enough for every shape of a scene's list. "
+            "Empty for a shape drawn from nothing. What a viewer reads to tell a refinement from the shape it refines"
+        ),
+    )
+    def source_ids(self, info: Info) -> List[strawberry.ID]:
+        """The sources' ids, off the prefetched links."""
+        return [strawberry.ID(str(link.source_id)) for link in sorted(self.derived_from_links.all(), key=lambda link: link.pk)]
 
     @kante.django_field(
         description=(

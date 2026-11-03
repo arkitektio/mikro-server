@@ -27,6 +27,7 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org
 
@@ -210,6 +211,7 @@ def create_network_collection(info: Info, input: CreateNetworkCollectionInput) -
 
 class DeleteNetworkCollectionInputModel(BaseModel):
     id: str = Field(description="The ID of the network collection to delete")
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteNetworkCollectionInputModel, description="Input for deleting a network collection by ID")
@@ -217,6 +219,7 @@ class DeleteNetworkCollectionInput:
     """Input for deleting a network collection by ID."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the network collection to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-delete_network_collection = make_delete(models.NetworkCollection, DeleteNetworkCollectionInput, owner=self_owner)
+delete_network_collection = make_delete(models.NetworkCollection, DeleteNetworkCollectionInput, owner=self_owner, lineage_kind="networkcollection")

@@ -19,6 +19,7 @@ from core.inputs.coords import DerivedFromInput, DerivedFromSpec, PhysicalAxisIn
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org
 from arkitekt_datalayer.models import KulisseStore
@@ -108,6 +109,7 @@ def create_fixture(info: Info, input: CreateFixtureInput) -> types.Fixture:
 
 class DeleteFixtureInputModel(BaseModel):
     id: str = Field(description="The ID of the fixture to delete")
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteFixtureInputModel, description="Input for deleting a fixture by ID")
@@ -115,6 +117,7 @@ class DeleteFixtureInput:
     """Input for deleting a fixture by ID."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the fixture to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-delete_fixture = make_delete(models.Fixture, DeleteFixtureInput, owner=self_owner)
+delete_fixture = make_delete(models.Fixture, DeleteFixtureInput, owner=self_owner, lineage_kind="fixture")

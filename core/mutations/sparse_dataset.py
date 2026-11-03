@@ -40,6 +40,7 @@ from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
 from core.logic import identification as identification_logic
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 from core.mutations.array_dataset import CoordinateAnchorInput, CoordinateAnchorInputModel, _get_or_create_anchor, _write_anchor_spokes, assert_anchors_name_axes
 from core.scoping import get_for_org
@@ -339,6 +340,7 @@ def update_sparse_dataset(info: Info, input: UpdateSparseDatasetInput) -> types.
 
 class DeleteSparseDatasetInputModel(BaseModel):
     id: str = Field(description="The ID of the sparse dataset to delete")
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteSparseDatasetInputModel, description="Input for deleting a sparse dataset by ID")
@@ -346,9 +348,10 @@ class DeleteSparseDatasetInput:
     """Input for deleting a sparse dataset by ID."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the sparse dataset to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 #: PROTECT, for the reason a table dataset is protected: a colouring names its source by id
 #: inside a JSON column, so there is no foreign key to cascade and a deleted matrix leaves an
 #: entry nothing can execute. See :func:`core.logic.pickers.assert_sparse_dataset_not_in_a_picker`.
-delete_sparse_dataset = make_delete(models.SparseDataset, DeleteSparseDatasetInput, owner=self_owner)
+delete_sparse_dataset = make_delete(models.SparseDataset, DeleteSparseDatasetInput, owner=self_owner, lineage_kind="sparsedataset")

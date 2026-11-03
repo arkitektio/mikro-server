@@ -9,6 +9,7 @@ from core.creation import CreationContext
 from core.inputs.file_link import ExportOfInput, ExportOfSpec
 from core.logic import file_link as file_link_logic
 from core.scoping import get_for_org
+from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 
 
@@ -75,6 +76,7 @@ def from_file_like(
 
 class DeleteFileInputModel(BaseModel):
     id: str = Field(description="The ID of the file to delete")
+    cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
 @kante.pydantic_input(DeleteFileInputModel, description="Input for deleting a file by ID")
@@ -82,6 +84,7 @@ class DeleteFileInput:
     """Input for deleting a file by ID"""
 
     id: strawberry.ID = strawberry.field(description="The ID of the file to delete")
+    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-delete_file = make_delete(models.File, DeleteFileInput, owner=self_owner)
+delete_file = make_delete(models.File, DeleteFileInput, owner=self_owner, lineage_kind="file")

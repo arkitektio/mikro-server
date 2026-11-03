@@ -18,6 +18,7 @@ import strawberry
 
 from core import scoping
 from core.logic import compositions as compositions_logic
+from core.logic import deletion as deletion_logic
 from mikro_server.contract import ADMIN
 from arkitekt_datalayer import storage
 
@@ -60,7 +61,7 @@ def creator_owner(item):
     return (item.creator_id,)
 
 
-def make_delete(model, input_type, owner=None, delete=None):
+def make_delete(model, input_type, owner=None, delete=None, lineage_kind: str | None = None):
     """Build a delete resolver: fetch org-scoped by id, guard ownership, delete.
 
     ``owner`` is an explicit callable returning the user ids allowed to delete
@@ -73,6 +74,10 @@ def make_delete(model, input_type, owner=None, delete=None):
     (:func:`core.logic.compositions.register_delete_guard`). They run after the ownership
     check, so a caller who may not delete the row hears that first rather than learning
     what else references it.
+
+    ``lineage_kind`` names the row's node kind in the ``lineage`` walk, for every model something
+    can be made from: such a delete follows lineage (:mod:`core.logic.deletion`) -- refused while
+    anything made from the row stands, unless the input's ``cascade`` asks to take it along.
     """
 
     def resolve(info: Info, input: input_type) -> strawberry.ID:
@@ -81,6 +86,9 @@ def make_delete(model, input_type, owner=None, delete=None):
         if owner is not None:
             assert_can_delete(info, item, owner)
         compositions_logic.assert_deletable(item)
+        if lineage_kind is not None:
+            deletion_logic.delete_with_lineage(info, item, lineage_kind, cascade=parsed.cascade, owner=owner, delete=delete)
+            return parsed.id
         with transaction.atomic():
             # Collected *before* the delete, because the cascade has to still be walkable, and
             # flagged after it, so a delete that raises flags nothing. The bytes themselves are
