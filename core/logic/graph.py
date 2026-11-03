@@ -14,6 +14,7 @@ request cannot go stale. See :mod:`core.models.coords`.
 
 import dataclasses
 import heapq
+import math
 from typing import TYPE_CHECKING, Callable, Iterable, Sequence
 
 from django.db.models import F, Q
@@ -1899,7 +1900,7 @@ def build_registration_edge(
     validity = validity.value if hasattr(validity, "value") else validity
     value_relation = value_relation.value if hasattr(value_relation, "value") else value_relation
     keeps_axes = kind in _AXIS_KINDS
-    edge = models.Transformation.objects.create(
+    edge = models.Transformation(
         kind=kind,
         name=name,
         input=input_system,
@@ -1915,6 +1916,9 @@ def build_registration_edge(
         creator=ctx.user,
         organization=ctx.organization,
     )
+    # Checked unsaved, so a refused calibration leaves no row behind.
+    assert_calibration_edge(edge)
+    edge.save(force_insert=True)
     # Each separate array a FIELD part reads, PROTECTed: deleting a times array or a warp
     # field would take a placement nobody named. A self field (a mask) has no link.
     models.TransformationField.objects.bulk_create([models.TransformationField(transformation=edge, field=field, part=index) for index, field in links])
@@ -3613,6 +3617,218 @@ def physical_neighbours(system: "models.CoordinateSystem") -> list["models.Coord
         if axes and all(axis.unit for axis in axes):
             found.append(target)
     return found
+
+
+@dataclasses.dataclass(frozen=True)
+class AxisVoxelSize:
+    """How far one step along a lens axis reaches in a physical space."""
+
+    axis: str  # the lens axis
+    size: float
+    unit: str
+    type: str  # the physical axis' AxisTypeChoices value
+    physical_axis: str
+
+
+@dataclasses.dataclass
+class Calibration:
+    """One physical space a lens reaches, by its best route there, and the voxel size that route gives."""
+
+    system: "models.CoordinateSystem"
+    route: list["models.Transformation"]
+    validity: str  # the weakest on the route
+    sizes: list[AxisVoxelSize]
+    #: Why this route cannot be a calibration, or None when it can.
+    problem: str | None
+    canonical: bool = False
+
+    @property
+    def hops(self) -> int:
+        return len(self.route)
+
+
+def lens_calibrations(lens: "models.ArrayLens") -> list[Calibration]:
+    """Every physical space a lens reaches with the edges, best first; the first sane one is canonical.
+
+    **Derived, nothing stored.** The edges are the one source of truth and their `validity`
+    is the priority: a converter reading a `.lif` writes its pixel size INFERRED, a person who
+    calibrates afterwards writes MANUAL and outranks it, a checked calibration is VALIDATED and
+    outranks both. So there is no "calibration space" pointer to keep in step with the edges.
+
+    The walk goes forward from the lens' own space (its crop edge, the dataset's grid, any
+    registered pixel space after it) and stops at the **first** spaces whose axes all carry
+    units: that is where a voxel's size is defined, and nothing is walked past it. Each such
+    space is reached by its best route under the ranking every placement uses
+    (:func:`_bfs_tree`: the weakest validity on the route, highest first, then fewest hops),
+    composed by :func:`condense_path`. The spaces are then ordered by that same key, ties by
+    the route's edge pks (the oldest first), so a scene placement and a voxel size never rank
+    the same routes differently.
+
+    A route that relates a SPACE axis to an axis of another kind, or measures one in arbitrary
+    units, carries a ``problem`` and is never canonical (:func:`_route_problem`).
+    """
+    # A whole lens is minted in its dataset's grid; the fallback only guards an older row.
+    source = lens.coordinate_system or lens.dataset.intrinsic_coordinate_system
+    if source is None:
+        return []
+    source_axes = list(source.axes.all())
+    names = [axis.name for axis in source_axes]
+    adjacency, physical = _calibration_adjacency(source)
+    if not physical:
+        return []
+    parents = _bfs_tree(adjacency, source.pk)
+    found: list[Calibration] = []
+    for pk, system in physical.items():
+        if pk not in parents:
+            continue
+        steps = _steps_from_parents(parents, source.pk, pk)
+        route = [edge for edge, _ in steps]
+        validity = weakest_validity(edge.validity for edge in route)
+        axes = list(system.axes.all())
+        try:
+            condensed = condense_path(steps, source_axes=names, destination_axes=[axis.name for axis in axes])
+        except coords_logic.NonAffineTransformError as error:
+            found.append(Calibration(system, route, validity, [], f"the route does not compose: {error}"))
+            continue
+        found.append(Calibration(system, route, validity, _axis_voxel_sizes(condensed, names, axes), _route_problem(condensed, source_axes, axes)))
+    found.sort(key=lambda calibration: (-_VALIDITY_RANK.get(calibration.validity, 0), calibration.hops, [edge.pk for edge in calibration.route]))
+    for calibration in found:
+        if calibration.problem is None:
+            calibration.canonical = True
+            break
+    return found
+
+
+def _calibration_adjacency(
+    source: "models.CoordinateSystem",
+) -> tuple[dict[int, list[tuple["models.Transformation", bool, int]]], dict[int, "models.CoordinateSystem"]]:
+    """The forward edges out of `source`, up to and into the first spaces whose axes all carry units.
+
+    The gates are the composing walks' (:func:`~core.logic.space_graph._meeting_spaces`):
+    unscoped, traversable, closed-form, and no key. One query per hop. Every admitted edge is
+    in the adjacency, also one into a space already seen, so rival routes are there for the
+    search to rank; a physical space is never expanded.
+    """
+    adjacency: dict[int, list[tuple[models.Transformation, bool, int]]] = {}
+    physical: dict[int, models.CoordinateSystem] = {}
+    seen = {source.pk}
+    frontier = [source.pk]
+    while frontier:
+        edges = (
+            models.Transformation.objects.filter(input_id__in=frontier, output__isnull=False, organization_id=source.organization_id)
+            .select_related("input", "output")
+            .prefetch_related("input__axes", "output__axes")
+            .order_by("pk")
+        )
+        frontier = []
+        for edge in edges:
+            if edge.output_id == edge.input_id:
+                continue
+            if not selector_admits(edge, None) or not is_traversable(edge) or not is_condensable(edge) or is_dereference(edge):
+                continue
+            adjacency.setdefault(edge.input_id, []).append((edge, False, edge.output_id))
+            if edge.output_id in seen:
+                continue
+            seen.add(edge.output_id)
+            axes = list(edge.output.axes.all())
+            if axes and all(axis.unit for axis in axes):
+                physical[edge.output_id] = edge.output
+            else:
+                frontier.append(edge.output_id)
+    return adjacency, physical
+
+
+def _axis_kind(axis: "models.Axis") -> str:
+    return axis.type.value if hasattr(axis.type, "value") else str(axis.type)
+
+
+def _mixed_kinds(
+    rows: "Iterable[tuple[models.Axis, Sequence[float]]]", inputs: "Sequence[models.Axis]"
+) -> tuple["models.Axis", "models.Axis"] | None:
+    """The first (input, output) pair a map relates although one is SPACE and the other is not."""
+    space = enums.AxisTypeChoices.SPACE.value
+    for target, coefficients in rows:
+        for source, coefficient in zip(inputs, coefficients):
+            if coefficient != 0.0 and (_axis_kind(source) == space) != (_axis_kind(target) == space):
+                return source, target
+    return None
+
+
+def _route_problem(condensed: "CondensedPlacement", source_axes: list["models.Axis"], physical: list["models.Axis"]) -> str | None:
+    """Why a composed route cannot be a calibration, or None.
+
+    A calibration says how far a step along each SPACE axis reaches in length units. So a
+    route that lets a SPACE axis feed a TIME or CHANNEL axis (or the reverse) is not one, and
+    neither is one that measures a SPACE axis in ``a.u.``. An axis the route says nothing
+    about is allowed: a (y, x) calibration of a z-stack is partial, not wrong.
+    """
+    by_name = {axis.name: axis for axis in physical}
+    rows = [(by_name[name], row[: len(source_axes)]) for row, name in zip(condensed.matrix, condensed.output_axes) if name in by_name]
+    mixed = _mixed_kinds(rows, source_axes)
+    if mixed is not None:
+        source, target = mixed
+        return f"it relates '{source.name}' ({_axis_kind(source)}) to '{target.name}' ({_axis_kind(target)})"
+    space = enums.AxisTypeChoices.SPACE.value
+    for target, coefficients in rows:
+        if _axis_kind(target) == space and any(coefficients) and kanne_scalars.is_arbitrary_unit(target.unit):
+            return f"it measures space on '{target.name}' in arbitrary units ({target.unit})"
+    return None
+
+
+def assert_calibration_edge(edge: "models.Transformation") -> None:
+    """Refuse an edge into a physical space that relates a SPACE axis to an axis of another kind.
+
+    The per-edge half of :func:`_route_problem`, checked where an edge is written or refined
+    (`build_registration_edge`, `updateTransformation`): a calibration route can only be as
+    sane as its last edge, and that edge is cheap to check alone. Rival edges stay allowed
+    (RFC-9); a nonsensical one does not. Works on an unsaved edge.
+    """
+    if edge.output is None or edge.input is None:
+        return
+    output_axes = list(edge.output.axes.all())
+    if not output_axes or not all(axis.unit for axis in output_axes):
+        return
+    if not is_condensable(edge) or is_dereference(edge):
+        return
+    try:
+        step = _edge_step(edge)
+        forms = coords_logic.step_forms(step)
+    except coords_logic.NonAffineTransformError:
+        return
+    by_name = {axis.name: axis for axis in output_axes}
+    input_axes = list(edge.input.axes.all())
+    mixed = _mixed_kinds(((by_name[name], form.coefficients) for name, form in forms.items() if name in by_name), input_axes)
+    if mixed is not None:
+        source, target = mixed
+        raise ValueError(
+            f"This transformation maps '{source.name}' ({_axis_kind(source)}) of '{edge.input.name}' onto '{target.name}' ({_axis_kind(target)}) of the "
+            f"physical space '{edge.output.name}'. A calibration relates SPACE axes to SPACE axes only, and other kinds to their own; map each axis onto its counterpart."
+        )
+
+
+def _axis_voxel_sizes(condensed: "CondensedPlacement", lens_axes: list[str], physical: list["models.Axis"]) -> list[AxisVoxelSize]:
+    by_name = {axis.name: axis for axis in physical}
+    sizes: list[AxisVoxelSize] = []
+    for column, name in enumerate(lens_axes):
+        terms = []
+        for row, output in zip(condensed.matrix, condensed.output_axes):
+            axis = by_name.get(output)
+            if row[column] == 0.0 or axis is None or not axis.unit or kanne_scalars.is_arbitrary_unit(axis.unit):
+                continue
+            terms.append((abs(row[column]), axis))
+        if not terms:
+            continue
+        base = terms[0][1].unit
+        factors = [coords_logic.unit_factor(axis.unit, base) for _, axis in terms]
+        if any(factor is None for factor in factors):
+            continue
+        converted = [(magnitude * factor, axis) for (magnitude, axis), factor in zip(terms, factors)]
+        _, dominant = max(converted, key=lambda term: term[0])
+        to_dominant = coords_logic.unit_factor(base, dominant.unit) or 1.0
+        size = math.sqrt(sum(value * value for value, _ in converted)) * to_dominant
+        axis_type = dominant.type.value if hasattr(dominant.type, "value") else str(dominant.type)
+        sizes.append(AxisVoxelSize(axis=name, size=size, unit=dominant.unit, type=axis_type, physical_axis=dominant.name))
+    return sizes
 
 
 def transform_version(system: "models.CoordinateSystem") -> int:

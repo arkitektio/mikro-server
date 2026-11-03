@@ -517,7 +517,8 @@ async def test_reaching_the_axis_through_a_field_is_not_placement(authenticated_
     signal_system, object_system = await _system_of(signal), await _system_of(objects)
 
     field_id = await _register(ctx, signal_system.pk, object_system.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["d"], "outputAxes": ["i"], "field": {"system": str(signal_system.pk)}}]})
-    await _register(ctx, object_system.pk, chart["worldCoordinateSystem"]["id"], {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["i"], "outputAxes": ["d"]}]})
+    chart_world = await sync_to_async(models.CoordinateSystem.objects.get)(pk=chart["worldCoordinateSystem"]["id"])
+    await seed.index_registration(ctx, object_system, chart_world, index_axis="i", onto="d")
 
     refused = await _run(ctx, TRACE, {"chart": chart["id"], "lens": await seed.whole_lens_id(models.ArrayDataset, str(signal.pk))})
     assert refused.errors, "reachable, and still not placed"

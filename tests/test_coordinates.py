@@ -761,7 +761,7 @@ async def test_registration_is_a_space_level_edge(authenticated_context: HttpCon
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Specimen")
+    dataset = await seed.create_array_dataset(authenticated_context, "Specimen", axes=seed.ZYX_AXES)
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def systems():
@@ -823,7 +823,7 @@ async def test_deleting_a_registration_unplaces_but_keeps_the_annotation(authent
 
     from core.models import Transformation as TransformationModel
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Specimen")
+    dataset = await seed.create_array_dataset(authenticated_context, "Specimen", axes=seed.ZYX_AXES)
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def systems():
@@ -887,7 +887,7 @@ async def test_wrapper_kinds_cannot_be_authored_directly(authenticated_context: 
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Specimen")
+    dataset = await seed.create_array_dataset(authenticated_context, "Specimen", axes=seed.ZYX_AXES)
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def systems():
@@ -1069,7 +1069,7 @@ async def test_layer_path_to_world(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Placed")
+    dataset = await seed.create_array_dataset(authenticated_context, "Placed", axes=seed.ZYX_AXES)
     lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
     scene = await seed.create_scene(authenticated_context, "Composition")
 
@@ -1163,12 +1163,12 @@ async def test_path_routes_through_a_calibration(authenticated_context: HttpCont
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Staged")
+    dataset = await seed.create_array_dataset(authenticated_context, "Staged", axes=seed.ZYX_AXES)
     physical = await seed.create_physical_space(
         authenticated_context,
         dataset,
         axes=[
-            seed.physical_axis("c", enums.AxisType.CHANNEL, unit="a.u."),
+            seed.physical_axis("z", enums.AxisType.SPACE, unit="micrometer"),
             seed.physical_axis("y", enums.AxisType.SPACE, unit="micrometer"),
             seed.physical_axis("x", enums.AxisType.SPACE, unit="micrometer"),
         ],
@@ -1207,7 +1207,7 @@ async def test_two_scenes_two_registrations(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Shared")
+    dataset = await seed.create_array_dataset(authenticated_context, "Shared", axes=seed.ZYX_AXES)
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
     scene_a = await seed.create_scene(authenticated_context, "A")
     scene_b = await seed.create_scene(authenticated_context, "B")

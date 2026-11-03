@@ -389,10 +389,8 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
             "input": {
                 "input": str(intrinsic.pk),
                 "output": str(world.pk),
-                "transform": {
-                    "kind": "AFFINE",
-                    "affine": [[1.0, 0.0, 0.0, 5.0], [0.0, 1.0, 0.0, 5.0], [0.0, 0.0, 1.0, 0.0]],
-                },
+                # The space axes onto the world's; the channel onto nothing.
+                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, 0.0]}]},
             }
         },
     )
@@ -411,7 +409,7 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
 
     edges = await sync_to_async(lambda: list(models.Transformation.objects.filter(output=world)))()
     assert len(edges) == 1, "creating a layer must not add a registration of its own"
-    assert edges[0].kind == enums.TransformKindChoices.AFFINE.value
+    assert edges[0].kind == enums.TransformKindChoices.BY_DIMENSION.value, "the one edge is the registration authored above"
 
 
 # --- 6. intensity is a channel, not a clock ---------------------------------

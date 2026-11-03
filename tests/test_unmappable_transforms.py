@@ -60,11 +60,9 @@ query Derived($id: ID!) {
 }
 """
 
-_AFFINE_3D = [
-    [1.0, 0.0, 0.0, 5.0],
-    [0.0, 1.0, 0.0, 5.0],
-    [0.0, 0.0, 1.0, 0.0],
-]
+#: A (c, y, x) source into a (z, y, x) world: the space axes onto their counterparts, the channel
+#: onto nothing (a calibration never relates a CHANNEL axis to a SPACE one). y is shifted by 5.
+_REGISTRATION = {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, 0.0]}]}
 
 
 async def _orm_layer(ctx: HttpContext, scene_id: str, lens: models.Lens) -> None:
@@ -93,7 +91,7 @@ async def _scene_with_registered_source(ctx: HttpContext, source: models.ArrayDa
     registered = await schema.execute(
         REGISTER,
         context_value=ctx,
-        variable_values={"input": {"input": str(intrinsic.pk), "output": world_id, "transform": {"kind": "AFFINE", "affine": _AFFINE_3D}}},
+        variable_values={"input": {"input": str(intrinsic.pk), "output": world_id, "transform": _REGISTRATION}},
     )
     assert not registered.errors, registered.errors
     return scene_id

@@ -60,7 +60,7 @@ from core.base_models import SliceInputModel, WindowInputModel  # noqa: E402
 from core.creation import CreationContext  # noqa: E402
 from core.logic import coords as coords_logic  # noqa: E402
 from core.logic import graph as graph_logic  # noqa: E402
-from core.models import ArrayDataset, Axis, CoordinateSystem, DataArray, Lens, Scene  # noqa: E402
+from core.models import ArrayDataset, Axis, CoordinateSystem, DataArray, Lens, Scene, Transformation  # noqa: E402
 from core.inputs.coords import (  # noqa: E402
     AffineTransformInputModel,
     AxisInputModel,
@@ -245,6 +245,34 @@ def _register_into_scene_sync(ctx: HttpContext, scene: Scene, dataset: ArrayData
         validity=enums.PlacementValidityChoices.MANUAL.value,
         ctx=_creation(ctx),
     )
+
+
+def _seed_index_registration_sync(ctx: HttpContext, input_system: CoordinateSystem, output_system: CoordinateSystem, index_axis: str, onto: str, validity: str) -> Transformation:
+    edge = Transformation.objects.create(
+        kind=enums.TransformKindChoices.BY_DIMENSION.value,
+        name=f"{input_system.name} -> {output_system.name}",
+        input=input_system,
+        output=output_system,
+        input_axes=[index_axis],
+        output_axes=[onto],
+        params={},
+        parts=[{"kind": enums.PartKind.IDENTITY.value, "input_axes": [index_axis], "output_axes": [onto], "params": {}}],
+        validity=validity,
+        creator=ctx.request.user,
+        organization=ctx.request.organization,
+    )
+    return edge
+
+
+async def index_registration(ctx: HttpContext, input_system: CoordinateSystem, output_system: CoordinateSystem, *, index_axis: str, onto: str, validity: str | None = None) -> Transformation:
+    """An object index registered onto a place, written through the ORM.
+
+    The write path refuses it (`graph.assert_calibration_edge`: an INDEX axis is no place, so a
+    calibration never maps one onto SPACE), so a test that needs a route running through a key
+    -- to show the placement gate refusing it -- writes the edge as a row from before that check
+    looks. The gate still has to answer for such rows.
+    """
+    return await sync_to_async(_seed_index_registration_sync)(ctx, input_system, output_system, index_axis, onto, validity or enums.PlacementValidityChoices.MANUAL.value)
 
 
 async def register_into_scene(ctx: HttpContext, scene: Scene, dataset: ArrayDataset | None = None, *, system: CoordinateSystem | None = None):

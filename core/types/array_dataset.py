@@ -22,7 +22,9 @@ from core.inputs.coords import CoordinateInput, at_map
 from core.types.visualization import Visualization
 from core.types.coords import (
     AffinePlacement,
+    AxisVoxelSize,
     PlacementField,
+    VoxelSize,
     CoordinateSystem,
     Fixture,
     MeshCollection,
@@ -866,6 +868,42 @@ class ArrayLens(Lens, OrgScoped):
         return self.shape_list
 
     @kante.django_field(
+        select_related=["dataset", "coordinate_system"],
+        description=(
+            "This lens' voxel size: how far one step along each of its axes reaches, read along the edges to the first space with units. The `canonical` one of "
+            "`voxelSizes` -- decided by the edges' validity, so a person's calibration outranks the pixel size a converter read from the file. Empty when the lens reaches "
+            "no physical space, or none by a sane route. Every axis the route scales is listed (a time step too); a voxel's spatial size is the SPACE entries. Never "
+            "raises, so it is the form to put in a fragment"
+        ),
+    )
+    def voxel_size(self, info: Info) -> List[AxisVoxelSize]:
+        """The canonical calibration's axes."""
+        canonical = next((calibration for calibration in _lens_calibrations(self) if calibration.canonical), None)
+        return [AxisVoxelSize.of(size) for size in canonical.sizes] if canonical is not None else []
+
+    @kante.django_field(
+        select_related=["dataset", "coordinate_system"],
+        description=(
+            "Every physical space this lens reaches with the edges, each by its best route and with the voxel size that route gives, canonical first. Read when "
+            "`voxelSize` is not what you expected: a rival calibration, its validity, its route, or why it was passed over (`problem`)"
+        ),
+    )
+    def voxel_sizes(self, info: Info) -> List[VoxelSize]:
+        """One entry per physical space reached."""
+        return [
+            VoxelSize(
+                system=calibration.system,
+                axes=[AxisVoxelSize.of(size) for size in calibration.sizes],
+                canonical=calibration.canonical,
+                validity=enums.PlacementValidity(calibration.validity),
+                hops=calibration.hops,
+                problem=calibration.problem,
+                route=calibration.route,
+            )
+            for calibration in _lens_calibrations(self)
+        ]
+
+    @kante.django_field(
         description="The edge from this lens' space back into its dataset's intrinsic pixel space. A crop is a translation of the slice starts; a stepped lens also rescales. Without this edge an ROI drawn on a cropped lens has no defined path back to its dataset. Null for an unsliced lens: its space IS the intrinsic space, and there is no shift to record",
     )
     def to_parent(self, info: Info) -> Transformation | None:
@@ -890,6 +928,15 @@ class ArrayLens(Lens, OrgScoped):
     def phasor(self, info: Info, axis: str | None = None, harmonic: int = 1) -> "PhasorContext | None":
         """The phasor context of one axis of this lens, at one harmonic."""
         return resolve_phasor_context(self, axis_name=axis, harmonic=harmonic)
+
+
+def _lens_calibrations(lens: "models.ArrayLens") -> "list[graph_logic.Calibration]":
+    """`graph_logic.lens_calibrations`, once per lens instance: `voxelSize` and `voxelSizes` asked together walk once."""
+    cached = getattr(lens, "_calibrations_cache", None)
+    if cached is None:
+        cached = graph_logic.lens_calibrations(lens)
+        lens._calibrations_cache = cached
+    return cached
 
 
 _WINDOWS_DESCRIPTION = "The windows, in the one normalized spelling: container axis order, floats, an open side as null. Empty for the whole lens"

@@ -305,7 +305,7 @@ async def test_a_key_on_the_path_errors_and_names_the_edge(authenticated_context
         object_system.pk,
         {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}]},
     )
-    await _register(authenticated_context, object_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["i"], "outputAxes": ["z"]}]})
+    await seed.index_registration(authenticated_context, object_system, world, index_axis="i", onto="z")
     await _image_layer(scene, lens)
 
     result = await schema.execute(AS_AFFINE, context_value=_fresh_request(authenticated_context), variable_values={"id": str(scene.pk)})

@@ -731,8 +731,9 @@ async def test_a_name_changing_affine_is_still_accepted(authenticated_context: H
     assert not other.errors, other.errors
     world = str(other.data["createCoordinateSystem"]["id"])
 
-    # Two output axes, three input axes plus the translation column.
-    result = await _create(ctx, intrinsic, world, {"kind": "AFFINE", "affine": [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]})
+    # Two output axes, three input axes plus the translation column: v from y, u from x (the
+    # channel onto nothing -- a calibration never relates a CHANNEL axis to a SPACE one).
+    result = await _create(ctx, intrinsic, world, {"kind": "AFFINE", "affine": [[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]})
     assert not result.errors, f"a rank-changing AFFINE is legal by design: {result.errors}"
 
 

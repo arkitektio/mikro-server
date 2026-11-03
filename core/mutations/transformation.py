@@ -171,6 +171,9 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     if model.validity is not None:
         transformation.validity = model.validity.value
 
+    # A refinement must not turn a calibration into nonsense either: checked before the save.
+    graph_logic.assert_calibration_edge(transformation)
+
     # The save is the record. `provenance` writes a history row for it, which is what
     # `graph_logic.transform_version` counts and what tells an ROI its chain has moved --
     # there is no counter here to bump, and so none to forget.

@@ -118,7 +118,7 @@ async def _mask_field_into(ctx: HttpContext, world, validity: str | None = None)
     mask_system, object_system = await sync_to_async(lambda: (mask.intrinsic_coordinate_system, objects.intrinsic_coordinate_system))()
 
     field_id = await _register(ctx, mask_system.pk, object_system.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}]}, validity=validity)
-    await _register(ctx, object_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["i"], "outputAxes": ["z"]}]}, validity=validity)
+    await seed.index_registration(ctx, object_system, world, index_axis="i", onto="z", validity=validity)
     return mask, mask_system, field_id
 
 

@@ -58,11 +58,9 @@ query Derived($id: ID!) {
 }
 """
 
-_AFFINE_3D = [
-    [1.0, 0.0, 0.0, 5.0],
-    [0.0, 1.0, 0.0, 5.0],
-    [0.0, 0.0, 1.0, 0.0],
-]
+#: A (c, y, x) source into a (z, y, x) world: the space axes onto their counterparts, the channel
+#: onto nothing (a calibration never relates a CHANNEL axis to a SPACE one). y is shifted by 5.
+_REGISTRATION = {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, 0.0]}]}
 
 
 async def _two_sources(ctx: HttpContext) -> tuple[models.ArrayDataset, models.Lens, models.ArrayDataset, models.Lens]:
@@ -311,7 +309,7 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
     registered = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(right_intrinsic.pk), "output": world_id, "transform": {"kind": "AFFINE", "affine": _AFFINE_3D}}},
+        variable_values={"input": {"input": str(right_intrinsic.pk), "output": world_id, "transform": _REGISTRATION}},
     )
     assert not registered.errors, registered.errors
 
@@ -324,7 +322,7 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
     registered = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(left_intrinsic.pk), "output": world_id, "transform": {"kind": "AFFINE", "affine": _AFFINE_3D}}},
+        variable_values={"input": {"input": str(left_intrinsic.pk), "output": world_id, "transform": _REGISTRATION}},
     )
     assert not registered.errors, registered.errors
 

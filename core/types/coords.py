@@ -763,6 +763,42 @@ class UnmappableTransformation(Transformation):
         return self.params.get("reason")
 
 
+@strawberry.type(description="How far one step along a lens axis reaches in a physical space: the voxel size along that axis")
+class AxisVoxelSize:
+    """One lens axis' voxel size in one physical space."""
+
+    axis: str = strawberry.field(description="The lens axis")
+    size: float = strawberry.field(description="How far one step along it reaches, in `unit`. A stepped lens' step is its own: `step: 2` reaches twice its dataset's voxel")
+    unit: str = strawberry.field(description="The unit of `size`: the unit of the physical axis it mostly lands on")
+    type: enums.AxisType = strawberry.field(description="That physical axis' kind. A calibration scales a time step or a spectral bin as well; a voxel's spatial size is the SPACE entries")
+    physical_axis: str = strawberry.field(description="The physical axis it mostly lands on")
+
+    @classmethod
+    def of(cls, size: "graph_logic.AxisVoxelSize") -> "AxisVoxelSize":
+        return cls(axis=size.axis, size=size.size, unit=size.unit, type=enums.AxisType(size.type), physical_axis=size.physical_axis)
+
+
+@strawberry.type(
+    description=(
+        "A lens' voxel size in one physical space it reaches with the edges: one of the first spaces on its way whose axes all carry units, by the best route there. "
+        "Several can be reached and they can disagree -- an imported pixel size and a later calibration -- so each is listed, and exactly one is `canonical`: the best by "
+        "the ranking placements use (the weakest `validity` on the route, highest first; then fewest hops; then the oldest edges). So a MANUAL calibration outranks the "
+        "INFERRED one a converter read from the file, and a VALIDATED one outranks both. Nothing about it is stored: the edges decide"
+    )
+)
+class VoxelSize:
+    """A lens' voxel size in one physical space."""
+
+    # Resolved by the caller, inside its own (thread-wrapped) resolver, like `PlacementField.field`.
+    system: CoordinateSystem = strawberry.field(description="The physical space")
+    axes: List[AxisVoxelSize] = strawberry.field(description="One entry per lens axis the route scales, in the lens' axis order. An axis in `a.u.` is not listed: it measures nothing")
+    canonical: bool = strawberry.field(description="Whether this is the lens' one voxel size, the one `ArrayLens.voxelSize` answers")
+    validity: enums.PlacementValidity = strawberry.field(description="The weakest validity on the route: the first thing the ranking compares")
+    hops: int = strawberry.field(description="How many edges the route takes, from the lens' own space")
+    problem: str | None = strawberry.field(description="Why this route cannot be a calibration -- it relates a SPACE axis to another kind of axis, measures space in arbitrary units, or does not compose -- or null. A route with a problem is never canonical")
+    route: List[Transformation] = strawberry.field(description="The edges of the route, from the lens' own space to this one")
+
+
 @kante.type(
     description="One step of a placement path: a transformation edge, plus whether it is traversed against its stored direction. Each step carries its own map, its own `validity` and its own `invariance`, which is what this shape is for -- a client that only wants the composed answer should ask the layer for `asAffine` instead of composing these itself"
 )
