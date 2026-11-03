@@ -440,6 +440,8 @@ class Transformation(Described):
     # is not a space: it is drawn in its collection's. So the edge lands where every
     # ANNOTATION_COLLECTION derivation lands and this column narrows it to the one shape --
     # the same sentence, said more exactly, never a second lineage table beside the edges.
+    # A shape made from a shape is the one lineage that is *not* this sentence -- neither end
+    # is data in a space -- and it is ``AnnotationDerivation``, never an edge.
     #
     # SET_NULL, not CASCADE: an annotation is mutable and deletable, and the data computed
     # from it is neither. Deleting the shape leaves the edge as what it also always was, a

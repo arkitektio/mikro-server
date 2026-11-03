@@ -23,6 +23,7 @@ from core.creation import CreationContext
 from core.input_unions import camel_field, prose_errors
 from core.inputs.coords import AxisInputModel, CoordinateInput, CoordinateInputModel
 from core.inputs.validators import assert_rgba, assert_shape_vectors
+from core.logic import annotation_lineage
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
@@ -62,6 +63,24 @@ class _ShapeInputModel(BaseModel):
         return self
 
 
+_DERIVED_FROM_DESCRIPTION = (
+    "The shapes this one was made from, and how: a path refined into a smoother one, a rectangle converted to a polygon, the pieces a shape was split into, a shape merged "
+    "from several. In order; read back as `Annotation.derivedFrom`, and from the source as `derivedAnnotations`. A record of the act, never an edge: the shapes are already "
+    "placed by their collections, and a source in another collection relates to this one through that collection's own `derivedFrom`. A shape edited in place keeps its "
+    "history instead"
+)
+
+
+@prose_errors
+@kante.pydantic_input(annotation_lineage.AnnotationSourceInputModel, description="One shape a new shape was made from, and how")
+class AnnotationSourceInput:
+    """One source of a new shape's `derivedFrom`."""
+
+    annotation: strawberry.ID = strawberry.field(description="The shape it was made from. Any annotation you can see in this organization, in this collection or another")
+    relation: enums.AnnotationRelation = strawberry.field(description="How it was made from it. REFINED holds the kind, CONVERTED changes it, MERGED names every source")
+    reason: str | None = strawberry.field(default=None, description="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's")
+
+
 class CreateAnnotationInputModel(_ShapeInputModel):
     collection: str | None = None
     scene: str | None = None
@@ -71,6 +90,7 @@ class CreateAnnotationInputModel(_ShapeInputModel):
     coordinates: list[CoordinateInputModel] | None = None
     stroke_width: float | None = None
     filled: bool | None = None
+    derived_from: list[annotation_lineage.AnnotationSourceInputModel] | None = None
 
 
 @prose_errors
@@ -97,6 +117,7 @@ class CreateAnnotationInput:
     fill_color: list[int] | None = strawberry.field(default=None, description="Fill color of the geometry, as RGBA: four components, each 0..255, or null for no fill")
     stroke_width: float | None = strawberry.field(default=None, description="Stroke width, in the drawing space's units (default 1.0)")
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
+    derived_from: list[AnnotationSourceInput] | None = strawberry.field(default=None, description=_DERIVED_FROM_DESCRIPTION)
 
 
 def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
@@ -254,6 +275,7 @@ def create_annotation(
     if system is None:
         raise ValueError(f"Annotation collection {collection.pk} has no coordinate system to draw in.")
 
+    sources = annotation_lineage.resolve_sources(info, child_kind=model.kind.value, entries=model.derived_from or [])
     vectors = model.vectors or []
 
     # Pushed through every corner of the box, not just the two extremes: an
@@ -261,28 +283,29 @@ def create_annotation(
     # small under any rotation or shear. Intrinsic, not world -- see Annotation.
     intrinsic_bbox = graph_logic.compute_intrinsic_bbox(system, vectors)
 
-    annotation = models.Annotation.objects.create(
-        collection=collection,
-        name=model.name or f"Annotation in {collection.name}",
-        description=model.description,
-        kind=model.kind.value,
-        vectors=vectors,
-        # Stored keyed by coordinate name -- the same shape as
-        # CoordinateAnchor.coordinates, and GIN-queryable. The API keeps the
-        # typed list shape.
-        coordinates={coordinate.name: coordinate.value for coordinate in (model.coordinates or [])},
-        intrinsic_bbox=intrinsic_bbox,
-        # The same box again as a Postgres cube: the GiST-indexed search copy.
-        bbox_cube=intrinsic_bbox,
-        created_with_transforms=graph_logic.transform_version(system),
-        stroke_color=model.stroke_color if model.stroke_color is not None else [255, 255, 255, 255],
-        fill_color=model.fill_color,
-        stroke_width=model.stroke_width if model.stroke_width is not None else 1.0,
-        filled=model.filled if model.filled is not None else False,
-        creator=ctx.user,
-        **ctx.provenance_kwargs(),
-    )
-
+    with transaction.atomic():
+        annotation = models.Annotation.objects.create(
+            collection=collection,
+            name=model.name or f"Annotation in {collection.name}",
+            description=model.description,
+            kind=model.kind.value,
+            vectors=vectors,
+            # Stored keyed by coordinate name -- the same shape as
+            # CoordinateAnchor.coordinates, and GIN-queryable. The API keeps the
+            # typed list shape.
+            coordinates={coordinate.name: coordinate.value for coordinate in (model.coordinates or [])},
+            intrinsic_bbox=intrinsic_bbox,
+            # The same box again as a Postgres cube: the GiST-indexed search copy.
+            bbox_cube=intrinsic_bbox,
+            created_with_transforms=graph_logic.transform_version(system),
+            stroke_color=model.stroke_color if model.stroke_color is not None else [255, 255, 255, 255],
+            fill_color=model.fill_color,
+            stroke_width=model.stroke_width if model.stroke_width is not None else 1.0,
+            filled=model.filled if model.filled is not None else False,
+            creator=ctx.user,
+            **ctx.provenance_kwargs(),
+        )
+        annotation_lineage.write_links(annotation_lineage.build_links(annotation, sources, ctx))
     return annotation
 
 
@@ -354,6 +377,7 @@ class AnnotationSpecInputModel(_ShapeInputModel):
     coordinates: list[CoordinateInputModel] | None = None
     stroke_width: float | None = None
     filled: bool | None = None
+    derived_from: list[annotation_lineage.AnnotationSourceInputModel] | None = None
 
 
 @prose_errors
@@ -370,6 +394,7 @@ class AnnotationSpecInput:
     fill_color: list[int] | None = strawberry.field(default=None, description="Fill color of the geometry, as RGBA: four components, each 0..255, or null for no fill")
     stroke_width: float | None = strawberry.field(default=None, description="Stroke width, in the drawing space's units (default 1.0)")
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
+    derived_from: list[AnnotationSourceInput] | None = strawberry.field(default=None, description=_DERIVED_FROM_DESCRIPTION)
 
 
 class CreateAnnotationsInputModel(BaseModel):
@@ -425,6 +450,12 @@ def create_annotations(
     chain = graph_logic.intrinsic_chain(system)
     version = graph_logic.transform_version(system)
 
+    # Every shape's sources first, so a refused one leaves nothing drawn.
+    sources = [
+        annotation_lineage.resolve_sources(info, child_kind=spec.kind.value, entries=spec.derived_from or [], position=f"annotations[{index}].derivedFrom")
+        for index, spec in enumerate(model.annotations)
+    ]
+
     rows = []
     for spec in model.annotations:
         vectors = spec.vectors or []
@@ -453,6 +484,9 @@ def create_annotations(
         # Described before the insert (a shape's descriptors are its kind and its collection's
         # axes, both in hand), since no save sees a bulk write.
         created = bulk_create_with_history(descriptors_logic.stamp(rows), models.Annotation)
+        # After the shapes exist: a link needs its child's row. The ids are client-side
+        # UUIDs, so `created` carries them and lines up with `sources` by position.
+        annotation_lineage.write_links([link for child, child_sources in zip(created, sources) for link in annotation_lineage.build_links(child, child_sources, ctx)])
         # bulk_create fires no post_save, so the collection's subscribers are told here:
         # one message for the whole batch (see AnnotationSignal.create_many) -- and the
         # collection and its lenses, which count the shapes, are restored once.

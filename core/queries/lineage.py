@@ -5,7 +5,6 @@ from strawberry_django.pagination import OffsetPaginationInput
 
 from core import enums, models
 from core.logic import lineage as lineage_logic
-from core.logic.graph import MODEL_BY_KEY
 from core.scoping import get_for_org
 from core.types.lineage import Descendants, DescendantNode, Lineage, RootNode, LineageAxis, LineageEdge, LineageEdgeKind, LineageLens, LineageNode, LineageNodeKind, LineageRootInput, LineageSlice, RootFilter
 
@@ -24,8 +23,7 @@ def lineage(
     for the parent value and silently drops it from the schema.
     """
     kind = LineageNodeKind(start.kind).value
-    model = models.File if kind == lineage_logic.FILE else MODEL_BY_KEY[kind]
-    instance = get_for_org(model, info, id=start.id)
+    instance = get_for_org(lineage_logic.model_of(kind), info, id=start.id)
 
     result = lineage_logic.lineage(
         (kind, instance.pk),
@@ -75,7 +73,8 @@ def lineage(
                 task_id=edge.task_id,
                 transformation_kind=enums.TransformKind(edge.transformation_kind) if edge.transformation_kind else None,
                 value_relation=enums.ValueRelation(edge.value_relation) if edge.value_relation else None,
-                annotation_id=str(edge.annotation_id) if edge.annotation_id else None,
+                annotation_id=edge.annotation_id,
+                annotation_relation=enums.AnnotationRelation(edge.annotation_relation) if edge.annotation_relation else None,
                 primary=edge.primary,
                 source_lens=str(edge.source_lens) if edge.source_lens else None,
             )
@@ -93,7 +92,7 @@ def descendants(
     fanout: int = 20,
 ) -> list[Descendants]:
     """What was made from each of many roots; see :func:`core.logic.lineage.descendants`."""
-    roots = [(LineageNodeKind(start.kind).value, int(start.id)) for start in starts]
+    roots = [(LineageNodeKind(start.kind).value, start.id) for start in starts]
     result = lineage_logic.descendants(roots, organization=info.context.request.organization, down=down, limit=limit, fanout=fanout)
     return [
         Descendants(

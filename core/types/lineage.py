@@ -10,9 +10,9 @@ import strawberry
 from core import enums
 
 
-@strawberry.enum(description="What a lineage node is: one of the containers, or a file")
+@strawberry.enum(description="What a lineage node is: one of the containers, a file, or a shape. A shape is reached only by walking from one -- rooted at it, or from a shape made from it -- never fanned out to from its collection")
 class LineageNodeKind(str, Enum):
-    """The container keys of ``core.logic.graph.CONTAINERS``, plus ``file``. The values are those keys."""
+    """The container keys of ``core.logic.graph.CONTAINERS``, plus ``file`` and ``annotation``. The values are those keys."""
 
     DATASET = "dataset"
     TABLE_DATASET = "tabledataset"
@@ -22,15 +22,17 @@ class LineageNodeKind(str, Enum):
     ANNOTATION_COLLECTION = "annotationcollection"
     FIXTURE = "fixture"
     FILE = "file"
+    ANNOTATION = "annotation"
 
 
-@strawberry.enum(description="What a lineage edge records")
+@strawberry.enum(description="What a lineage edge records: a derivation (between containers, or from a shape to data computed along or within it), an ingest, an export, or a shape made from a shape")
 class LineageEdgeKind(str, Enum):
-    """A derivation edge between two containers, or a file link in one of its two directions."""
+    """A derivation edge, a file link in one of its two directions, or a shape -> shape link."""
 
     DERIVATION = "DERIVATION"
     INGEST = "INGEST"
     EXPORT = "EXPORT"
+    SHAPE_DERIVATION = "SHAPE_DERIVATION"
 
 
 @strawberry.input(description="The node a lineage walk starts from")
@@ -113,13 +115,14 @@ class LineageNode:
 @kante.type(description="That one node was made from another. Always parent to child, the way provenance reads")
 class LineageEdge:
     key: strawberry.ID = strawberry.field(description="Unique within the lineage and stable across walks")
-    kind: LineageEdgeKind = strawberry.field(description="A derivation between containers, an ingest from a file, or an export to one")
+    kind: LineageEdgeKind = strawberry.field(description="A derivation between containers or out of a shape, an ingest from a file, an export to one, or a shape made from a shape")
     source: strawberry.ID = strawberry.field(description="The parent's node key")
     target: strawberry.ID = strawberry.field(description="The child's node key")
     task_id: strawberry.ID | None = strawberry.field(description="The task that made this step, if any: a rekuest task ID. For a file link, the link's own task when it records one; otherwise, and for every derivation, the task that made the child")
     transformation_kind: enums.TransformKind | None = strawberry.field(description="(DERIVATION) The kind of the edge's map. UNMAPPABLE where the lineage is recorded but no geometry survived")
     value_relation: enums.ValueRelation | None = strawberry.field(description="What the step did to the values, if stated")
-    annotation_id: strawberry.ID | None = strawberry.field(description="(DERIVATION) The shape the child was computed along or within, if the derivation named one")
+    annotation_id: strawberry.ID | None = strawberry.field(description="(DERIVATION) The shape the child was computed along or within, if the derivation named one. Root a walk at it (`kind: ANNOTATION`) for the shape's own lineage")
+    annotation_relation: enums.AnnotationRelation | None = strawberry.field(description="(SHAPE_DERIVATION) How the child shape was made from the parent shape")
     primary: bool = strawberry.field(description="(DERIVATION) Whether this is the child's primary parent: the first edge its creator declared, the one that places it")
     source_lens: strawberry.ID | None = strawberry.field(
         description="The parent's lens this step was computed from -- the one whose space a derivation lands in, the whole lens for an export -- always one of the parent's `lenses`. Null when the parent is a file"

@@ -272,6 +272,15 @@ class AnnotationKindChoices(TextChoices):
     ELLIPSOID = "ellipsoid", "Ellipsoid"
 
 
+class AnnotationRelationChoices(TextChoices):
+    """How a shape came from the shape it names as its source. A DB column on `AnnotationDerivation`, so it needs this twin as well as the strawberry enum."""
+
+    REFINED = "REFINED", "Refined (same kind, geometry improved)"
+    CONVERTED = "CONVERTED", "Converted (drawn as another kind)"
+    SPLIT = "SPLIT", "Split (one of several shapes cut out of the source)"
+    MERGED = "MERGED", "Merged (one shape joined from several sources)"
+
+
 @strawberry.enum(description="The color space format used to interpret color component values.")
 @strawberry.enum(description="The colormap used to map intensity values of a channel to display colors.")
 class ColorMap(str, Enum):
@@ -1287,4 +1296,28 @@ _describe(
     ELLIPSE="A round shape across two axes with a radius per axis. Vectors are the two opposite corners of its bounding box; each semi-axis is half that axis' extent.",
     SPHERE="A round shape across three axes with one radius. Vectors are the two opposite corners of its bounding box.",
     ELLIPSOID="A round shape across three axes with a radius per axis. Vectors are the two opposite corners of its bounding box; each semi-axis is half that axis' extent.",
+)
+
+
+@strawberry.enum(
+    description=(
+        "How a shape came from the shape it names in `derivedFrom`: the act, not the algorithm (that is the creating task's). A record of where a new shape came from -- editing a "
+        "shape in place is its history, never a derivation"
+    )
+)
+class AnnotationRelation(str, Enum):
+    """How a shape came from its source shape."""
+
+    REFINED = "REFINED"
+    CONVERTED = "CONVERTED"
+    SPLIT = "SPLIT"
+    MERGED = "MERGED"
+
+
+_describe(
+    AnnotationRelation,
+    REFINED="The same kind of shape, its geometry improved: a path smoothed or snapped to an edge, a polygon re-traced. The source must be of the same kind",
+    CONVERTED="The same thing drawn as another kind: a rectangle as a polygon, a polygon's outline as a path, a path closed into a polygon. The source must be of a different kind",
+    SPLIT="One of several shapes cut out of the source. Its siblings name the same source",
+    MERGED="One shape joined from several sources. Every source is named, each as MERGED, and there are at least two",
 )

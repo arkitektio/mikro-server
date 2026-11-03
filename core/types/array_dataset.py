@@ -1704,6 +1704,26 @@ class AnnotationCollection:
 
 
 @kante.django_type(
+    models.AnnotationDerivation,
+    description=(
+        "That a shape was made from another shape, and how: a path refined, a rectangle converted to a polygon, a shape split or merged. A record of the act, never an edge in "
+        "space -- both shapes are placed by their collections, and editing either afterwards changes nothing here"
+    ),
+)
+class AnnotationDerivation:
+    """One source of a shape's `derivedFrom`."""
+
+    id: auto
+    relation: enums.AnnotationRelation = kante.django_field(description="How the child came from the source")
+    reason: str | None = kante.django_field(description="A free-form note on why or how, if one was given")
+    created_at: datetime.datetime = kante.django_field(description="When the child was made from the source")
+    creator: User | None = kante.django_field(description="Who made the child, or null when that user is gone")
+
+    child: "Annotation" = kante.django_field(description="The shape that was made")
+    source: Optional["Annotation"] = kante.django_field(description="The shape it was made from, or null once that shape has been deleted: the link still says the child was made from one")
+
+
+@kante.django_type(
     models.Annotation,
     filters=filters.AnnotationFilter,
     ordering=order.AnnotationOrder,
@@ -1787,6 +1807,30 @@ class Annotation:
     def derived_residents(self, info: Info) -> List[Resident]:
         """Every container with a derivation edge naming this shape."""
         return graph_logic.annotation_derived_containers(self)
+
+    @kante.django_field(
+        description=(
+            "The shapes this one was made from, and how, in the order its creator named them: the other end of `derivedAnnotations`. Empty for a shape drawn from nothing. "
+            "Shape to shape only -- what *data* a shape was computed from is its collection's `derivedFrom`, and what was computed from it is `derivedResidents`"
+        )
+    )
+    def derived_from(self, info: Info) -> List[AnnotationDerivation]:
+        """The links out of this shape, in declared order."""
+        return list(self.derived_from_links.select_related("source", "creator").order_by("pk"))
+
+    @kante.django_field(
+        description=(
+            "The shapes made from this one -- refined, converted, split out of it or merged from it -- oldest first, in any collection. How each was made is on its own "
+            "`derivedFrom`. Shapes, never containers: data computed from this shape is `derivedResidents`"
+        )
+    )
+    def derived_annotations(self, info: Info) -> List["Annotation"]:
+        """The children whose links name this shape."""
+        return list(
+            models.Annotation.objects.filter(derived_from_links__source=self, collection__organization=info.context.request.organization)
+            .select_related("collection__coordinate_system")
+            .order_by("derived_from_links__pk")
+        )
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):

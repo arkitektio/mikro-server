@@ -277,3 +277,60 @@ class Annotation(Described):
     def __str__(self) -> str:
         """The annotation's name and kind."""
         return f"{self.name} ({self.kind})"
+
+
+class AnnotationDerivation(models.Model):
+    """That a shape was made from another shape: a path refined, a rectangle converted to a polygon.
+
+    **A row of its own, never an edge.** Container lineage is the coordinate graph -- a
+    derived dataset's edge back into its source, narrowed to a shape by
+    ``Transformation.annotation`` when it was computed along or within one. A shape made
+    from a shape is not that sentence: neither end is a space, both are already placed by
+    their collections, and a refinement inside one collection would be an edge from a space
+    to itself -- which, on a collection that has no other derivation, the placement walks
+    would take for its primary parent. Where a conversion crosses into another collection,
+    the map between the two drawing spaces is that collection's own ``derivedFrom`` edge,
+    stated once for every shape in it.
+
+    **A record of the act, not a relation in space**, as ``LensCut`` is: editing either shape
+    afterwards changes nothing here, and editing a shape in place is its history, never a
+    derivation. The order is the creator's: pk order, as ``derivedFrom`` keeps it.
+
+    SET_NULL on the source, as on ``Transformation.annotation``: deleting the source must not
+    delete what was made from it, and the row is left saying that the shape *was* made from
+    one. The child's own CASCADE removes the row with it.
+    """
+
+    child = models.ForeignKey(Annotation, on_delete=models.CASCADE, related_name="derived_from_links", help_text="The shape that was made")
+    source = models.ForeignKey(
+        Annotation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_links",
+        help_text="The shape it was made from, or null once that shape is deleted",
+    )
+    relation = TextChoicesField(choices_enum=enums.AnnotationRelationChoices, help_text="How the child came from the source: refined, converted, split or merged")
+    reason = models.TextField(null=True, blank=True, help_text="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization the child belongs to, denormalized for the lineage walk's org filter")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When the child was made from the source")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="annotation_derivations", help_text="Who made the child")
+    created_through = models.ForeignKey("koherent.Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="annotation_derivations", help_text="The task the child was made under, if any")
+    created_through_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_annotation_derivations",
+        help_text="The assigner of the creating task, denormalized for fast filtering",
+    )
+
+    class Meta:
+        """One row per (child, source) while the source stands; pk order is the declared order."""
+
+        ordering = ["id"]
+        constraints = [models.UniqueConstraint(fields=["child", "source"], condition=models.Q(source__isnull=False), name="annotation_derived_once")]
+
+    def __str__(self) -> str:
+        """The child and the source it was made from."""
+        return f"annotation {self.child_id} <- {self.relation} annotation {self.source_id}"

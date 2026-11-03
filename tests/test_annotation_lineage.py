@@ -293,3 +293,259 @@ async def test_deleting_the_shape_keeps_what_was_made_from_it(authenticated_cont
     assert by_shape["annotation"] is None and by_shape["output"]["id"] == collection["coordinateSystem"]["id"]
     edges = await sync_to_async(lambda: models.Transformation.objects.filter(annotation__isnull=False).count())()
     assert edges == 0
+
+
+# --- a shape made from a shape --------------------------------------------------------
+
+DRAW_FROM = """
+mutation Draw($input: CreateAnnotationInput!) {
+  createAnnotation(input: $input) { id kind }
+}
+"""
+
+DRAW_MANY_FROM = """
+mutation DrawMany($input: CreateAnnotationsInput!) {
+  createAnnotations(input: $input) { id kind }
+}
+"""
+
+SHAPE_LINEAGE = """
+query ShapeLineage($id: ID!) {
+  annotation(id: $id) {
+    id
+    derivedFrom { relation reason source { id } child { id } }
+    derivedAnnotations { id }
+  }
+}
+"""
+
+PATH = [[1.0, 1.0], [2.0, 3.0], [3.0, 2.0], [5.0, 5.0]]
+SMOOTHER = [[1.0, 1.0], [2.5, 2.5], [5.0, 5.0]]
+
+
+async def _draw_from(ctx: HttpContext, collection_id: str, kind: str, vectors: list[list[float]], derived_from: list[dict]):  # noqa: ANN202 - strawberry's ExecutionResult
+    return await schema.execute(
+        DRAW_FROM,
+        context_value=_fresh_request(ctx),
+        variable_values={"input": {"collection": collection_id, "kind": kind, "vectors": vectors, "derivedFrom": derived_from}},
+    )
+
+
+async def _shape_lineage(ctx: HttpContext, annotation_id: str) -> dict:
+    result = await schema.execute(SHAPE_LINEAGE, context_value=_fresh_request(ctx), variable_values={"id": annotation_id})
+    assert not result.errors, result.errors
+    return result.data["annotation"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_refined_path_names_the_path_it_refines_and_writes_no_edge(authenticated_context: HttpContext):
+    """Shape -> shape is a link row: the collection's own lineage, and the coordinate graph, are untouched."""
+    ctx = authenticated_context
+    _, collection = await _drawn_on(ctx)
+    rough = await _draw(ctx, collection["id"], "PATH", PATH)
+    edges_before = await models.Transformation.objects.acount()
+
+    made = await _draw_from(ctx, collection["id"], "PATH", SMOOTHER, [{"annotation": rough["id"], "relation": "REFINED", "reason": "smoothed"}])
+    assert not made.errors, made.errors
+    smooth = made.data["createAnnotation"]
+
+    assert await models.Transformation.objects.acount() == edges_before, "a shape made from a shape is no edge in space"
+    assert (await _shape_lineage(ctx, smooth["id"]))["derivedFrom"] == [{"relation": "REFINED", "reason": "smoothed", "source": {"id": rough["id"]}, "child": {"id": smooth["id"]}}]
+    assert (await _shape_lineage(ctx, rough["id"]))["derivedAnnotations"] == [{"id": smooth["id"]}]
+    assert (await _shape_lineage(ctx, rough["id"]))["derivedFrom"] == [], "the source was drawn from nothing"
+    assert (await _lineage(ctx, rough["id"]))["derivedResidents"] == [], "a shape is not a container: derivedResidents stays the data computed from it"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_converted_changes_the_kind_and_refined_keeps_it(authenticated_context: HttpContext):
+    """The relation is checked against the two kinds, across collections as within one."""
+    ctx = authenticated_context
+    dataset, collection = await _drawn_on(ctx)
+    other = await _collection_on(ctx, axes=["y", "x"], derived_from={"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}}, name="Converted")
+    rectangle = await _draw(ctx, collection["id"], "RECTANGLE", CORNERS)
+
+    as_polygon = await _draw_from(ctx, other["id"], "POLYGON", CORNERS, [{"annotation": rectangle["id"], "relation": "CONVERTED"}])
+    assert not as_polygon.errors, as_polygon.errors
+    assert (await _shape_lineage(ctx, rectangle["id"]))["derivedAnnotations"] == [{"id": as_polygon.data["createAnnotation"]["id"]}], "a source in another collection is still a source"
+
+    converted_to_itself = await _draw_from(ctx, collection["id"], "RECTANGLE", CORNERS, [{"annotation": rectangle["id"], "relation": "CONVERTED"}])
+    assert converted_to_itself.errors and "REFINED" in converted_to_itself.errors[0].message
+
+    refined_into_another_kind = await _draw_from(ctx, collection["id"], "POLYGON", CORNERS, [{"annotation": rectangle["id"], "relation": "REFINED"}])
+    assert refined_into_another_kind.errors and "CONVERTED" in refined_into_another_kind.errors[0].message
+
+    assert await models.Annotation.objects.acount() == 2, "a refused source leaves nothing drawn"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_merge_names_every_source_in_order(authenticated_context: HttpContext):
+    """MERGED is several sources or none; a source named twice is refused."""
+    ctx = authenticated_context
+    _, collection = await _drawn_on(ctx)
+    left = await _draw(ctx, collection["id"], "POLYGON", CORNERS)
+    right = await _draw(ctx, collection["id"], "POLYGON", [[4.0, 2.0], [4.0, 6.0], [6.0, 6.0], [6.0, 2.0]])
+
+    alone = await _draw_from(ctx, collection["id"], "POLYGON", CORNERS, [{"annotation": left["id"], "relation": "MERGED"}])
+    assert alone.errors and "at least two" in alone.errors[0].message
+
+    mixed = await _draw_from(ctx, collection["id"], "POLYGON", CORNERS, [{"annotation": left["id"], "relation": "MERGED"}, {"annotation": right["id"], "relation": "REFINED"}])
+    assert mixed.errors and "each as MERGED" in mixed.errors[0].message
+
+    twice = await _draw_from(ctx, collection["id"], "POLYGON", CORNERS, [{"annotation": left["id"], "relation": "MERGED"}, {"annotation": left["id"], "relation": "MERGED"}])
+    assert twice.errors and "more than once" in twice.errors[0].message
+
+    merged = await _draw_from(ctx, collection["id"], "POLYGON", CORNERS, [{"annotation": right["id"], "relation": "MERGED"}, {"annotation": left["id"], "relation": "MERGED"}])
+    assert not merged.errors, merged.errors
+    sources = [link["source"]["id"] for link in (await _shape_lineage(ctx, merged.data["createAnnotation"]["id"]))["derivedFrom"]]
+    assert sources == [right["id"], left["id"]], "the creator's order, not the sources' age"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_bulk_draw_links_each_shape_after_the_insert(authenticated_context: HttpContext):
+    """createAnnotations: the pieces of a split each name the source, and a refused one draws nothing."""
+    ctx = authenticated_context
+    _, collection = await _drawn_on(ctx)
+    whole = await _draw(ctx, collection["id"], "POLYGON", CORNERS)
+    split = [{"annotation": whole["id"], "relation": "SPLIT"}]
+
+    result = await schema.execute(
+        DRAW_MANY_FROM,
+        context_value=_fresh_request(ctx),
+        variable_values={
+            "input": {
+                "collection": collection["id"],
+                "annotations": [
+                    {"kind": "POLYGON", "vectors": [[1.0, 2.0], [1.0, 4.0], [4.0, 4.0]], "derivedFrom": split},
+                    {"kind": "POLYGON", "vectors": [[1.0, 4.0], [1.0, 6.0], [4.0, 6.0]], "derivedFrom": split},
+                    {"kind": "POINT", "vectors": [[5.0, 3.0]]},
+                ],
+            }
+        },
+    )
+    assert not result.errors, result.errors
+    pieces = [shape["id"] for shape in result.data["createAnnotations"]]
+    assert [shape["id"] for shape in (await _shape_lineage(ctx, whole["id"]))["derivedAnnotations"]] == pieces[:2]
+    assert (await _shape_lineage(ctx, pieces[2]))["derivedFrom"] == []
+
+    before = await models.Annotation.objects.acount()
+    refused = await schema.execute(
+        DRAW_MANY_FROM,
+        context_value=_fresh_request(ctx),
+        variable_values={
+            "input": {
+                "collection": collection["id"],
+                "annotations": [
+                    {"kind": "POLYGON", "vectors": CORNERS, "derivedFrom": split},
+                    {"kind": "POLYGON", "vectors": CORNERS, "derivedFrom": [{"annotation": whole["id"], "relation": "CONVERTED"}]},
+                ],
+            }
+        },
+    )
+    assert refused.errors and "A CONVERTED shape" in refused.errors[0].message, refused.errors
+    assert await models.Annotation.objects.acount() == before, "nothing of a refused batch is drawn"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_deleting_either_end_of_a_link(authenticated_context: HttpContext):
+    """The source going leaves the child saying it was made from one; the child going takes the link."""
+    ctx = authenticated_context
+    _, collection = await _drawn_on(ctx)
+    rough = await _draw(ctx, collection["id"], "PATH", PATH)
+    made = await _draw_from(ctx, collection["id"], "PATH", SMOOTHER, [{"annotation": rough["id"], "relation": "REFINED"}])
+    assert not made.errors, made.errors
+    smooth = made.data["createAnnotation"]["id"]
+
+    deleted = await schema.execute(DELETE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"id": rough["id"]}})
+    assert not deleted.errors, deleted.errors
+    assert (await _shape_lineage(ctx, smooth))["derivedFrom"] == [{"relation": "REFINED", "reason": None, "source": None, "child": {"id": smooth}}]
+
+    deleted = await schema.execute(DELETE_ANNOTATION, context_value=_fresh_request(ctx), variable_values={"input": {"id": smooth}})
+    assert not deleted.errors, deleted.errors
+    assert await models.AnnotationDerivation.objects.acount() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_source_of_another_organization_is_not_there(authenticated_context: HttpContext, other_org_context: HttpContext):
+    """Nothing of another organization resolves as a source."""
+    _, theirs = await _drawn_on(other_org_context, "Theirs")
+    their_path = await _draw(other_org_context, theirs["id"], "PATH", PATH)
+    _, mine = await _drawn_on(authenticated_context, "Mine")
+
+    refused = await _draw_from(authenticated_context, mine["id"], "PATH", SMOOTHER, [{"annotation": their_path["id"], "relation": "REFINED"}])
+    assert refused.errors and "does not exist or is not visible" in refused.errors[0].message
+    malformed = await _draw_from(authenticated_context, mine["id"], "PATH", SMOOTHER, [{"annotation": "not-a-uuid", "relation": "REFINED"}])
+    assert malformed.errors and "does not exist or is not visible" in malformed.errors[0].message
+
+
+SHAPE_WALK = """
+query Walk($start: LineageRootInput!, $up: Int!, $down: Int!) {
+  lineage(start: $start, up: $up, down: $down) {
+    nodes { key kind id name depth hasMoreUp hasMoreDown }
+    edges { key kind source target annotationId annotationRelation primary }
+  }
+}
+"""
+
+
+async def _walk_shape(ctx: HttpContext, kind: str, id: str, *, up: int, down: int) -> dict:
+    result = await schema.execute(SHAPE_WALK, context_value=_fresh_request(ctx), variable_values={"start": {"kind": kind, "id": id}, "up": up, "down": down})
+    assert not result.errors, result.errors
+    return result.data["lineage"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_lineage_walk_starts_at_a_shape(authenticated_context: HttpContext):
+    """Rooted at a shape: up to what it was made from, down to the shapes made from it and the data computed within them."""
+    ctx = authenticated_context
+    dataset, collection = await _drawn_on(ctx)
+    rough = await _draw(ctx, collection["id"], "RECTANGLE", CORNERS)
+    made = await _draw_from(ctx, collection["id"], "RECTANGLE", [[1.0, 2.0], [4.0, 6.0]], [{"annotation": rough["id"], "relation": "REFINED"}])
+    assert not made.errors, made.errors
+    snapped = made.data["createAnnotation"]["id"]
+    cut = await _lens_from(ctx, dataset, annotation=snapped)
+    assert isinstance(cut, dict), cut
+    cropped = await _derive(
+        ctx,
+        "Cropped",
+        axes=seed.YX_AXES,
+        shape=[4, 5],
+        entries=[{"kind": "LENS", "lens": cut["id"], "transform": {"kind": "IDENTITY"}}, {"kind": "ANNOTATION", "annotation": snapped}],
+    )
+    assert not cropped.errors, cropped.errors
+    cropped_id = cropped.data["createArrayDataset"]["id"]
+
+    down = await _walk_shape(ctx, "ANNOTATION", rough["id"], up=1, down=2)
+    depths = {node["key"]: node["depth"] for node in down["nodes"]}
+    assert depths == {f"annotation:{rough['id']}": 0, f"annotation:{snapped}": 1, f"dataset:{cropped_id}": 2}, "the collection's other residents are not the shape's lineage"
+    by_target = {edge["target"]: edge for edge in down["edges"]}
+    assert by_target[f"annotation:{snapped}"]["kind"] == "SHAPE_DERIVATION"
+    assert by_target[f"annotation:{snapped}"]["annotationRelation"] == "REFINED"
+    crop_edge = by_target[f"dataset:{cropped_id}"]
+    assert crop_edge["kind"] == "DERIVATION" and crop_edge["source"] == f"annotation:{snapped}" and crop_edge["annotationId"] == snapped
+    assert crop_edge["primary"] is False, "a shape is why the crop is what it is, not what places it"
+    crop_node = next(node for node in down["nodes"] if node["key"] == f"dataset:{cropped_id}")
+    assert crop_node["hasMoreUp"], "the crop has parents this walk left out: its dataset, through the lens"
+
+    up = await _walk_shape(ctx, "ANNOTATION", snapped, up=1, down=0)
+    assert {node["key"] for node in up["nodes"]} == {f"annotation:{snapped}", f"annotation:{rough['id']}"}
+
+    from_crop = await _walk_shape(ctx, "DATASET", cropped_id, up=1, down=0)
+    assert all(node["kind"] != "ANNOTATION" for node in from_crop["nodes"]), "walking up from data still lands on containers; the edge names the shape"
+    assert any(edge["annotationId"] == snapped for edge in from_crop["edges"])
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_another_organization_cannot_walk_from_a_shape(authenticated_context: HttpContext, other_org_context: HttpContext):
+    """The root is scoped like any node."""
+    _, collection = await _drawn_on(authenticated_context)
+    rectangle = await _draw(authenticated_context, collection["id"], "RECTANGLE", CORNERS)
+    result = await schema.execute(SHAPE_WALK, context_value=_fresh_request(other_org_context), variable_values={"start": {"kind": "ANNOTATION", "id": rectangle["id"]}, "up": 1, "down": 1})
+    assert result.errors

@@ -157,7 +157,8 @@ async def test_the_sql_answers_what_the_python_predicates_answer(authenticated_c
             for system, key in expected.items():
                 cursor.execute(lineage_logic._key_of("%(system)s"), {"system": system})
                 row = cursor.fetchone()
-                assert (tuple(row) if row else ("system", system)) == key, system
+                # The walk carries pks as text (a shape's is a UUID); `node_pk` is how it reads them back.
+                assert ((row[0], lineage_logic.node_pk(row[0], row[1])) if row else ("system", system)) == key, system
 
     await sync_to_async(check)()
 

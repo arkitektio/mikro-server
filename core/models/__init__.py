@@ -56,6 +56,7 @@ from .sparse_dataset import (
 from .annotation import (
     AnnotationCollection,
     Annotation,
+    AnnotationDerivation,
 )
 from .array_dataset import (
     ArrayDataset,
@@ -122,6 +123,7 @@ __all__ = [
     # annotations
     "AnnotationCollection",
     "Annotation",
+    "AnnotationDerivation",
     # array_dataset
     "ArrayDataset",
     "DataArray",

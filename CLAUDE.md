@@ -42,7 +42,13 @@ and `createLens` also cuts from a `box` in any space the dataset reaches or from
 box); the result is always the container's row for what is selected. A cut to an annotation
 is recorded beside the lens (`LensCut`, read as `Annotation.derivedLenses`), and data computed
 from a shape names it as an ANNOTATION source of `derivedFrom` (`Transformation.annotation`,
-read as `Annotation.derivedResidents`): both a record of the act, never a relation in space. A lens is
+read as `Annotation.derivedResidents`): both a record of the act, never a relation in space. A shape
+made from a shape (refined, converted, split, merged) is neither: it names its sources in
+`createAnnotation(s)`'s `derivedFrom` and is an `AnnotationDerivation` row (`core/logic/annotation_lineage.py`,
+read as `Annotation.derivedFrom` / `derivedAnnotations`), **never an edge** -- a refinement inside one
+collection would be a space's edge to itself, and the placement walks would take it for the
+collection's primary parent. The `lineage` walk reaches a shape only from a shape (`kind: ANNOTATION`
+roots and SHAPE_DERIVATION hops; its pks are text, because a shape's is a UUID). A lens is
 reached across a polymorphic foreign key: prefetch it (`Lens.objects.with_sources()`), never
 `select_related` it, or you get the base row. Every kind is hosted *and announced*
 (`mikro_server/contract.py`, `mikro_server/service.py`), described in its container's
