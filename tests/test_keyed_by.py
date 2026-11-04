@@ -833,3 +833,45 @@ async def test_a_kind_that_cannot_key_is_refused_rather_than_raising_keyerror(au
     assert "'TABLE' cannot key" in message
     assert "authors no edge" in message
     assert "TABLE_DATASET" in message, "the keyable kinds are listed"
+
+
+KEYED_BY = """
+query Keys($id: ID!) {
+  tableDataset(id: $id) {
+    keyedBy { source { __typename ... on ArrayDataset { id name } } produces passesThrough }
+  }
+}
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_table_says_what_keys_it(authenticated_context: HttpContext):
+    """`TableDataset.keyedBy` reads the keys back from the table's side: each mask, its id axis, what passes through."""
+    nuclei = await _mask(authenticated_context, "nuclei labels")
+    cells = await _mask(authenticated_context, "cell labels")
+    result = await _create(
+        authenticated_context,
+        "object morphology",
+        OBJECT_COLUMNS,
+        keyed_by=[{"kind": "DATASET", "dataset": str(nuclei.pk)}, {"kind": "DATASET", "dataset": str(cells.pk)}],
+    )
+    assert not result.errors, result.errors
+    table = result.data["createTableDataset"]
+
+    keys = await schema.execute(KEYED_BY, context_value=authenticated_context, variable_values={"id": table["id"]})
+    assert not keys.errors, keys.errors
+    assert keys.data["tableDataset"]["keyedBy"] == [
+        {"source": {"__typename": "ArrayDataset", "id": str(nuclei.pk), "name": "nuclei labels"}, "produces": ["i"], "passesThrough": ["t"]},
+        {"source": {"__typename": "ArrayDataset", "id": str(cells.pk), "name": "cell labels"}, "produces": ["i"], "passesThrough": ["t"]},
+    ]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_table_nothing_keys_says_so(authenticated_context: HttpContext):
+    result = await _create(authenticated_context, "loose", OBJECT_COLUMNS)
+    assert not result.errors, result.errors
+    keys = await schema.execute(KEYED_BY, context_value=authenticated_context, variable_values={"id": result.data["createTableDataset"]["id"]})
+    assert not keys.errors, keys.errors
+    assert keys.data["tableDataset"]["keyedBy"] == []

@@ -66,6 +66,15 @@ class Column:
     )
 
 
+@strawberry.type(description="One container keying a table: its contents are the table's row ids (`TableDataset.keyedBy`)")
+class TableKey:
+    source: Annotated["Resident", strawberry.lazy("core.types.coords")] = strawberry.field(
+        description="The container whose contents are the ids: a label mask's dataset, a mesh collection"
+    )
+    produces: List[str] = strawberry.field(description="The table axes its ids land on: the id column(s) a row is found by")
+    passes_through: List[str] = strawberry.field(description="Table axes the source shares by name (a per-frame mask's `t`), which select alongside the id")
+
+
 @kante.django_type(
     models.TableDataset,
     filters=filters.TableDatasetFilter,
@@ -97,6 +106,17 @@ class TableDataset(OrgScoped):
     def full_lens(self, info: Info) -> Optional[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:
         """The whole lens over this container."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
+
+    @kante.django_field(
+        description=(
+            "What this table describes: the containers whose contents ARE its row ids -- a label mask whose pixel values are the ids, a mesh collection whose objects are "
+            "-- each with the table axis its ids land on (`produces`, the id column) and the axes that pass through by name. The other end of `keyedBy` at creation, and "
+            "of `attributePlans` from the source's side. Empty for a table nothing keys: localizations placed by their own coordinates, or a table of per-dataset values"
+        )
+    )
+    def keyed_by(self, info: Info) -> List["TableKey"]:
+        """The keys landing on this table."""
+        return [TableKey(source=container, produces=produces, passes_through=passes) for container, produces, passes in graph_logic.table_keys(self)]
 
     @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:

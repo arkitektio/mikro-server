@@ -2062,6 +2062,57 @@ def mesh_object_derived_containers(collection: "models.MeshCollection", object_i
     return _containers_derived_through(edges, own=("meshcollection", collection.pk))
 
 
+def table_keys(table: "models.TableDataset") -> list[tuple[object, list[str], list[str]]]:
+    """What keys a table: the containers whose contents ARE its row ids, with the axes they supply.
+
+    The read side of ``write_key_edges``: every key edge (a dereferencing FIELD part,
+    :func:`dereference_q`) landing on the table's space, by the container it leaves from --
+    a label mask whose pixel values are the ids, a mesh collection whose objects are. Each
+    comes with the table axes it PRODUCES (the id axis: the table's axes the source lacks
+    and the table does not identify itself, the rule the write side derives it by) and the
+    axes that PASS THROUGH by name (``t`` of a per-frame mask). Creator order; a container
+    keying the table twice is listed once.
+    """
+    system = table.coordinate_system
+    if system is None:
+        return []
+    edges = list(
+        models.Transformation.objects.filter(dereference_q(), output=system)
+        .select_related("input")
+        .prefetch_related("input__axes")
+        .order_by("pk")
+    )
+    if not edges:
+        return []
+    table_axes = [axis.name for axis in system.axes.all()]
+    identified = identified_axes(system)
+    keys = _keys_for(edges)
+
+    first_edge: dict[tuple, "models.Transformation"] = {}
+    for edge in edges:
+        key = keys.get(edge.input_id)
+        if key is not None and key not in first_edge:
+            first_edge[key] = edge
+
+    by_kind: dict[str, list[int]] = {}
+    for kind, pk in first_edge:
+        by_kind.setdefault(kind, []).append(pk)
+    found: dict[tuple, object] = {}
+    for label, pks in by_kind.items():
+        found.update({(label, row.pk): row for row in MODEL_BY_KEY[label].objects.filter(pk__in=pks)})
+
+    answer = []
+    for key, edge in first_edge.items():
+        container = found.get(key)
+        if container is None:
+            continue
+        source_axes = {axis.name for axis in edge.input.axes.all()}
+        produces = [axis for axis in table_axes if axis not in source_axes and axis not in identified]
+        passes = [axis for axis in table_axes if axis in source_axes]
+        answer.append((container, produces, passes))
+    return answer
+
+
 def _containers_derived_through(edges: "list[models.Transformation]", *, own: tuple) -> list:
     """The containers these edges leave from, once each, in the creators' order; ``own`` is the source and never its own child."""
     if not edges:
