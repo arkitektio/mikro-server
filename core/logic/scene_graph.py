@@ -18,6 +18,8 @@ answers. A question that reads no layer does not belong in this file; a question
 answer is the same for two scenes over one world does not belong on a scene at all.
 """
 
+from typing import Iterable
+
 from kante.types import Info
 
 from django.db.models import Prefetch
@@ -39,8 +41,13 @@ class SceneGraph(placement.PlacementGraph):
     its layers draws from, and the pyramid levels behind them.
     """
 
-    def __init__(self, scene: "models.Scene", *, loaders: dict | None = None) -> None:
-        """Fetch the scene's layers, then the edge universe rooted at its world."""
+    def __init__(self, scene: "models.Scene", *, loaders: dict | None = None, previews: "Iterable[models.Layer]" = ()) -> None:
+        """Fetch the scene's layers, then the edge universe rooted at its world.
+
+        ``previews`` are unsaved layers (``previewLayer``) whose source spaces seed the
+        universe beside the saved layers', so their placement is searched exactly as a
+        saved layer's would be. They are not in ``self.layers``: nothing was written.
+        """
         self.scene = scene
 
         # The layers, with every relation the placement logic walks in Python. The
@@ -52,7 +59,7 @@ class SceneGraph(placement.PlacementGraph):
         # Seeding by *system* is right here and would be wrong for a space graph -- each
         # layer names one source space, so `residence_map` collapses nothing.
         layer_systems: set[int] = set()
-        for layer in self.layers:
+        for layer in [*self.layers, *previews]:
             source = graph_logic.layer_source_system(layer)
             if source is not None:
                 layer_systems.add(source.pk)
@@ -167,6 +174,21 @@ LAYER_SOURCE_AXIS_PREFETCH = (
 #: the base row, and the placement logic needs the kind. It arrives through the prefetch above,
 #: which goes through the polymorphic manager and hands back the kind.
 LAYER_PLACEMENT_RELATIONS = ("scene__world",)
+
+
+def admit_previews(info: "Info", scene: "models.Scene", previews: "Iterable[models.Layer]") -> None:
+    """Make this request's graph of ``scene`` one that also places ``previews``.
+
+    The graph is memoized per scene and seeded from the scene's saved layers, so a preview's
+    source space would otherwise be outside the universe its ``asAffine`` searches. Called by
+    ``previewLayer`` before the preview's fields resolve; replaces any graph already built
+    for the scene in this request, which is the same graph plus the previews' seeds.
+    """
+    context = info.context
+    loaders = getattr(context, "_loaders", None)
+    if loaders is None:
+        return
+    loaders.setdefault(_LOADER_KEY, {})[scene.pk] = SceneGraph(scene, loaders=loaders, previews=list(previews))
 
 
 def for_request(info: "Info", scene: "models.Scene") -> SceneGraph:

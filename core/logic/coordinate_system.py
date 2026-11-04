@@ -14,6 +14,7 @@ sight, and it lived in the scene module only because the scene bootstrap happene
 caller.
 """
 
+import dataclasses
 import datetime
 import math
 import re
@@ -312,7 +313,33 @@ def source_label(model: type, source) -> str:  # noqa: ANN001 - any container ro
 _NEVER_A_SOURCE: tuple[type, ...] = (models.NetworkLens, models.SparseLens)
 
 
-def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, str, models.Annotation | None]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
+@dataclasses.dataclass(frozen=True)
+class SourceNarrowing:
+    """Which part of a source's space a derivation names, when it names a part.
+
+    An ANNOTATION source is its collection's drawing space and one shape there; a
+    MESH_OBJECT source is its collection's vertex space and one object there. Both say the
+    same thing as the bare collection, more exactly, and the edge carries the part.
+    """
+
+    annotation: "models.Annotation | None" = None
+    mesh_collection: "models.MeshCollection | None" = None
+    mesh_object: int | None = None
+
+    @property
+    def key(self) -> tuple | None:
+        """The part, for telling two sources in one space apart; None for the whole space."""
+        if self.annotation is not None:
+            return ("annotation", self.annotation.pk)
+        if self.mesh_collection is not None:
+            return ("meshobject", self.mesh_collection.pk, self.mesh_object)
+        return None
+
+
+WHOLE_SOURCE = SourceNarrowing()
+
+
+def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, str, SourceNarrowing]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
     """The space a derivation derives *from*, a label for the edge's name, and the shape it names.
 
     **One path for every spelling.** A source is a lens or a bare space: an entry naming a
@@ -329,20 +356,32 @@ def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, 
     is drawn in its collection's -- and hands the annotation back beside it, for the edge to
     carry. It is the only arm whose third member is not None, and deliberately not an entry
     of ``_DERIVATION_SOURCES``: that table is also what a ``keyedBy`` reads, and a shape
-    keys nothing.
+    keys nothing. MESH_OBJECT is the same move for one object of a mesh collection: the
+    collection's vertex space, and which object.
     """
     if lowered.source_kind == enums.DerivationSourceKind.ANNOTATION.value:
         annotation = cast(models.Annotation, get_for_org(models.Annotation, info, id=lowered.source_id))
         collection = annotation.collection
-        return whole_lens(collection).coordinate_system, f"{source_label(models.AnnotationCollection, collection)} / {annotation.name or annotation.pk}", annotation
+        return (
+            whole_lens(collection).coordinate_system,
+            f"{source_label(models.AnnotationCollection, collection)} / {annotation.name or annotation.pk}",
+            SourceNarrowing(annotation=annotation),
+        )
+    if lowered.source_kind == enums.DerivationSourceKind.MESH_OBJECT.value:
+        mesh_collection = cast(models.MeshCollection, get_for_org(models.MeshCollection, info, id=lowered.source_id))
+        return (
+            whole_lens(mesh_collection).coordinate_system,
+            f"{source_label(models.MeshCollection, mesh_collection)} / object {lowered.source_object}",
+            SourceNarrowing(mesh_collection=mesh_collection, mesh_object=lowered.source_object),
+        )
     model, keyword = _DERIVATION_SOURCES[lowered.source_kind]
     source = get_for_org(model, info, id=lowered.source_id)
     if keyword == "coordinate_system":
-        return source, source_label(model, source), None
+        return source, source_label(model, source), WHOLE_SOURCE
     lens = source if keyword == "lens" else whole_lens(source)
     if isinstance(lens, _NEVER_A_SOURCE):
         raise ValueError(f"Lens {lens.pk} is a {type(lens).KIND.lower()} lens; a {type(lens.container).__name__} is never a named derivation source -- it is derived, not derived from.")
-    return lens.coordinate_system, source_label(type(lens.container), lens.container), None
+    return lens.coordinate_system, source_label(type(lens.container), lens.container), WHOLE_SOURCE
 
 def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSystem", derived_from: Sequence, ctx: CreationContext) -> list["models.Transformation"]:
     """Write one edge per source this data was computed from, child space -> source space.
@@ -384,7 +423,7 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
     # named beside one of its own shapes still collides -- the shape already says the
     # collection, and the bare entry would add an edge that names nothing.
     systems = [system.pk for system, _, _ in sources]
-    shapes = [annotation.pk if annotation is not None else None for _, _, annotation in sources]
+    shapes = [narrowing.key for _, _, narrowing in sources]
     resolved = list(zip(systems, shapes))
 
     def collides(index: int) -> bool:
@@ -398,7 +437,7 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
 
     edges: list[models.Transformation] = []
     with transaction.atomic():
-        for low, (source_system, label, annotation), parts in zip(lowered, sources, resolved_parts):
+        for low, (source_system, label, narrowing), parts in zip(lowered, sources, resolved_parts):
             transform = low.transform
             edges.append(
                 graph_logic.write_relation_edge(
@@ -414,7 +453,9 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
                     parts=parts,
                     reason=transform.reason,
                     value_relation=low.value_relation,
-                    annotation=annotation,
+                    annotation=narrowing.annotation,
+                    mesh_collection=narrowing.mesh_collection,
+                    mesh_object=narrowing.mesh_object,
                     ctx=ctx,
                 )
             )

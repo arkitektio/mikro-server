@@ -23,6 +23,7 @@ import datetime
 from typing import TYPE_CHECKING, Annotated, List, Optional, Union
 
 import strawberry
+from asgiref.sync import sync_to_async
 from django.db.models import Q
 from strawberry import auto
 
@@ -1089,6 +1090,40 @@ class MeshCollection(OrgScoped):
         """The edges relating this collection's space to the ones it came from."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
+
+
+@strawberry.type(
+    description=(
+        "One object of a mesh collection: a row of its object catalog, not a row here -- the meshes live in the collection's Parquet store. What the data computed from "
+        "that one surface hangs off (a MESH_OBJECT derivation). Asked for with `meshObject(collection:, object:)`"
+    )
+)
+class MeshObject:
+    """One object of a mesh collection, by its catalog id."""
+
+    object_id: int = strawberry.field(description="The object's id in the collection's object catalog: what a picked mesh reports")
+    _collection: strawberry.Private["models.MeshCollection"]
+
+    @strawberry.field(description="`<collection>:<object>`: a stable handle, unique across collections")
+    def id(self) -> strawberry.ID:
+        """The collection and the object, together."""
+        return strawberry.ID(f"{self._collection.pk}:{self.object_id}")
+
+    @strawberry.field(description="The mesh collection the object belongs to")
+    def collection(self) -> "MeshCollection":
+        """The owning collection."""
+        return self._collection
+
+    @strawberry.field(
+        description=(
+            "Everything computed from this one object: the data whose `derivedFrom` named it as a MESH_OBJECT source. The object-level twin of "
+            "`Annotation.derivedResidents`, kind-blind like it. These are listed on the collection's own lineage too: an object is part of its collection"
+        )
+    )
+    async def derived_residents(self, info: Info) -> List[Resident]:
+        """Every container with a derivation edge naming this object."""
+        # A plain strawberry type, not a django one: its ORM read leaves the event loop itself.
+        return await sync_to_async(graph_logic.mesh_object_derived_containers)(self._collection, self.object_id)
 
 
 @kante.django_type(

@@ -14,6 +14,7 @@ from core.logic import column_options as column_options_logic
 from core.logic.column_options import mesh_collection_system
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
+from core.logic.layer_preview import persist_layer
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha, assert_contrast_limits, assert_rgba, assert_white_balance
 from core.scoping import get_for_org
@@ -295,19 +296,17 @@ def create_layer(
 
     # The graph and the index of the lenses it names are one write: a graph whose lenses the
     # delete guard cannot see is a layer waiting to lose its source.
-    with transaction.atomic():
-        layer = models.Layer.objects.create(
-            kind=enums.LayerKind.IMAGE,
-            lens=lens,
-            scene=scene,
-            blending=model.blending or enums.Blending.ADDITIVE,
-            opacity=model.opacity if model.opacity is not None else 1.0,
-            visible=model.visible if model.visible is not None else True,
-            order=model.order or 0,
-            render_graph=render_graph,
-        )
-        layer.channel_lenses.set(graph_channel_lens_ids(render_graph))
-    return layer
+    return persist_layer(
+        kind=enums.LayerKind.IMAGE,
+        lens=lens,
+        scene=scene,
+        blending=model.blending or enums.Blending.ADDITIVE,
+        opacity=model.opacity if model.opacity is not None else 1.0,
+        visible=model.visible if model.visible is not None else True,
+        order=model.order or 0,
+        render_graph=render_graph,
+        channel_lens_ids=graph_channel_lens_ids(render_graph),
+    )
 
 
 class UpdateLayerInputModel(BaseModel):
@@ -474,7 +473,7 @@ def _create_flat_layer(info: Info, *, lens_id: str, scene_id: str, kind: enums.L
 
     graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
-    return models.Layer.objects.create(
+    return persist_layer(
         kind=kind,
         lens=lens,
         scene=scene,
@@ -1499,7 +1498,7 @@ def create_label_layer(info: Info, input: CreateLabelLayerInput) -> types.LabelL
 
     graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
 
-    return models.Layer.objects.create(
+    return persist_layer(
         kind=enums.LayerKind.LABEL,
         lens=lens,
         scene=scene,

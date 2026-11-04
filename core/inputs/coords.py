@@ -736,6 +736,8 @@ class LoweredDerivation:
     source_id: str
     transform: LoweredTransform
     value_relation: "enums.ValueRelation | None" = None
+    #: (MESH_OBJECT) Which object of the collection ``source_id`` names.
+    source_object: int | None = None
 
 
 #: What an omitted `transform` means. **UNMAPPABLE, not IDENTITY** -- naming a source is not
@@ -817,6 +819,19 @@ class AnnotationDerivedFromInputModel(DerivedFromInputBase):
     SOURCE_FIELD: ClassVar[str] = "annotation"
 
 
+class MeshObjectDerivedFromInputModel(DerivedFromInputBase):
+    """Derived from one object of a mesh collection: the collection's vertex space, and which object."""
+
+    kind: Literal[enums.DerivationSourceKind.MESH_OBJECT] = enums.DerivationSourceKind.MESH_OBJECT
+    mesh_collection: str
+    mesh_object: int
+    SOURCE_FIELD: ClassVar[str] = "mesh_collection"
+
+    def lower(self) -> LoweredDerivation:
+        """The collection as the source, and the object beside it."""
+        return dataclasses.replace(super().lower(), source_object=self.mesh_object)
+
+
 class CoordinateSystemDerivedFromInputModel(DerivedFromInputBase):
     """Derived from a coordinate system directly -- a physical space, a world."""
 
@@ -833,6 +848,7 @@ DERIVED_FROM_MEMBERS: dict[str, type[BaseModel]] = {
     enums.DerivationSourceKind.MESH_COLLECTION.value: MeshCollectionDerivedFromInputModel,
     enums.DerivationSourceKind.ANNOTATION_COLLECTION.value: AnnotationCollectionDerivedFromInputModel,
     enums.DerivationSourceKind.ANNOTATION.value: AnnotationDerivedFromInputModel,
+    enums.DerivationSourceKind.MESH_OBJECT.value: MeshObjectDerivedFromInputModel,
     enums.DerivationSourceKind.COORDINATE_SYSTEM.value: CoordinateSystemDerivedFromInputModel,
 }
 
@@ -844,12 +860,13 @@ DerivedFromSpec = Annotated[
     | MeshCollectionDerivedFromInputModel
     | AnnotationCollectionDerivedFromInputModel
     | AnnotationDerivedFromInputModel
+    | MeshObjectDerivedFromInputModel
     | CoordinateSystemDerivedFromInputModel,
     Field(discriminator="kind"),
 ]
 
 #: The wire fields carrying a source id, one per member.
-_DERIVED_FROM_SOURCE_FIELDS = ("lens", "dataset", "table_dataset", "mesh_collection", "annotation_collection", "annotation", "coordinate_system")
+_DERIVED_FROM_SOURCE_FIELDS = ("lens", "dataset", "table_dataset", "mesh_collection", "mesh_object", "annotation_collection", "annotation", "coordinate_system")
 
 _TRANSFORM_DESCRIPTION = (
     "How this data's own space maps back into the source's -- any creatable kind; the rank check holds you to it. **Omit it and the edge is UNMAPPABLE**: naming a source records "
@@ -883,7 +900,11 @@ class DerivedFromInput:
     lens: strawberry.ID | None = strawberry.field(default=None, description="(LENS) The lens this data was computed from, of any kind but a network or sparse lens -- those are derived, never derived from. Every container arm below is this arm on the container's whole lens")
     dataset: strawberry.ID | None = strawberry.field(default=None, description="(DATASET) The array dataset this data was computed from: its whole lens, through its whole pixel grid")
     table_dataset: strawberry.ID | None = strawberry.field(default=None, description="(TABLE_DATASET) The table this data was computed from -- an SMLM localization table a reconstruction was rendered from, say")
-    mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="(MESH_COLLECTION) The mesh collection this data was computed from")
+    mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="(MESH_COLLECTION, MESH_OBJECT) The mesh collection this data was computed from, or whose object it was")
+    mesh_object: int | None = strawberry.field(
+        default=None,
+        description="(MESH_OBJECT) Which object of `meshCollection` this data was computed from: its id in the collection's object catalog. The edge lands in the collection's vertex space and names the object",
+    )
     annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="(ANNOTATION_COLLECTION) The annotation collection this data was computed from")
     annotation: strawberry.ID | None = strawberry.field(
         default=None,
@@ -973,6 +994,17 @@ class AnnotationDerivedFromInput:
     value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
 
 
+@_derived_from_member(MeshObjectDerivedFromInputModel, enums.DerivationSourceKind.MESH_OBJECT, "The fields a MESH_OBJECT derivation reads")
+class MeshObjectDerivedFromInput:
+    """The MESH_OBJECT member of the derivation source union."""
+
+    kind: enums.DerivationSourceKind = strawberry.field(description="The discriminator: which member of DerivedFromInput this is")
+    mesh_collection: strawberry.ID = strawberry.field(description="The mesh collection the object belongs to")
+    mesh_object: int = strawberry.field(description="The object this data was computed from: its id in the collection's object catalog")
+    transform: TransformInput | None = strawberry.field(default=None, description=_TRANSFORM_DESCRIPTION)
+    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+
+
 @_derived_from_member(CoordinateSystemDerivedFromInputModel, enums.DerivationSourceKind.COORDINATE_SYSTEM, "The fields a COORDINATE_SYSTEM derivation reads")
 class CoordinateSystemDerivedFromInput:
     """The COORDINATE_SYSTEM member of the derivation source union."""
@@ -992,6 +1024,7 @@ derived_from_union_types: list[type] = [
     MeshCollectionDerivedFromInput,
     AnnotationCollectionDerivedFromInput,
     AnnotationDerivedFromInput,
+    MeshObjectDerivedFromInput,
     CoordinateSystemDerivedFromInput,
 ]
 

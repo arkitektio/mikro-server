@@ -1333,6 +1333,8 @@ def write_relation_edge(
     reason: str | None = None,
     value_relation: "enums.ValueRelation | str | None" = None,
     annotation: "models.Annotation | None" = None,
+    mesh_collection: "models.MeshCollection | None" = None,
+    mesh_object: int | None = None,
     ctx: CreationContext,
 ) -> "models.Transformation":
     """The one place a client-authored "this came from that" edge is written.
@@ -1355,7 +1357,8 @@ def write_relation_edge(
     ``annotation`` is the shape an ANNOTATION source names: the output is then its
     collection's drawing space, and the row says which of the shapes there the data was
     computed along or within. Derivation-only, like the validity: a registration places
-    data and is about no shape.
+    data and is about no shape. ``mesh_collection`` and ``mesh_object`` are the same
+    sentence for one object of a mesh collection (a MESH_OBJECT source).
     """
     return build_registration_edge(
         input_system=input_system,
@@ -1372,6 +1375,8 @@ def write_relation_edge(
         validity=None,  # defaults to MANUAL inside: an authored claim, never VALIDATED
         value_relation=value_relation,
         annotation=annotation,
+        mesh_collection=mesh_collection,
+        mesh_object=mesh_object,
         ctx=ctx,
     )
 
@@ -1825,6 +1830,8 @@ def build_registration_edge(
     value_relation: "enums.ValueRelation | str | None" = None,
     selector: dict | None = None,
     annotation: "models.Annotation | None" = None,
+    mesh_collection: "models.MeshCollection | None" = None,
+    mesh_object: int | None = None,
     ctx: CreationContext,
 ) -> "models.Transformation":
     """Validate and write one edge of the coordinate graph, input -> output.
@@ -1913,6 +1920,8 @@ def build_registration_edge(
         value_relation=value_relation,
         selector=selector,
         annotation=annotation,
+        mesh_collection=mesh_collection,
+        mesh_object=mesh_object,
         creator=ctx.user,
         organization=ctx.organization,
     )
@@ -2040,6 +2049,17 @@ def annotation_derived_containers(annotation: "models.Annotation") -> list:
     """
     edges = list(models.Transformation.objects.filter(annotation=annotation).select_related("input", "output").order_by("pk"))
     return _containers_derived_through(edges, own=("annotationcollection", annotation.collection_id))
+
+
+def mesh_object_derived_containers(collection: "models.MeshCollection", object_id: int) -> list:
+    """Everything computed from one object of a mesh collection: the containers whose derivation edges name it.
+
+    The MESH_OBJECT twin of :func:`annotation_derived_containers`, narrowed by the edge's
+    ``mesh_collection`` and ``mesh_object`` -- every object of a collection lands in its one
+    vertex space, so where the edge lands cannot tell them apart.
+    """
+    edges = list(models.Transformation.objects.filter(mesh_collection=collection, mesh_object=object_id).select_related("input", "output").order_by("pk"))
+    return _containers_derived_through(edges, own=("meshcollection", collection.pk))
 
 
 def _containers_derived_through(edges: "list[models.Transformation]", *, own: tuple) -> list:

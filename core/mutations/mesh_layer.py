@@ -5,6 +5,7 @@ from core import types, models, enums
 import kante
 from pydantic import BaseModel
 from core.logic import graph as graph_logic
+from core.logic.layer_preview import persist_layer
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
 from core.mutations.layer import assert_active_color_by, assert_active_filter_bys, build_mesh_color_bys, build_mesh_filter_bys, mesh_reachable_tables
@@ -110,7 +111,7 @@ def create_mesh_layer(info: Info, input: CreateMeshLayerInput) -> types.MeshLaye
     filter_bys = build_mesh_filter_bys(info, collection, model.filter_bys, reachable=reachable) or []
     assert_active_filter_bys(filter_bys, model.active_filter_bys)
 
-    return models.Layer.objects.create(
+    return persist_layer(
         kind=enums.LayerKind.MESH,
         scene=scene,
         lens=lens,

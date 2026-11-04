@@ -127,6 +127,18 @@ class Query:
 
     layers: list[types.Layer] = field(filters=filters.LayerFilter, ordering=order.LayerOrder, pagination=True, description="List layers placed in scenes (a heterogeneous list of layer kinds)")
     layer: types.Layer = field(description="Get a single layer by ID")
+    mesh_object: types.MeshObject = field(
+        resolver=queries.mesh_object,
+        description="One object of a mesh collection, by its id in the collection's object catalog: what was computed from that one surface (`derivedResidents`)",
+    )
+    preview_layer: types.Layer = field(
+        resolver=queries.preview_layer,
+        description=(
+            "The layer a create mutation would make, built and not saved: every field resolves as it would on the saved layer -- `asAffine`, `pathToWorld`, the "
+            "kind's render columns -- and nothing is written. Refused for exactly the reasons the create would refuse it. Its `id` is negative and names no row; "
+            "keep it by sending the same input to the create. What a viewer draws while it stages a layer it has not decided to keep"
+        ),
+    )
 
     collaborations: list[collaboration_types.Collaboration] = field(resolver=collaboration_api.collaborations, description="List the organization's collaborations: what a guest granted one sees of it (a guest: the collaborations granted to them)")
     collaboration: collaboration_types.Collaboration = field(resolver=collaboration_api.collaboration, description="Get a single collaboration by ID")

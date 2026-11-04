@@ -456,6 +456,25 @@ class Transformation(Described):
         help_text="(derivation into an annotation collection's space) The shape this data was computed along or within. Null on every other edge, and once that shape is deleted",
     )
 
+    # The mesh twin of `annotation`: a MESH_OBJECT source lands in its collection's vertex
+    # space, and these two say which object there the data was computed from. A collection
+    # *and* an id, because an object id is only unique within its collection's catalog, and
+    # the objects are parquet rows, not rows here -- there is no object to point at. A record
+    # of the act like `annotation`: nothing spatial reads it.
+    mesh_collection = models.ForeignKey(
+        "MeshCollection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="object_derivation_edges",
+        help_text="(MESH_OBJECT derivation) The collection whose object this data was computed from. Null on every other edge",
+    )
+    mesh_object = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="(MESH_OBJECT derivation) Which object of `mesh_collection` this data was computed from: its id in the collection's object catalog",
+    )
+
     # See CoordinateSystem.organization.
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this transformation belongs to")
     creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this transformation")

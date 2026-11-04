@@ -950,6 +950,7 @@ class DerivationSourceKind(str, Enum):
     MESH_COLLECTION = "MESH_COLLECTION"
     ANNOTATION_COLLECTION = "ANNOTATION_COLLECTION"
     ANNOTATION = "ANNOTATION"
+    MESH_OBJECT = "MESH_OBJECT"
     COORDINATE_SYSTEM = "COORDINATE_SYSTEM"
 
 
@@ -964,6 +965,11 @@ _describe(
         "One shape of an annotation collection: the data was computed along it or within it -- a crop to an ROI, an image straightened along a path. The ANNOTATION_COLLECTION "
         "arm on the shape's collection, and which shape: the edge lands in the collection's drawing space and carries the annotation, so two shapes of one collection are two "
         "sources. Usually named second, behind the lens the pixels came from, and usually without a transform: the shape is why the data is what it is, not where it sits."
+    ),
+    MESH_OBJECT=(
+        "One object of a mesh collection: the data was computed from that one surface -- a crop to a cell's mesh, measurements over one organelle. The MESH_COLLECTION arm "
+        "on the collection, and which object: the edge lands in the collection's vertex space and carries the object's id (the catalog's `object_id`), so two objects of one "
+        "collection are two sources. What `meshObject(...).derivedResidents` reads back."
     ),
     COORDINATE_SYSTEM="A coordinate system directly, when the source is a space rather than a container -- a physical space, or a world.",
 )
