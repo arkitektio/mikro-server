@@ -164,3 +164,88 @@ async def test_a_lens_something_was_derived_from_is_not_deleted(authenticated_co
 
     refused = await _run(ctx, DELETE_LENS, {"input": {"id": str(crop.pk)}})
     assert refused.errors and "were derived from its selection" in refused.errors[0].message, refused.errors
+
+
+DELETE_DERIVED = "mutation D($input: DeleteDerivedInput!) { deleteDerived(input: $input) }"
+PREFLIGHT_DERIVED = f"query P($kind: LineageNodeKind!, $id: ID!) {{ preflightDeleteDerived(kind: $kind, id: $id) {{ {PREFLIGHT_FIELDS} }} }}"
+
+
+async def test_delete_derived_takes_what_was_made_from_a_dataset_and_keeps_it(authenticated_context: HttpContext) -> None:
+    """Raw stays; Mask and Cleaned (made from Mask) go, as the preflight lists them."""
+    ctx = authenticated_context
+    raw, mask, cleaned = await _chain(ctx)
+
+    answer = await _run(ctx, PREFLIGHT_DERIVED, {"kind": "DATASET", "id": str(raw.pk)})
+    assert not answer.errors, answer.errors
+    preflight = answer.data["preflightDeleteDerived"]
+    assert preflight["deletable"] and preflight["needsCascade"]
+    assert [c["key"] for c in preflight["casualties"]] == [f"dataset:{mask}", f"dataset:{cleaned}"]
+
+    deleted = await _run(ctx, DELETE_DERIVED, {"input": {"kind": "DATASET", "id": str(raw.pk)}})
+    assert not deleted.errors, deleted.errors
+    assert deleted.data["deleteDerived"] == [f"dataset:{mask}", f"dataset:{cleaned}"]
+    assert [pk async for pk in models.ArrayDataset.objects.values_list("pk", flat=True)] == [raw.pk]
+
+    # Nothing is made from it any more: a second call deletes nothing, and a plain delete goes.
+    again = await _run(ctx, DELETE_DERIVED, {"input": {"kind": "DATASET", "id": str(raw.pk)}})
+    assert not again.errors and again.data["deleteDerived"] == []
+    assert not (await _run(ctx, DELETE_DATASET, {"input": {"id": str(raw.pk)}})).errors
+
+
+async def test_delete_derived_of_a_path_keeps_the_path(authenticated_context: HttpContext) -> None:
+    """The smoothed path and the crop straightened along it go; the path and its image stay, with no link left to it."""
+    ctx = authenticated_context
+    dataset, collection = await _drawn_on(ctx)
+    path = await _draw(ctx, collection["id"], "PATH", PATH)
+    smoothed = await _draw_from(ctx, collection["id"], "PATH", SMOOTHER, [{"annotation": path["id"], "relation": "REFINED"}])
+    assert not smoothed.errors, smoothed.errors
+    smoothed_id = smoothed.data["createAnnotation"]["id"]
+    cut = await _lens_from(ctx, dataset, annotation=path["id"])
+    crop = await _derive(ctx, "Straightened", axes=seed.YX_AXES, shape=[4, 5], entries=[{"kind": "LENS", "lens": cut["id"], "transform": {"kind": "IDENTITY"}}, {"kind": "ANNOTATION", "annotation": path["id"]}])
+    assert not crop.errors, crop.errors
+    crop_id = crop.data["createArrayDataset"]["id"]
+
+    deleted = await _run(ctx, DELETE_DERIVED, {"input": {"kind": "ANNOTATION", "id": path["id"]}})
+    assert not deleted.errors, deleted.errors
+    assert set(deleted.data["deleteDerived"]) == {f"annotation:{smoothed_id}", f"dataset:{crop_id}"}
+    assert await models.Annotation.objects.filter(pk=path["id"]).aexists(), "the path itself stays"
+    assert not await models.Annotation.objects.filter(pk=smoothed_id).aexists()
+    assert not await models.ArrayDataset.objects.filter(pk=crop_id).aexists()
+    assert await models.ArrayDataset.objects.filter(pk=dataset.pk).aexists(), "what the path was drawn on is upstream"
+    assert not await models.AnnotationDerivation.objects.filter(source_id=path["id"]).aexists()
+    assert not (await _run(ctx, DELETE_ANNOTATION, {"input": {"id": path["id"]}})).errors, "nothing is downstream any more"
+
+
+async def test_delete_derived_holds_every_casualty_to_its_own_owner(authenticated_context: HttpContext, bot_context: HttpContext) -> None:
+    """The bot may not delete the admin's dataset derived from its own: refused, nothing goes."""
+    theirs = await seed.create_array_dataset(bot_context, "Bot's", axes=seed.YX_AXES, shapes=[[64, 64]])
+    derived = await _derived(authenticated_context, "Admin's", lens=await seed.create_lens(authenticated_context, theirs))
+
+    preflight = (await _run(bot_context, PREFLIGHT_DERIVED, {"kind": "DATASET", "id": str(theirs.pk)})).data["preflightDeleteDerived"]
+    assert preflight["deletable"] is False
+    assert [blocker["key"] for blocker in preflight["blockers"]] == [f"dataset:{derived}"]
+
+    refused = await _run(bot_context, DELETE_DERIVED, {"input": {"kind": "DATASET", "id": str(theirs.pk)}})
+    assert refused.errors and "Only the creator" in refused.errors[0].message
+    assert await models.ArrayDataset.objects.acount() == 2
+
+
+async def test_delete_derived_does_not_check_the_object_it_keeps(authenticated_context: HttpContext, bot_context: HttpContext) -> None:
+    """The bot may not delete the admin's dataset, but it stays: the bot's own dataset made from it goes."""
+    ours = await seed.create_array_dataset(authenticated_context, "Admin's", axes=seed.YX_AXES, shapes=[[64, 64]])
+    derived = await _derived(bot_context, "Bot's", lens=await seed.create_lens(bot_context, ours))
+
+    preflight = (await _run(bot_context, PREFLIGHT_DERIVED, {"kind": "DATASET", "id": str(ours.pk)})).data["preflightDeleteDerived"]
+    assert preflight["blockers"] == [] and preflight["deletable"], preflight
+    assert preflight["target"] == f"dataset:{ours.pk}"
+    assert [c["key"] for c in preflight["casualties"]] == [f"dataset:{derived}"]
+
+    # A plain cascade is refused to the bot: the target is the admin's.
+    refused = await _run(bot_context, DELETE_DATASET, {"input": {"id": str(ours.pk), "cascade": True}})
+    assert refused.errors and "Only the creator" in refused.errors[0].message
+
+    deleted = await _run(bot_context, DELETE_DERIVED, {"input": {"kind": "DATASET", "id": str(ours.pk)}})
+    assert not deleted.errors, deleted.errors
+    assert deleted.data["deleteDerived"] == [f"dataset:{derived}"]
+    assert await models.ArrayDataset.objects.filter(pk=ours.pk).aexists()
+    assert not await models.ArrayDataset.objects.filter(pk=derived).aexists()

@@ -16,6 +16,10 @@ about what is downstream.
 
 ``preflight`` answers the same questions without deleting: what would go, what stops it, and
 what else cascades (layers, lenses) -- the ``preflightDelete<Model>`` queries.
+
+``delete_derived`` is the same closure with the target left standing: everything made from it
+goes, it stays (``deleteDerived`` / ``preflightDeleteDerived``). Its links to what was made from
+it go with its children, so it is left with nothing downstream.
 """
 
 import dataclasses
@@ -245,8 +249,11 @@ def _internal_links(rows: list[Model]) -> "QuerySet[models.AnnotationDerivation]
     return models.AnnotationDerivation.objects.filter(Q(child_id__in=shapes) | Q(child__collection_id__in=collections))
 
 
-def preflight(info: Info, target: Model, kind: str, owner: Callable[[Model], Iterable[int | None]] | None) -> Preflight:
+def preflight(info: Info, target: Model, kind: str, owner: Callable[[Model], Iterable[int | None]] | None, *, keep_target: bool = False) -> Preflight:
     """What deleting ``target`` would take along and what stops it, computed and not acted on.
+
+    With ``keep_target`` it is what :func:`delete_derived` would do: the same casualties, the
+    target neither deleted nor checked (it stays, so whether it may go does not matter).
 
     Run in a transaction that is rolled back: the internal shape links are removed so the
     collector sees what the delete itself would, and nothing of it is kept.
@@ -254,7 +261,8 @@ def preflight(info: Info, target: Model, kind: str, owner: Callable[[Model], Ite
     organization = info.context.request.organization
     key = (kind, lineage_logic.node_pk(kind, target.pk))
     planned = plan([key], organization=organization)
-    rows = {key: target, **instances(((c.kind, c.pk) for c in planned.casualties), organization)}
+    casualties = instances(((c.kind, c.pk) for c in planned.casualties), organization)
+    rows = casualties if keep_target else {key: target, **casualties}
     blockers = _checks(info, rows, owner)
 
     counts: list[tuple[str, int]] = []
@@ -288,20 +296,36 @@ def delete_with_lineage(info: Info, target: Model, kind: str, *, cascade: bool, 
     planned = plan([(kind, target.pk)], organization=organization)
     if planned.casualties and not cascade:
         raise ValueError(refusal(planned))
+    _refuse_truncated(planned)
+    casualties = _checked_casualties(info, planned, owner)
+    _delete_rows(_farthest_first(planned, casualties), target, delete=delete)
+
+
+def _refuse_truncated(planned: Plan) -> None:
     if planned.truncated:
         raise ValueError(
             f"More was made from it than one delete may take along (over {MAX_DEPTH} hops deep or {MAX_NODES} rows). Delete what was made from it in parts, from the leaves"
         )
 
-    casualties = instances(((c.kind, c.pk) for c in planned.casualties), organization)
+
+def _checked_casualties(info: Info, planned: Plan, owner: Callable[[Model], Iterable[int | None]] | None) -> dict[NodeKey, Model]:
+    """The rows behind a plan's casualties, every one held to its owner and delete guards -- or a refusal."""
+    casualties = instances(((c.kind, c.pk) for c in planned.casualties), info.context.request.organization)
     blockers = _checks(info, casualties, owner)
     if blockers:
         first = blockers[0]
         raise ValueError(f"Cannot delete {first.kind} {first.pk} along with it: {first.reason}")
+    return casualties
 
-    # Farthest first, so a row never outlives what it was made from inside the transaction.
-    order = [casualties[(c.kind, c.pk)] for c in sorted(planned.casualties, key=lambda c: -c.depth) if (c.kind, c.pk) in casualties]
-    everything = [*order, target]
+
+def _farthest_first(planned: Plan, casualties: dict[NodeKey, Model]) -> list[Model]:
+    """Farthest first, so a row never outlives what it was made from inside the transaction."""
+    return [casualties[(c.kind, c.pk)] for c in sorted(planned.casualties, key=lambda c: -c.depth) if (c.kind, c.pk) in casualties]
+
+
+def _delete_rows(order: list[Model], target: Model | None = None, *, delete: Callable[[Model], None] | None = None) -> None:
+    """Delete ``order`` (farthest first) and then ``target``, if any, in one transaction."""
+    everything = [*order, target] if target is not None else list(order)
     with transaction.atomic():
         _internal_links(everything).delete()
         # Collected *before* the delete, because the cascade has to still be walkable, and
@@ -310,8 +334,25 @@ def delete_with_lineage(info: Info, target: Model, kind: str, *, cascade: bool, 
         for row in order:
             if type(row).objects.filter(pk=row.pk).exists():  # a collection deleted earlier took its shapes
                 row.delete()
-        if delete is None:
-            target.delete()
-        else:
-            delete(target)
+        if target is not None:
+            if delete is None:
+                target.delete()
+            else:
+                delete(target)
         storage.flag_orphaned(orphaned)
+
+
+def delete_derived(info: Info, target: Model, kind: str, *, owner: Callable[[Model], Iterable[int | None]] | None) -> list[NodeKey]:
+    """Delete everything made from ``target``, transitively, and leave ``target`` standing.
+
+    The same closure and the same checks as a cascade (:func:`delete_with_lineage`), the target
+    left out of both: each casualty is held to its own owner and guards, all before anything
+    goes. Answers the keys deleted, nearest first; nothing made from it deletes nothing.
+    """
+    planned = plan([(kind, target.pk)], organization=info.context.request.organization)
+    if not planned.casualties:
+        return []
+    _refuse_truncated(planned)
+    casualties = _checked_casualties(info, planned, owner)
+    _delete_rows(_farthest_first(planned, casualties))
+    return [(c.kind, c.pk) for c in planned.casualties if (c.kind, c.pk) in casualties]

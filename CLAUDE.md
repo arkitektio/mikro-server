@@ -118,6 +118,9 @@ annotation collection's own shapes go with it by CASCADE; what was made from the
 casualty. A sliced lens something was derived from is refused (`assert_lens_deletable`).
 `AnnotationDerivation.source` is RESTRICT as the backstop. Deleting a derivation edge
 (`deleteTransformation`) or a file link edits lineage and deletes no data: those are not guarded.
+`deleteDerived(kind, id)` is the same closure with the object kept: every casualty goes (each
+held to its own owner and guards), the object itself is neither deleted nor checked;
+`preflightDeleteDerived(kind, id)` answers it (`preflight(..., keep_target=True)`).
 
 ## Metrics
 

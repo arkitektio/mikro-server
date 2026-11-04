@@ -18,28 +18,38 @@ def _key(kind: str, pk: object) -> str:
     return f"{kind}:{pk}"
 
 
+def _as_type(kind: str, target: object, result: deletion_logic.Preflight) -> DeletePreflight:
+    blockers = [DeleteBlocker(key=_key(b.kind, b.pk), kind=LineageNodeKind(b.kind), id=str(b.pk), reason=b.reason) for b in result.blockers]
+    return DeletePreflight(
+        target=_key(kind, lineage_logic.node_pk(kind, target.pk)),
+        casualties=[
+            DeleteCasualty(key=_key(c.kind, c.pk), kind=LineageNodeKind(c.kind), id=str(c.pk), name=c.name, depth=c.depth, parent=_key(*c.parent))
+            for c in result.plan.casualties
+        ],
+        blockers=blockers,
+        cascade_counts=[CascadeCount(label=label, count=count) for label, count in result.cascade_counts],
+        truncated=result.plan.truncated,
+        needs_cascade=bool(result.plan.casualties),
+        deletable=not blockers and not result.plan.truncated,
+    )
+
+
 def _preflight_for(model: type, kind: str) -> Callable[[Info, strawberry.ID], DeletePreflight]:
     """One model's preflight query: the shared preflight, rooted at a row of ``model``."""
 
     def resolve(info: Info, id: strawberry.ID) -> DeletePreflight:
         target = get_for_org(model, info, id=id)
-        result = deletion_logic.preflight(info, target, kind, self_owner)
-        blockers = [DeleteBlocker(key=_key(b.kind, b.pk), kind=LineageNodeKind(b.kind), id=str(b.pk), reason=b.reason) for b in result.blockers]
-        return DeletePreflight(
-            target=_key(kind, lineage_logic.node_pk(kind, target.pk)),
-            casualties=[
-                DeleteCasualty(key=_key(c.kind, c.pk), kind=LineageNodeKind(c.kind), id=str(c.pk), name=c.name, depth=c.depth, parent=_key(*c.parent))
-                for c in result.plan.casualties
-            ],
-            blockers=blockers,
-            cascade_counts=[CascadeCount(label=label, count=count) for label, count in result.cascade_counts],
-            truncated=result.plan.truncated,
-            needs_cascade=bool(result.plan.casualties),
-            deletable=not blockers and not result.plan.truncated,
-        )
+        return _as_type(kind, target, deletion_logic.preflight(info, target, kind, self_owner))
 
     resolve.__name__ = f"preflight_delete_{model.__name__.lower()}"
     return resolve
+
+
+def preflight_delete_derived(info: Info, kind: LineageNodeKind, id: strawberry.ID) -> DeletePreflight:
+    """What ``deleteDerived`` would delete: the same casualties as a cascade, the object itself kept and unchecked."""
+    key = LineageNodeKind(kind).value
+    target = get_for_org(lineage_logic.model_of(key), info, id=id)
+    return _as_type(key, target, deletion_logic.preflight(info, target, key, self_owner, keep_target=True))
 
 
 preflight_delete_array_dataset = _preflight_for(models.ArrayDataset, "dataset")
@@ -54,6 +64,7 @@ preflight_delete_annotation = _preflight_for(models.Annotation, "annotation")
 
 __all__ = [
     "preflight_delete_annotation",
+    "preflight_delete_derived",
     "preflight_delete_annotation_collection",
     "preflight_delete_array_dataset",
     "preflight_delete_file",

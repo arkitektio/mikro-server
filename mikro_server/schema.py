@@ -247,6 +247,10 @@ class Query:
         resolver=queries.preflight_delete_annotation,
         description="What deleting this annotation (the shapes refined, converted, split or merged from it count) would cost, without deleting it: everything made from it (a plain delete is refused over it; `cascade: true` takes it along), what stops the delete, and what else goes with it",
     )
+    preflight_delete_derived = field(
+        resolver=queries.preflight_delete_derived,
+        description="What `deleteDerived` would delete: everything made from this object, transitively, nearest first, with what would stop it and what else cascades. The object itself stays, so it is neither listed nor checked; `needsCascade` says whether anything was made from it at all",
+    )
 
     attribute_plans = field(
         resolver=queries.attribute_plans,
@@ -648,6 +652,10 @@ class Mutation:
         description="Edit an annotation: name, kind, vectors, pins or styling. New vectors re-derive the bounding box against the current transform chain",
     )
     delete_annotation = mutation(scope="mikro_annotate", roles=[EDITOR, ANNOTATOR], resolver=mutations.delete_annotation, description="Delete an existing annotation")
+    delete_derived = mutation(
+        resolver=mutations.delete_derived,
+        description="Delete everything made from one object -- derived data, data computed within a shape, shapes refined or converted from it, series converted out of a file, files exported from a dataset, transitively -- and keep the object. Every row is held to its own owner and delete guards before anything goes; one refusal deletes nothing. Answers the `<kind>:<id>` keys deleted; nothing made from it deletes nothing (`preflightDeleteDerived` lists what it takes)",
+    )
 
     create_annotation_collection = mutation(
         resolver=mutations.create_annotation_collection,
