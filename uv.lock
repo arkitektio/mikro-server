@@ -124,7 +124,7 @@ wheels = [
 
 [[package]]
 name = "arkitekt-service"
-version = "9.1.0"
+version = "9.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -134,9 +134,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a5/79/4a3930d9565a9194cfd721c825376c5dcb031dbfa31e57294be7f64a63a3/arkitekt_service-9.1.0.tar.gz", hash = "sha256:b6d76e37624a9d225a322cf5fe28b376b5e910c560e19608e362b3e7d070a31f", size = 89433, upload-time = "2026-11-03T12:45:45.26Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/d2/aedf2d1f1a8dfe7b5a26e227422521d84512f704aa4f84a937171ba72a69/arkitekt_service-9.2.0.tar.gz", hash = "sha256:f0e987a11297d766fc9233be26a19dbaad5bdbc84aa8729745afd7d011adb79a", size = 89585, upload-time = "2026-11-04T14:56:06.256Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/95/419823ff30b2e409c174856c20df67b6a7bf63cb58528d04c25d7ca10ccb/arkitekt_service-9.1.0-py3-none-any.whl", hash = "sha256:e88528be3ea6766513f6ad5f189de76aad20debe7bf6bfff3fa035a6f2d37236", size = 114463, upload-time = "2026-11-03T12:45:43.836Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/4f/a6df65a5e826ebc6b7c51b20330f34e4106c65ad89a18a6c4c93fea365a7/arkitekt_service-9.2.0-py3-none-any.whl", hash = "sha256:15a2210b1b8cb301b7b5406ce9be2e7f4e280a66b4e1c95e877d241c322c9927", size = 114653, upload-time = "2026-11-04T14:56:05.129Z" },
 ]
 
 [[package]]
@@ -1122,7 +1122,7 @@ wheels = [
 
 [[package]]
 name = "koherent"
-version = "4.1.0"
+version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authentikate" },
@@ -1130,9 +1130,9 @@ dependencies = [
     { name = "django-simple-history" },
     { name = "kante" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/f0/f440d70aadace82a56d42e9dcc0b02240392b855f979909448c674c0c3da/koherent-4.1.0.tar.gz", hash = "sha256:918f99a9df789d687cb423f9431fa758b33a423bd7e5a6d014a72aa8dc985e38", size = 16601, upload-time = "2026-06-24T09:53:20.395Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/2f/806e88ed106c9fd08866d08472706cb8704e557edb53a762cc9e1f51d32c/koherent-4.2.0.tar.gz", hash = "sha256:75d3060451732c19ca626ea6cf70f680e576c7982ba2d46cedf1abfbf538dae3", size = 17490, upload-time = "2026-11-04T14:53:47.473Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/23/4d4e733f3b638ada062e6f996307e50135605f99de8de4ef3715baafee24/koherent-4.1.0-py3-none-any.whl", hash = "sha256:c1c4c213d71dc8e7d06d9c5ae57700043314e39bcd506f00383029679244a521", size = 20981, upload-time = "2026-06-24T09:53:18.969Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/5f/2e4894f225a702b1753551ab20fcbbdd0de33f4ae1dbb9cac32868b6b426/koherent-4.2.0-py3-none-any.whl", hash = "sha256:d0c01f3c0e2a51042be5f98f7e7f72ea10da29835296bf8814e29ab15b399d15", size = 22002, upload-time = "2026-11-04T14:53:46.403Z" },
 ]
 
 [[package]]
@@ -1260,7 +1260,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
     { name = "arkitekt-datalayer", specifier = ">=3.0.0" },
-    { name = "arkitekt-service", specifier = ">=9.1.0" },
+    { name = "arkitekt-service", specifier = ">=9.2.0" },
     { name = "authentikate", specifier = ">=6.1" },
     { name = "boto3", specifier = ">=1.38.9" },
     { name = "channels-redis", specifier = ">=4.1.0,<5" },
@@ -1275,7 +1275,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.2.2" },
     { name = "jsonpatch", specifier = "~=1.33" },
     { name = "kante", specifier = ">=2.4.1" },
-    { name = "koherent", specifier = ">=4.1" },
+    { name = "koherent", specifier = ">=4.2.0" },
     { name = "model2vec", specifier = ">=0.9" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "pandas", specifier = ">=2.3.3" },
