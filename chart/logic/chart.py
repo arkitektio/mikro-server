@@ -306,7 +306,21 @@ def _bindings(kind: str, *, x: str | None, y: str | None, z: str | None, value: 
     return {"x": value}
 
 
-def assert_value_layer(chart: "models.Chart", *, kind: str, lens: "core_models.TableLens", x: str | None, y: str | None, z: str | None, value: str | None, group: str | None, bins: int | None, mark: str) -> dict[str, object]:
+def assert_value_layer(
+    chart: "models.Chart",
+    *,
+    kind: str,
+    lens: "core_models.TableLens",
+    x: str | None,
+    y: str | None,
+    z: str | None,
+    value: str | None,
+    group: str | None,
+    bins: int | None,
+    mark: str,
+    updating: "models.ChartLayer | None" = None,
+    check_placement: bool = True,
+) -> dict[str, object]:
     """Check a value layer's column bindings and return them as the row's fields.
 
     The lens' rows are placed into the chart's world -- its own table's space, or one its table
@@ -314,9 +328,14 @@ def assert_value_layer(chart: "models.Chart", *, kind: str, lens: "core_models.T
     values of the columns named. Each must exist and hold numbers. The layers of one chart draw
     one kind, and agree on the units of each position -- `area` in µm² and `area_mm2` may
     share x; a volume may not, because a chart's axis is one quantity.
+
+    ``updating`` is the layer being edited: it is compared with the chart's OTHER layers, never
+    with its own old columns. ``check_placement`` is false when an edit keeps the lens: an
+    existing layer is not re-litigated for a placement it already has.
     """
     table = lens.table_dataset
-    graph_logic.assert_placeable_in(chart.world, lens.coordinate_system, destination=f"the world of chart '{chart.name}' (whose rows it draws)")
+    if check_placement:
+        graph_logic.assert_placeable_in(chart.world, lens.coordinate_system, destination=f"the world of chart '{chart.name}' (whose rows it draws)")
     if kind == enums.ChartLayerKindChoices.POINTS.value:
         if x is None or y is None:
             raise ValueError("A POINTS layer places each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth); name both.")
@@ -343,7 +362,7 @@ def assert_value_layer(chart: "models.Chart", *, kind: str, lens: "core_models.T
     bound = _bindings(kind, x=x, y=y, z=z, value=value)
     units = {position: numeric_column(table, name, role=f"the {position} position").unit for position, name in bound.items() if name is not None}
 
-    others = list(chart.layers.all())
+    others = [other for other in chart.layers.all() if updating is None or other.pk != updating.pk]
     # The lens is polymorphic: read the table lenses as themselves, not through the base row.
     tables = {lens.pk: lens.table_dataset for lens in core_models.TableLens.objects.filter(pk__in=[other.lens_id for other in others]).select_related("table_dataset").prefetch_related("table_dataset__columns")}
     for other in others:
@@ -435,6 +454,120 @@ def create_layer(
         order = 0 if last is None else last + 1
 
     return models.ChartLayer.objects.create(chart=chart, kind=kind, order=order, **{enums.SOURCE_FIELD[kind]: source}, **values, **settings)
+
+
+#: The bindings an update may clear, by the kind that has them: each is optional at creation.
+CLEARABLE: dict[str, str] = {
+    "z_column": enums.ChartLayerKindChoices.POINTS.value,
+    "group_column": enums.ChartLayerKindChoices.DISTRIBUTION.value,
+    "bins": enums.ChartLayerKindChoices.DISTRIBUTION.value,
+}
+
+
+def update_layer(
+    layer: "models.ChartLayer",
+    *,
+    source: "core_models.Lens | None" = None,
+    value_column: str | None = None,
+    x_column: str | None = None,
+    y_column: str | None = None,
+    z_column: str | None = None,
+    group_column: str | None = None,
+    bins: int | None = None,
+    clear: frozenset[str] = frozenset(),
+    **settings: object,
+) -> "models.ChartLayer":
+    """Retune a layer: rebind its lens or columns, restyle it, and refuse what creating it so would refuse.
+
+    The checks run on the MERGED state -- what is stored, with the patch over it -- so an edit
+    to one binding is held to the others it now sits beside. A lens is re-placed only when it
+    changes: resending the current one does not re-litigate an existing layer. A distribution
+    turned into a BOX drops its stored ``bins``, which a box does not have; naming bins with a
+    BOX is refused.
+    """
+    kind = str(layer.kind)
+    chart = layer.chart
+    rebound = source is not None and source.pk != layer.lens_id
+    lens = source if source is not None else core_models.Lens.objects.with_sources().get(pk=layer.lens_id)
+    what = f"{type(lens).__name__} {lens.pk}"
+
+    allowed = enums.MARKS.get(kind)
+    mark = settings.get("mark")
+    if mark is not None and allowed is not None and mark not in allowed:
+        raise ValueError(f"A {kind.upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(mark).upper()}: a look of another kind.")
+    for field in clear:
+        if CLEARABLE.get(field) != kind:
+            raise ValueError(f"A {kind.upper()} layer has no `{field}` to clear.")
+    named = {"value_column": value_column, "x_column": x_column, "y_column": y_column, "z_column": z_column, "group_column": group_column, "bins": bins}
+    for field in clear:
+        if named[field] is not None:
+            raise ValueError(f"`{field}` is both set and cleared; do one.")
+
+    fields: dict[str, object] = {}
+    if kind in enums.VALUE_KINDS:
+        if not isinstance(lens, core_models.TableLens):
+            raise ValueError(f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns.")
+        merged_mark = str(mark if mark is not None else layer.mark)
+
+        def merged(field: str) -> object:
+            if field in clear:
+                return None
+            given = named[field]
+            return given if given is not None else getattr(layer, field)
+
+        merged_bins = merged("bins")
+        if merged_mark == enums.ChartMarkChoices.BOX.value and bins is None:
+            merged_bins = None  # a box has no bins: the stored ones go with the histogram
+        changed = rebound or bool(clear) or mark is not None or any(named[field] is not None for field in named)
+        if changed:
+            is_points = kind == enums.ChartLayerKindChoices.POINTS.value
+            fields.update(
+                assert_value_layer(
+                    chart,
+                    kind=kind,
+                    lens=lens,
+                    x=merged("x_column") if is_points else None,
+                    y=merged("y_column") if is_points else None,
+                    z=merged("z_column") if is_points else None,
+                    value=None if is_points else merged("value_column"),
+                    group=None if is_points else merged("group_column"),
+                    bins=None if is_points else merged_bins,
+                    mark=merged_mark,
+                    updating=layer,
+                    check_placement=rebound,
+                )
+            )
+    else:
+        bound = [field for field in ("x_column", "y_column", "z_column", "group_column", "bins") if named[field] is not None]
+        if bound:
+            raise ValueError(f"A {kind.upper()} layer is placed along the chart's axis by the graph; {', '.join(f'`{field}`' for field in bound)} are a POINTS or DISTRIBUTION layer's.")
+        if value_column is not None and kind != enums.ChartLayerKindChoices.SERIES.value:
+            raise ValueError(f"A {kind.upper()} layer reads no value column; a SERIES does.")
+        if kind == enums.ChartLayerKindChoices.TRACE.value and rebound:
+            if not isinstance(lens, core_models.ArrayLens):
+                raise ValueError(f"{what} is not an array lens; a trace reads an array along one of its axes.")
+            assert_trace(lens, resolve_along_axis(chart, lens.coordinate_system, what=what))
+        elif kind == enums.ChartLayerKindChoices.SERIES.value and (rebound or value_column is not None):
+            if not isinstance(lens, core_models.TableLens):
+                raise ValueError(f"{what} is not a table lens; a series reads a table's value column.")
+            along = resolve_along_axis(chart, lens.coordinate_system, what=what)
+            # A new table keeps the stored column only if it has one by that name; else the one it can be.
+            requested = value_column if value_column is not None else (layer.value_column if not rebound or any(c.name == layer.value_column for c in lens.table_dataset.columns.all()) else None)
+            fields["value_column"] = resolve_value_column(lens.table_dataset, along, requested)
+        elif kind == enums.ChartLayerKindChoices.ANNOTATION.value and rebound:
+            if not isinstance(lens, core_models.AnnotationLens):
+                raise ValueError(f"{what} is not an annotation lens; an annotation layer draws a collection's marks.")
+            resolve_along_axis(chart, lens.coordinate_system, what=what)
+
+    if rebound:
+        layer.lens = lens
+        fields["lens"] = lens
+    fields.update(settings)
+    for field, value in fields.items():
+        setattr(layer, field, value)
+    if fields:
+        layer.save(update_fields=list(fields))
+    return layer
 
 
 def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: CreationContext) -> "core_models.AnnotationCollection":

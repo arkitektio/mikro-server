@@ -8,6 +8,10 @@ from .layer import (
     create_trace_chart_layer,
     delete_chart_layer,
     update_chart_layer,
+    update_distribution_chart_layer,
+    update_points_chart_layer,
+    update_series_chart_layer,
+    update_trace_chart_layer,
 )
 
 __all__ = [
@@ -23,4 +27,8 @@ __all__ = [
     "delete_chart_layer",
     "update_chart",
     "update_chart_layer",
+    "update_distribution_chart_layer",
+    "update_points_chart_layer",
+    "update_series_chart_layer",
+    "update_trace_chart_layer",
 ]

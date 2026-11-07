@@ -757,7 +757,16 @@ class Mutation:
         resolver=chart_mutations.create_distribution_chart_layer,
         description="Summarise the values of one column of a table lens' rows in a VALUES chart: a histogram or a box, over every row or once per value of a grouping column such as a condition",
     )
-    update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer. View state only")
+    update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer of any kind: name, visibility, order, opacity, colour and its look")
+    update_trace_chart_layer = mutation(resolver=chart_mutations.update_trace_chart_layer, description="Retune a trace: draw another array lens along the chart's axis, or restyle it")
+    update_series_chart_layer = mutation(resolver=chart_mutations.update_series_chart_layer, description="Retune a series: read another value column or table lens against the chart's axis, or restyle it")
+    update_points_chart_layer = mutation(
+        resolver=chart_mutations.update_points_chart_layer, description="Retune a points layer: plot other columns or another table lens' rows, or restyle it"
+    )
+    update_distribution_chart_layer = mutation(
+        resolver=chart_mutations.update_distribution_chart_layer,
+        description="Retune a distribution: summarise another column, regroup or rebin it, switch between histogram and box, or restyle it",
+    )
     delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")
 
     create_grid = mutation(

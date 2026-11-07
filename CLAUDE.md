@@ -129,7 +129,7 @@ placed into it (`Chart.kind`): an AXIS chart draws its world, one measured axis 
 ANNOTATION, laid along it by edges); a VALUES chart's world is whose rows (a table's space, not
 drawn), its POINTS (`x/y/z_column`) and DISTRIBUTION (`value_column`, `group_column`, `bins`)
 layers placed into it and binding columns by name (`chart.assert_value_layer`: placed, numeric,
-one kind per chart, units agree per position). Same world, same rows: a derived PCA table draws
+one kind per chart, units agree per position). A chart layer is retuned as a scene layer is: `updateChartLayer` restyles any kind, and what a layer reads (lens, columns, grouping, bins) is its kind's own update (`updateTrace/Series/Points/DistributionChartLayer`, `chart.logic.update_layer`), held to the creation rules on the merged state, re-placed only when the lens changes. Same world, same rows: a derived PCA table draws
 beside its source. A chart is never both. A PCA or UMAP is a derived table (IDENTITY over the frame, a TABLE key back,
 parameters in provenance), not an edge. **A grid shows which** (`grid/`): its world is one or
 two enumerating axes -- rows, columns: members with no distance -- and its HEATMAP (an array or

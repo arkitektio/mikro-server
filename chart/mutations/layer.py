@@ -302,8 +302,9 @@ class UpdateChartLayerInputModel(_Style):
 @kante.pydantic_input(
     UpdateChartLayerInputModel,
     description=(
-        "Input for restyling a chart layer. View state only: what the layer reads, and where its data sits along the chart's axis, are not settings -- the first is fixed "
-        "at creation and the second is the graph's, changed by editing the registration"
+        "Input for restyling a chart layer of any kind: view state only. What a layer reads -- its lens and its columns -- is changed by its kind's own update "
+        "(updateTraceChartLayer, updateSeriesChartLayer, updatePointsChartLayer, updateDistributionChartLayer); where its data sits along the chart's axis is the "
+        "graph's, changed by editing the registration"
     ),
 )
 class UpdateChartLayerInput:
@@ -344,6 +345,170 @@ def update_chart_layer(info: Info, input: UpdateChartLayerInput) -> types.ChartL
         with transaction.atomic():
             layer.save(update_fields=list(settings))
     return layer
+
+
+# --- per-kind updates: what a layer reads, as the scene's layers have ------------
+
+#: What each kind reads, and the update that changes it -- named in the refusal of the wrong one.
+_KIND_VOCABULARY: dict[str, tuple[str, str]] = {
+    enums.ChartLayerKindChoices.TRACE.value: ("an array lens read along the chart's axis", "updateTraceChartLayer"),
+    enums.ChartLayerKindChoices.SERIES.value: ("a table lens and its value column", "updateSeriesChartLayer"),
+    enums.ChartLayerKindChoices.ANNOTATION.value: ("a collection's marks, each carrying its own styling", "updateChartLayer"),
+    enums.ChartLayerKindChoices.POINTS.value: ("a table lens and the columns of its x, y and z positions", "updatePointsChartLayer"),
+    enums.ChartLayerKindChoices.DISTRIBUTION.value: ("a table lens, the column it summarises, a grouping and bins", "updateDistributionChartLayer"),
+}
+
+
+def _layer_of_kind(info: Info, id: str, expected: enums.ChartLayerKindChoices) -> "models.ChartLayer":
+    """The layer, refused in prose when it is of another kind -- naming the update that kind takes."""
+    layer = get_for_org(models.ChartLayer, info, id=id)
+    if layer.kind == expected.value:
+        return layer
+    theirs, mutation = _KIND_VOCABULARY.get(str(layer.kind), ("other settings", "updateChartLayer"))
+    mine, _ = _KIND_VOCABULARY[expected.value]
+    raise ValueError(f"Chart layer {layer.pk} is a {str(layer.kind).upper()} layer, not a {expected.value.upper()} layer: it reads {theirs}, not {mine}. Use {mutation}.")
+
+
+def _update(info: Info, layer: "models.ChartLayer", model: BaseModel, *, lens_kind: type, role: str, clear: frozenset[str] = frozenset(), **bindings: object) -> "models.ChartLayer":
+    """Apply one kind's update: resolve the lens it names, then the shared rules in `chart_logic.update_layer`."""
+    lens_id = getattr(model, "lens", None)
+    source = lens_of_kind(info, kind=lens_kind, lens=lens_id, role=role) if lens_id else None
+    with transaction.atomic():
+        return chart_logic.update_layer(layer, source=source, clear=clear, **bindings, **_settings(model))
+
+
+_LENS_REBIND = "A lens to read through instead: the data must be placed in the chart as creating the layer requires. Omit to keep the current one"
+
+
+class UpdateTraceChartLayerInputModel(_Style):
+    id: str
+    lens: str | None = None
+
+
+@prose_errors
+@kante.pydantic_input(UpdateTraceChartLayerInputModel, description="Retune a trace: draw another array lens along the chart's axis, or change how it is drawn")
+class UpdateTraceChartLayerInput:
+    id: strawberry.ID = strawberry.field(description="The ID of the trace layer to update")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_LENS_REBIND + ". An array lens leaving free the axis laid along the chart (and at most one CHANNEL or INDEX axis beside it)")
+    name: str | None = strawberry.field(default=None, description=_NAME)
+    visible: bool | None = strawberry.field(default=None, description="Whether the layer is drawn")
+    order: int | None = strawberry.field(default=None, description="A new drawing order")
+    opacity: float | None = strawberry.field(default=None, description=_OPACITY)
+    color: list[float] | None = strawberry.field(default=None, description=_COLOR)
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="LINE, MARKERS, LINE_MARKERS or STEPS")
+    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
+    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels")
+
+
+def update_trace_chart_layer(info: Info, input: UpdateTraceChartLayerInput) -> types.TraceChartLayer:
+    """Rebind or restyle a trace."""
+    model = input.to_pydantic()
+    layer = _layer_of_kind(info, model.id, enums.ChartLayerKindChoices.TRACE)
+    return _update(info, layer, model, lens_kind=core_models.ArrayLens, role="a trace reads")
+
+
+class UpdateSeriesChartLayerInputModel(_Style):
+    id: str
+    lens: str | None = None
+    value_column: str | None = None
+
+
+@prose_errors
+@kante.pydantic_input(UpdateSeriesChartLayerInputModel, description="Retune a series: read another value column, or another table lens, against the chart's axis")
+class UpdateSeriesChartLayerInput:
+    id: strawberry.ID = strawberry.field(description="The ID of the series layer to update")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_LENS_REBIND + ". A table lens; its value column is kept when the new table has it, else inferred")
+    value_column: str | None = strawberry.field(default=None, description="The numeric column read as the value. Omit to keep the current one")
+    name: str | None = strawberry.field(default=None, description=_NAME)
+    visible: bool | None = strawberry.field(default=None, description="Whether the layer is drawn")
+    order: int | None = strawberry.field(default=None, description="A new drawing order")
+    opacity: float | None = strawberry.field(default=None, description=_OPACITY)
+    color: list[float] | None = strawberry.field(default=None, description=_COLOR)
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="LINE, MARKERS, LINE_MARKERS or STEPS")
+    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
+    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels")
+
+
+def update_series_chart_layer(info: Info, input: UpdateSeriesChartLayerInput) -> types.SeriesChartLayer:
+    """Rebind or restyle a series."""
+    model = input.to_pydantic()
+    layer = _layer_of_kind(info, model.id, enums.ChartLayerKindChoices.SERIES)
+    return _update(info, layer, model, lens_kind=core_models.TableLens, role="a series reads", value_column=model.value_column)
+
+
+class UpdatePointsChartLayerInputModel(_Style):
+    id: str
+    lens: str | None = None
+    x_column: str | None = None
+    y_column: str | None = None
+    z_column: str | None = None
+    clear_z_column: bool = False
+
+
+@prose_errors
+@kante.pydantic_input(UpdatePointsChartLayerInputModel, description="Retune a points layer: plot other columns, or another table lens' rows, or change how they are drawn")
+class UpdatePointsChartLayerInput:
+    id: strawberry.ID = strawberry.field(description="The ID of the points layer to update")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_LENS_REBIND + ". A table lens whose rows are placed in the chart's world, holding the columns plotted")
+    x_column: str | None = strawberry.field(default=None, description="The numeric column of the horizontal position. Omit to keep the current one")
+    y_column: str | None = strawberry.field(default=None, description="The numeric column of the vertical position. Omit to keep the current one")
+    z_column: str | None = strawberry.field(default=None, description="The numeric column of the depth (or colour). Omit to keep the current one")
+    clear_z_column: bool = strawberry.field(default=False, description="Drop the z column: a flat scatter")
+    name: str | None = strawberry.field(default=None, description=_NAME)
+    visible: bool | None = strawberry.field(default=None, description="Whether the layer is drawn")
+    order: int | None = strawberry.field(default=None, description="A new drawing order")
+    opacity: float | None = strawberry.field(default=None, description=_OPACITY)
+    color: list[float] | None = strawberry.field(default=None, description=_COLOR)
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="MARKERS, or a LINE through the rows sorted along x")
+    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
+    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels")
+
+
+def update_points_chart_layer(info: Info, input: UpdatePointsChartLayerInput) -> types.PointsChartLayer:
+    """Rebind or restyle a points layer."""
+    model = input.to_pydantic()
+    layer = _layer_of_kind(info, model.id, enums.ChartLayerKindChoices.POINTS)
+    clear = frozenset({"z_column"} if model.clear_z_column else set())
+    return _update(info, layer, model, lens_kind=core_models.TableLens, role="a points layer reads", clear=clear, x_column=model.x_column, y_column=model.y_column, z_column=model.z_column)
+
+
+class UpdateDistributionChartLayerInputModel(_Style):
+    id: str
+    lens: str | None = None
+    value_column: str | None = None
+    group_column: str | None = None
+    bins: int | None = None
+    clear_group_column: bool = False
+    clear_bins: bool = False
+
+
+@prose_errors
+@kante.pydantic_input(UpdateDistributionChartLayerInputModel, description="Retune a distribution: summarise another column, group it otherwise, bin it otherwise, or draw it as a histogram or a box")
+class UpdateDistributionChartLayerInput:
+    id: strawberry.ID = strawberry.field(description="The ID of the distribution layer to update")
+    lens: strawberry.ID | None = strawberry.field(default=None, description=_LENS_REBIND + ". A table lens whose rows are placed in the chart's world, holding the columns read")
+    value_column: str | None = strawberry.field(default=None, description="The numeric column summarised. Omit to keep the current one")
+    group_column: str | None = strawberry.field(default=None, description="The column whose values split the rows into one summary each. Omit to keep the current one")
+    bins: int | None = strawberry.field(default=None, description="How many bins a HISTOGRAM is cut into. Omit to keep the current number")
+    clear_group_column: bool = strawberry.field(default=False, description="Drop the grouping: one summary over every row")
+    clear_bins: bool = strawberry.field(default=False, description="Drop the bin count: the viewer chooses")
+    name: str | None = strawberry.field(default=None, description=_NAME)
+    visible: bool | None = strawberry.field(default=None, description="Whether the layer is drawn")
+    order: int | None = strawberry.field(default=None, description="A new drawing order")
+    opacity: float | None = strawberry.field(default=None, description=_OPACITY)
+    color: list[float] | None = strawberry.field(default=None, description=_COLOR)
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="A HISTOGRAM or a BOX. A box has no bins: switching to one drops the stored count")
+    line_width: float | None = strawberry.field(default=None, description="Outline width in screen pixels")
+
+
+def update_distribution_chart_layer(info: Info, input: UpdateDistributionChartLayerInput) -> types.DistributionChartLayer:
+    """Rebind, regroup, rebin or restyle a distribution."""
+    model = input.to_pydantic()
+    layer = _layer_of_kind(info, model.id, enums.ChartLayerKindChoices.DISTRIBUTION)
+    clear = frozenset({"group_column"} if model.clear_group_column else set()) | frozenset({"bins"} if model.clear_bins else set())
+    return _update(
+        info, layer, model, lens_kind=core_models.TableLens, role="a distribution reads", clear=clear, value_column=model.value_column, group_column=model.group_column, bins=model.bins
+    )
 
 
 class DeleteChartLayerInputModel(BaseModel):
