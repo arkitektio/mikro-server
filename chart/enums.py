@@ -29,6 +29,27 @@ class ChartLayerKindChoices(TextChoices):
     DISTRIBUTION = "distribution", "Distribution (a table's rows summarised by the values of one of its columns)"
 
 
+class ChartMarkerShapeChoices(TextChoices):
+    CIRCLE = "circle", "Circle"
+    SQUARE = "square", "Square"
+    TRIANGLE = "triangle", "Triangle"
+    DIAMOND = "diamond", "Diamond"
+    CROSS = "cross", "Cross"
+    PLUS = "plus", "Plus"
+
+
+@strawberry.enum(description="The symbol each marker is drawn as. A look: it changes nothing about what the layer reads")
+class ChartMarkerShape(str, Enum):
+    """The symbol a marker is drawn as."""
+
+    CIRCLE = "circle"
+    SQUARE = "square"
+    TRIANGLE = "triangle"
+    DIAMOND = "diamond"
+    CROSS = "cross"
+    PLUS = "plus"
+
+
 class ChartMarkChoices(TextChoices):
     LINE = "line", "Line"
     MARKERS = "markers", "Markers"

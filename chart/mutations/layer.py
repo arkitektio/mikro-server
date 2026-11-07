@@ -34,6 +34,7 @@ class _Style(BaseModel):
     mark: enums.ChartMark | None = None
     line_width: float | None = Field(default=None, gt=0)
     marker_size: float | None = Field(default=None, gt=0)
+    marker_shape: enums.ChartMarkerShape | None = None
 
     @field_validator("color")
     @classmethod
@@ -45,9 +46,14 @@ class _Style(BaseModel):
 
 def _settings(model: _Style) -> dict[str, object]:
     """The style a caller actually named, as column values."""
-    named = {field: getattr(model, field) for field in ("name", "visible", "order", "opacity", "color", "line_width", "marker_size") if getattr(model, field) is not None}
-    if model.mark is not None:
-        named["mark"] = model.mark.value
+    named = {field: getattr(model, field) for field in ("name", "visible", "order", "opacity", "color") if getattr(model, field) is not None}
+    for field in ("line_width", "marker_size"):
+        if getattr(model, field) is not None:
+            named[field] = getattr(model, field)
+    for field in ("mark", "marker_shape"):
+        value = getattr(model, field)
+        if value is not None:
+            named[field] = value.value
     return named
 
 
@@ -57,8 +63,9 @@ _ORDER = "Explicit drawing order, back to front. Defaults to after the chart's l
 _OPACITY = "Layer alpha, from 0 (transparent) to 1 (opaque)"
 _COLOR = "The colour the layer is drawn in, as RGBA: exactly four components. Omit to let the viewer choose"
 _MARK = "How the values are drawn: a line, markers, both, or steps. A look, not a kind. Defaults to LINE"
-_LINE_WIDTH = "Line width in screen pixels. Omit to let the viewer choose"
-_MARKER_SIZE = "Marker size in screen pixels. Omit to let the viewer choose"
+_LINE_WIDTH = "How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half -- never pixels. Omit to let the viewer choose"
+_MARKER_SIZE = "How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half -- never pixels. Omit to let the viewer choose"
+_MARKER_SHAPE = "The symbol a marker is drawn as: CIRCLE, SQUARE, TRIANGLE, DIAMOND, CROSS or PLUS. Omit to let the viewer choose (a circle)"
 
 
 # --- trace --------------------------------------------------------------------
@@ -91,6 +98,7 @@ class CreateTraceChartLayerInput:
     mark: enums.ChartMark | None = strawberry.field(default=None, description=_MARK)
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> types.TraceChartLayer:
@@ -135,6 +143,7 @@ class CreateSeriesChartLayerInput:
     mark: enums.ChartMark | None = strawberry.field(default=None, description=_MARK)
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 def create_series_chart_layer(info: Info, input: CreateSeriesChartLayerInput) -> types.SeriesChartLayer:
@@ -234,6 +243,7 @@ class CreatePointsChartLayerInput:
     mark: enums.ChartMark | None = strawberry.field(default=None, description="MARKERS (the default), or a LINE through the rows sorted along x")
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 def create_points_chart_layer(info: Info, input: CreatePointsChartLayerInput) -> types.PointsChartLayer:
@@ -317,12 +327,13 @@ class UpdateChartLayerInput:
     opacity: float | None = strawberry.field(default=None, description="A new alpha, 0 to 1. Omit to leave it as it is")
     color: list[float] | None = strawberry.field(default=None, description="A new RGBA colour. Omit to leave it as it is")
     mark: enums.ChartMark | None = strawberry.field(default=None, description="How the layer is drawn, among its kind's looks. Not for annotation layers. Omit to leave it as it is")
-    line_width: float | None = strawberry.field(default=None, description="Line width in screen pixels. Trace and series layers only. Omit to leave it as it is")
-    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels. Trace and series layers only. Omit to leave it as it is")
+    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
+    marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 #: The settings that describe how a line of values is drawn, which marks do not have.
-_LINE_SETTINGS = ("mark", "line_width", "marker_size")
+_LINE_SETTINGS = ("mark", "line_width", "marker_size", "marker_shape")
 
 
 def update_chart_layer(info: Info, input: UpdateChartLayerInput) -> types.ChartLayer:
@@ -397,7 +408,8 @@ class UpdateTraceChartLayerInput:
     color: list[float] | None = strawberry.field(default=None, description=_COLOR)
     mark: enums.ChartMark | None = strawberry.field(default=None, description="LINE, MARKERS, LINE_MARKERS or STEPS")
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
-    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels")
+    marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 def update_trace_chart_layer(info: Info, input: UpdateTraceChartLayerInput) -> types.TraceChartLayer:
@@ -426,7 +438,8 @@ class UpdateSeriesChartLayerInput:
     color: list[float] | None = strawberry.field(default=None, description=_COLOR)
     mark: enums.ChartMark | None = strawberry.field(default=None, description="LINE, MARKERS, LINE_MARKERS or STEPS")
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
-    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels")
+    marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 def update_series_chart_layer(info: Info, input: UpdateSeriesChartLayerInput) -> types.SeriesChartLayer:
@@ -461,7 +474,8 @@ class UpdatePointsChartLayerInput:
     color: list[float] | None = strawberry.field(default=None, description=_COLOR)
     mark: enums.ChartMark | None = strawberry.field(default=None, description="MARKERS, or a LINE through the rows sorted along x")
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
-    marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels")
+    marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+    marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
 
 
 def update_points_chart_layer(info: Info, input: UpdatePointsChartLayerInput) -> types.PointsChartLayer:
@@ -498,7 +512,7 @@ class UpdateDistributionChartLayerInput:
     opacity: float | None = strawberry.field(default=None, description=_OPACITY)
     color: list[float] | None = strawberry.field(default=None, description=_COLOR)
     mark: enums.ChartMark | None = strawberry.field(default=None, description="A HISTOGRAM or a BOX. A box has no bins: switching to one drops the stored count")
-    line_width: float | None = strawberry.field(default=None, description="Outline width in screen pixels")
+    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
 
 
 def update_distribution_chart_layer(info: Info, input: UpdateDistributionChartLayerInput) -> types.DistributionChartLayer:

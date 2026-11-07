@@ -101,8 +101,9 @@ class ChartLayer(models.Model):
 
     # --- style (trace, series) ---
     mark = TextChoicesField(choices_enum=enums.ChartMarkChoices, default=enums.ChartMarkChoices.LINE.value, help_text="(trace/series) How the values are drawn: a line, markers, both, or steps")
-    line_width = models.FloatField(null=True, blank=True, help_text="(trace/series) Line width in screen pixels. Null to let the viewer choose")
-    marker_size = models.FloatField(null=True, blank=True, help_text="(trace/series) Marker size in screen pixels. Null to let the viewer choose")
+    line_width = models.FloatField(null=True, blank=True, help_text="(trace/series/points/distribution) How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_size = models.FloatField(null=True, blank=True, help_text="(trace/series/points) How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_shape = TextChoicesField(choices_enum=enums.ChartMarkerShapeChoices, null=True, blank=True, help_text="(trace/series/points) The symbol a marker is drawn as. Null to let the viewer choose (a circle)")
 
 
     class Meta:

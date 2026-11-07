@@ -186,8 +186,9 @@ class TraceChartLayer(ChartLayer):
     id: auto
     lens: core_types.ArrayLens = kante.django_field(disable_optimization=True, description="The array lens whose values are read")
     mark: enums.ChartMark = kante.django_field(description="How the values are drawn: a line, markers, both, or steps")
-    line_width: float | None = kante.django_field(description="Line width in screen pixels. Null lets the viewer choose")
-    marker_size: float | None = kante.django_field(description="Marker size in screen pixels. Null lets the viewer choose")
+    line_width: float | None = kante.django_field(description="How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_size: float | None = kante.django_field(description="How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_shape: enums.ChartMarkerShape | None = kante.django_field(description="The symbol a marker is drawn as. Null lets the viewer choose (a circle)")
 
     @kante.django_field(description="The CHANNEL or INDEX axis the lens leaves free beside `alongAxis`, drawn as one line per position along it. Null when the lens is a single line. Read from the lens' shape, not stored")
     def series_axis(self, info: Info) -> str | None:
@@ -237,8 +238,9 @@ class SeriesChartLayer(ChartLayer):
         return self.lens.table_dataset
     value_column: str = kante.django_field(description="The numeric attribute column read as the value")
     mark: enums.ChartMark = kante.django_field(description="How the values are drawn: a line, markers, both, or steps")
-    line_width: float | None = kante.django_field(description="Line width in screen pixels. Null lets the viewer choose")
-    marker_size: float | None = kante.django_field(description="Marker size in screen pixels. Null lets the viewer choose")
+    line_width: float | None = kante.django_field(description="How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_size: float | None = kante.django_field(description="How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_shape: enums.ChartMarkerShape | None = kante.django_field(description="The symbol a marker is drawn as. Null lets the viewer choose (a circle)")
 
     @kante.django_field(description="The coordinate column the values are read against: the same name as `alongAxis`, since a table's coordinate columns are its space's axes. Null when the table is no longer placed")
     def coordinate_column(self, info: Info) -> str | None:
@@ -326,8 +328,9 @@ class PointsChartLayer(ChartLayer):
     y_column: str = kante.django_field(description="The numeric column whose value is a row's vertical position")
     z_column: str | None = kante.django_field(description="The numeric column whose value is a row's depth, for a three-dimensional scatter. Null for a flat one")
     mark: enums.ChartMark = kante.django_field(description="How the rows are drawn: MARKERS, or a LINE through them sorted along x")
-    line_width: float | None = kante.django_field(description="Line width in screen pixels. Null lets the viewer choose")
-    marker_size: float | None = kante.django_field(description="Marker size in screen pixels. Null lets the viewer choose")
+    line_width: float | None = kante.django_field(description="How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_size: float | None = kante.django_field(description="How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
+    marker_shape: enums.ChartMarkerShape | None = kante.django_field(description="The symbol a marker is drawn as. Null lets the viewer choose (a circle)")
 
     @kante.django_field(description=_WINDOW_FILTERS)
     def window_filters(self, info: Info) -> List[LabelFilterBy]:
@@ -377,6 +380,7 @@ class DistributionChartLayer(ChartLayer):
     group_column: str | None = kante.django_field(description="The column whose values split the rows into one summary each: a text or boolean attribute, a label, a group id, or a long-form CHANNEL coordinate. Null for one summary over every row")
     bins: int | None = kante.django_field(description="How many bins a HISTOGRAM is cut into. Null lets the viewer choose")
     mark: enums.ChartMark = kante.django_field(description="How the values are summarised: a HISTOGRAM or a BOX")
+    line_width: float | None = kante.django_field(description="How thick the outlines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
 
     @kante.django_field(description=_WINDOW_FILTERS)
     def window_filters(self, info: Info) -> List[LabelFilterBy]:
