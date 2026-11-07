@@ -40,7 +40,7 @@ mutation U($input: UpdateTraceChartLayerInput!) { updateTraceChartLayer(input: $
 
 
 async def _scatter(ctx: HttpContext) -> tuple[dict, dict, str]:
-    """A VALUES chart over a table of nuclei, plotting area against volume."""
+    """A chart over a table of nuclei, plotting area against volume."""
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
     layer = (await _ok(ctx, POINTS, {"input": {"chart": chart["id"], "lens": lens, "xColumn": "area", "yColumn": "volume"}}))["createPointsChartLayer"]

@@ -1,4 +1,4 @@
-"""The "Create plot" button: a VALUES chart over one table's space, and one layer, in one transaction.
+"""The "Create plot" button: a chart over one table's space, and one value layer, in one transaction.
 
 Nothing new is decided here. A table's rows live in its space (its frame: an INDEX `cell_id`,
 the synthetic `object`, a localization table's `(t, y, x)`) and carry values (its other
@@ -39,7 +39,7 @@ def create_table_plot(
     name: str | None = None,
     **settings: object,
 ) -> "models.Chart":
-    """A VALUES chart over one table's space, and its layer through ``lens`` (the table's whole lens when omitted).
+    """A chart over one table's space, and its value layer through ``lens`` (the table's whole lens when omitted).
 
     POINTS reads ``x_column``/``y_column`` (and ``z_column``); a DISTRIBUTION reads
     ``x_column`` as its value column, the horizontal axis, and ``group_column``.
@@ -55,7 +55,6 @@ def create_table_plot(
         chart = chart_logic.create_chart(
             name=name or default_name(table, kind=kind, x_column=x_column, y_column=y_column, z_column=z_column),
             world=table.coordinate_system,
-            kind=enums.ChartKindChoices.VALUES.value,
             ctx=ctx,
         )
         if kind == enums.ChartLayerKindChoices.POINTS.value:

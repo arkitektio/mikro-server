@@ -1,12 +1,12 @@
 """What a chart is and what may be drawn in one. The rules, and the writers that obey them.
 
-A chart draws values as position. **Every chart has a world -- the domain its layers' rows
-live in -- and at most one axis of it is drawn.** An AXIS chart's world is one metric axis,
-and its TRACE, SERIES and ANNOTATION layers are laid along it. A VALUES chart's world is
-whose rows it draws (a table's space, not drawn); its POINTS and DISTRIBUTION layers are
-placed into it and drawn at the values of the columns they name. For a value layer the
-questions are: is its table placed in the world, do its columns exist and hold numbers, and
-do their units agree with the chart's other layers.
+A chart draws values as position. **Every chart has a world -- the domain its layers live
+in -- and each layer says where its positions come from** (:func:`positioning_of`). TRACE,
+SERIES and ANNOTATION are laid *along* the world's one measured axis, so they need a world of
+exactly one (:func:`chart_axis`). POINTS and DISTRIBUTION are drawn *by their values*: their
+rows are placed in the world and drawn at the values of the columns they name. One chart may
+hold both; its layout lays them out. For a value layer the questions are: is its table placed
+in the world, and do its columns exist and hold numbers.
 
 For a placed layer, three questions decide whether it may exist, asked in this order:
 
@@ -76,13 +76,17 @@ def chart_axis(world: "core_models.CoordinateSystem") -> "core_models.Axis":
     return axis
 
 
-def assert_layout(chart_name: str, kind: str, layout: str) -> None:
-    """Refuse a layout the kind cannot draw: a VALUES chart has no second scale to give each layer in one plot."""
-    if kind == enums.ChartKindChoices.VALUES.value and layout not in enums.VALUES_LAYOUTS:
-        raise ValueError(
-            f"Chart '{chart_name}' draws rows at their values, where a layer's scale IS its axis: OVERLAY would give each layer its own scale in one plot. "
-            "Use STACKED (a panel per layer) or SHARED (layers in the same units overlaid, the rest beside them)."
-        )
+def world_axis(world: "core_models.CoordinateSystem") -> "core_models.Axis | None":
+    """The axis an along-axis layer would be laid along, or None when the world has no single measured one."""
+    try:
+        return chart_axis(world)
+    except ValueError:
+        return None
+
+
+def positioning_of(kind: str) -> str:
+    """Where a layer of this kind takes its positions from: along the world axis, or by its values."""
+    return enums.ChartLayerPositioning.ALONG_AXIS.value if kind in enums.PLACED_KINDS else enums.ChartLayerPositioning.BY_VALUES.value
 
 
 def create_chart(
@@ -92,30 +96,25 @@ def create_chart(
     description: str | None = None,
     world: "core_models.CoordinateSystem | None" = None,
     axis: object | None = None,
-    kind: str = enums.ChartKindChoices.AXIS.value,
     layout: str = enums.ChartLayoutChoices.SHARED.value,
 ) -> "models.Chart":
     """Create a chart over a world: an adopted existing space, or one minted from a single axis.
 
     Adopting lays the chart out over the space as it is. Minting is convenience only: the
     space it makes is an ordinary shared one, which other charts can adopt, which outlives
-    every chart over it, and which only ``deleteCoordinateSystem`` removes. An AXIS chart's
-    world must be one metric axis with a unit, which it draws; a VALUES chart's may be any
-    space -- whose rows it draws -- and is not drawn.
+    every chart over it, and which only ``deleteCoordinateSystem`` removes. Any space will do:
+    what a layer needs of the world is checked when the layer is added -- one measured axis to
+    lay it along, or its rows placed in it.
     """
     if (world is None) == (axis is None):
         raise ValueError("A chart is created over exactly one of `coordinateSystem` (an existing space to adopt) or `axis` (the one axis of a space to create).")
-    assert_layout(name, kind, layout)
 
     with transaction.atomic():
         if world is None:
             world = coordinate_system_logic.create_world_space(name=f"{name}/axis", axes=[axis], ctx=ctx)
-        if kind == enums.ChartKindChoices.AXIS.value:
-            chart_axis(world)
         return models.Chart.objects.create(
             name=name,
             description=description,
-            kind=kind,
             layout=layout,
             world=world,
             creator=ctx.user,
@@ -155,11 +154,15 @@ def resolve_along_axis(chart: "models.Chart", source_system: "core_models.Coordi
     Then the two questions only a chart asks, both of the same composed map.
     """
     world = chart.world
-    if chart.kind == enums.ChartKindChoices.VALUES.value:
-        raise ValueError(f"Chart '{chart.name}' is a VALUES chart: it draws rows at their values, and has no drawn axis to lay {what} along. Draw it in an AXIS chart, or draw a table's rows as POINTS or a DISTRIBUTION here.")
+    try:
+        axis = chart_axis(world)
+    except ValueError as refused:
+        raise ValueError(
+            f"Chart '{chart.name}' has no single measured axis to lay {what} along: {refused} "
+            "A table's rows can still be drawn here by their values, as POINTS or a DISTRIBUTION."
+        ) from refused
     graph_logic.assert_placeable_in(world, source_system, destination=f"the axis of chart '{chart.name}'")
 
-    axis = chart_axis(world)
     condensed = placement.PlacementGraph(world, seed_systems=[source_system.pk]).condensed(source_system)
     if condensed is None or not condensed.total:
         raise ValueError(
@@ -390,8 +393,8 @@ def create_layer(
 ) -> "models.ChartLayer":
     """Draw a source in a chart, refusing one its kind cannot read.
 
-    A placed kind needs the chart's world and its data laid along it; a value kind needs a
-    VALUES chart whose world its rows are placed in, and columns that hold numbers. ``settings`` are the view-state columns,
+    A placed kind needs a world of one measured axis and its data laid along it; a value kind
+    needs its rows placed in the chart's world, and columns that hold numbers. ``settings`` are the view-state columns,
     passed through as given; a look its kind does not take is refused, and an omitted one is
     the kind's first. Appended after the chart's last layer unless an order is named.
     """
@@ -405,11 +408,6 @@ def create_layer(
 
     values: dict[str, object] = {}
     if kind in enums.VALUE_KINDS:
-        if chart.kind != enums.ChartKindChoices.VALUES.value:
-            raise ValueError(
-                f"Chart '{chart.name}' is an AXIS chart, laid along '{chart_axis(chart.world).name}', and a {kind.upper()} layer draws rows at their values. "
-                "Draw it in a VALUES chart over the table's space (`createChart(kind: VALUES)`, or `createTablePlot`)."
-            )
         if not isinstance(source, core_models.TableLens):
             raise ValueError(f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns.")
         values.update(assert_value_layer(chart, kind=kind, lens=source, x=x_column, y=y_column, z=z_column, value=value_column, group=group_column, bins=bins, mark=str(settings["mark"])))
@@ -561,9 +559,9 @@ def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: 
     chart may hold values in several units, and which scale a height is read against is the
     viewer's binding, not a fact about the drawing.
     """
-    if chart.kind == enums.ChartKindChoices.VALUES.value:
-        raise ValueError(f"Chart '{chart.name}' is a VALUES chart, with no drawn axis to draw marks along. Annotate an AXIS chart.")
-    axis = chart_axis(chart.world)
+    axis = world_axis(chart.world)
+    if axis is None:
+        raise ValueError(f"Chart '{chart.name}' has no single measured axis to draw marks along. Annotate a chart whose world is one measured axis.")
     collection = core_models.AnnotationCollection.objects.create(
         name=(name or f"{chart.name}/annotations")[:255],
         creator=ctx.user,

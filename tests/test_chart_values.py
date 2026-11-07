@@ -1,10 +1,11 @@
-"""A VALUES chart: a table's rows placed in its world and drawn at the values of their columns.
+"""Value layers: a table's rows placed in a chart's world and drawn at the values of their columns.
 
 A scene shows *where*: every screen axis is a world axis and data is placed by edges. A chart
 shows *how much*: values as position, and at most one axis drawn from its world. Every chart
-has a world -- the domain its layers' rows live in. An AXIS chart draws it (one metric axis); a
-VALUES chart does not: its world is a table's space, whose rows it draws, its POINTS and
-DISTRIBUTION layers are placed into it and name the columns whose values are their positions.
+has a world -- the domain its layers live in -- and each layer says where its positions come
+from: along the world's one measured axis (TRACE, SERIES, ANNOTATION), or by its values (POINTS,
+DISTRIBUTION), its rows placed in the world and naming the columns whose values are its positions.
+One chart may hold both.
 The columns stay columns -- a table's space is its frame -- and a gate (`area >= 50`) is a
 window of a table lens on a numeric column, so it is a lens like any other.
 """
@@ -30,7 +31,7 @@ query T($id: ID!) { tableDataset(id: $id) { fullLens { id } coordinateSystem { i
 
 CHART = """
 mutation C($input: CreateChartInput!) {
-  createChart(input: $input) { id kind axis { name } worldCoordinateSystem { id } descriptors }
+  createChart(input: $input) { id axis { name } worldCoordinateSystem { id } descriptors }
 }
 """
 
@@ -48,6 +49,10 @@ DISTRIBUTION = """
 mutation D($input: CreateDistributionChartLayerInput!) {
   createDistributionChartLayer(input: $input) { id kind mark valueColumn groupColumn bins valueUnit }
 }
+"""
+
+POSITIONING = """
+query P($id: ID!) { chart(id: $id) { layers { id positioning } } }
 """
 
 SERIES = """
@@ -79,16 +84,15 @@ async def _nuclei(ctx: HttpContext, name: str = "nuclei") -> tuple[str, str, str
 
 
 async def _values_chart(ctx: HttpContext, world: str) -> dict:
-    return (await _ok(ctx, CHART, {"input": {"name": "morphology", "kind": "VALUES", "coordinateSystem": world}}))["createChart"]
+    return (await _ok(ctx, CHART, {"input": {"name": "morphology", "coordinateSystem": world}}))["createChart"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_values_chart_has_its_rows_for_a_world_and_draws_no_axis_of_it(authenticated_context: HttpContext):
+async def test_a_chart_over_rows_has_no_axis_to_lay_along(authenticated_context: HttpContext):
     _, _, space = await _nuclei(authenticated_context)
     chart = await _values_chart(authenticated_context, space)
-    assert chart["kind"] == "VALUES"
-    assert chart["worldCoordinateSystem"]["id"] == space and chart["axis"] is None
+    assert chart["worldCoordinateSystem"]["id"] == space and chart["axis"] is None, "a table's INDEX is not a measured axis"
     assert chart["descriptors"]["@mikro/axis_type"] == "VALUE"
 
 
@@ -163,17 +167,36 @@ async def test_a_distribution_per_condition(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_placed_and_value_layers_do_not_mix(authenticated_context: HttpContext):
-    """A position along a world axis and a measurement are not one kind of thing, even in one unit."""
-    ctx = authenticated_context
-    _, lens, space = await _nuclei(ctx)
-    values = await _values_chart(ctx, space)
-    assert "VALUES chart" in await _refused(ctx, SERIES, {"input": {"chart": values["id"], "lens": lens}})
+async def test_a_layer_says_where_its_positions_come_from(authenticated_context: HttpContext):
+    """One chart over a table framed by `t`: a SERIES laid along `t` and a scatter of the same time points' columns, side by side.
 
-    placed = (await _ok(ctx, CHART, {"input": {"name": "over time", "axis": {"name": "t", "type": "TIME", "unit": "second"}}}))["createChart"]
-    assert placed["kind"] == "AXIS"
-    assert placed["axis"]["name"] == "t"
-    assert "AXIS chart" in await _refused(ctx, POINTS, {"input": {"chart": placed["id"], "lens": lens, "xColumn": "area", "yColumn": "volume"}})
+    What positions a layer is its own kind's: along the world axis (needing a world of one measured
+    axis) or by its values (needing its rows placed in the world). Over a table's INDEX there is no
+    axis to lay anything along, and the refusal says so.
+    """
+    ctx = authenticated_context
+    table_id = await _table(
+        ctx,
+        "per frame",
+        [
+            {"name": "t", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "TIME", "unit": "second"},
+            {"name": "intensity", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
+            {"name": "area", "dtype": "DOUBLE", "role": "ATTRIBUTE", "unit": "micrometer ** 2"},
+        ],
+    )
+    table = (await _ok(ctx, TABLE, {"id": table_id}))["tableDataset"]
+    chart = (await _ok(ctx, CHART, {"input": {"name": "over time", "coordinateSystem": table["coordinateSystem"]["id"]}}))["createChart"]
+    assert chart["axis"] == {"name": "t"}
+    assert chart["descriptors"]["@mikro/axis_type"] == "TIME"
+
+    series = (await _ok(ctx, SERIES, {"input": {"chart": chart["id"], "lens": table["fullLens"]["id"], "valueColumn": "intensity"}}))["createSeriesChartLayer"]
+    points = (await _ok(ctx, POINTS, {"input": {"chart": chart["id"], "lens": table["fullLens"]["id"], "xColumn": "area", "yColumn": "intensity"}}))["createPointsChartLayer"]
+    shown = (await _ok(ctx, POSITIONING, {"id": chart["id"]}))["chart"]["layers"]
+    assert {layer["id"]: layer["positioning"] for layer in shown} == {series["id"]: "ALONG_AXIS", points["id"]: "BY_VALUES"}
+
+    _, lens, space = await _nuclei(ctx)
+    rows = await _values_chart(ctx, space)
+    assert "no single measured axis" in await _refused(ctx, SERIES, {"input": {"chart": rows["id"], "lens": lens}})
 
 
 @pytest.mark.django_db(transaction=True)
@@ -199,7 +222,7 @@ AUTO = """
 mutation Auto($input: AutoVisualizeInput!) {
   autoVisualize(input: $input) {
     __typename
-    ... on Chart { kind worldCoordinateSystem { id } layers { __typename ... on PointsChartLayer { xColumn yColumn } } }
+    ... on Chart { worldCoordinateSystem { id } layers { __typename ... on PointsChartLayer { xColumn yColumn } } }
   }
 }
 """
@@ -211,7 +234,7 @@ async def test_a_table_with_no_place_is_shown_as_a_chart_of_its_values(authentic
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     shown = (await _ok(ctx, AUTO, {"input": {"lens": lens}}))["autoVisualize"]
-    assert shown == {"__typename": "Chart", "kind": "VALUES", "worldCoordinateSystem": {"id": space}, "layers": [{"__typename": "PointsChartLayer", "xColumn": "area", "yColumn": "area_mm"}]}
+    assert shown == {"__typename": "Chart", "worldCoordinateSystem": {"id": space}, "layers": [{"__typename": "PointsChartLayer", "xColumn": "area", "yColumn": "area_mm"}]}
 
 
 @pytest.mark.django_db(transaction=True)

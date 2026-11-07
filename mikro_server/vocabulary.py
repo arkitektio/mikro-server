@@ -148,10 +148,10 @@ SCENE_DESCRIPTORS = [
     Descriptor(key="@mikro/blending", type="STRING", description="How its layers are blended: additive, multiplicative or normal"),
     Descriptor(key="@mikro/preferred_view", type="STRING", description="The view it asks to be opened in: two_d, three_d or auto"),
 ]
-#: A chart: the one metric axis it lays its data out along.
+#: A chart: the one metric axis its world is, if it is one.
 CHART_DESCRIPTORS = [
-    Descriptor(key="@mikro/axis_type", type="STRING", description="What its drawn axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength) -- or VALUE for a VALUES chart (a scatter, a histogram), which draws no world axis"),
-    Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its drawn axis; 'None' for a VALUES chart, whose axes are the units of the columns its layers read"),
+    Descriptor(key="@mikro/axis_type", type="STRING", description="What its world's one measured axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength) -- or VALUE when the world is not one measured axis (a table's rows), where only value layers (scatters, histograms) draw"),
+    Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its world's one measured axis; 'None' when the world is not one, and the drawn axes are the units of the columns its layers read"),
 ]
 #: A grid: what its rows and columns enumerate.
 GRID_DESCRIPTORS = [

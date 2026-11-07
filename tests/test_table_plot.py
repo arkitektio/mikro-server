@@ -1,6 +1,6 @@
 """createTablePlot: the "Create plot" button. One call, one transaction, a chart of a table's values.
 
-It makes a VALUES chart whose world is the table's space -- whose rows, not drawn -- and draws
+It makes a chart whose world is the table's space -- whose rows -- and draws
 the layer through the table's whole lens or a window of it: points at the values of two or three columns, or the
 distribution of one. A table then lists the compositions that draw any lens of it
 (`visualizations`), charts and scenes alike.

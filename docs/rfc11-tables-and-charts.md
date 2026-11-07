@@ -111,39 +111,45 @@ names it was cut with (`coordinate_system.windowable_names`), a row filter on re
 windowed: a layer's `filterBys` filters by value.
 
 ### Charts
-Every chart has a **world -- the domain its layers' rows live in** -- and every layer is placed
-into it. A chart draws at most one axis of it (`Chart.kind`):
+Every chart has a **world -- the domain its layers live in** -- and every layer is placed into
+it. What positions a layer on screen is the layer's own, read off its kind
+(`ChartLayer.positioning`), never the chart's:
 
-| Kind | World | Drawn? | A layer's placement says |
-|---|---|---|---|
-| `AXIS` | one measured axis with a unit, e.g. `t` | yes, horizontally | where along `t` each value sits |
-| `VALUES` | whose rows: a table's space -- `cell_id`, `object`, a localization table's `(t, y, x)` | no | which rows are the same rows |
+| Positioning | Kinds | Needs of the world | x comes from | A layer's placement says |
+|---|---|---|---|---|
+| `ALONG_AXIS` | TRACE, SERIES, ANNOTATION | exactly one measured axis with a unit, e.g. `t` (`Chart.axis`) | the placement: where along `t` | where along `t` each value sits (`asAffine` is one row) |
+| `BY_VALUES` | POINTS, DISTRIBUTION | its rows placed in it -- `cell_id`, a table's frame | the values of the columns it names | which rows are the same rows |
 
-- **AXIS charts** lay TRACE, SERIES and ANNOTATION along their axis (`asAffine` is one row).
-  Unchanged.
-- **VALUES charts** (`createChart(kind: VALUES, coordinateSystem: <a table's space>)`) draw
-  POINTS -- a table lens' rows at the values of `xColumn`, `yColumn` and optionally `zColumn` --
-  and DISTRIBUTION -- `valueColumn` as a HISTOGRAM (`bins`) or a BOX, once per value of an
-  optional `groupColumn` (a text or boolean attribute, a label, a group id, or a long-form
-  CHANNEL). A layer's lens must be placed in the world (its own table's space, or one its table
-  is derived or registered into); every bound column exists and holds numbers. Neither their
-  kinds nor their units need agree (a scatter beside a histogram): the chart's remembered `layout` lays them
-  out -- STACKED, a panel per layer; SHARED, layers in the same units overlaid and the rest
-  beside them -- so `area` against `volume` and `cluster_id` against `arclength` share a chart
-  without sharing an axis.
+- **Along the axis:** TRACE, SERIES and ANNOTATION are laid along the world's one axis. Over a
+  world that is not one measured axis (a table's INDEX, an image's `(y, x)`) they are refused,
+  naming why.
+- **By their values:** POINTS -- a table lens' rows at the values of `xColumn`, `yColumn` and
+  optionally `zColumn` -- and DISTRIBUTION -- `valueColumn` as a HISTOGRAM (`bins`) or a BOX, once
+  per value of an optional `groupColumn` (a text or boolean attribute, a label, a group id, or a
+  long-form CHANNEL). A layer's lens must be placed in the world (its own table's space, or one
+  its table is derived or registered into); every bound column exists and holds numbers.
+- **One chart, both kinds:** a table framed by `t` is both an axis and rows, so one chart over it
+  holds a SERIES of `intensity` along `t` *and* a scatter of the same time points' `area`
+  against `intensity`. Neither the kinds nor the units of a chart's layers need agree: the
+  chart's remembered `layout` lays them out -- STACKED, a row or panel per layer; SHARED, the
+  layers that read their axes alike overlaid (along the axis: the same value unit; by values:
+  one kind, one mark, the same units) and the rest beside them; OVERLAY, every along-axis layer in
+  one plot, value layers as SHARED.
 - **Same world, same rows.** A PCA written as a table derived from the measurements with
-  IDENTITY over the frame is placed in their world, so `pc1` and `area` draw in one VALUES chart,
-  and a board can link selection between them (RFC-12).
+  IDENTITY over the frame is placed in their world, so `pc1` and `area` draw in one chart, and a
+  board can link selection between them (RFC-12).
 - **Why every table has an index, in practice:** a table's space is how its rows are addressed --
   an INDEX for measurements, the frame for localizations. No `object` axis is added beside a
   frame: it would put an extra axis into every edge out of the table, and a row number does not
   identify rows across tables -- a declared id does.
-- A chart is AXIS or VALUES, never both: a position along a world axis and a measurement are not
-  one kind of thing, even in one unit.
+- An earlier design kept a chart-level `Chart.kind` (AXIS or VALUES, never both). It went once
+  layouts existed: the distinction is real, but it is each layer's -- *aligned by a measured
+  axis* or *aligned by rows* -- and a chart can show both side by side.
 - `createTablePlot(table, lens?, kind, xColumn, yColumn?, zColumn?, groupColumn?, bins?)` makes a
-  VALUES chart over the table's space and its layer in one transaction. `autoVisualize` of a
+  chart over the table's space and its value layer in one transaction. `autoVisualize` of a
   table lens whose table has no place draws its first two measurements against each other.
-- Descriptors: a VALUES chart describes `@mikro/axis_type` as `VALUE` (it draws no world axis).
+- Descriptors: `@mikro/axis_type` is the world's one measured axis' type, or `VALUE` when the
+  world is not one (a table's rows), where only value layers draw.
 
 ### PCA, UMAP, clusters
 A computation over a table's columns writes a **derived table** whose rows are the source's
@@ -182,8 +188,8 @@ scene over a declared group of components. CATEGORY stays (a grid will enumerate
 - A ROTATION mixing axes outside one metric group (use AFFINE).
 - A CHANNEL coordinate with a unit; `variesOver` on a coordinate or naming no CHANNEL coordinate.
 - A window on a text column.
-- A value layer in an AXIS chart, a placed layer in a VALUES chart, two value kinds in one chart, and
-  a value layer whose table is not placed in the VALUES chart's world.
+- An along-axis layer (TRACE, SERIES, ANNOTATION) in a chart whose world is not one measured axis,
+  and a value layer whose table is not placed in the chart's world.
 
 ## Where it lives
 

@@ -734,7 +734,7 @@ class Mutation:
 
     create_chart = mutation(
         resolver=chart_mutations.create_chart,
-        description="Create a chart over a world: values drawn as position. An AXIS chart draws its world's one metric, unit-carrying axis (an existing space, or one created from `axis`); a VALUES chart's world is a table's space -- whose rows -- and its layers draw those rows at the values of columns, for scatters and histograms",
+        description="Create a chart over a world: values drawn as position. The world is an existing space or one created from `axis`; along-axis layers (traces, series, marks) are laid along its one metric, unit-carrying axis, value layers (scatters, histograms) draw the rows placed in it at the values of their columns. One chart may hold both",
     )
     create_chart_from_coordinate_system = mutation(
         resolver=chart_mutations.create_chart_from_coordinate_system,
@@ -756,15 +756,15 @@ class Mutation:
     )
     create_table_plot = mutation(
         resolver=chart_mutations.create_table_plot,
-        description="Plot a table's columns in one call: a VALUES chart over the table's space and one POINTS or DISTRIBUTION layer drawing its rows at the values of the named columns. One transaction",
+        description="Plot a table's columns in one call: a chart over the table's space and one POINTS or DISTRIBUTION layer drawing its rows at the values of the named columns. One transaction",
     )
     create_points_chart_layer = mutation(
         resolver=chart_mutations.create_points_chart_layer,
-        description="Draw a table lens' rows as points in a VALUES chart: placed in its world (whose rows), each drawn at the values of two columns (a scatter), or three for depth",
+        description="Draw a table lens' rows as points in a chart: placed in its world (whose rows), each drawn at the values of two columns (a scatter), or three for depth",
     )
     create_distribution_chart_layer = mutation(
         resolver=chart_mutations.create_distribution_chart_layer,
-        description="Summarise the values of one column of a table lens' rows in a VALUES chart: a histogram or a box, over every row or once per value of a grouping column such as a condition",
+        description="Summarise the values of one column of a table lens' rows in a chart: a histogram or a box, over every row or once per value of a grouping column such as a condition",
     )
     update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer of any kind: name, visibility, order, opacity, colour and its look")
     update_trace_chart_layer = mutation(resolver=chart_mutations.update_trace_chart_layer, description="Retune a trace: draw another array lens along the chart's axis, or restyle it")

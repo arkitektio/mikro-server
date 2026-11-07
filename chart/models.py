@@ -19,21 +19,20 @@ class Chart(Described):
     (a colour, a size). A chart answers *how much*: values are drawn as position. Both name
     data through lenses and own none of it.
 
-    **Every chart has a world -- the domain its layers' rows live in -- and at most one of its
-    axes is drawn.** An AXIS chart draws its world: one measured axis with a unit, which its
-    layers are laid along by the edges into it (TRACE, SERIES, ANNOTATION) -- intensity
-    against `t`. A VALUES chart does not draw its world: the world says *whose rows* -- a
-    table's space, usually its INDEX axis (`cell_id`), a localization table's frame -- each
-    layer is placed into it, and the rows are drawn at the values of the columns it names
-    (POINTS, DISTRIBUTION): nuclei at `area` against `volume`. Two layers placed in one VALUES
-    world are about the same rows (a table and the PCA derived from it). A chart is one kind
-    or the other, never both: a position along a world axis and a measurement are not the same
-    kind of thing, even in one unit.
+    **Every chart has a world -- the domain its layers live in -- and each layer says where its
+    positions come from** (``enums.ChartLayerPositioning``). An *along-axis* layer (TRACE,
+    SERIES, ANNOTATION) is laid along the world's one measured axis by the edges into it --
+    intensity against `t` -- so it needs a world of exactly one measured axis with a unit. A
+    *value* layer (POINTS, DISTRIBUTION) has its rows placed in the world -- a table's space,
+    its INDEX axis or its frame -- and draws them at the values of the columns it names:
+    nuclei at `area` against `volume`. Two layers in one world are about the same domain (one
+    clock, the same rows); a chart may hold both kinds, and its ``layout`` lays them out: the
+    along-axis layers share the axis, the value layers their panels. What positions a layer
+    is a property of the layer, never of the chart.
     """
 
     name = models.CharField(max_length=255)
     description = models.CharField(max_length=1000, null=True, blank=True)
-    kind = TextChoicesField(choices_enum=enums.ChartKindChoices, default=enums.ChartKindChoices.AXIS.value, help_text="What the world is to the chart: the one axis it draws (AXIS), or whose rows it draws at their values (VALUES). Fixed for the life of the row")
     layout = TextChoicesField(
         choices_enum=enums.ChartLayoutChoices,
         default=enums.ChartLayoutChoices.SHARED.value,
@@ -45,8 +44,8 @@ class Chart(Described):
         on_delete=models.RESTRICT,
         related_name="charts",
         help_text=(
-            "The domain this chart's layers live in: for an AXIS chart a coordinate system with one metric, unit-carrying axis it lays them along; for a VALUES chart the "
-            "space whose rows it draws -- a table's. Never owned by the chart: several charts can share it, it outlives each of them, and deleting a chart never deletes it. "
+            "The domain this chart's layers live in: one metric, unit-carrying axis its along-axis layers are laid along, the space whose rows its value layers draw -- "
+            "a table's -- or both at once. Never owned by the chart: several charts can share it, it outlives each of them, and deleting a chart never deletes it. "
             "RESTRICT: while a chart is laid out over a space, the space cannot be deleted"
         ),
     )

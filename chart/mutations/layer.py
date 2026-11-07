@@ -2,7 +2,7 @@
 
 A placed kind (trace, series, annotation) runs the same gate before it writes -- the source
 must be laid along the chart's axis by the graph. A value kind (points, distribution) names
-the columns whose values are its positions, in a VALUES chart whose world its rows are placed in. None of them writes an edge.
+the columns whose values are its positions, its rows placed in the chart's world. One chart may hold both. None of them writes an edge.
 """
 
 import kante
@@ -223,14 +223,14 @@ class CreatePointsChartLayerInputModel(_Style):
 @kante.pydantic_input(
     CreatePointsChartLayerInputModel,
     description=(
-        "Input for drawing a table's rows as points in a VALUES chart: each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth) -- nuclei at their "
+        "Input for drawing a table's rows as points in a chart: each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth) -- nuclei at their "
         "`area` and `volume`. The rows are placed in the chart's world (whose rows); the columns' units are its drawn axes, and a second layer's must convert to them. Writes no edge"
     ),
 )
 class CreatePointsChartLayerInput:
     """Input for creating a points layer."""
 
-    chart: strawberry.ID = strawberry.field(description="The VALUES chart to draw in: its world must be the lens' table's space, or one it is placed in")
+    chart: strawberry.ID = strawberry.field(description="The chart to draw in: its world must be the lens' table's space, or one it is placed in")
     lens: strawberry.ID = strawberry.field(description=_LENS_ROWS)
     x_column: str = strawberry.field(description="The numeric column whose value is a row's horizontal position")
     y_column: str = strawberry.field(description="The numeric column whose value is a row's vertical position")
@@ -271,14 +271,14 @@ class CreateDistributionChartLayerInputModel(_Style):
 @kante.pydantic_input(
     CreateDistributionChartLayerInputModel,
     description=(
-        "Input for summarising the values of one column of a table's rows in a VALUES chart: a HISTOGRAM or a BOX, over every row or once per value of `groupColumn` "
+        "Input for summarising the values of one column of a table's rows in a chart: a HISTOGRAM or a BOX, over every row or once per value of `groupColumn` "
         "-- the `area` of nuclei, one histogram per `condition`. The rows are placed in the chart's world (whose rows). Writes no edge"
     ),
 )
 class CreateDistributionChartLayerInput:
     """Input for creating a distribution layer."""
 
-    chart: strawberry.ID = strawberry.field(description="The VALUES chart to draw in: its world must be the lens' table's space, or one it is placed in")
+    chart: strawberry.ID = strawberry.field(description="The chart to draw in: its world must be the lens' table's space, or one it is placed in")
     lens: strawberry.ID = strawberry.field(description=_LENS_ROWS)
     value_column: str = strawberry.field(description="The numeric column whose values are summarised: the chart's horizontal axis")
     group_column: str | None = strawberry.field(default=None, description="A column that sorts rows -- a text or boolean attribute, a label, a group id -- or a long-form CHANNEL coordinate, drawn as one summary per value. Omit for one over every row")

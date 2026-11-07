@@ -11,6 +11,12 @@ from django.db.models import TextChoices
 
 
 class ChartKindChoices(TextChoices):
+    """History only: what `Chart.kind` held until migration 0006 dropped it. Migrations 0002-0005 still import it.
+
+    A chart has no kind any more -- each layer says where its positions come from
+    (:class:`ChartLayerPositioning`). Do not use this in new code.
+    """
+
     AXIS = "axis", "Axis (laid along its world's one measured axis)"
     VALUES = "values", "Values (rows drawn at the values of their columns; the world is whose rows)"
 
@@ -18,7 +24,7 @@ class ChartKindChoices(TextChoices):
 class ChartLayoutChoices(TextChoices):
     STACKED = "stacked", "Stacked (one row or panel per layer, each on its own scale)"
     SHARED = "shared", "Shared (layers measuring the same thing overlaid on one scale; the rest beside them)"
-    OVERLAY = "overlay", "Overlay (every layer in one plot, each on its own scale; AXIS charts only)"
+    OVERLAY = "overlay", "Overlay (every along-axis layer in one plot, each on its own scale; value layers lay out as shared)"
 
 
 class ChartLayerKindChoices(TextChoices):
@@ -61,17 +67,10 @@ class ChartMarkChoices(TextChoices):
 
 @strawberry.enum(
     description=(
-        "The kind of a chart layer, which says what it reads -- never how it looks. Three are drawn in an AXIS chart, laid along its one world axis by the graph: TRACE "
-        "reads an array along one axis, SERIES one value column of a table along its coordinate, ANNOTATION drawn marks. Two are drawn in a VALUES chart, their rows placed "
-        "in its world and drawn at their values: POINTS at two or three columns (a scatter), DISTRIBUTION summarising one column (a histogram, a box), once per value of a "
-        "grouping column. A line, markers, a histogram or a box is `ChartMark`, a setting on the layer."
-    )
-)
-@strawberry.enum(
-    description=(
-        "How a chart's layers share the screen, remembered with the chart. STACKED: one row (AXIS) or one panel (VALUES) per layer, each on its own scale. SHARED: layers "
-        "measuring the same thing overlaid on one scale -- the same unit on an AXIS chart's value axis; one kind, one mark and the same x and y units in a VALUES chart's panel -- and the rest "
-        "beside them. OVERLAY (AXIS charts only): every layer in one plot, each on its own scale"
+        "How a chart's layers share the screen, remembered with the chart. STACKED: one row (an along-axis layer) or one panel (a value layer) per layer, each on its own "
+        "scale. SHARED: layers measuring the same thing overlaid on one scale -- along the axis, the same value unit; by their values, one kind, one mark and the same x and y "
+        "units -- and the rest beside them. OVERLAY: every along-axis layer in one plot, each on its own scale; value layers lay out as SHARED, since there a layer's scale is "
+        "its axis"
     )
 )
 class ChartLayout(str, Enum):
@@ -82,10 +81,14 @@ class ChartLayout(str, Enum):
     OVERLAY = "overlay"
 
 
-#: The layouts a VALUES chart takes: a scatter has no second scale to give each layer in one plot.
-VALUES_LAYOUTS: frozenset[str] = frozenset({ChartLayoutChoices.STACKED.value, ChartLayoutChoices.SHARED.value})
-
-
+@strawberry.enum(
+    description=(
+        "The kind of a chart layer, which says what it reads -- never how it looks. Three are laid along the chart's world axis by the graph (`ChartLayerPositioning` ALONG_AXIS): TRACE "
+        "reads an array along one axis, SERIES one value column of a table along its coordinate, ANNOTATION drawn marks. Two are drawn by their values (BY_VALUES), their rows placed "
+        "in the chart's world: POINTS at two or three columns (a scatter), DISTRIBUTION summarising one column (a histogram, a box), once per value of a "
+        "grouping column. One chart may hold both. A line, markers, a histogram or a box is `ChartMark`, a setting on the layer."
+    )
+)
 class ChartLayerKind(str, Enum):
     """The kind of a chart layer: what it reads."""
 
@@ -98,17 +101,16 @@ class ChartLayerKind(str, Enum):
 
 @strawberry.enum(
     description=(
-        "What a chart's world is to it. Every chart has a world -- the domain its layers' rows live in -- and every layer is placed into it by the graph. An AXIS chart "
-        "draws its world: one measured axis with a unit, which TRACE, SERIES and ANNOTATION layers are laid along (intensity against `t`). A VALUES chart does not draw "
-        "it: its world says *whose rows* -- a table's space, usually its INDEX axis (`cell_id`) -- and its POINTS and DISTRIBUTION layers draw those rows at the values "
-        "of the columns they name (`area` against `volume`). Two layers placed in one VALUES world are about the same rows."
+        "Where a chart layer's positions come from. ALONG_AXIS: laid along the chart's world axis by the graph's edges -- TRACE, SERIES and ANNOTATION, which need a world "
+        "of one measured axis (`Chart.axis`). BY_VALUES: drawn at the values of the columns it names, its rows placed in the chart's world -- POINTS and DISTRIBUTION. One "
+        "chart may hold both; its layout lays them out (along-axis layers share the axis, value layers their panels)"
     )
 )
-class ChartKind(str, Enum):
-    """What a chart's world is to it: the axis it draws, or whose rows it draws."""
+class ChartLayerPositioning(str, Enum):
+    """Where a chart layer's positions come from."""
 
-    AXIS = "axis"
-    VALUES = "values"
+    ALONG_AXIS = "along_axis"
+    BY_VALUES = "by_values"
 
 
 @strawberry.enum(
@@ -138,10 +140,10 @@ SOURCE_FIELD: dict[str, str] = {
     ChartLayerKindChoices.DISTRIBUTION.value: "lens",
 }
 
-#: The layer kinds an AXIS chart draws: laid along its one world axis.
+#: The layer kinds laid along the chart's world axis (ALONG_AXIS): they need a world of one measured axis.
 PLACED_KINDS: frozenset[str] = frozenset({ChartLayerKindChoices.TRACE.value, ChartLayerKindChoices.SERIES.value, ChartLayerKindChoices.ANNOTATION.value})
 
-#: The layer kinds a VALUES chart draws: rows placed in its world, drawn at their columns' values.
+#: The layer kinds drawn by their values (BY_VALUES): rows placed in the chart's world, drawn at their columns' values.
 VALUE_KINDS: frozenset[str] = frozenset({ChartLayerKindChoices.POINTS.value, ChartLayerKindChoices.DISTRIBUTION.value})
 
 #: The looks each kind may take, the first its default. ANNOTATION draws marks, which have no look here.

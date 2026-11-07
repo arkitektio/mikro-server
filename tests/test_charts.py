@@ -242,28 +242,36 @@ async def test_two_charts_adopt_one_world_and_neither_owns_it(authenticated_cont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_world_that_is_not_one_metric_unit_carrying_axis_is_refused(authenticated_context: HttpContext):
-    """Three ways a space is not an axis to lay data along, each refused by name."""
+async def test_a_world_that_is_not_one_metric_unit_carrying_axis_lays_nothing_along_it(authenticated_context: HttpContext):
+    """Three ways a space is not an axis to lay data along. A chart may still adopt it -- its value layers draw rows there -- but it has
+    no `axis`, its descriptor says VALUE, and an along-axis layer is refused, naming why."""
     ctx = authenticated_context
+    profile = await _dataset(ctx, "Profile", [("d", enums.AxisType.SPACE)], [64])
+    lens = await seed.whole_lens_id(models.ArrayDataset, str(profile.pk))
+
+    async def refused_along(chart_input: dict) -> str:
+        chart = (await _ok(ctx, CREATE_CHART, {"name": "C", **chart_input}))["createChart"]
+        assert chart["axis"] is None and chart["descriptors"]["@mikro/axis_type"] == "VALUE", chart
+        result = await _run(ctx, TRACE, {"chart": chart["id"], "lens": lens})
+        assert result.errors, result.data
+        message = str(result.errors[0])
+        assert "no single measured axis" in message, message
+        return message
 
     # Several axes: a place, not an axis.
     scene = await seed.create_scene(ctx, "Place")
-    several = await _run(ctx, CREATE_CHART, {"name": "C", "coordinateSystem": str(scene.world_id)})
-    assert several.errors and "laid out along exactly one" in str(several.errors[0]), several.errors
+    assert "laid out along exactly one" in await refused_along({"coordinateSystem": str(scene.world_id)})
 
     # One axis with no unit: a pixel grid's.
     grid = await _dataset(ctx, "Grid", [("d", enums.AxisType.SPACE)], [64])
-    unitless = await _run(ctx, CREATE_CHART, {"name": "C", "coordinateSystem": str((await _system_of(grid)).pk)})
-    assert unitless.errors and "carries no unit" in str(unitless.errors[0]), unitless.errors
+    assert "carries no unit" in await refused_along({"coordinateSystem": str((await _system_of(grid)).pk)})
 
     # One axis that enumerates: there is no distance between object 3 and object 4.
-    enumerating = await _run(ctx, CREATE_CHART, {"name": "C", "axis": {"name": "object", "type": "INDEX", "unit": "a.u."}})
-    assert enumerating.errors and "does not measure anything" in str(enumerating.errors[0]), enumerating.errors
+    assert "does not measure anything" in await refused_along({"axis": {"name": "object", "type": "INDEX", "unit": "a.u."}})
 
     # And a chart over nothing, or over two things at once, is not a chart.
     neither = await _run(ctx, CREATE_CHART, {"name": "C"})
     assert neither.errors and "exactly one of" in str(neither.errors[0]), neither.errors
-    assert not await sync_to_async(chart_models.Chart.objects.exists)(), "a refused chart leaves no chart and no minted space behind"
 
 
 # --- TRACE ---------------------------------------------------------------------

@@ -35,7 +35,7 @@ from kanne_server import scalars as kanne_scalars
         "metric axis with a unit, and lays TRACE, SERIES and ANNOTATION layers along it: a timelapse's intensity against `t`. A **VALUES** chart does not draw its world, "
         "which says whose rows -- a table's space, usually its INDEX axis -- and its POINTS and DISTRIBUTION layers draw those rows at the values of the columns they name: "
         "nuclei at `area` against `volume`, a histogram of `area` per `condition`. Two layers in one VALUES world are about the same rows (a table and the PCA derived from "
-        "it). The same table lens may be drawn as a scene, at its `(y, x)` coloured by `area`, and as a VALUES chart at `(area, volume)`. A chart names data through lenses "
+        "it). The same table lens may be drawn as a scene, at its `(y, x)` coloured by `area`, and as a chart at `(area, volume)`. A chart names data through lenses "
         "and owns none of it; if rotating its view would mix units, it is a chart, and if it would not, a scene"
     ),
 )
@@ -55,21 +55,26 @@ class Chart(OrgScoped, core_types.Visualization):
         pagination=True,
         description="The layers drawn in this chart, back to front (a heterogeneous list of layer kinds)",
     )
-    kind: enums.ChartKind = kante.django_field(description="What the world is to this chart: AXIS, the one axis it draws and lays its layers along; VALUES, whose rows it draws at the values of their columns")
-    layout: enums.ChartLayout = kante.django_field(description="How the layers share the screen, remembered with the chart: STACKED (one row or panel each), SHARED (overlaid where they measure the same thing) or OVERLAY (all in one plot; AXIS only)")
+    layout: enums.ChartLayout = kante.django_field(description="How the layers share the screen, remembered with the chart: STACKED (one row or panel each), SHARED (overlaid where they read their axes alike) or OVERLAY (every along-axis layer in one plot)")
     world_coordinate_system: core_types.CoordinateSystem = kante.django_field(
         field_name="world",
         description=(
-            "The domain this chart's layers live in: an AXIS chart's one metric axis, which it draws; a VALUES chart's space whose rows it draws -- a table's -- which it does "
-            "not. Never owned by the chart: several charts can share it, it outlives each of them, and deleting a chart never deletes it. Ask it for `placedSystems` to learn "
-            "what could be drawn here"
+            "The domain this chart's layers live in: one measured axis its along-axis layers are laid along (`axis`), the space whose rows its value layers draw (a table's), "
+            "or both at once (a table framed by `t`). Never owned by the chart: several charts can share it, it outlives each of them, and deleting a chart never deletes it. "
+            "Ask it for `placedSystems` to learn what could be drawn here"
         ),
     )
 
-    @kante.django_field(description="The one axis an AXIS chart is laid out along: its name, its metric type and its unit -- the world's only axis, repeated so a client need not unwrap a list of one. Null for a VALUES chart, whose drawn axes are the columns its layers name")
+    @kante.django_field(
+        description=(
+            "The one measured axis this chart's along-axis layers (TRACE, SERIES, ANNOTATION) are laid along: its name, its type and its unit -- the world's only axis, "
+            "repeated so a client need not unwrap a list of one. Null when the world is not one measured axis, and then only value layers can be drawn here. A renderer "
+            "reads it to know whether an axis panel exists before any layer does"
+        )
+    )
     def axis(self, info: Info) -> core_types.Axis | None:
-        """The world's one axis, for an AXIS chart."""
-        return chart_logic.chart_axis(self.world) if self.kind == enums.ChartKindChoices.AXIS.value else None
+        """The world's one measured axis, if it is that."""
+        return chart_logic.world_axis(self.world)
 
 
 @kante.django_interface(
@@ -77,9 +82,9 @@ class Chart(OrgScoped, core_types.Visualization):
     description=(
         "A layer drawn in a chart. It carries view state only. A placed layer's position along the chart's axis -- `pathToWorld`, `asAffine`, `alongAxis`, `placement`, "
         "`placementValidity`, `placementInvariance` -- is derived from the graph on read and stored nowhere, so refining one registration moves every layer that looks "
-        "through it. A value layer is placed the same way -- its rows into the VALUES chart's world, which says they are the same rows as the others' -- and drawn at the "
+        "through it. A value layer is placed the same way -- its rows into the chart's world, which says they are the same rows as the others' -- and drawn at the "
         "values of the columns it names. The concrete kind says what the layer reads: TraceChartLayer an array, SeriesChartLayer a table's value column, "
-        "AnnotationChartLayer drawn marks -- along an AXIS chart's axis -- and PointsChartLayer and DistributionChartLayer a table's columns, in a VALUES chart"
+        "AnnotationChartLayer drawn marks -- along the chart's axis -- and PointsChartLayer and DistributionChartLayer a table's columns, by their values; `positioning` says which, and one chart may hold both"
     ),
 )
 class ChartLayer:
@@ -93,6 +98,16 @@ class ChartLayer:
     order: int
     opacity: float
     color: list[float] | None = kante.django_field(description="The colour the layer is drawn in, as RGBA. Null lets the viewer choose")
+
+    @kante.django_field(
+        description=(
+            "Where this layer's positions come from, read off its kind: ALONG_AXIS (TRACE, SERIES, ANNOTATION) -- laid along the chart's `axis` by the graph; BY_VALUES "
+            "(POINTS, DISTRIBUTION) -- drawn at the values of the columns it names. What a renderer groups layers into panels by"
+        )
+    )
+    def positioning(self, info: Info) -> enums.ChartLayerPositioning:
+        """Along the world axis, or by its values."""
+        return enums.ChartLayerPositioning(chart_logic.positioning_of(str(self.kind)))
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):  # noqa: ANN001, ANN003, ANN206 - strawberry_django's hook
@@ -314,7 +329,7 @@ def _column_unit(lens: "core_types.TableLens", name: str | None) -> str | None:
     pagination=True,
     description=(
         "A layer that draws a table lens' rows at the values of its columns: each row a point at (`xColumn`, `yColumn`), and at `zColumn` too for depth -- a scatter. "
-        "The rows are placed in the VALUES chart's world -- whose rows -- and drawn at their values: the position is the measurement, read from the row. A row with a null "
+        "The rows are placed in the chart's world -- whose rows -- and drawn at their values: the position is the measurement, read from the row. A row with a null "
         "in a named column is not drawn. "
         "MARKERS, or a LINE through the rows sorted along x. Example: nuclei at (`area`, `volume`), through a lens that keeps `area >= 50`"
     ),
@@ -367,7 +382,7 @@ class PointsChartLayer(ChartLayer):
     pagination=True,
     description=(
         "A layer that summarises the values of one column of a table lens' rows: a HISTOGRAM (`bins`) or a BOX, over every row or once per value of `groupColumn` -- a "
-        "condition, a cluster, a long-form channel. The rows are placed in the VALUES chart's world; their values are the horizontal axis. Example: the "
+        "condition, a cluster, a long-form channel. The rows are placed in the chart's world; their values are the horizontal axis. Example: the "
         "`area` of nuclei, one histogram per `condition`"
     ),
 )

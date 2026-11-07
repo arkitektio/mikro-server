@@ -7,13 +7,13 @@ decides where a thing is drawn on screen?*
   placed there by the graph's edges; values are drawn as appearance (an image's intensity as
   colour, a table's `area` as the colour of its dots).
 - A **chart** shows *how much*. Values are drawn as position, and **at most one axis comes from
-  the graph**. An AXIS chart lays its layers along its world's one measured axis (intensity
-  against `t`); a VALUES chart's world is whose rows -- a table's space, not drawn -- and it
-  draws those rows at the values of the columns it names (`area` against `volume`).
+  the graph**. Each layer says where its positions come from: an along-axis layer is laid along
+  the world's one measured axis (intensity against `t`); a value layer draws rows placed in the
+  world at the values of the columns it names (`area` against `volume`). One chart may hold both.
 
 If rotating the view makes sense, it is a scene; if rotating would mix units, it is a chart. The
-same lens draws both ways -- nuclei at `(y, x)` on the image, and at `(area, volume)` in a chart
-VALUES chart. Grids, diagrams and boards, the compositions after these two, are planned in
+same lens draws both ways -- nuclei at `(y, x)` on the image, and at `(area, volume)` in a
+chart. Grids, diagrams and boards, the compositions after these two, are planned in
 `docs/rfc12-compositions.md`.
 
 A chart is built on the same coordinate graph as a scene and is its equal, not its child.
@@ -22,18 +22,20 @@ of looking at it" is a directory boundary.
 
 ## Concepts
 
-**Chart.** A name, a `kind`, and a `world`: the domain its layers' rows live in. The chart adopts
-the world and never owns it: several charts can share one, the space outlives all of them, and
-deleting a chart deletes no space.
-- An **AXIS** chart's world is a `CoordinateSystem` with exactly one axis, measured
-  (`METRIC_AXIS_TYPES`) and carrying a unit, which it draws.
-- A **VALUES** chart's world is the space whose rows it draws: a table's -- usually its INDEX
-  axis (`cell_id`), a localization table's frame. It is not drawn; every layer's rows are placed
-  into it, so two layers in one world are about the same rows (a table and the PCA table
-  derived from it, row for row). Its drawn axes are the units of the columns its layers bind.
+**Chart.** A name, a `world` -- the domain its layers live in -- and a remembered `layout`. The
+chart adopts the world and never owns it: several charts can share one, the space outlives all
+of them, and deleting a chart deletes no space. The world can be:
+- **one measured axis** (`METRIC_AXIS_TYPES`) carrying a unit -- `Chart.axis` -- which along-axis
+  layers are laid along;
+- **the space whose rows value layers draw**: a table's -- usually its INDEX axis (`cell_id`), a
+  localization table's frame. Every value layer's rows are placed into it, so two layers in one
+  world are about the same rows (a table and the PCA table derived from it, row for row);
+- **both at once**: a table framed by `t` is an axis and rows, so a SERIES along `t` and a
+  scatter of the same time points' columns share one chart.
 
-A chart is one kind or the other, never both: a position along a world axis and a measurement
-are not one kind of thing, even in one unit.
+What positions a layer is the layer's (`ChartLayer.positioning`, read off its kind), never the
+chart's: a position along a world axis and a measurement are not one kind of thing, so they are
+never one *axis* -- but they can be two panels of one chart.
 
 **ChartLayer.** One reading of data, drawn in a chart. It names its source lens and carries view
 state: name, order, visibility, opacity, colour, and how it is drawn. It owns no data and stores
@@ -41,18 +43,19 @@ nothing about where the data sits; a value layer stores which columns it reads.
 
 **Kind.** What a layer reads.
 
-| Kind | Chart | Reads | Shape it requires |
+| Kind | Positioning | Reads | Shape it requires |
 | --- | --- | --- | --- |
-| `TRACE` | AXIS | an array lens | one metric axis free, laid along the chart; optionally one enumerating axis free, drawn as one line per position; every other axis fixed |
-| `SERIES` | AXIS | a table lens | one coordinate column laid along the chart, and one numeric attribute column as the value |
-| `ANNOTATION` | AXIS | an annotation lens | a space with an axis laid along the chart |
-| `POINTS` | VALUES | a table lens | `xColumn`, `yColumn` (and `zColumn`): numeric columns, each row drawn at their values |
-| `DISTRIBUTION` | VALUES | a table lens | `valueColumn`, numeric, summarised; optionally `groupColumn` (a text/boolean attribute, label, group id or long-form CHANNEL), one summary per value |
+| `TRACE` | ALONG_AXIS | an array lens | one metric axis free, laid along the chart; optionally one enumerating axis free, drawn as one line per position; every other axis fixed |
+| `SERIES` | ALONG_AXIS | a table lens | one coordinate column laid along the chart, and one numeric attribute column as the value |
+| `ANNOTATION` | ALONG_AXIS | an annotation lens | a space with an axis laid along the chart |
+| `POINTS` | BY_VALUES | a table lens | `xColumn`, `yColumn` (and `zColumn`): numeric columns, each row drawn at their values |
+| `DISTRIBUTION` | BY_VALUES | a table lens | `valueColumn`, numeric, summarised; optionally `groupColumn` (a text/boolean attribute, label, group id or long-form CHANNEL), one summary per value |
 
-The layers of a VALUES chart are placed in its world (`assert_value_layer`). Neither their kinds nor their units need
-agree: `Chart.layout` (remembered) draws a panel per layer (STACKED) or overlays the layers that read their axes alike --
-one kind, one mark, the same units -- and lays the rest beside them (SHARED); a scatter and a histogram of the same rows
-are two panels of one chart. OVERLAY, every layer in one plot on its own scale, is an AXIS chart's only. Their placement fields
+A value layer's rows are placed in the world (`assert_value_layer`). Neither the kinds nor the units of a chart's layers
+need agree: `Chart.layout` (remembered) draws a row or panel per layer (STACKED) or overlays the layers that read their
+axes alike -- along the axis, the same value unit; by values, one kind, one mark, the same units -- and lays the rest
+beside them (SHARED); a scatter and a histogram of the same rows are two panels of one chart. OVERLAY puts every
+along-axis layer in one plot on its own scale; value layers lay out as SHARED. A value layer's placement fields
 (`asAffine`, `placement`, ...) answer for the rows' place in the world -- for a table's own
 space, the identity. A gate -- the rows with `area >= 50` -- is a
 table lens window on that column, drawn through like any lens.
@@ -83,10 +86,11 @@ scale, the last entry is the offset, and both are in the unit of the chart's axi
 
 ### The world
 
-**An AXIS chart's world has exactly one axis.** A chart has one direction to lay data along;
-a second axis in its world would be a direction nothing draws. To chart along `t` of a 4D
+**Along-axis layers need a world of exactly one axis.** A chart has one direction to lay data
+along; a second axis in its world would be a direction nothing draws. To chart along `t` of a 4D
 timelapse, make the one-axis `t` space and register into it. Values against values draw no world
-axis: that is a VALUES chart, whose world says whose rows and whose drawn axes are its columns.
+axis: a value layer's world says whose rows, and its drawn axes are its columns -- so any world
+takes value layers, and only one of one measured axis takes along-axis layers.
 
 **Metric means SPACE, TIME, MICROTIME or SPECTRUM.** The set is stated in
 `core/logic/coords.py` as `METRIC_AXIS_TYPES`, beside `ENUMERATING_AXIS_TYPES` (CHANNEL,
@@ -99,13 +103,13 @@ COORDINATE, DISPLACEMENT and VALUE are not axes data is laid along.
 is an index. A chart over a dataset's own grid is refused; calibrate it into a physical space and
 chart that.
 
-**`createChart` takes exactly one of `coordinateSystem` and `axis`, and a `kind`.** Minting from
+**`createChart` takes exactly one of `coordinateSystem` and `axis`, and a `layout`.** Minting from
 an axis is
 convenience for `createCoordinateSystem` followed by `createChart`, and produces the same two
 rows. It uses core's `create_world_space`.
 
-**The world is fixed.** `updateChart` changes name and description. A chart along another
-axis is another chart.
+**The world is fixed.** `updateChart` changes name, description and layout. A chart over another
+space is another chart.
 
 ### Placement
 
@@ -202,7 +206,10 @@ the layers that drew it. Deleting a chart or a layer deletes nothing it drew.
 the source its kind names. mikro's `Layer` enforces this in mutations only; here the database
 does, as elektro's does.
 
-**`kind` is immutable.** `updateChartLayer` takes style only.
+**A layer's `kind` is immutable.** `updateChartLayer` restyles any kind; what a layer reads --
+its lens, its columns, a grouping, bins -- is its kind's own update
+(`updateTrace/Series/Points/DistributionChartLayer`), held to the creation rules on the merged
+state.
 
 **Deleting a chart needs its creator or an org admin.** A layer is deleted by whoever may
 delete its chart.
@@ -260,7 +267,7 @@ the registry holds exactly a scene entry and a chart entry.
 `Chart` is declared in mikro's hub contract (`mikro_server/contract.py`) as the structure
 `@mikro/chart`, with a signal on create, update and delete. Its descriptors are
 `@mikro/axis_type` and `@mikro/axis_unit` -- what its world axis measures, and in what unit;
-`VALUE` and `None` for a VALUES chart, which draws no world axis. The
+`VALUE` and `None` when the world is not one measured axis (a table's rows). The
 binding is in `mikro_server/service.py`, beside the scene's; `Chart.descriptors` answers from it.
 A chart layer is hosted nowhere, as a scene layer is not.
 

@@ -15,7 +15,7 @@ What tells one kind of composition from another is a single question:
 | Composition | Position on screen comes from | Values are drawn as | World |
 |---|---|---|---|
 | **Scene** | measured world axes, through the graph's edges | appearance: colour, size, opacity | a place (time or space axes) |
-| **Chart** | values -- plus at most one drawn world axis | position | AXIS: one measured axis, drawn; VALUES: whose rows, not drawn |
+| **Chart** | values -- plus at most one drawn world axis | position | one measured axis (along-axis layers), whose rows (value layers), or both |
 | **Grid** | enumerating axes: members in an order, no distance | colour per cell | enumerating axes (INDEX, CHANNEL, CATEGORY) |
 | **Diagram** | relations, through a layout | appearance on nodes and edges | none: the layout is the position |
 | **Board** | other compositions, as panels | -- | none: panels have their own |
@@ -70,7 +70,8 @@ Each is a **claim about what screen position means**, checked when a layer is ma
   with `register_composition(model, lens_relation=...)`. Core never imports the app.
 - The GraphQL `Visualization` interface: `id`, `name`, `descriptors`, `worldCoordinateSystem`.
   A client holding "a visualization" opens it without knowing the kind. The world is the domain
-  the layers' rows live in -- drawn by a scene, an AXIS chart and a grid, not by a VALUES chart.
+  the layers live in -- drawn by a scene and a grid, and by a chart's along-axis layers; a chart's
+  value layers draw their rows by their values instead.
 - Column bindings by name, never columns as axes: what a scene reads as appearance, a chart as
   position, a grid as order, a diagram as node style.
 
@@ -107,7 +108,7 @@ check that the source keys the table; both are a phase of their own.
 `Grid.rowAxis`/`columnAxis`; registered with `register_composition`, held by the lens delete guard
 and repointed by `merge_duplicate_lenses`. `autoVisualize` shows a space of two enumerating axes
 -- refused before -- and a sparse or long-form table lens as a grid; a table of enumerated objects
-stays a VALUES chart of its measurements. Tests: `tests/test_grids.py`.
+stays a chart of its measurements' values. Tests: `tests/test_grids.py`.
 
 ## Board (phase 2)
 

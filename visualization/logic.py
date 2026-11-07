@@ -77,14 +77,14 @@ _CHART_LAYER_KIND: dict[type, str] = {
 
 
 def _chart_of_values(lens: models.TableLens, *, name: str | None, ctx: CreationContext) -> chart_models.Chart | None:
-    """A VALUES chart of a table lens, over its table's space: a scatter of its first two numeric attribute columns, or a histogram of its only one. None when it has none."""
+    """A chart of a table lens' values, over its table's space: a scatter of its first two numeric attribute columns, or a histogram of its only one. None when it has none."""
     table = lens.table_dataset
     measured = [column.name for column in table.columns.all() if column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value and chart_logic.is_numeric(column)]
     if not measured:
         return None
     label = table.name if not lens.name else f"{table.name} · {lens.name}"
     with transaction.atomic():
-        chart = chart_logic.create_chart(name=name or label, world=table.coordinate_system, kind=chart_enums.ChartKindChoices.VALUES.value, ctx=ctx)
+        chart = chart_logic.create_chart(name=name or label, world=table.coordinate_system, ctx=ctx)
         if len(measured) > 1:
             chart_logic.create_layer(chart, kind=chart_enums.ChartLayerKindChoices.POINTS.value, source=lens, x_column=measured[0], y_column=measured[1], name=lens.name or table.name)
         else:

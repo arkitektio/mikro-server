@@ -30,7 +30,7 @@ class CreateTablePlotInputModel(BaseModel):
 @kante.pydantic_input(
     CreateTablePlotInputModel,
     description=(
-        "Input for plotting a table's columns in one call: a VALUES chart over the table's space (whose rows, not drawn) and one POINTS or DISTRIBUTION layer through the table's "
+        "Input for plotting a table's columns in one call: a chart over the table's space (whose rows) and one POINTS or DISTRIBUTION layer through the table's "
         "whole lens or a window of it, in one transaction, so a refused layer makes nothing. `area` against `volume` is `{kind: POINTS, xColumn: \"area\", yColumn: "
         "\"volume\"}`; a histogram of `area` per `condition` is `{kind: DISTRIBUTION, xColumn: \"area\", groupColumn: \"condition\"}`"
     ),
@@ -51,7 +51,7 @@ class CreateTablePlotInput:
 
 
 def create_table_plot(info: Info, input: CreateTablePlotInput) -> types.Chart:
-    """Plot a table's columns: a VALUES chart over its space, and the layer."""
+    """Plot a table's columns: a chart over its space, and the layer."""
     model = input.to_pydantic()
     table = get_for_org(core_models.TableDataset, info, id=model.table)
     lens = get_for_org(core_models.TableLens, info, id=model.lens) if model.lens is not None else None

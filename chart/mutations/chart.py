@@ -21,7 +21,6 @@ class CreateChartInputModel(BaseModel):
     description: str | None = None
     coordinate_system: str | None = None
     axis: PhysicalAxisInputModel | None = None
-    kind: enums.ChartKind = enums.ChartKind.AXIS
     layout: enums.ChartLayout = enums.ChartLayout.SHARED
 
 
@@ -29,10 +28,10 @@ class CreateChartInputModel(BaseModel):
 @kante.pydantic_input(
     CreateChartInputModel,
     description=(
-        "Input type for creating a chart over a world: an existing coordinate system adopted as it is, or one created from `axis`. An AXIS chart (the default) draws its "
-        "world -- one metric axis with a unit -- and lays TRACE, SERIES and ANNOTATION layers along it by the graph: intensity against `t`. A VALUES chart does not draw its "
-        "world: the world says whose rows -- a table's space, usually its INDEX axis -- and its POINTS and DISTRIBUTION layers, placed into it, draw those rows at the values "
-        "of the columns they name: `area` against `volume`. It starts with no layers"
+        "Input type for creating a chart over a world: an existing coordinate system adopted as it is, or one created from `axis`. The world is the domain the layers "
+        "live in. TRACE, SERIES and ANNOTATION layers are laid along its one measured axis by the graph (intensity against `t`), so they need a world of exactly one; "
+        "POINTS and DISTRIBUTION layers have their rows placed in it -- a table's space -- and are drawn at the values of the columns they name (`area` against `volume`). "
+        "One chart may hold both. It starts with no layers"
     ),
 )
 class CreateChartInput:
@@ -43,8 +42,8 @@ class CreateChartInput:
     coordinate_system: strawberry.ID | None = strawberry.field(
         default=None,
         description=(
-            "An existing coordinate system to adopt as the chart's world. For an AXIS chart it must have exactly one axis, of a metric type and carrying a unit; for a "
-            "VALUES chart it is the space whose rows are drawn -- a table's own (`TableDataset.coordinateSystem`). The space is never owned by the chart: several charts "
+            "An existing coordinate system to adopt as the chart's world: a space of one measured axis with a unit to lay layers along, or the space whose rows are drawn "
+            "by their values -- a table's own (`TableDataset.coordinateSystem`) -- or one that is both (a table framed by `t`). The space is never owned by the chart: several charts "
             "can share it, it survives their deletion, and while a chart is laid out over it the space cannot be deleted. Exactly one of `coordinateSystem` and `axis`"
         ),
     )
@@ -55,10 +54,9 @@ class CreateChartInput:
             "`createCoordinateSystem` followed by `createChart(coordinateSystem:)`; the space made is an ordinary shared one. Exactly one of `coordinateSystem` and `axis`"
         ),
     )
-    kind: enums.ChartKind = strawberry.field(default=enums.ChartKind.AXIS, description="AXIS (the default): draw the world's one axis and lay layers along it. VALUES: draw the world's rows at the values of the columns each layer names")
     layout: enums.ChartLayout = strawberry.field(
         default=enums.ChartLayout.SHARED,
-        description="How the layers share the screen: SHARED (the default; overlaid where they measure the same thing), STACKED (a row or panel each), OVERLAY (AXIS only)",
+        description="How the layers share the screen: SHARED (the default; overlaid where they read their axes alike), STACKED (a row or panel each), OVERLAY (every along-axis layer in one plot)",
     )
 
 
@@ -68,7 +66,7 @@ def create_chart(info: Info, input: CreateChartInput) -> types.Chart:
     ctx = CreationContext.from_info(info)
 
     world = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system) if model.coordinate_system else None
-    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, kind=model.kind.value, layout=model.layout.value, ctx=ctx)
+    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, layout=model.layout.value, ctx=ctx)
 
 
 class ChartPolicyInputModel(BaseModel):
@@ -121,7 +119,7 @@ class UpdateChartInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateChartInputModel, description="Input for renaming, re-describing or re-laying-out a chart. Its world and kind are not editable: a chart along another axis is another chart")
+@kante.pydantic_input(UpdateChartInputModel, description="Input for renaming, re-describing or re-laying-out a chart. Its world is not editable: a chart over another space is another chart")
 class UpdateChartInput:
     """Input for updating a chart."""
 
@@ -145,7 +143,6 @@ def update_chart(info: Info, input: UpdateChartInput) -> types.Chart:
         chart.description = parsed.description
         updated.append("description")
     if parsed.layout is not None:
-        chart_logic.assert_layout(chart.name, str(chart.kind), parsed.layout.value)
         chart.layout = parsed.layout.value
         updated.append("layout")
 

@@ -124,13 +124,19 @@ with a `c`. A **gate** is a table lens window on a numeric column (`area >= 50`,
 `coordinate_system.windowable_names`, which `merge_duplicate_lenses` normalises against too).
 **A scene shows where, a chart shows how much**: in a scene every screen axis is a world axis
 and values are appearance; in a chart values are position and at most one axis comes from the
-graph. Every chart has a world -- the domain its layers' rows live in -- and every layer is
-placed into it (`Chart.kind`): an AXIS chart draws its world, one measured axis (TRACE, SERIES,
-ANNOTATION, laid along it by edges); a VALUES chart's world is whose rows (a table's space, not
-drawn), its POINTS (`x/y/z_column`) and DISTRIBUTION (`value_column`, `group_column`, `bins`)
-layers placed into it and binding columns by name (`chart.assert_value_layer`: placed, numeric,
-neither kinds nor units need agree -- `Chart.layout` STACKED/SHARED/OVERLAY, remembered with the chart, lays layers in other units beside each other and overlays only those that measure the same thing, and a VALUES chart refuses OVERLAY). A chart layer is retuned as a scene layer is: `updateChartLayer` restyles any kind, and what a layer reads (lens, columns, grouping, bins) is its kind's own update (`updateTrace/Series/Points/DistributionChartLayer`, `chart.logic.update_layer`), held to the creation rules on the merged state, re-placed only when the lens changes. Same world, same rows: a derived PCA table draws
-beside its source. A chart is never both. A PCA or UMAP is a derived table (IDENTITY over the frame, a TABLE key back,
+graph. Every chart has a world -- the domain its layers live in -- and every layer is placed
+into it; **what positions a layer is the layer's** (`ChartLayer.positioning`, read off its kind),
+never the chart's: TRACE, SERIES and ANNOTATION are laid ALONG_AXIS -- the world's one measured
+axis (`Chart.axis`; refused, naming why, over any other world) -- and POINTS (`x/y/z_column`) and
+DISTRIBUTION (`value_column`, `group_column`, `bins`) are drawn BY_VALUES, their rows placed in the
+world and binding columns by name (`chart.assert_value_layer`: placed, numeric). One chart may hold
+both -- a table framed by `t` takes a SERIES along `t` and a scatter of the same time points --
+and neither kinds nor units need agree: `Chart.layout` STACKED/SHARED/OVERLAY, remembered with the
+chart, overlays only the layers that read their axes alike and lays the rest beside them (OVERLAY
+affects along-axis layers only). `Chart.kind` existed until migration 0006; `ChartKindChoices`
+stays only for the migration history. `@mikro/axis_type` is the world's one measured axis' type,
+or VALUE. A chart layer is retuned as a scene layer is: `updateChartLayer` restyles any kind, and what a layer reads (lens, columns, grouping, bins) is its kind's own update (`updateTrace/Series/Points/DistributionChartLayer`, `chart.logic.update_layer`), held to the creation rules on the merged state, re-placed only when the lens changes. Same world, same rows: a derived PCA table draws
+beside its source. A PCA or UMAP is a derived table (IDENTITY over the frame, a TABLE key back,
 parameters in provenance), not an edge. **A grid shows which** (`grid/`): its world is one or
 two enumerating axes -- rows, columns: members with no distance -- and its HEATMAP (an array or
 sparse lens leaving those axes free) and CELLS (a table lens, coloured by `value_column`) layers
