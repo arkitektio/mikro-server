@@ -12,6 +12,9 @@ from core import subscriptions
 from chart import filters as chart_filters
 from chart import mutations as chart_mutations
 from chart import types as chart_types
+from grid import filters as grid_filters
+from grid import mutations as grid_mutations
+from grid import types as grid_types
 from metric import mutations as metric_mutations
 from metric import types as metric_types
 from visualization import mutations as visualization_mutations
@@ -148,6 +151,12 @@ class Query:
 
     chart_layers: list[chart_types.ChartLayer] = field(filters=chart_filters.ChartLayerFilter, ordering=chart_filters.ChartLayerOrder, pagination=True, description="List layers drawn in charts (a heterogeneous list of layer kinds)")
     chart_layer: chart_types.ChartLayer = field(description="Get a single chart layer by ID")
+
+    grids: list[grid_types.Grid] = field(description="List grids (compositions laying out the members of one or two enumerating axes: a heatmap of genes against cells, a table's cells against channels)")
+    grid: grid_types.Grid = field(description="Get a single grid by ID")
+
+    grid_layers: list[grid_types.GridLayer] = field(filters=grid_filters.GridLayerFilter, ordering=grid_filters.GridLayerOrder, pagination=True, description="List layers drawn in grids (a heterogeneous list of layer kinds)")
+    grid_layer: grid_types.GridLayer = field(description="Get a single grid layer by ID")
 
     metrics: list[metric_types.Metric] = field(description="List metrics: values recorded about annotations and datasets, by apps and people")
     metric: metric_types.Metric = field(description="Get a single metric by ID")
@@ -359,6 +368,7 @@ class Query:
     annotations_stats: types.AnnotationStats = field(resolver=types.AnnotationStatsResolver, description="Get statistics about annotations: counts over the annotations of the current organization")
     scenes_stats: types.SceneStats = field(resolver=types.SceneStatsResolver, description="Get statistics about scenes: counts over the scenes of the current organization")
     charts_stats: chart_types.ChartStats = field(resolver=chart_types.ChartStatsResolver, description="Get statistics about charts: counts and time-bucketed series over the charts of the current organization")
+    grids_stats: grid_types.GridStats = field(resolver=grid_types.GridStatsResolver, description="Get statistics about grids: counts and time-bucketed series over the grids of the current organization")
 
     @field(description="List the memberships of the current organization (excluding bots)")
     def members(self, info: Info) -> list[types.Membership]:
@@ -750,6 +760,27 @@ class Mutation:
     update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer. View state only")
     delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")
 
+    create_grid = mutation(
+        resolver=grid_mutations.create_grid,
+        description="Create a grid over an existing space whose one or two enumerating axes (INDEX, CHANNEL, CATEGORY) are its rows and columns: members in order, a value as each cell's colour",
+    )
+    create_grid_from_coordinate_system = mutation(
+        resolver=grid_mutations.create_grid_from_coordinate_system,
+        description="Bootstrap a grid over an existing space, drawing each sparse matrix and array covering its axes as a heatmap and each table as cells. Authors no edges",
+    )
+    update_grid = mutation(resolver=grid_mutations.update_grid, description="Rename or re-describe a grid. Its world is fixed")
+    delete_grid = mutation(resolver=grid_mutations.delete_grid, description="Delete a grid and its layers. The data they drew and the grid's world are untouched")
+    create_heatmap_grid_layer = mutation(
+        resolver=grid_mutations.create_heatmap_grid_layer,
+        description="Draw an array or a sparse matrix in a grid: one cell per position along the grid's axes, coloured by the value there -- genes against cells",
+    )
+    create_cells_grid_layer = mutation(
+        resolver=grid_mutations.create_cells_grid_layer,
+        description="Draw a table's rows in a grid: one cell per row at its position along the grid's axes, coloured by a numeric column -- a long-form table's mean per cell and channel",
+    )
+    update_grid_layer = mutation(resolver=grid_mutations.update_grid_layer, description="Restyle a grid layer. View state only")
+    delete_grid_layer = mutation(resolver=grid_mutations.delete_grid_layer, description="Delete a grid layer. Deletes nothing it drew")
+
     create_metric = mutation(
         resolver=metric_mutations.create_metric,
         description="Record one value about an annotation or a dataset: a quantity or a code. Announced to the hub's rekuest (a CREATED @mikro/metric signal) once committed",
@@ -762,7 +793,7 @@ class Mutation:
 
     auto_visualize = mutation(
         resolver=visualization_mutations.auto_visualize,
-        description="Show a coordinate system as whichever composition fits it: a chart over a space with exactly one metric, unit-carrying axis, a scene over any other space with a time or space axis. Bootstrapped from what already resides in the space; authors no edges",
+        description="Show a coordinate system or a lens as whichever composition fits it: a chart over a space with exactly one metric, unit-carrying axis, a grid over two enumerating axes, a scene over any other space with a time or space axis. Bootstrapped from what already resides in the space; authors no edges",
     )
 
     # The coordinate graph. Registration used to be a 4x4 matrix on the layer, where
@@ -1053,7 +1084,7 @@ schema = Schema(
         CollaborationGate,
         KoherentExtension,
     ],
-    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *lens_types, *chart_types.chart_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
+    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *lens_types, *chart_types.chart_layer_types, *grid_types.grid_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
     # The union member inputs above are referenced by no field: they are published for
     # codegen, and the directive on each says which flat union input it belongs to.
     schema_directives=[unionElementOf],

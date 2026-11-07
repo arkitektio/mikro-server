@@ -31,6 +31,7 @@ EXPECTED = {
     "@mikro/arraydataset": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/scene": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/chart": ["CREATED", "UPDATED", "DELETED"],
+    "@mikro/grid": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/scenesnapshot": ["CREATED", "DELETED"],
     "@mikro/tabledataset": ["CREATED", "UPDATED", "DELETED"],
     "@mikro/meshcollection": ["CREATED", "DELETED"],

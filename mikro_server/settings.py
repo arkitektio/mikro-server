@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "core",
     "arkitekt_datalayer",
     "chart",
+    "grid",
     "metric",
     # The change feed: what mikro changed, written with the change, for kraph to read in order.
     "arkitekt_service.feed",

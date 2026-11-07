@@ -1,7 +1,7 @@
 # RFC-12: Compositions — scene, chart, grid, diagram, board
 
-**Status:** Proposed (November 2026). Scene and chart exist; grid, diagram and board are planned
-here and not built.
+**Status:** In progress (November 2026). Scene, chart and grid (phase 1: HEATMAP, CELLS) exist;
+diagram and board are planned here and not built.
 **Builds on:** RFC-11 (a table's space is its frame; scene shows where, chart shows how much),
 `core/logic/compositions.py` (the registry every composition joins).
 
@@ -74,37 +74,40 @@ Each is a **claim about what screen position means**, checked when a layer is ma
 - Column bindings by name, never columns as axes: what a scene reads as appearance, a chart as
   position, a grid as order, a diagram as node style.
 
-## Grid (phase 1)
+## Grid (phase 1, built)
 
 **Claim:** the screen axes are one or two enumerating axes -- positions are members in an order,
 no distance between them.
 
-**World:** a coordinate system whose drawn axes are INDEX, CHANNEL or CATEGORY. A sparse
-dataset's own space `(gene, cell)`, a plate's `(row, column)` (CATEGORY rows `A..H`, INDEX
-columns `1..12`), or a minted space for a gallery. A CATEGORY axis is where the grid enumerates
-by value (`condition`), which is why RFC-11 kept that type.
+**World:** an existing space of one or two enumerating axes (INDEX, CHANNEL, CATEGORY), rows
+then columns, adopted and never minted -- a sparse dataset's own `(feature, object)`, a long-form
+table's `(cell, c)`, a plate table's `(row, column)`. A measured axis is refused, naming the
+scene and the chart. Every layer is placed into the world and covers each of its axes: a cell
+exists where the data has a position along the rows and the columns.
 
-**Layers:**
+**Layers (built):**
 
 | Kind | Reads | Draws |
 |---|---|---|
-| `HEATMAP` | a sparse lens or an array lens over two enumerating axes | one cell per position, value → colour (`colormap`, `min`, `max`) |
-| `TILES` | a table lens (one tile per row) and a source of crops (an array lens + the mask keying the table) | one thumbnail per row, ordered by `orderColumn` (asc/desc), at most `limit` |
-| `PLATE` | a table lens whose rows are wells (`rowColumn`, `columnColumn`) and a `valueColumn` | the plate layout, value → colour |
+| `HEATMAP` | an array or sparse lens leaving free exactly the grid's axes | one cell per position, value → colour (`colormap`, `min`, `max`) |
+| `CELLS` | a table lens whose frame is the grid's axes, and a numeric `valueColumn` (inferred when the table has one) | one cell per row, value → colour |
 
-**Checks:** the drawn axes are enumerating (a SPACE axis is refused: that is a scene); a HEATMAP's
-lens leaves exactly the two drawn axes free (as TRACE leaves one); `orderColumn` is a column of
-the table; a TILES source keys the table (`keyedBy`).
+`CELLS` is the general form of the planned `PLATE`: a plate is a table whose frame is its
+`(row, column)` wells. With table coordinates SPACE, TIME, INDEX and CHANNEL, rows and columns
+are INDEX positions (`0..7`, `0..11`); letter rows (`A..H`) would need CATEGORY as a table
+coordinate type, a model change left for when a plate needs it.
 
-**Order is a binding, not a fact:** sorting tiles by `area` stores `orderColumn: "area"` on the
-layer. The grid's axis positions stay members; a different sort is a different layer setting.
+**Not built yet: `TILES`** -- a gallery, one thumbnail per row of a keyed table, ordered by a
+column. It needs a source of crops (the image the mask keying the table was made from) and a
+check that the source keys the table; both are a phase of their own.
 
-**Model:** `grid/` app (`Grid`, `GridLayer` with `kind`, `lens`, settings), `createGrid`,
-`createHeatmapGridLayer`, `createTilesGridLayer`, `createPlateGridLayer`; `autoVisualize` sends
-a sparse dataset (today refused: neither place nor quantity) to a grid.
-
-**Tests:** a sparse lens shown as a heatmap; a SPACE world refused with "that is a scene"; tiles
-of a keyed table ordered by a column; `visualizations` lists the grid.
+**Where it lives:** the `grid/` app -- `Grid` (`Described`, `@mikro/grid` with
+`row_axis_type`/`column_axis_type`), `GridLayer`, `createGrid`, `createGridFromCoordinateSystem`,
+`createHeatmapGridLayer`, `createCellsGridLayer`, `updateGridLayer`, `deleteGrid(Layer)`;
+`Grid.rowAxis`/`columnAxis`; registered with `register_composition`, held by the lens delete guard
+and repointed by `merge_duplicate_lenses`. `autoVisualize` shows a space of two enumerating axes
+-- refused before -- and a sparse or long-form table lens as a grid; a table of enumerated objects
+stays a VALUES chart of its measurements. Tests: `tests/test_grids.py`.
 
 ## Board (phase 2)
 
@@ -152,7 +155,7 @@ column; a TREE's time axis must be measured with a unit.
 
 ## Order of work
 
-1. **Grid** -- the gap in what can be shown today (sparse data has nowhere honest to go).
+1. **Grid** -- built (HEATMAP, CELLS); TILES follows.
 2. **Board** -- linking scene and chart is the most asked-for workflow once both exist.
 3. **Diagram** -- network and lineage views exist as queries already; a saved view is last.
 

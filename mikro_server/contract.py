@@ -16,6 +16,7 @@ from mikro_server.vocabulary import (
     ARRAY_DESCRIPTORS,
     FIXTURE_DESCRIPTORS,
     CHART_DESCRIPTORS,
+    GRID_DESCRIPTORS,
     COORDINATE_ANCHOR_DESCRIPTORS,
     COORDINATE_SYSTEM_DESCRIPTORS,
     FILE_DESCRIPTORS,
@@ -119,6 +120,12 @@ HOSTS = Hosts(
             label="Chart",
             description="A plot of data laid out along one measured axis (a distance, a time, a wavelength), such as an intensity line profile, a time course or a spectrum. Its layers read image lenses, table series or annotations.",
             descriptors=CHART_DESCRIPTORS,
+        ),
+        Structure(
+            identifier="@mikro/grid",
+            label="Grid",
+            description="A view that lays out members in rows and columns, coloured by a value: a heatmap of genes against cells, a table's measurements per object and channel, a plate's wells. Its layers read sparse matrices, arrays or tables.",
+            descriptors=GRID_DESCRIPTORS,
         ),
         Structure(
             identifier="@mikro/scenesnapshot",
@@ -324,6 +331,12 @@ HOSTS = Hosts(
             kinds=["CREATED", "UPDATED", "DELETED"],
             descriptors=_keys(CHART_DESCRIPTORS),
             description="A chart (a plot of data along one measured axis) was created, changed or deleted, with what its axis measures and its unit.",
+        ),
+        Signal(
+            identifier="@mikro/grid",
+            kinds=["CREATED", "UPDATED", "DELETED"],
+            descriptors=_keys(GRID_DESCRIPTORS),
+            description="A grid (members laid out in rows and columns, coloured by a value) was created, changed or deleted, with what its rows and columns enumerate.",
         ),
         Signal(
             identifier="@mikro/scenesnapshot",

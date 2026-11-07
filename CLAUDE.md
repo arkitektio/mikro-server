@@ -131,7 +131,10 @@ drawn), its POINTS (`x/y/z_column`) and DISTRIBUTION (`value_column`, `group_col
 layers placed into it and binding columns by name (`chart.assert_value_layer`: placed, numeric,
 one kind per chart, units agree per position). Same world, same rows: a derived PCA table draws
 beside its source. A chart is never both. A PCA or UMAP is a derived table (IDENTITY over the frame, a TABLE key back,
-parameters in provenance), not an edge. `docs/rfc11-tables-and-charts.md` is the model,
+parameters in provenance), not an edge. **A grid shows which** (`grid/`): its world is one or
+two enumerating axes -- rows, columns: members with no distance -- and its HEATMAP (an array or
+sparse lens leaving those axes free) and CELLS (a table lens, coloured by `value_column`) layers
+are placed into it and cover its axes (`grid.logic.grid`). `docs/rfc11-tables-and-charts.md` is the model,
 `docs/rfc12-compositions.md` the plan for grids, diagrams and boards; `tests/test_axis_structure.py`,
 `test_table_space.py`, `test_chart_values.py` and `test_table_plot.py` hold it.
 

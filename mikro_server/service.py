@@ -19,6 +19,8 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 from chart import enums as chart_enums
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
+from grid import models as grid_models
+from grid.logic import grid as grid_logic
 from metric import logic as metric_logic
 from metric import models as metric_models
 from core import models
@@ -113,6 +115,15 @@ def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
 
 
 chart = service.structure(chart_models.Chart, "@mikro/chart", describe=_chart_descriptors)
+
+
+def _grid_descriptors(grid: grid_models.Grid) -> dict[str, str]:
+    """A grid's descriptors: what its rows and columns enumerate."""
+    axes = grid_logic.grid_axes(grid.world)
+    return {"@mikro/row_axis_type": str(axes[0].type), "@mikro/column_axis_type": str(axes[1].type) if len(axes) > 1 else "None"}
+
+
+grid = service.structure(grid_models.Grid, "@mikro/grid", describe=_grid_descriptors)
 scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
 tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset", describe=table_descriptors, depends=_stored_needs)
 meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection", describe=mesh_descriptors, depends=_stored_needs)
@@ -159,6 +170,7 @@ service.model_signal(annotationlens, organization=org)
 service.model_signal(fixturelens, organization=org)
 service.model_signal(scene, organization=org)
 service.model_signal(chart, organization=org)
+service.model_signal(grid, organization=org)
 service.model_signal(scenesnapshot, organization=org)
 service.model_signal(tabledataset, organization=org)
 service.model_signal(meshcollection, organization=org)
@@ -194,6 +206,7 @@ service.model_signal(sparsestore, organization=org)
 # space it places that input in (a world many datasets are registered into).
 service.not_part_of(models.Layer, "lens")
 service.not_part_of(chart_models.ChartLayer, "lens")
+service.not_part_of(grid_models.GridLayer, "lens")
 service.not_part_of(models.Transformation, "output")
 
 

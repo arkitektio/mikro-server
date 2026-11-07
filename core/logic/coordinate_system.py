@@ -914,11 +914,16 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
     drawing = layers_drawing_through(lens)
     layers = list(drawing.select_related("scene").order_by("pk")[:5])
     chart_layers = list(lens.chart_layers.select_related("chart").order_by("pk")[:5])
-    if not layers and not chart_layers:
+    grid_layers = list(lens.grid_layers.select_related("grid").order_by("pk")[:5])
+    if not layers and not chart_layers and not grid_layers:
         return
 
-    total = drawing.count() + lens.chart_layers.count()
-    described = [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers] + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
+    total = drawing.count() + lens.chart_layers.count() + lens.grid_layers.count()
+    described = (
+        [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers]
+        + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
+        + [f"grid layer {layer.pk} in grid '{layer.grid.name}'" for layer in grid_layers]
+    )
     more = f" (and {total - len(described)} more)" if total > len(described) else ""
     raise ValueError(
         f"Lens {lens.pk} cannot be deleted: {total} layer(s) draw through it -- {', '.join(described)}{more}. Delete those layers first, or leave the lens; it is shared by every "

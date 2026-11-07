@@ -30,8 +30,9 @@ class AutoVisualizeInputModel(BaseModel):
 @kante.pydantic_input(
     AutoVisualizeInputModel,
     description=(
-        "Show a coordinate system, or one lens, without choosing how. A space with exactly one metric, unit-carrying axis becomes a chart; any other space with a time or space axis "
-        "becomes a scene. Over a `coordinateSystem`, either is bootstrapped from what already resides in the space; over a `lens`, it shows that lens' selection and nothing else of "
+        "Show a coordinate system, or one lens, without choosing how. A space with exactly one metric, unit-carrying axis becomes a chart; a space of two enumerating axes "
+        "(genes against cells, objects against channels) a grid; any other space with a time or space axis a scene; a table lens whose rows have no place a VALUES chart of "
+        "its measurements. Over a `coordinateSystem`, either is bootstrapped from what already resides in the space; over a `lens`, it shows that lens' selection and nothing else of "
         "its container, the choice read off the space the selection lives in. Both use that kind's default policy and register nothing into any space. Provide exactly one of the two. For a say in "
         "the kind or the policy, use `createChartFromCoordinateSystem`, `createSceneFromCoordinateSystem` or `createSceneFromLens`"
     ),

@@ -161,16 +161,31 @@ async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_space_neither_composition_can_show_is_refused_and_nothing_is_made(authenticated_context: HttpContext):
-    """Two enumerating axes: more than a chart's one, and no time or space to navigate."""
+async def test_a_space_no_composition_can_show_is_refused_and_nothing_is_made(authenticated_context: HttpContext):
+    """Three enumerating axes: more than a chart's one and a grid's two, and no time or space to navigate."""
     ctx = authenticated_context
-    system = await _space(ctx, "labels", [{"name": "c", "type": "CHANNEL", "unit": "a.u."}, {"name": "object", "type": "INDEX", "unit": "a.u."}])
+    system = await _space(
+        ctx,
+        "labels",
+        [{"name": "c", "type": "CHANNEL", "unit": "a.u."}, {"name": "object", "type": "INDEX", "unit": "a.u."}, {"name": "gene", "type": "INDEX", "unit": "a.u."}],
+    )
     before = await _compositions()
 
     refused = await _run(ctx, AUTO, {"coordinateSystem": system})
 
-    assert refused.errors and "neither as a chart nor as a scene" in str(refused.errors[0]), refused.errors
+    assert refused.errors and "neither a chart, a grid nor a scene" in str(refused.errors[0]), refused.errors
     assert await _compositions() == before
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_two_enumerating_axes_are_shown_as_a_grid(authenticated_context: HttpContext):
+    """Channels against objects: members against members, which a grid lays out. It was refused before grids."""
+    ctx = authenticated_context
+    system = await _space(ctx, "labels", [{"name": "c", "type": "CHANNEL", "unit": "a.u."}, {"name": "object", "type": "INDEX", "unit": "a.u."}])
+    shown = await _run(ctx, AUTO, {"coordinateSystem": system})
+    assert not shown.errors, shown.errors
+    assert shown.data["autoVisualize"]["__typename"] == "Grid"
 
 
 @pytest.mark.django_db(transaction=True)

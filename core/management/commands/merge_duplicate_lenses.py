@@ -46,6 +46,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from chart.models import ChartLayer
+from grid.models import GridLayer
 from core import descriptors as descriptors_logic
 from core import enums, models
 from core.logic import coordinate_system as coordinate_system_logic
@@ -241,10 +242,12 @@ class Command(BaseCommand):
 
         layers = models.Layer.objects.filter(lens=duplicate).count()
         chart_layers = ChartLayer.objects.filter(lens=duplicate).count()
+        grid_layers = GridLayer.objects.filter(lens=duplicate).count()
         verb = "would merge" if self.dry_run else "merged"
-        self.stdout.write(f"{verb} lens {duplicate.pk} into lens {into.pk} ({layers} layer(s), {chart_layers} chart layer(s) repointed)")
+        self.stdout.write(f"{verb} lens {duplicate.pk} into lens {into.pk} ({layers} layer(s), {chart_layers} chart layer(s), {grid_layers} grid layer(s) repointed)")
         models.Layer.objects.filter(lens=duplicate).update(lens=into)
         ChartLayer.objects.filter(lens=duplicate).update(lens=into)
+        GridLayer.objects.filter(lens=duplicate).update(lens=into)
         # Every other way a layer names an array lens (`layers_drawing_through`): as an RGB
         # component, and as the source of a render-graph node. Those columns cascade, so a
         # name left on the duplicate would take its layer with it.
