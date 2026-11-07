@@ -69,6 +69,7 @@ from core.types.attribute_plans import (
     MeshSample,
     NetworkSample,
     PlanKeyColumn,
+    RowPlan,
     SampleStep,
     sample_step_types,
 )

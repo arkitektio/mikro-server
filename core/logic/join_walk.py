@@ -36,7 +36,7 @@ size of someone's warehouse.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, Literal
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 
 from core import enums, models
 from core.logic import coords as coords_logic
@@ -52,6 +52,13 @@ if TYPE_CHECKING:
 MAX_JOIN_DEPTH = 4
 
 Cardinality = Literal["ONE", "MANY"]
+
+#: Which way a hop crosses its fact. FORWARD follows a reference as declared (a column's values,
+#: a matrix axis' positions). REVERSE reads a ``Column.references`` backwards -- from a row to
+#: every row of another table whose column names it, so a cluster reaches its members. SAME_ROWS
+#: crosses an edge between two tables' frames that maps one INDEX onto the other -- a PCA derived
+#: row for row from its measurements -- so the same row is read in the other table.
+Direction = Literal["FORWARD", "REVERSE", "SAME_ROWS"]
 
 #: A node of the walk: which kind of container, and which row. ``T`` and ``S`` because a table
 #: and a matrix are hopped *from* differently (columns vs axes) and hopped *into* differently (a
@@ -124,6 +131,10 @@ class JoinHop:
     # The picker's identity for a pure table->table chain from the landing table; empty once a
     # matrix has been crossed, because no `joinPath` can name that.
     join_path: tuple[tuple["models.TableDataset", "models.Column"], ...] = ()
+    # How the fact was crossed. A REVERSE hop's `key_column` is the child's referencing column and
+    # its `via_column` the parent's INDEX; a SAME_ROWS hop's `key_scale`/`key_offset` map the held
+    # id onto the target's INDEX (``target = held * scale + offset``).
+    direction: Direction = "FORWARD"
 
     @property
     def held(self) -> str:
@@ -193,6 +204,92 @@ def _reverse_references(table_ids: Iterable[int], organization: "Organization") 
     for reference in references:
         by_table.setdefault(reference.references_id, []).append(reference)
     return by_table
+
+
+def _referencing_columns(table_ids: Iterable[int], organization: "Organization") -> dict[int, list["models.Column"]]:
+    """The columns of other tables whose values identify rows of each table -- a reference read backwards, one query."""
+    identifiers = list(table_ids)
+    if not identifiers:
+        return {}
+    by_table: dict[int, list["models.Column"]] = {}
+    columns = (
+        models.Column.objects.filter(references_id__in=identifiers, table__organization=organization)
+        .exclude(role=enums.ColumnRoleChoices.COORDINATE.value)
+        .select_related("table")
+        .order_by("table_id", "order", "pk")
+    )
+    for column in columns:
+        by_table.setdefault(column.references_id, []).append(column)
+    return by_table
+
+
+@dataclass(frozen=True)
+class _SameRows:
+    """Another table whose rows are this one's: its pk, and the held id as its INDEX value."""
+
+    table_id: int
+    key_scale: float
+    key_offset: float
+
+
+def _same_row_tables(tables: "Iterable[models.TableDataset]", organization: "Organization") -> dict[int, list[_SameRows]]:
+    """The tables whose rows ARE each table's rows, through an edge between the two frames -- one query.
+
+    An edge qualifies in either direction when both of its ends are the spaces of single-INDEX
+    tables and it maps the one INDEX onto the other by exactly one coefficient: an IDENTITY (a
+    PCA derived row for row) or an affine relabel (``cell_id = cell + 1``, a BY_DIMENSION part).
+    A key (a dereferencing FIELD) is not one -- it says a mask's pixels name rows, not that two
+    tables share them -- and an UNMAPPABLE states no correspondence at all.
+    """
+    index_by_system = {table.coordinate_system_id: (table, column) for table in tables if table.coordinate_system_id is not None and (column := _index_column(table)) is not None}
+    if not index_by_system:
+        return {}
+    systems = list(index_by_system)
+    edges = list(
+        models.Transformation.objects.filter(Q(input_id__in=systems) | Q(output_id__in=systems), organization=organization)
+        .exclude(graph_logic.dereference_q())
+        .exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
+        .select_related("input", "output")
+        .prefetch_related("input__axes", "output__axes")
+        .order_by("pk")
+    )
+    # The far ends: the tables those edges lead to, each with its own INDEX column.
+    far_systems = {edge.output_id for edge in edges} | {edge.input_id for edge in edges}
+    far_tables = {
+        table.coordinate_system_id: table
+        for table in models.TableDataset.objects.filter(coordinate_system_id__in=far_systems, organization=organization).prefetch_related("columns")
+    }
+
+    found: dict[int, list[_SameRows]] = {}
+    seen: set[tuple[int, int]] = set()
+    for edge in edges:
+        input_table = index_by_system.get(edge.input_id, (far_tables.get(edge.input_id), None))[0]
+        output_table = index_by_system.get(edge.output_id, (far_tables.get(edge.output_id), None))[0]
+        if input_table is None or output_table is None or input_table.pk == output_table.pk:
+            continue
+        input_index = _index_column(input_table)
+        output_index = _index_column(output_table)
+        if input_index is None or output_index is None:
+            continue
+        try:
+            step = graph_logic._edge_step(edge)
+            form = coords_logic.step_forms(step).get(output_index.name)
+        except coords_logic.NonAffineTransformError:
+            continue
+        if form is None:
+            continue
+        acting = [position for position, coefficient in enumerate(form.coefficients) if coefficient != 0]
+        if len(acting) != 1 or list(step.input_axes)[acting[0]] != input_index.name:
+            continue
+        factor = form.coefficients[acting[0]]
+        # output = factor * input + constant, read from whichever end the walk stands on.
+        if edge.input_id in index_by_system and (input_table.pk, output_table.pk) not in seen:
+            seen.add((input_table.pk, output_table.pk))
+            found.setdefault(input_table.pk, []).append(_SameRows(table_id=output_table.pk, key_scale=factor, key_offset=form.constant))
+        if edge.output_id in index_by_system and (output_table.pk, input_table.pk) not in seen:
+            seen.add((output_table.pk, input_table.pk))
+            found.setdefault(output_table.pk, []).append(_SameRows(table_id=input_table.pk, key_scale=1.0 / factor, key_offset=-form.constant / factor))
+    return found
 
 
 @dataclass(frozen=True)
@@ -305,6 +402,8 @@ def walk_joins(
     *,
     max_join_depth: int,
     cross_matrices: bool = True,
+    reverse_references: bool = False,
+    same_rows: bool = False,
 ) -> dict[int, list[JoinHop]]:
     """Every hop reachable from each root, keyed by root position, in a stable breadth-first order.
 
@@ -315,6 +414,12 @@ def walk_joins(
 
     ``cross_matrices=False`` confines the walk to ``Column.references`` -- the picker's walk,
     which cannot store a position along an axis, of a matrix or of a dense array.
+
+    ``reverse_references`` also reads ``Column.references`` backwards (a REVERSE hop, MANY: a
+    cluster row reaches every member row naming it), and ``same_rows`` crosses edges between two
+    tables' frames (a SAME_ROWS hop: the PCA row of a measurement row). Both are off for the
+    picker and the scene's plans, whose chains a stored `joinPath` must be able to name, and on
+    for a row's plan (:func:`core.logic.attribute_plans.build_row_plan`).
     """
     depth_limit = max(0, min(max_join_depth, MAX_JOIN_DEPTH))
     hops: dict[int, list[JoinHop]] = {position: [] for position in range(len(roots))}
@@ -338,11 +443,13 @@ def walk_joins(
 
         reverse = _reverse_references((tip.key[1] for tip in frontier if tip.key[0] == "T"), organization) if cross_matrices else {}
         derived = _derived_arrays([tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"], organization) if cross_matrices else {}
+        referencing = _referencing_columns((tip.key[1] for tip in frontier if tip.key[0] == "T"), organization) if reverse_references else {}
+        alike = _same_row_tables([tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"], organization) if same_rows else {}
         doors: dict[tuple[int, int], _ArrayDoor] = {}
 
         # First pass: what each tip could hop to, before any target is loaded, so the targets of
         # a whole level are fetched in two queries rather than one per hop.
-        candidates: list[tuple[tuple, _Frontier, "models.Column | None", str | None, NodeKey]] = []
+        candidates: list[tuple[tuple, _Frontier, "models.Column | None", str | None, NodeKey, dict]] = []
         for tip in frontier:
             kind, pk = tip.key
             if kind == "T":
@@ -350,36 +457,48 @@ def walk_joins(
                 for column in table.columns.all():
                     if column.references_id is None or column.role == enums.ColumnRoleChoices.COORDINATE.value:
                         continue  # a COORDINATE reference is the product-space enumeration, not a hop
-                    candidates.append((tip.order + (column.order, 0), tip, column, None, ("T", column.references_id)))
+                    candidates.append((tip.order + (column.order, 0), tip, column, None, ("T", column.references_id), {}))
                 for reference in reverse.get(pk, []):
                     index_column = _index_column(table)
                     if index_column is None:
                         continue
-                    candidates.append((tip.order + (index_column.order, 1, reference.dataset_id), tip, index_column, reference.axis, ("S", reference.dataset_id)))
+                    candidates.append((tip.order + (index_column.order, 1, reference.dataset_id), tip, index_column, reference.axis, ("S", reference.dataset_id), {}))
                 for door in derived.get(pk, []):
                     index_column = _index_column(table)
                     if index_column is None:
                         continue
                     # Per table, not per tip: every branch standing on this table gets the hop.
                     doors[(pk, door.dataset.pk)] = door
-                    candidates.append((tip.order + (index_column.order, 2, door.dataset.pk), tip, index_column, door.key_axis, ("A", door.dataset.pk)))
+                    candidates.append((tip.order + (index_column.order, 2, door.dataset.pk), tip, index_column, door.key_axis, ("A", door.dataset.pk), {}))
+                index_column = _index_column(table)
+                if index_column is not None:
+                    # One reverse hop per referencing table: two columns of one table naming these
+                    # rows are two readings of one relation, and the first declared is the one walked.
+                    walked: set[int] = set()
+                    for child_column in referencing.get(pk, []):
+                        if child_column.table_id in walked:
+                            continue
+                        walked.add(child_column.table_id)
+                        candidates.append((tip.order + (index_column.order, 3, child_column.table_id), tip, index_column, None, ("T", child_column.table_id), {"direction": "REVERSE", "key_column": child_column}))
+                    for same in alike.get(pk, []):
+                        candidates.append((tip.order + (index_column.order, 4, same.table_id), tip, index_column, None, ("T", same.table_id), {"direction": "SAME_ROWS", "key_scale": same.key_scale, "key_offset": same.key_offset}))
             else:
                 matrix = matrices[pk]
                 names = matrix.axis_names
                 for reference in matrix.axis_references.all():
                     if reference.axis == tip.arrived_axis or reference.axis not in names:
                         continue  # the axis the branch came in on leads back where it came from
-                    candidates.append((tip.order + (names.index(reference.axis),), tip, None, reference.axis, ("T", reference.references_id)))
+                    candidates.append((tip.order + (names.index(reference.axis),), tip, None, reference.axis, ("T", reference.references_id), {}))
 
         candidates = [entry for entry in candidates if entry[4] not in entry[1].visited]
         candidates.sort(key=lambda entry: (entry[0], entry[4]))
 
         # Second pass: load every target of the level at once, then build the hops in order.
-        tables.update(load_tables({key[1] for *_, key in candidates if key[0] == "T" and key[1] not in tables}, organization))
-        matrices.update(load_sparse_datasets({key[1] for *_, key in candidates if key[0] == "S" and key[1] not in matrices}, organization))
+        tables.update(load_tables({entry[4][1] for entry in candidates if entry[4][0] == "T" and entry[4][1] not in tables}, organization))
+        matrices.update(load_sparse_datasets({entry[4][1] for entry in candidates if entry[4][0] == "S" and entry[4][1] not in matrices}, organization))
 
         next_frontier: list[_Frontier] = []
-        for order, tip, via_column, via_axis, key in candidates:
+        for order, tip, via_column, via_axis, key, extra in candidates:
             kind, pk = key
             if kind == "A":
                 # A leaf: the hop is recorded and no frontier grows from it.
@@ -395,15 +514,19 @@ def walk_joins(
                 continue
             if kind == "T":
                 target = tables.get(pk)
-                key_column = _index_column(target) if target is not None else None
-                if target is None or key_column is None:
+                direction: Direction = extra.get("direction", "FORWARD")
+                key_column = extra.get("key_column") or (_index_column(target) if target is not None else None)
+                if target is None or key_column is None or (direction != "FORWARD" and _index_column(target) is None):
                     continue
-                cardinality: Cardinality = "MANY" if tip.key[0] == "S" else tip.cardinality
-                crossed = tip.crossed_matrix or via_axis is not None
+                cardinality: Cardinality = "MANY" if tip.key[0] == "S" or direction == "REVERSE" else tip.cardinality
+                # A stored `joinPath` names forward references only: past a matrix, a reverse read
+                # or a crossing between frames, no picker entry can say how it got here.
+                crossed = tip.crossed_matrix or via_axis is not None or direction != "FORWARD"
                 join_path = () if crossed else tip.join_path + ((tables[tip.key[1]], via_column),)
                 hop = JoinHop(
                     root=tip.root, index=counters[tip.root], parent=tip.parent, depth=depth, cardinality=cardinality,
                     via_column=via_column, via_axis=via_axis, table=target, key_column=key_column, attributes=_attributes(target), join_path=join_path,
+                    direction=direction, key_scale=extra.get("key_scale"), key_offset=extra.get("key_offset"),
                 )
                 arrived = None
             else:

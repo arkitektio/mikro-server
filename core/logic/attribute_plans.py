@@ -172,6 +172,8 @@ class HopSpec:
     # `(table, column)` steps a stored `joinPath` names. Empty on the landing, and empty once a
     # matrix has been crossed, because no `joinPath` can name that.
     join_path: tuple[tuple["models.TableDataset", "models.Column"], ...] = ()
+    # How the hop crossed its fact (:data:`core.logic.join_walk.Direction`).
+    direction: str = "FORWARD"
 
 
 @dataclass(frozen=True)
@@ -193,16 +195,23 @@ class AttributePlanSpec:
         return self.hops[0]
 
 
-def _table_lookup(table: "models.TableDataset", key_columns: list[PlanKeySpec]) -> LookupSpec:
+def _table_lookup(table: "models.TableDataset", key_columns: list[PlanKeySpec], *, include_index: bool = False, key_map: "KeyMapSpec | None" = None) -> LookupSpec:
     """The TABLE half over ``table``, bound by ``key_columns``: every non-coordinate column selected.
 
     There is no narrower rule available: a table declares all of its columns, so "the caller
     meant this one" is true of every one of them. The width of a lookup is therefore the width
     of the table, which is what `_MAX_TABLE_COLUMNS` bounds -- a file wide enough for that to
     hurt is a matrix, and `createSparseDataset` is where it belongs.
+
+    ``include_index`` also selects the table's INDEX column: a lookup bound by some other column
+    (a REVERSE hop binds the child's referencing column) returns rows the worker could not
+    otherwise name, and what a row *is* (its mesh, its label) is spelled by that index.
+    ``key_map`` maps the held id before it binds (a SAME_ROWS hop across a relabel).
     """
     attributes = [column for column in table.columns.all() if column.role != enums.ColumnRoleChoices.COORDINATE.value]
-    return LookupSpec(kind="TABLE", store=table.store, key_columns=key_columns, attributes=attributes)
+    if include_index:
+        attributes = [*(column for column in table.columns.all() if column.role == enums.ColumnRoleChoices.COORDINATE.value), *attributes]
+    return LookupSpec(kind="TABLE", store=table.store, key_columns=key_columns, attributes=attributes, key_map=key_map)
 
 
 def _sparse_lookup(sparse_array: "models.SparseArray", *, key_axis: str, key_held: str, value_axes: list[str]) -> LookupSpec:
@@ -218,7 +227,13 @@ def _array_lookup(*, key_axis: str, key_held: str, key_map: KeyMapSpec, value_ax
 def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
     """A walk's hop as a plan hop: the same facts, with the lookup the worker will run built in."""
     if found.table is not None:
-        lookup = _table_lookup(found.table, [PlanKeySpec(axis=found.held, column=found.key_column)])
+        relabelled = found.key_scale is not None and (found.key_scale != 1.0 or found.key_offset != 0.0)
+        lookup = _table_lookup(
+            found.table,
+            [PlanKeySpec(axis=found.held, column=found.key_column)],
+            include_index=found.direction == "REVERSE",
+            key_map=KeyMapSpec(scale=float(found.key_scale), offset=float(found.key_offset)) if relabelled else None,
+        )
     elif found.array_dataset is not None:
         # Held under the INDEX column's name, never the axis': the parent is a table row, and
         # a row has no value called `cell`.
@@ -241,6 +256,7 @@ def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
         sparse_dataset=found.sparse_dataset,
         array_dataset=found.array_dataset,
         join_path=found.join_path,
+        direction=found.direction,
     )
 
 
@@ -532,3 +548,38 @@ def build_attribute_plans(
     for position, found in join_walk.walk_joins(roots, organization, max_join_depth=max_join_depth).items():
         plans[position].hops.extend(_hop_from(hop) for hop in found)
     return plans
+
+
+@dataclass(frozen=True)
+class RowPlanSpec:
+    """What a row of a table reaches: no sample -- the probed row's INDEX value IS the id -- then the chain."""
+
+    table: "models.TableDataset"
+    key: PlanKeySpec
+    hops: list[HopSpec]
+
+
+def build_row_plan(table: "models.TableDataset", *, organization: "Organization", max_join_depth: int) -> RowPlanSpec:
+    """The plan a picked row executes: its own table first, then every hop the schema allows.
+
+    A chart of values draws rows, and a picked point already holds its row's id -- there is
+    nothing to sample, so the plan starts at the table, bound by its INDEX column. From there the
+    walk takes the facts a FIELD-rooted plan takes, and two more that only make sense from a
+    row: REVERSE references (a cluster's member rows) and SAME_ROWS crossings (the PCA row of a
+    measurement row, through the edge between the two frames). The scene's plans and the picker
+    do not take those, because a stored `joinPath` cannot name them.
+
+    Refused for a table without exactly one INDEX coordinate column: a synthetic `object` frame
+    has no column to bind (positional parquet access is not a lookup), and a product space is
+    keyed by a pair -- the same tables a FIELD-rooted plan skips, for the same reason.
+    """
+    index = join_walk._index_column(table)
+    if index is None:
+        raise ValueError(
+            f"Table dataset '{table.name}' is not keyed by one INDEX column, so a row of it has no id to look anything up by. "
+            "Declare its row id as an INDEX coordinate column (`ColumnInput(axis_type=INDEX)`)."
+        )
+    key = PlanKeySpec(axis=index.name, column=index)
+    landing = HopSpec(index=0, parent=None, cardinality="ONE", table=table, lookup=_table_lookup(table, [key]))
+    found = join_walk.walk_joins([join_walk.JoinRoot(table=table)], organization, max_join_depth=max_join_depth, reverse_references=True, same_rows=True)
+    return RowPlanSpec(table=table, key=key, hops=[landing, *(_hop_from(hop) for hop in found[0])])

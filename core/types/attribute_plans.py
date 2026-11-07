@@ -137,7 +137,8 @@ class LookupStep:
         default=None,
         description=(
             "(ARRAY) The held id as a position along `keyAxis`. A matrix axis *is* the row ids; a dense array's positions relate to them by whatever its derivation edge states "
-            "(`cell_id = cell + 1`), and this is that edge already inverted. Do not re-derive it from the edge's steps"
+            "(`cell_id = cell + 1`), and this is that edge already inverted. Do not re-derive it from the edge's steps. (TABLE, a SAME_ROWS hop) The held id as the target's "
+            "INDEX value, when the edge between the two frames relabels it; null when the id is the same in both tables"
         ),
     )
 
@@ -154,6 +155,10 @@ class HopVia:
 
     column: Column | None = strawberry.field(default=None, description="The column whose values are bound: the parent row's reference column, or its INDEX column when the hop enters a matrix or a dense array")
     axis: str | None = strawberry.field(default=None, description="The axis crossed: the parent slice's value axis when the hop leaves a matrix, the target's indexed axis when it enters one, the array's key axis when it enters a dense array")
+    direction: enums.HopDirection = strawberry.field(
+        default=enums.HopDirection.FORWARD,
+        description="Which way the fact is crossed: FORWARD as declared, REVERSE a `references` read backwards (the child's referencing column binds the parent's INDEX), SAME_ROWS the same row in another table",
+    )
 
 
 @kante.type(
@@ -207,6 +212,20 @@ class AttributePlan:
     hops: List[Hop] = strawberry.field(
         description="The chain, in execution order. `hops[0]` is the landing: the table or matrix the key's id keys, bound from `sample`. Each later hop crosses one declared reference from a parent hop, up to the query's `maxJoinDepth`. A client that only wants the landing reads `hops[0]`"
     )
+
+
+@kante.type(
+    description=(
+        "What a picked row of a table reaches -- a point of a chart of values. There is no sample: the row's INDEX value IS the id, so a client holding it binds `key` and "
+        "runs `hops` in order, exactly as it runs an `AttributePlan`'s after its sample. `hops[0]` is the row itself; later hops cross every fact the schema allows from it, "
+        "including two only a row's plan takes: REVERSE references (a cluster's member rows) and SAME_ROWS crossings (the PCA row of a measurement row). Like an attribute "
+        "plan it takes no id and reads no store, so fetch it once per table"
+    )
+)
+class RowPlan:
+    table: TableDataset = strawberry.field(description="Whose rows these are")
+    key: PlanKeyColumn = strawberry.field(description="The INDEX column a row is found by: hold the picked row's value under `key.axis`")
+    hops: List[Hop] = strawberry.field(description="The chain, in execution order. `hops[0]` is the row in its own table, bound from `key`; each later hop binds from its `parent`")
 
 
 #: The implementations of ``SampleStep``, for the schema's ``types=[...]``. Reachable only

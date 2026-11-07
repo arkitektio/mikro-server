@@ -272,6 +272,37 @@ the table's `i` axis, so the highlight is a predicate on pixels you already have
 highlight = (pixel) => pixel === clickedRow.i;        // a shader, not a query
 ```
 
+## A picked row: `rowPlan(table:)`
+
+A point of a chart of values is a row, and a picked point already holds its row's id -- so
+there is nothing to sample. `rowPlan(table: ID!, maxJoinDepth: Int = 1)` is the chain without
+the sample: `key` names the INDEX column to hold the id under, `hops[0]` is the row in its own
+table, and every later hop binds from its parent exactly as an attribute plan's do.
+
+```graphql
+query { rowPlan(table: "42", maxJoinDepth: 2) {
+  key { axis }
+  hops { index parent cardinality via { column { name } direction } table { id keyedBy { structure } }
+         lookup { keyColumns { axis column { name } } attributes { name } keyMap { scale offset } } }
+} }
+```
+
+A row's plan crosses two facts the scene's plans and the picker do not, because a stored
+`joinPath` cannot name them (`HopVia.direction`):
+
+- **REVERSE** -- a `Column.references` read backwards. From a cluster row, every row of the
+  member table whose `cluster` column names it: `MANY`, the parent's INDEX bound into the
+  child's referencing column, and the child's own INDEX selected with the attributes so each
+  returned row can say what it is.
+- **SAME_ROWS** -- an edge between two tables' frames that maps one INDEX onto the other: a PCA
+  derived row for row from its measurements, either way. `lookup.keyMap`, when set, maps the
+  held id onto the target's INDEX first (`cell_id = cell + 1` gives `scale 1, offset 1`).
+
+What a row *is* is read where it is declared: `hop.table.keyedBy[].structure` --
+`@mikro/meshobject` for a mesh collection's rows, whose id is `<collection>:<object>`; null for
+a mask's labels, which have no structure yet. A table not keyed by one INDEX column (a
+synthetic `object` frame, a product space) has no row plan: there is no column to bind.
+
 ## Caching
 
 A plan names columns and stores, never values — so the parquet's contents changing does not

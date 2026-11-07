@@ -266,6 +266,15 @@ class Query:
         description="Every attribute plan reachable from one system: one per FIELD edge landing on a table, discovered across the fact component -- probe a source image and the plans of the instance mask derived from it come back, each carrying the `path` of steps from the probed system to its root. Registrations are never crossed (no scene, no world). A plan is instructions, never attributes -- map along the path, sample this array, look the value up in this parquet -- and takes no coordinate, so a client fetches it once and executes it per hover against the chunks it is already rendering. Cache it against the FIELD edge plus every path step (ids and versions); `maxDepth` bounds the discovery. Each plan is a chain of `hops`: the landing, then every declared reference reachable from it -- `Column.references` into another table, a matrix axis a table identifies, or the same axis walked into the matrix -- up to `maxJoinDepth` (default 1, at most 4; 0 is the landing alone), each bound from the hop before and executed by the client in order. The server reads no store and composes nothing",
     )
 
+    row_plan = field(
+        resolver=queries.row_plan,
+        description=(
+            "What a picked row of a table reaches -- a point of a chart of values: the row itself, then every hop the schema allows from it, as `attributePlans` describes "
+            "its chain, plus REVERSE references (a cluster's member rows) and SAME_ROWS crossings (the PCA row of a measurement row). No sample: the picked row's INDEX "
+            "value is the id. Instructions, never values, and no id argument, so fetch it once per table. Refused for a table not keyed by one INDEX column"
+        ),
+    )
+
     color_by_options = field(
         resolver=queries.color_by_options,
         description=(

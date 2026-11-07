@@ -502,6 +502,22 @@ class HopCardinality(str, Enum):
     MANY = "MANY"
 
 
+@strawberry.enum(
+    description=(
+        "Which way a hop crosses its fact. FORWARD: as declared -- a column's values are rows of the table it `references`, a matrix axis' positions are rows. REVERSE: a "
+        "`references` read backwards -- every row of another table whose column names the held row (a cluster's members); MANY, binding the parent's INDEX into the "
+        "child's referencing column. SAME_ROWS: the same row in another table, across an edge between the two tables' frames (the PCA row of a measurement row); the "
+        "lookup's `keyMap`, when set, maps the held id onto the other INDEX first. REVERSE and SAME_ROWS appear only in a row's plan (`rowPlan`)"
+    )
+)
+class HopDirection(str, Enum):
+    """Which way a hop crosses its fact."""
+
+    FORWARD = "FORWARD"
+    REVERSE = "REVERSE"
+    SAME_ROWS = "SAME_ROWS"
+
+
 _describe(
     HopCardinality,
     ONE="The bound value is a scalar: one id from the sample, or one row's column from the parent hop.",

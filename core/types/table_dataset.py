@@ -74,6 +74,10 @@ class Column:
     )
 
 
+#: The structure a keyed row is, by the container keying it. A mask label has none yet.
+_KEY_STRUCTURES: dict[type, str] = {models.MeshCollection: "@mikro/meshobject"}
+
+
 @strawberry.type(description="One container keying a table: its contents are the table's row ids (`TableDataset.keyedBy`)")
 class TableKey:
     source: Annotated["Resident", strawberry.lazy("core.types.coords")] = strawberry.field(
@@ -81,6 +85,13 @@ class TableKey:
     )
     produces: List[str] = strawberry.field(description="The table axes its ids land on: the id column(s) a row is found by")
     passes_through: List[str] = strawberry.field(description="Table axes the source shares by name (a per-frame mask's `t`), which select alongside the id")
+    structure: str | None = strawberry.field(
+        default=None,
+        description=(
+            "What each row IS, as a structure a client can open: `@mikro/meshobject` for a mesh collection's objects, whose id is `<collection>:<object>` (the `produces` "
+            "value as the object, `MeshObject.id`). Null where a row has no structure of its own yet -- a label of a mask"
+        ),
+    )
 
 
 @kante.django_type(
@@ -135,7 +146,10 @@ class TableDataset(OrgScoped):
     )
     def keyed_by(self, info: Info) -> List["TableKey"]:
         """The keys landing on this table."""
-        return [TableKey(source=container, produces=produces, passes_through=passes) for container, produces, passes in graph_logic.table_keys(self)]
+        return [
+            TableKey(source=container, produces=produces, passes_through=passes, structure=_KEY_STRUCTURES.get(type(container)))
+            for container, produces, passes in graph_logic.table_keys(self)
+        ]
 
     @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:

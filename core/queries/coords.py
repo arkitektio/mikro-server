@@ -3,7 +3,7 @@
 import strawberry
 from kante.types import Info
 
-from core import models, types
+from core import enums, models, types
 from core.logic import attribute_plans as attribute_plans_logic
 from core.logic import graph as graph_logic
 from core.logic import join_walk
@@ -109,7 +109,7 @@ def _hop(hop: "attribute_plans_logic.HopSpec") -> types.Hop:
         index=hop.index,
         parent=hop.parent,
         cardinality=hop.cardinality,
-        via=None if hop.parent is None else types.HopVia(column=hop.via_column, axis=hop.via_axis),
+        via=None if hop.parent is None else types.HopVia(column=hop.via_column, axis=hop.via_axis, direction=enums.HopDirection(hop.direction)),
         table=hop.table,
         sparse_dataset=hop.sparse_dataset,
         array_dataset=hop.array_dataset,
@@ -150,3 +150,24 @@ def attribute_plans(info: Info, system: strawberry.ID, max_depth: int | None = N
         )
         for spec in specs
     ]
+
+
+def row_plan(info: Info, table: strawberry.ID, max_join_depth: int = 1) -> types.RowPlan:
+    """What a picked row of a table reaches: its own row, then every hop the schema allows from it.
+
+    A chart of values draws rows, and a picked point holds its row's id -- so the plan has no
+    sample and starts at the table. Beside the facts a FIELD-rooted plan crosses it takes REVERSE
+    references and SAME_ROWS crossings (:func:`core.logic.attribute_plans.build_row_plan`).
+    `max_join_depth` is clamped as for `attributePlans`.
+    """
+    root = get_for_org(models.TableDataset, info, id=table)
+    spec = attribute_plans_logic.build_row_plan(
+        root,
+        organization=info.context.request.organization,
+        max_join_depth=max(0, min(max_join_depth, join_walk.MAX_JOIN_DEPTH)),
+    )
+    return types.RowPlan(
+        table=spec.table,
+        key=types.PlanKeyColumn(axis=spec.key.axis, column=spec.key.column),
+        hops=[_hop(hop) for hop in spec.hops],
+    )
