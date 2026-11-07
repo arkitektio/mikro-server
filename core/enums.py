@@ -126,6 +126,7 @@ class AxisTypeChoices(TextChoices):
     SPECTRUM = "SPECTRUM", "Spectrum (wavelength bin)"
     INDEX = "INDEX", "Index (an enumeration with no metric: an object id, a row number)"
     VALUE = "VALUE", "Value (the direction values are drawn along, in a drawing space only)"
+    CATEGORY = "CATEGORY", "Category (an enumeration whose positions are the values a column holds)"
 
 
 class ColorMapChoices(TextChoices):
@@ -835,6 +836,7 @@ class AxisType(str, Enum):
     SPECTRUM = "SPECTRUM"
     INDEX = "INDEX"
     VALUE = "VALUE"
+    CATEGORY = "CATEGORY"
 
 
 _describe(
@@ -848,6 +850,7 @@ _describe(
     MICROTIME="A FLIM arrival-time bin. Continuous, so a pyramid may re-bin it, and a phasor may be taken over it.",
     VALUE="The direction values are drawn along. It exists only in a drawing space -- an annotation collection's -- so that a mark can sit at a height as well as a position: no dataset's grid, no table and no unit-carrying space has one, because what data *holds* is its values, not an axis of them. Always unitless: what a height measures is whatever the thing drawn beside it measures.",
     SPECTRUM="A wavelength bin of a spectrally resolved acquisition. Continuous -- unlike a CHANNEL axis, whose coordinates index acquisitions rather than positions -- so a pyramid may re-bin it, and a phasor may be taken over it.",
+    CATEGORY="An enumerating axis whose positions are the values a column holds -- a condition, a genotype, a cluster id. It has no unit and no metric, exactly as an INDEX axis has none: nothing scales or offsets it, and a BY_DIMENSION passes it through with an IDENTITY part. The positions are not stored: they are whatever the values are. Never on an array's grid; declared on a coordinate system that enumerates by value.",
 )
 
 

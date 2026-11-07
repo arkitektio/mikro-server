@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 import kante
 from core import enums, models, types
 from core.creation import CreationContext
-from core.inputs.coords import SelectorInput, SelectorInputModel, TransformInput, TransformSpec
+from core.inputs.coords import SelectorInput, SelectorInputModel, TransformInput, TransformSpec, assert_orthonormal
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import assert_can_delete, creator_owner, make_delete
@@ -308,6 +308,11 @@ def _refine_params(transformation: models.Transformation, model: UpdateTransform
     # this line, refining a SCALE edge to `[0, 0]` is the one way left to store a map that
     # collapses an axis.
     graph_logic.assert_edge_values(params)
+    # And a ROTATION stays one: the input validators that check `MᵀM ≈ I` at creation never
+    # see a refinement, so without this a rotation could be refined into a shear that still
+    # reports itself an isometry.
+    if transformation.kind == enums.TransformKind.ROTATION.value and params.get("affine") is not None:
+        assert_orthonormal(params["affine"], noun="ROTATION")
 
     # The rank it lands on is the rank the endpoints already fix, and an update that
     # silently changed it would be a back door around the check `create_transformation` makes.
@@ -339,6 +344,8 @@ def _refine_part(transformation: models.Transformation, model: UpdateTransformat
         params = dict(part.get("params") or {})
         if index == model.part:
             params.update({field: getattr(model, field) for field in supplied})
+            if part["kind"] == enums.PartKind.ROTATION.value and params.get("affine") is not None:
+                assert_orthonormal(params["affine"], noun="ROTATION part")
         entry = {"kind": part["kind"], "input_axes": part["input_axes"], "output_axes": part["output_axes"]}
         if part["kind"] == enums.PartKind.FIELD.value:
             entry.update(field=transformation.field_of(part), unit=params.get("unit"), min=params.get("min"), max=params.get("max"))

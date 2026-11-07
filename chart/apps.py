@@ -17,4 +17,4 @@ class ChartConfig(AppConfig):
         from chart import models
         from core.logic import compositions
 
-        compositions.register_composition(models.Chart, world_relation="charts", noun="chart")
+        compositions.register_composition(models.Chart, world_relation="charts", noun="chart", lens_relation="layers__lens")

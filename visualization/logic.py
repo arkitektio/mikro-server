@@ -13,6 +13,7 @@ from django.db import transaction
 from chart import enums as chart_enums
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
+from core import enums as core_enums
 from core import models
 from core.creation import CreationContext
 from core.inputs.coords import ScenePolicyInputModel
@@ -63,6 +64,22 @@ _CHART_LAYER_KIND: dict[type, str] = {
 }
 
 
+def _chart_of_values(lens: models.TableLens, *, name: str | None, ctx: CreationContext) -> chart_models.Chart | None:
+    """A VALUES chart of a table lens, over its table's space: a scatter of its first two numeric attribute columns, or a histogram of its only one. None when it has none."""
+    table = lens.table_dataset
+    measured = [column.name for column in table.columns.all() if column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value and chart_logic.is_numeric(column)]
+    if not measured:
+        return None
+    label = table.name if not lens.name else f"{table.name} · {lens.name}"
+    with transaction.atomic():
+        chart = chart_logic.create_chart(name=name or label, world=table.coordinate_system, kind=chart_enums.ChartKindChoices.VALUES.value, ctx=ctx)
+        if len(measured) > 1:
+            chart_logic.create_layer(chart, kind=chart_enums.ChartLayerKindChoices.POINTS.value, source=lens, x_column=measured[0], y_column=measured[1], name=lens.name or table.name)
+        else:
+            chart_logic.create_layer(chart, kind=chart_enums.ChartLayerKindChoices.DISTRIBUTION.value, source=lens, value_column=measured[0], name=lens.name or table.name)
+    return chart
+
+
 def auto_visualize_lens(lens: models.Lens, *, name: str | None, ctx: CreationContext) -> models.Scene | chart_models.Chart:
     """A scene or a chart of one lens: its selection, and nothing else of its container.
 
@@ -74,7 +91,18 @@ def auto_visualize_lens(lens: models.Lens, *, name: str | None, ctx: CreationCon
     with the lens as its one layer, and a lens no chart layer reads is refused in prose.
     """
     system = lens.coordinate_system
-    if kind_for(system) == "SCENE":
+    try:
+        shown_as = kind_for(system)
+    except ValueError:
+        # A table whose rows have no place -- enumerated objects and their measurements --
+        # is still a table of values: shown as a chart of them, its first two measurements
+        # against each other, or the distribution of its only one.
+        if isinstance(lens, models.TableLens):
+            chart = _chart_of_values(lens, name=name, ctx=ctx)
+            if chart is not None:
+                return chart
+        raise
+    if shown_as == "SCENE":
         return scene_logic.bootstrap_scene_from_lens(lens, ctx, name=name)
 
     kind = next((kind for model, kind in _CHART_LAYER_KIND.items() if isinstance(lens, model)), None)

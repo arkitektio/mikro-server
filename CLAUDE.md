@@ -103,6 +103,38 @@ glTF, read and checked when `finishKulisseUpload` runs) in a unit-carrying space
 `Fixture`, `FixtureLens`, `FixtureLayer`. The box is the store's, never declared or re-read here.
 10.2.0 shipped it as a "CAD model"; nothing of that name is left.
 
+## Axes, tables, scenes and charts (RFC-11, RFC-12)
+
+**A coordinate system assumes nothing; its consumers check what they need.** Each axis is
+*measured* (`coords.METRIC_AXIS_TYPES`: SPACE, TIME, MICROTIME, SPECTRUM) or *enumerating*
+(`ENUMERATING_AXIS_TYPES`: CHANNEL, INDEX, CATEGORY), and may declare a `metric_group` -- the
+axes that share one distance. A SPACE axis is in `"space"` unless it says otherwise, **in code**
+(`coords.effective_metric_group`), so an older space needs no migration; groups only on
+measured axes, one dimension per group. A ROTATION (whole edge or part) needs the axes it
+*mixes* to share a group (`graph.assert_mixed_axes_share_metric`; a passed-through axis needs
+nothing); AFFINE, SCALE and TRANSLATION need only measured axes. A CATEGORY (positions are
+values) has no unit, is never on a grid, and takes no arithmetic: a BY_DIMENSION passes it with
+an IDENTITY part.
+**A table's space is its frame**: its coordinate columns (SPACE, TIME, INDEX, CHANNEL) or a
+synthetic `object`; its measurements stay columns, as an array's intensity is a value and not an
+axis. A long-form table declares a CHANNEL coordinate (`(cell, c, mean)`), unitless, and each
+data column what it `varies_over`; a key from a mask leaves the channel to the reader
+(`graph.reader_selected_axes`, no attribute plan) or passes it through by name from a source
+with a `c`. A **gate** is a table lens window on a numeric column (`area >= 50`,
+`coordinate_system.windowable_names`, which `merge_duplicate_lenses` normalises against too).
+**A scene shows where, a chart shows how much**: in a scene every screen axis is a world axis
+and values are appearance; in a chart values are position and at most one axis comes from the
+graph. Every chart has a world -- the domain its layers' rows live in -- and every layer is
+placed into it (`Chart.kind`): an AXIS chart draws its world, one measured axis (TRACE, SERIES,
+ANNOTATION, laid along it by edges); a VALUES chart's world is whose rows (a table's space, not
+drawn), its POINTS (`x/y/z_column`) and DISTRIBUTION (`value_column`, `group_column`, `bins`)
+layers placed into it and binding columns by name (`chart.assert_value_layer`: placed, numeric,
+one kind per chart, units agree per position). Same world, same rows: a derived PCA table draws
+beside its source. A chart is never both. A PCA or UMAP is a derived table (IDENTITY over the frame, a TABLE key back,
+parameters in provenance), not an edge. `docs/rfc11-tables-and-charts.md` is the model,
+`docs/rfc12-compositions.md` the plan for grids, diagrams and boards; `tests/test_axis_structure.py`,
+`test_table_space.py`, `test_chart_values.py` and `test_table_plot.py` hold it.
+
 ## Deletes follow lineage
 
 Nothing is deleted while something made from it stands. A delete of any `lineage` node kind

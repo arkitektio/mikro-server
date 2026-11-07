@@ -602,7 +602,13 @@ class OmeMetadata:
     filters=filters.SceneFilter,
     pagination=True,
     ordering=order.SceneOrder,
-    description="A composition of layers over a shared world coordinate system. The scene carries no units of its own -- they are per-axis, on the axes of its world system",
+    description=(
+        "A composition that shows **where**: every screen axis is an axis of its world -- a place, with a time or space axis -- and each layer is placed there by the "
+        "graph's edges, so refining a registration moves what is drawn. Values are drawn as appearance: an image's intensity as colour, a table's `area` as the colour "
+        "or size of its points. The counterpart of a chart, which shows *how much*: there values are drawn as position. The same table lens may be drawn both ways -- "
+        "nuclei at their `(y, x)` on the image here, at `(area, volume)` in a VALUES chart. If rotating the view makes sense, it is a scene. The scene carries no units "
+        "of its own -- they are per-axis, on the axes of its world system"
+    ),
 )
 class Scene(OrgScoped, Visualization):
     """A composition of layers over a shared world coordinate system."""
@@ -942,7 +948,7 @@ def _lens_calibrations(lens: "models.ArrayLens") -> "list[graph_logic.Calibratio
 _WINDOWS_DESCRIPTION = "The windows, in the one normalized spelling: container axis order, floats, an open side as null. Empty for the whole lens"
 
 
-@kante.django_type(models.TableLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a table dataset by value windows on its coordinate columns: the rows kept. Lives in the table's own space")
+@kante.django_type(models.TableLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a table dataset by value windows on its columns: the rows kept. A window on a coordinate column bounds a region of space; one on a numeric measurement column is a gate (`area >= 50`), which bounds nothing in space. Lives in the table's own space")
 class TableLens(Lens, OrgScoped):
     """A selection over a table dataset."""
 

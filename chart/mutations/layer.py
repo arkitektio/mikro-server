@@ -1,7 +1,8 @@
 """Chart layers: one creator per kind, because each kind reads a different source.
 
-Every creator runs the same gate before it writes -- the source must be laid along the
-chart's axis by the graph -- and none of them writes an edge.
+A placed kind (trace, series, annotation) runs the same gate before it writes -- the source
+must be laid along the chart's axis by the graph. A value kind (points, distribution) names
+the columns whose values are its positions, in a VALUES chart whose world its rows are placed in. None of them writes an edge.
 """
 
 import kante
@@ -195,6 +196,101 @@ def create_annotation_chart_layer(info: Info, input: CreateAnnotationChartLayerI
         return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.ANNOTATION.value, source=lens, **settings)
 
 
+# --- points -------------------------------------------------------------------
+
+
+_LENS_ROWS = "The table lens whose rows are read: a table's whole lens (`TableDataset.fullLens`), or a window of it"
+
+
+class CreatePointsChartLayerInputModel(_Style):
+    chart: str
+    lens: str
+    x_column: str
+    y_column: str
+    z_column: str | None = None
+
+
+@prose_errors
+@kante.pydantic_input(
+    CreatePointsChartLayerInputModel,
+    description=(
+        "Input for drawing a table's rows as points in a VALUES chart: each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth) -- nuclei at their "
+        "`area` and `volume`. The rows are placed in the chart's world (whose rows); the columns' units are its drawn axes, and a second layer's must convert to them. Writes no edge"
+    ),
+)
+class CreatePointsChartLayerInput:
+    """Input for creating a points layer."""
+
+    chart: strawberry.ID = strawberry.field(description="The VALUES chart to draw in: its world must be the lens' table's space, or one it is placed in")
+    lens: strawberry.ID = strawberry.field(description=_LENS_ROWS)
+    x_column: str = strawberry.field(description="The numeric column whose value is a row's horizontal position")
+    y_column: str = strawberry.field(description="The numeric column whose value is a row's vertical position")
+    z_column: str | None = strawberry.field(default=None, description="The numeric column whose value is a row's depth, for a three-dimensional scatter. Omit for a flat one")
+    name: str | None = strawberry.field(default=None, description=_NAME)
+    visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
+    order: int | None = strawberry.field(default=None, description=_ORDER)
+    opacity: float | None = strawberry.field(default=None, description=_OPACITY)
+    color: list[float] | None = strawberry.field(default=None, description=_COLOR)
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="MARKERS (the default), or a LINE through the rows sorted along x")
+    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
+    marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
+
+
+def create_points_chart_layer(info: Info, input: CreatePointsChartLayerInput) -> types.PointsChartLayer:
+    """Draw a table lens' rows at the values of two or three of its columns."""
+    model = input.to_pydantic()
+    chart = get_for_org(models.Chart, info, id=model.chart)
+    lens = lens_of_kind(info, kind=core_models.TableLens, lens=model.lens, role="a points layer reads")
+
+    with transaction.atomic():
+        return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.POINTS.value, source=lens, x_column=model.x_column, y_column=model.y_column, z_column=model.z_column, **_settings(model))
+
+
+# --- distribution -------------------------------------------------------------
+
+
+class CreateDistributionChartLayerInputModel(_Style):
+    chart: str
+    lens: str
+    value_column: str
+    group_column: str | None = None
+    bins: int | None = None
+
+
+@prose_errors
+@kante.pydantic_input(
+    CreateDistributionChartLayerInputModel,
+    description=(
+        "Input for summarising the values of one column of a table's rows in a VALUES chart: a HISTOGRAM or a BOX, over every row or once per value of `groupColumn` "
+        "-- the `area` of nuclei, one histogram per `condition`. The rows are placed in the chart's world (whose rows). Writes no edge"
+    ),
+)
+class CreateDistributionChartLayerInput:
+    """Input for creating a distribution layer."""
+
+    chart: strawberry.ID = strawberry.field(description="The VALUES chart to draw in: its world must be the lens' table's space, or one it is placed in")
+    lens: strawberry.ID = strawberry.field(description=_LENS_ROWS)
+    value_column: str = strawberry.field(description="The numeric column whose values are summarised: the chart's horizontal axis")
+    group_column: str | None = strawberry.field(default=None, description="A column that sorts rows -- a text or boolean attribute, a label, a group id -- or a long-form CHANNEL coordinate, drawn as one summary per value. Omit for one over every row")
+    bins: int | None = strawberry.field(default=None, description="How many bins a HISTOGRAM is cut into. Omit to let the viewer choose; a BOX takes none")
+    name: str | None = strawberry.field(default=None, description=_NAME)
+    visible: bool | None = strawberry.field(default=None, description=_VISIBLE)
+    order: int | None = strawberry.field(default=None, description=_ORDER)
+    opacity: float | None = strawberry.field(default=None, description=_OPACITY)
+    color: list[float] | None = strawberry.field(default=None, description=_COLOR)
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="A HISTOGRAM (the default) or a BOX")
+
+
+def create_distribution_chart_layer(info: Info, input: CreateDistributionChartLayerInput) -> types.DistributionChartLayer:
+    """Summarise the values of one column of a table lens' rows."""
+    model = input.to_pydantic()
+    chart = get_for_org(models.Chart, info, id=model.chart)
+    lens = lens_of_kind(info, kind=core_models.TableLens, lens=model.lens, role="a distribution reads")
+
+    with transaction.atomic():
+        return chart_logic.create_layer(chart, kind=enums.ChartLayerKindChoices.DISTRIBUTION.value, source=lens, value_column=model.value_column, group_column=model.group_column, bins=model.bins, **_settings(model))
+
+
 # --- update / delete ----------------------------------------------------------
 
 
@@ -219,7 +315,7 @@ class UpdateChartLayerInput:
     order: int | None = strawberry.field(default=None, description="A new drawing order. Omit to leave it as it is")
     opacity: float | None = strawberry.field(default=None, description="A new alpha, 0 to 1. Omit to leave it as it is")
     color: list[float] | None = strawberry.field(default=None, description="A new RGBA colour. Omit to leave it as it is")
-    mark: enums.ChartMark | None = strawberry.field(default=None, description="How the values are drawn. Trace and series layers only. Omit to leave it as it is")
+    mark: enums.ChartMark | None = strawberry.field(default=None, description="How the layer is drawn, among its kind's looks. Not for annotation layers. Omit to leave it as it is")
     line_width: float | None = strawberry.field(default=None, description="Line width in screen pixels. Trace and series layers only. Omit to leave it as it is")
     marker_size: float | None = strawberry.field(default=None, description="Marker size in screen pixels. Trace and series layers only. Omit to leave it as it is")
 
@@ -238,6 +334,9 @@ def update_chart_layer(info: Info, input: UpdateChartLayerInput) -> types.ChartL
         refused = [field for field in _LINE_SETTINGS if field in settings]
         if refused:
             raise ValueError(f"Chart layer {layer.pk} draws annotations, which have no {', '.join(refused)}: each mark carries its own styling.")
+    allowed = enums.MARKS.get(str(layer.kind))
+    if "mark" in settings and allowed is not None and settings["mark"] not in allowed:
+        raise ValueError(f"A {str(layer.kind).upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(settings['mark']).upper()}: a look of another kind.")
 
     if settings:
         for field, value in settings.items():

@@ -490,6 +490,11 @@ def build_attribute_plans(
             continue
 
         coordinate_columns = {column.name: column for column in table.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value)}
+        # A long-form CHANNEL the key does not pass through is the reader's to pick, so an id
+        # alone finds one row per channel -- a slice, not a row -- and no plan states that
+        # honestly yet; passed through (the image's `c`), it is bound like `t` and keys the row.
+        if graph_logic.reader_selected_axes(output) - set(passthrough):
+            continue
         key_columns: list[PlanKeySpec] = []
         for axis in output.axes.all():
             column = coordinate_columns.get(axis.name)

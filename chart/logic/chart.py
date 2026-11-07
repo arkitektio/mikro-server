@@ -1,7 +1,14 @@
 """What a chart is and what may be drawn in one. The rules, and the writers that obey them.
 
-A chart is a world with one metric axis, and a layer is a reading of data laid along it.
-Three questions decide whether a layer may exist, and they are asked in this order:
+A chart draws values as position. **Every chart has a world -- the domain its layers' rows
+live in -- and at most one axis of it is drawn.** An AXIS chart's world is one metric axis,
+and its TRACE, SERIES and ANNOTATION layers are laid along it. A VALUES chart's world is
+whose rows it draws (a table's space, not drawn); its POINTS and DISTRIBUTION layers are
+placed into it and drawn at the values of the columns they name. For a value layer the
+questions are: is its table placed in the world, do its columns exist and hold numbers, and
+do their units agree with the chart's other layers.
+
+For a placed layer, three questions decide whether it may exist, asked in this order:
 
 1. **Is the data placed in the chart's world?** Mikro's strict rule
    (:func:`core.logic.graph.assert_placeable_in`, rfc10): a route of edges that composes
@@ -26,6 +33,7 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.logic import placement
+from kanne_server import scalars as kanne_scalars
 
 #: The axis types that measure, and the ones that enumerate. A chart's axis is metric, and
 #: so is the axis a trace is read along; an enumerating axis is the one a trace may leave
@@ -76,12 +84,15 @@ def create_chart(
     description: str | None = None,
     world: "core_models.CoordinateSystem | None" = None,
     axis: object | None = None,
+    kind: str = enums.ChartKindChoices.AXIS.value,
 ) -> "models.Chart":
     """Create a chart over a world: an adopted existing space, or one minted from a single axis.
 
-    Adopting lays the chart out along the space as it is. Minting is convenience only: the
+    Adopting lays the chart out over the space as it is. Minting is convenience only: the
     space it makes is an ordinary shared one, which other charts can adopt, which outlives
-    every chart over it, and which only ``deleteCoordinateSystem`` removes.
+    every chart over it, and which only ``deleteCoordinateSystem`` removes. An AXIS chart's
+    world must be one metric axis with a unit, which it draws; a VALUES chart's may be any
+    space -- whose rows it draws -- and is not drawn.
     """
     if (world is None) == (axis is None):
         raise ValueError("A chart is created over exactly one of `coordinateSystem` (an existing space to adopt) or `axis` (the one axis of a space to create).")
@@ -89,10 +100,12 @@ def create_chart(
     with transaction.atomic():
         if world is None:
             world = coordinate_system_logic.create_world_space(name=f"{name}/axis", axes=[axis], ctx=ctx)
-        chart_axis(world)
+        if kind == enums.ChartKindChoices.AXIS.value:
+            chart_axis(world)
         return models.Chart.objects.create(
             name=name,
             description=description,
+            kind=kind,
             world=world,
             creator=ctx.user,
             organization=ctx.organization,
@@ -131,6 +144,8 @@ def resolve_along_axis(chart: "models.Chart", source_system: "core_models.Coordi
     Then the two questions only a chart asks, both of the same composed map.
     """
     world = chart.world
+    if chart.kind == enums.ChartKindChoices.VALUES.value:
+        raise ValueError(f"Chart '{chart.name}' is a VALUES chart: it draws rows at their values, and has no drawn axis to lay {what} along. Draw it in an AXIS chart, or draw a table's rows as POINTS or a DISTRIBUTION here.")
     graph_logic.assert_placeable_in(world, source_system, destination=f"the axis of chart '{chart.name}'")
 
     axis = chart_axis(world)
@@ -141,6 +156,11 @@ def resolve_along_axis(chart: "models.Chart", source_system: "core_models.Coordi
             f"Author a registration that maps one of its axes onto '{axis.name}'."
         )
 
+    if not condensed.matrix:
+        raise ValueError(
+            f"{what} is placed on the axis '{axis.name}' of chart '{chart.name}' by a field, not by a map with a coefficient per axis, so no one of its axes runs along the chart. "
+            "A trace, a series or an annotation is laid along a chart by exactly one of its axes."
+        )
     along = along_axis_of(condensed)
     if along is None:
         coefficients = condensed.matrix[0][:-1]
@@ -233,6 +253,125 @@ def resolve_value_column(table: "core_models.TableDataset", along: str, requeste
     return requested
 
 
+# --- values -------------------------------------------------------------------
+
+
+#: The roles a grouping column may have: what sorts rows rather than measures them.
+_GROUPING_ROLES = frozenset({core_enums.ColumnRoleChoices.ATTRIBUTE.value, core_enums.ColumnRoleChoices.LABEL.value, core_enums.ColumnRoleChoices.GROUP_ID.value})
+
+
+def _column(table: "core_models.TableDataset", name: str, *, role: str) -> "core_models.Column":
+    column = next((column for column in table.columns.all() if column.name == name), None)
+    if column is None:
+        raise ValueError(f"Table dataset '{table.name}' has no column '{name}' to read as {role}; its columns are {', '.join(column.name for column in table.columns.all())}.")
+    return column
+
+
+def numeric_column(table: "core_models.TableDataset", name: str, *, role: str) -> "core_models.Column":
+    """A column a value layer reads a position from: it exists, and holds numbers."""
+    column = _column(table, name, role=role)
+    if not is_numeric(column):
+        raise ValueError(f"Column '{name}' of table dataset '{table.name}' holds {column.dtype}, not numbers, so it has no value to draw as {role}. A text column is what a distribution groups by.")
+    return column
+
+
+def grouping_column(table: "core_models.TableDataset", name: str) -> "core_models.Column":
+    """A column a distribution draws one summary per value of: what sorts rows -- a condition, a cluster -- or a long-form channel."""
+    column = _column(table, name, role="the grouping")
+    sorts = column.role in _GROUPING_ROLES and (column.role != core_enums.ColumnRoleChoices.ATTRIBUTE.value or not is_numeric(column))
+    channel = column.axis_type == core_enums.AxisTypeChoices.CHANNEL.value
+    if not (sorts or channel):
+        raise ValueError(
+            f"Column '{name}' of table dataset '{table.name}' is a {'numeric ' if is_numeric(column) else ''}{column.role} column; a distribution is drawn once per value of a "
+            "column that sorts rows -- a text or boolean ATTRIBUTE, a LABEL, a GROUP_ID -- or of a long-form CHANNEL coordinate. A measurement has no values to count."
+        )
+    return column
+
+
+def _units_agree(first: "str | None", second: "str | None") -> bool:
+    """Whether two declared units name one dimension: both absent, or both present and convertible."""
+    if first is None or second is None:
+        return first is None and second is None
+    registry = kanne_scalars.get_registry()
+    try:
+        return dict(registry.Unit(kanne_scalars.normalize_compact_units(first)).dimensionality) == dict(registry.Unit(kanne_scalars.normalize_compact_units(second)).dimensionality)
+    except Exception:  # noqa: BLE001 - an unparseable stored unit agrees with nothing
+        return False
+
+
+def _bindings(kind: str, *, x: str | None, y: str | None, z: str | None, value: str | None) -> dict[str, str | None]:
+    """The position a value layer reads each of its columns into: a distribution's value is its horizontal axis."""
+    if kind == enums.ChartLayerKindChoices.POINTS.value:
+        return {"x": x, "y": y, "z": z}
+    return {"x": value}
+
+
+def assert_value_layer(chart: "models.Chart", *, kind: str, lens: "core_models.TableLens", x: str | None, y: str | None, z: str | None, value: str | None, group: str | None, bins: int | None, mark: str) -> dict[str, object]:
+    """Check a value layer's column bindings and return them as the row's fields.
+
+    The lens' rows are placed into the chart's world -- its own table's space, or one its table
+    is registered or derived into, so two layers are about the same rows -- and drawn at the
+    values of the columns named. Each must exist and hold numbers. The layers of one chart draw
+    one kind, and agree on the units of each position -- `area` in µm² and `area_mm2` may
+    share x; a volume may not, because a chart's axis is one quantity.
+    """
+    table = lens.table_dataset
+    graph_logic.assert_placeable_in(chart.world, lens.coordinate_system, destination=f"the world of chart '{chart.name}' (whose rows it draws)")
+    if kind == enums.ChartLayerKindChoices.POINTS.value:
+        if x is None or y is None:
+            raise ValueError("A POINTS layer places each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth); name both.")
+        if value is not None or group is not None or bins is not None:
+            raise ValueError("A POINTS layer reads `xColumn`, `yColumn` and `zColumn`; `valueColumn`, `groupColumn` and `bins` are a distribution's.")
+        names = [name for name in (x, y, z) if name is not None]
+        if len(set(names)) != len(names):
+            raise ValueError(f"A POINTS layer reads a different column for each position, but names {names}.")
+    else:
+        if value is None:
+            raise ValueError("A DISTRIBUTION summarises the values of one column; name it with `valueColumn`.")
+        if x is not None or y is not None or z is not None:
+            raise ValueError("A DISTRIBUTION reads `valueColumn` (and `groupColumn`); `xColumn`, `yColumn` and `zColumn` are points'.")
+        if bins is not None:
+            if mark != enums.ChartMarkChoices.HISTOGRAM.value:
+                raise ValueError(f"`bins` is how a HISTOGRAM is cut; a {mark.upper()} has none.")
+            if bins < 1:
+                raise ValueError(f"A histogram has at least one bin, not {bins}.")
+        if group is not None:
+            grouping_column(table, group)
+            if group == value:
+                raise ValueError(f"A distribution of '{value}' is not grouped by '{value}' itself.")
+
+    bound = _bindings(kind, x=x, y=y, z=z, value=value)
+    units = {position: numeric_column(table, name, role=f"the {position} position").unit for position, name in bound.items() if name is not None}
+
+    others = list(chart.layers.all())
+    # The lens is polymorphic: read the table lenses as themselves, not through the base row.
+    tables = {lens.pk: lens.table_dataset for lens in core_models.TableLens.objects.filter(pk__in=[other.lens_id for other in others]).select_related("table_dataset").prefetch_related("table_dataset__columns")}
+    for other in others:
+        if other.kind != kind:
+            raise ValueError(f"Chart '{chart.name}' draws {other.kind.upper()} layers; a VALUES chart draws one kind, and a {kind.upper()} reads its axes differently. Make another chart.")
+        other_table = tables.get(other.lens_id)
+        if other_table is None:
+            continue
+        other_bound = _bindings(other.kind, x=other.x_column, y=other.y_column, z=other.z_column, value=other.value_column)
+        for position, unit in units.items():
+            name = other_bound.get(position)
+            if name is None:
+                continue
+            other_unit = next((column.unit for column in other_table.columns.all() if column.name == name), None)
+            if not _units_agree(unit, other_unit):
+                raise ValueError(
+                    f"Chart '{chart.name}' draws '{name}' ({other_unit or 'no unit'}) at its {position} position, and '{bound[position]}' is in {unit or 'no unit'}. "
+                    "One axis of a chart is one quantity: draw columns whose units convert, or make another chart."
+                )
+
+    fields: dict[str, object] = {}
+    if kind == enums.ChartLayerKindChoices.POINTS.value:
+        fields.update(x_column=x, y_column=y, z_column=z)
+    else:
+        fields.update(value_column=value, group_column=group, bins=bins)
+    return fields
+
+
 # --- writers ------------------------------------------------------------------
 
 
@@ -242,18 +381,44 @@ def create_layer(
     kind: str,
     source: object,
     value_column: str | None = None,
+    x_column: str | None = None,
+    y_column: str | None = None,
+    z_column: str | None = None,
+    group_column: str | None = None,
+    bins: int | None = None,
     order: int | None = None,
     **settings: object,
 ) -> "models.ChartLayer":
-    """Draw a source in a chart, refusing one that is not laid along its axis or not its kind's shape.
+    """Draw a source in a chart, refusing one its kind cannot read.
 
-    ``settings`` are the view-state columns, passed through as given. Appended after the
-    chart's last layer unless an order is named.
+    A placed kind needs the chart's world and its data laid along it; a value kind needs a
+    VALUES chart whose world its rows are placed in, and columns that hold numbers. ``settings`` are the view-state columns,
+    passed through as given; a look its kind does not take is refused, and an omitted one is
+    the kind's first. Appended after the chart's last layer unless an order is named.
     """
     what = f"{type(source).__name__} {source.pk}"
-    along = resolve_along_axis(chart, source.coordinate_system, what=what)
+    allowed = enums.MARKS.get(kind)
+    mark = settings.get("mark")
+    if mark is not None and allowed is not None and mark not in allowed:
+        raise ValueError(f"A {kind.upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(mark).upper()}: a look of another kind.")
+    if mark is None and allowed is not None:
+        settings["mark"] = allowed[0]
 
     values: dict[str, object] = {}
+    if kind in enums.VALUE_KINDS:
+        if chart.kind != enums.ChartKindChoices.VALUES.value:
+            raise ValueError(
+                f"Chart '{chart.name}' is an AXIS chart, laid along '{chart_axis(chart.world).name}', and a {kind.upper()} layer draws rows at their values. "
+                "Draw it in a VALUES chart over the table's space (`createChart(kind: VALUES)`, or `createTablePlot`)."
+            )
+        if not isinstance(source, core_models.TableLens):
+            raise ValueError(f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns.")
+        values.update(assert_value_layer(chart, kind=kind, lens=source, x=x_column, y=y_column, z=z_column, value=value_column, group=group_column, bins=bins, mark=str(settings["mark"])))
+    else:
+        if any(binding is not None for binding in (x_column, y_column, z_column, group_column, bins)):
+            raise ValueError(f"A {kind.upper()} layer is placed along the chart's axis by the graph; column bindings are a POINTS or DISTRIBUTION layer's.")
+        along = resolve_along_axis(chart, source.coordinate_system, what=what)
+
     if kind == enums.ChartLayerKindChoices.TRACE.value:
         if not isinstance(source, core_models.ArrayLens):
             raise ValueError(f"{what} is not an array lens; a trace reads an array along one of its axes.")
@@ -262,7 +427,7 @@ def create_layer(
         if not isinstance(source, core_models.TableLens):
             raise ValueError(f"{what} is not a table lens; a series reads a table's value column.")
         values["value_column"] = resolve_value_column(source.table_dataset, along, value_column)
-    elif not isinstance(source, core_models.AnnotationLens):
+    elif kind == enums.ChartLayerKindChoices.ANNOTATION.value and not isinstance(source, core_models.AnnotationLens):
         raise ValueError(f"{what} is not an annotation lens; an annotation layer draws a collection's marks.")
 
     if order is None:
@@ -284,6 +449,8 @@ def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: 
     chart may hold values in several units, and which scale a height is read against is the
     viewer's binding, not a fact about the drawing.
     """
+    if chart.kind == enums.ChartKindChoices.VALUES.value:
+        raise ValueError(f"Chart '{chart.name}' is a VALUES chart, with no drawn axis to draw marks along. Annotate an AXIS chart.")
     axis = chart_axis(chart.world)
     collection = core_models.AnnotationCollection.objects.create(
         name=(name or f"{chart.name}/annotations")[:255],

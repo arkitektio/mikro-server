@@ -6,7 +6,7 @@ from django.db import transaction
 from kante.types import Info
 from pydantic import BaseModel, Field
 
-from chart import models, types
+from chart import enums, models, types
 from chart.logic import chart as chart_logic
 from core import models as core_models
 from core.creation import CreationContext
@@ -21,14 +21,17 @@ class CreateChartInputModel(BaseModel):
     description: str | None = None
     coordinate_system: str | None = None
     axis: PhysicalAxisInputModel | None = None
+    kind: enums.ChartKind = enums.ChartKind.AXIS
 
 
 @prose_errors
 @kante.pydantic_input(
     CreateChartInputModel,
     description=(
-        "Input type for creating a chart: a composition of data laid out along one metric axis. The chart is created over a world -- an existing coordinate system "
-        "adopted as it is, or one created from a single axis -- and starts with no layers"
+        "Input type for creating a chart over a world: an existing coordinate system adopted as it is, or one created from `axis`. An AXIS chart (the default) draws its "
+        "world -- one metric axis with a unit -- and lays TRACE, SERIES and ANNOTATION layers along it by the graph: intensity against `t`. A VALUES chart does not draw its "
+        "world: the world says whose rows -- a table's space, usually its INDEX axis -- and its POINTS and DISTRIBUTION layers, placed into it, draw those rows at the values "
+        "of the columns they name: `area` against `volume`. It starts with no layers"
     ),
 )
 class CreateChartInput:
@@ -39,9 +42,9 @@ class CreateChartInput:
     coordinate_system: strawberry.ID | None = strawberry.field(
         default=None,
         description=(
-            "An existing coordinate system to adopt as the chart's world. It must have exactly one axis, of a metric type and carrying a unit. The space is never owned by "
-            "the chart: several charts can share it, it survives their deletion, and while a chart is laid out over it the space cannot be deleted. Exactly one of "
-            "`coordinateSystem` and `axis`"
+            "An existing coordinate system to adopt as the chart's world. For an AXIS chart it must have exactly one axis, of a metric type and carrying a unit; for a "
+            "VALUES chart it is the space whose rows are drawn -- a table's own (`TableDataset.coordinateSystem`). The space is never owned by the chart: several charts "
+            "can share it, it survives their deletion, and while a chart is laid out over it the space cannot be deleted. Exactly one of `coordinateSystem` and `axis`"
         ),
     )
     axis: PhysicalAxisInput | None = strawberry.field(
@@ -51,15 +54,16 @@ class CreateChartInput:
             "`createCoordinateSystem` followed by `createChart(coordinateSystem:)`; the space made is an ordinary shared one. Exactly one of `coordinateSystem` and `axis`"
         ),
     )
+    kind: enums.ChartKind = strawberry.field(default=enums.ChartKind.AXIS, description="AXIS (the default): draw the world's one axis and lay layers along it. VALUES: draw the world's rows at the values of the columns each layer names")
 
 
 def create_chart(info: Info, input: CreateChartInput) -> types.Chart:
-    """Create a chart over a world: an adopted existing system or one created from a single axis."""
+    """Create a chart over a world: adopted, or created from a single axis."""
     model = input.to_pydantic()
     ctx = CreationContext.from_info(info)
 
     world = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system) if model.coordinate_system else None
-    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, ctx=ctx)
+    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, kind=model.kind.value, ctx=ctx)
 
 
 class ChartPolicyInputModel(BaseModel):

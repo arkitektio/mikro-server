@@ -29,12 +29,18 @@ from kanne_server import scalars as kanne_scalars
     ordering=filters.ChartOrder,
     pagination=True,
     description=(
-        "A composition of data laid out along one metric axis, with values read off it. The second kind of composition beside a scene: a scene is a place, a chart is an "
-        "axis. It names data by id and owns none of it, and it carries no unit of its own -- the unit is its world axis's"
+        "A composition that shows **how much**: values drawn as position. The counterpart of a scene, which shows **where**: in a scene every screen axis is a world axis, "
+        "data is placed by the graph's edges and values are drawn as appearance (a colour, a size); in a chart at most one axis is drawn from the world and every other "
+        "position is a value. Every chart has a world -- the domain its layers' rows live in -- and every layer is placed into it. An **AXIS** chart draws its world, one "
+        "metric axis with a unit, and lays TRACE, SERIES and ANNOTATION layers along it: a timelapse's intensity against `t`. A **VALUES** chart does not draw its world, "
+        "which says whose rows -- a table's space, usually its INDEX axis -- and its POINTS and DISTRIBUTION layers draw those rows at the values of the columns they name: "
+        "nuclei at `area` against `volume`, a histogram of `area` per `condition`. Two layers in one VALUES world are about the same rows (a table and the PCA derived from "
+        "it). The same table lens may be drawn as a scene, at its `(y, x)` coloured by `area`, and as a VALUES chart at `(area, volume)`. A chart names data through lenses "
+        "and owns none of it; if rotating its view would mix units, it is a chart, and if it would not, a scene"
     ),
 )
 class Chart(OrgScoped, core_types.Visualization):
-    """A composition of layers along one metric axis."""
+    """A composition that shows values as position."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
 
@@ -49,26 +55,30 @@ class Chart(OrgScoped, core_types.Visualization):
         pagination=True,
         description="The layers drawn in this chart, back to front (a heterogeneous list of layer kinds)",
     )
+    kind: enums.ChartKind = kante.django_field(description="What the world is to this chart: AXIS, the one axis it draws and lays its layers along; VALUES, whose rows it draws at the values of their columns")
     world_coordinate_system: core_types.CoordinateSystem = kante.django_field(
         field_name="world",
         description=(
-            "The space this chart is laid out along. Never owned by the chart: several charts can share it, it outlives each of them, and deleting a chart never deletes it. "
-            "Ask it for `placedSystems` to learn what could be drawn here"
+            "The domain this chart's layers live in: an AXIS chart's one metric axis, which it draws; a VALUES chart's space whose rows it draws -- a table's -- which it does "
+            "not. Never owned by the chart: several charts can share it, it outlives each of them, and deleting a chart never deletes it. Ask it for `placedSystems` to learn "
+            "what could be drawn here"
         ),
     )
 
-    @kante.django_field(description="The one axis this chart is laid out along: its name, its metric type and its unit. The world's only axis, repeated here so a client drawing the chart need not unwrap a list of one")
-    def axis(self, info: Info) -> core_types.Axis:
-        """The world's one axis."""
-        return chart_logic.chart_axis(self.world)
+    @kante.django_field(description="The one axis an AXIS chart is laid out along: its name, its metric type and its unit -- the world's only axis, repeated so a client need not unwrap a list of one. Null for a VALUES chart, whose drawn axes are the columns its layers name")
+    def axis(self, info: Info) -> core_types.Axis | None:
+        """The world's one axis, for an AXIS chart."""
+        return chart_logic.chart_axis(self.world) if self.kind == enums.ChartKindChoices.AXIS.value else None
 
 
 @kante.django_interface(
     models.ChartLayer,
     description=(
-        "A layer drawn in a chart. It carries view state only. Where its data sits along the chart's axis -- `pathToWorld`, `asAffine`, `alongAxis`, `placement`, "
+        "A layer drawn in a chart. It carries view state only. A placed layer's position along the chart's axis -- `pathToWorld`, `asAffine`, `alongAxis`, `placement`, "
         "`placementValidity`, `placementInvariance` -- is derived from the graph on read and stored nowhere, so refining one registration moves every layer that looks "
-        "through it. The concrete kind says what the layer reads: TraceChartLayer an array, SeriesChartLayer a table, AnnotationChartLayer drawn marks"
+        "through it. A value layer is placed the same way -- its rows into the VALUES chart's world, which says they are the same rows as the others' -- and drawn at the "
+        "values of the columns it names. The concrete kind says what the layer reads: TraceChartLayer an array, SeriesChartLayer a table's value column, "
+        "AnnotationChartLayer drawn marks -- along an AXIS chart's axis -- and PointsChartLayer and DistributionChartLayer a table's columns, in a VALUES chart"
     ),
 )
 class ChartLayer:
@@ -281,9 +291,115 @@ class AnnotationChartLayer(ChartLayer):
         return isinstance(obj, models.ChartLayer) and obj.kind == enums.ChartLayerKind.ANNOTATION.value
 
 
+_WINDOW_FILTERS = (
+    "The lens' selection as row filters, always applied: a row is drawn when every one keeps it (`min <= column <= max`, an omitted side open). Derived from the lens; "
+    "empty for a whole lens"
+)
+
+
+def _column_unit(lens: "core_types.TableLens", name: str | None) -> str | None:
+    if name is None:
+        return None
+    column = next((column for column in lens.table_dataset.columns.all() if column.name == name), None)
+    return column.unit if column is not None else None
+
+
+@kante.django_type(
+    models.ChartLayer,
+    filters=filters.ChartLayerFilter,
+    ordering=filters.ChartLayerOrder,
+    pagination=True,
+    description=(
+        "A layer that draws a table lens' rows at the values of its columns: each row a point at (`xColumn`, `yColumn`), and at `zColumn` too for depth -- a scatter. "
+        "The rows are placed in the VALUES chart's world -- whose rows -- and drawn at their values: the position is the measurement, read from the row. A row with a null "
+        "in a named column is not drawn. "
+        "MARKERS, or a LINE through the rows sorted along x. Example: nuclei at (`area`, `volume`), through a lens that keeps `area >= 50`"
+    ),
+)
+class PointsChartLayer(ChartLayer):
+    """A layer that draws a table lens' rows at the values of two or three columns."""
+
+    id: auto
+    lens: core_types.TableLens = kante.django_field(disable_optimization=True, description="The table lens whose rows are drawn: the rows its selection keeps")
+    x_column: str = kante.django_field(description="The numeric column whose value is a row's horizontal position")
+    y_column: str = kante.django_field(description="The numeric column whose value is a row's vertical position")
+    z_column: str | None = kante.django_field(description="The numeric column whose value is a row's depth, for a three-dimensional scatter. Null for a flat one")
+    mark: enums.ChartMark = kante.django_field(description="How the rows are drawn: MARKERS, or a LINE through them sorted along x")
+    line_width: float | None = kante.django_field(description="Line width in screen pixels. Null lets the viewer choose")
+    marker_size: float | None = kante.django_field(description="Marker size in screen pixels. Null lets the viewer choose")
+
+    @kante.django_field(description=_WINDOW_FILTERS)
+    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+        """The lens' selection as row filters."""
+        del info
+        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
+
+    @kante.django_field(description="The table dataset whose columns are read: the container of the lens")
+    def table_dataset(self, info: Info) -> core_types.TableDataset:
+        """The lens' table."""
+        return self.lens.table_dataset
+
+    @kante.django_field(description="The unit of `xColumn`, as the table declares it: the chart's horizontal axis. Null when the column declares none")
+    def x_unit(self, info: Info) -> kanne_scalars.Unit | None:
+        return _column_unit(self.lens, self.x_column)
+
+    @kante.django_field(description="The unit of `yColumn`, as the table declares it: the chart's vertical axis. Null when the column declares none")
+    def y_unit(self, info: Info) -> kanne_scalars.Unit | None:
+        return _column_unit(self.lens, self.y_column)
+
+    @kante.django_field(description="The unit of `zColumn`, as the table declares it. Null for a flat scatter or a column that declares none")
+    def z_unit(self, info: Info) -> kanne_scalars.Unit | None:
+        return _column_unit(self.lens, self.z_column)
+
+    @classmethod
+    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+        return isinstance(obj, models.ChartLayer) and obj.kind == enums.ChartLayerKind.POINTS.value
+
+
+@kante.django_type(
+    models.ChartLayer,
+    filters=filters.ChartLayerFilter,
+    ordering=filters.ChartLayerOrder,
+    pagination=True,
+    description=(
+        "A layer that summarises the values of one column of a table lens' rows: a HISTOGRAM (`bins`) or a BOX, over every row or once per value of `groupColumn` -- a "
+        "condition, a cluster, a long-form channel. The rows are placed in the VALUES chart's world; their values are the horizontal axis. Example: the "
+        "`area` of nuclei, one histogram per `condition`"
+    ),
+)
+class DistributionChartLayer(ChartLayer):
+    """A layer that summarises one column of a table lens' rows."""
+
+    id: auto
+    lens: core_types.TableLens = kante.django_field(disable_optimization=True, description="The table lens whose rows are summarised: the rows its selection keeps")
+    value_column: str = kante.django_field(description="The numeric column whose values are summarised: the chart's horizontal axis")
+    group_column: str | None = kante.django_field(description="The column whose values split the rows into one summary each: a text or boolean attribute, a label, a group id, or a long-form CHANNEL coordinate. Null for one summary over every row")
+    bins: int | None = kante.django_field(description="How many bins a HISTOGRAM is cut into. Null lets the viewer choose")
+    mark: enums.ChartMark = kante.django_field(description="How the values are summarised: a HISTOGRAM or a BOX")
+
+    @kante.django_field(description=_WINDOW_FILTERS)
+    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+        """The lens' selection as row filters."""
+        del info
+        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
+
+    @kante.django_field(description="The table dataset whose columns are read: the container of the lens")
+    def table_dataset(self, info: Info) -> core_types.TableDataset:
+        """The lens' table."""
+        return self.lens.table_dataset
+
+    @kante.django_field(description="The unit of `valueColumn`, as the table declares it: the chart's horizontal axis. Null when the column declares none")
+    def value_unit(self, info: Info) -> kanne_scalars.Unit | None:
+        return _column_unit(self.lens, self.value_column)
+
+    @classmethod
+    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+        return isinstance(obj, models.ChartLayer) and obj.kind == enums.ChartLayerKind.DISTRIBUTION.value
+
+
 #: The concrete layer types. Reachable only through the `ChartLayer` interface, so they must
 #: be handed to the schema's ``types=`` list or strawberry drops them from the SDL.
-chart_layer_types = [TraceChartLayer, SeriesChartLayer, AnnotationChartLayer]
+chart_layer_types = [TraceChartLayer, SeriesChartLayer, AnnotationChartLayer, PointsChartLayer, DistributionChartLayer]
 
 # The home page's count of charts, like the core kinds' in `core.types.stats`.
 ChartStats, ChartStatsResolver = create_stats_type(
@@ -293,4 +409,4 @@ ChartStats, ChartStatsResolver = create_stats_type(
     filters=filters.ChartFilter,
 )
 
-__all__ = ["AnnotationChartLayer", "Chart", "ChartLayer", "ChartStats", "ChartStatsResolver", "SeriesChartLayer", "TraceChartLayer", "chart_layer_types"]
+__all__ = ["AnnotationChartLayer", "Chart", "ChartLayer", "ChartStats", "ChartStatsResolver", "DistributionChartLayer", "PointsChartLayer", "SeriesChartLayer", "TraceChartLayer", "chart_layer_types"]

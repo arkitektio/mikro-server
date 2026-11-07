@@ -106,11 +106,19 @@ def assert_nonsingular_matrix(affine: list[list[float]], *, noun: str = "transfo
         )
 
 
+METRIC_GROUP_DESCRIPTION = (
+    "The axes that share one distance with this one: a step along one is comparable to a step along another. A rotation, a distance and an isotropic zoom need one; a per-axis "
+    "scale, an offset and an affine map do not. A SPACE axis is in the group 'space' unless it names another; every other axis shares a distance with nothing until it declares "
+    "a group (two spectral axes of one detector, a phasor plane). Only measured axes may declare one, and one group measures one dimension"
+)
+
+
 class AxisInputModel(BaseModel):
     """One structural axis of a dataset's pixel grid, as supplied at ingest."""
 
     name: str
     type: enums.AxisType
+    metric_group: str | None = None
     long_name: str | None = None
     description: str | None = None
 
@@ -120,7 +128,8 @@ class AxisInput:
     """Input for one structural axis of a dataset's pixel grid."""
 
     name: str = strawberry.field(description="The name of the axis, e.g. 'z', 'c' or 'tau'. Free-form")
-    type: enums.AxisType = strawberry.field(description="The semantic kind of the axis. Axes must be ordered by this: time first, then channel and custom types, then space")
+    type: enums.AxisType = strawberry.field(description="The semantic kind of the axis. No ordering by type is required; what a renderer reads is the relative order of the spatial axes, the last being x")
+    metric_group: str | None = strawberry.field(default=None, description=METRIC_GROUP_DESCRIPTION)
     long_name: str | None = strawberry.field(default=None, description="A human-readable name for the axis")
     description: str | None = strawberry.field(default=None, description="A free-form description of what the axis measures, e.g. 'distance from the coverslip'")
 
@@ -1034,7 +1043,8 @@ class PhysicalAxisInputModel(BaseModel):
 
     name: str
     type: enums.AxisType
-    unit: str
+    unit: str | None = None
+    metric_group: str | None = None
     long_name: str | None = None
     description: str | None = None
 
@@ -1045,7 +1055,8 @@ class PhysicalAxisInput:
 
     name: str = strawberry.field(description="The name of the axis, e.g. 'z' or 't'. Free-form")
     type: enums.AxisType = strawberry.field(description="The semantic kind of the axis. Must match the pixel axis at the same position when the space reinterprets a dataset's grid")
-    unit: kanne_scalars.Unit = strawberry.field(description="The physical unit of the axis, e.g. 'micrometer' or 'millisecond'. A pint unit, validated on the way in; 'a.u.' for arbitrary units")
+    unit: kanne_scalars.Unit | None = strawberry.field(default=None, description="The physical unit of the axis, e.g. 'micrometer' or 'millisecond'. A pint unit, validated on the way in; 'a.u.' for arbitrary units. Required for every type but CATEGORY, which never has one")
+    metric_group: str | None = strawberry.field(default=None, description=METRIC_GROUP_DESCRIPTION)
     long_name: str | None = strawberry.field(default=None, description="A human-readable name for the axis")
     description: str | None = strawberry.field(default=None, description="A free-form description of what the axis measures, e.g. 'distance from the coverslip'")
 

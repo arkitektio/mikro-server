@@ -150,8 +150,8 @@ SCENE_DESCRIPTORS = [
 ]
 #: A chart: the one metric axis it lays its data out along.
 CHART_DESCRIPTORS = [
-    Descriptor(key="@mikro/axis_type", type="STRING", description="What its axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength)"),
-    Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its axis"),
+    Descriptor(key="@mikro/axis_type", type="STRING", description="What its drawn axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength) -- or VALUE for a VALUES chart (a scatter, a histogram), which draws no world axis"),
+    Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its drawn axis; 'None' for a VALUES chart, whose axes are the units of the columns its layers read"),
 ]
 #: A metric: what was measured, its value, and the object it is about. Few and flat, because a
 #: metric is written by the thousand: a trigger reacts to a key, a value past a threshold, a code.

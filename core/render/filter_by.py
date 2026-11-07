@@ -196,8 +196,8 @@ class NetworkFilterByModel(PickerFilterByModel):
 def filters_for_windows(table_id: str, windows: "Iterable[WindowLike]") -> list[LabelFilterByModel]:
     """A table lens' windows as row filters a renderer applies: one COLUMN rule per window, inclusive on both ends, as a window is.
 
-    A table's axes are its coordinate columns by construction, so a window's axis names the
-    column outright. These are the lens' selection, not a picker entry: always applied, on top
+    A window names a column outright: a coordinate column (a table's axes are its coordinate
+    columns) or a numeric column it gates on (`area >= 50`). These are the lens' selection, not a picker entry: always applied, on top
     of whatever ``filterBys`` the layer offers. Derived on read, never stored -- the lens is
     the one record of what it selects.
     """

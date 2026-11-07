@@ -32,6 +32,9 @@ class Composition:
     world_relation: str
     #: What a refusal calls one of them: "scene", "chart".
     noun: str
+    #: The lookup from a composition to the lenses its layers draw through ("layers__lens"),
+    #: or None for one that draws nothing: what "this composition shows that data" is read off.
+    lens_relation: str | None = None
 
 
 _COMPOSITIONS: list[Composition] = []
@@ -39,13 +42,13 @@ _COMPOSITIONS: list[Composition] = []
 _DELETE_GUARDS: dict[type[django_models.Model], list[Callable[[django_models.Model], None]]] = {}
 
 
-def register_composition(model: type[django_models.Model], *, world_relation: str, noun: str) -> None:
+def register_composition(model: type[django_models.Model], *, world_relation: str, noun: str, lens_relation: str | None = None) -> None:
     """Declare a composition model and the relation by which a space knows it is its world.
 
     Idempotent, because ``ready()`` can run more than once in a process (the autoreloader,
     a test runner re-populating the app registry).
     """
-    composition = Composition(model=model, world_relation=world_relation, noun=noun)
+    composition = Composition(model=model, world_relation=world_relation, noun=noun, lens_relation=lens_relation)
     if composition not in _COMPOSITIONS:
         _COMPOSITIONS.append(composition)
 
@@ -53,6 +56,15 @@ def register_composition(model: type[django_models.Model], *, world_relation: st
 def compositions() -> tuple[Composition, ...]:
     """Every registered composition, in registration order."""
     return tuple(_COMPOSITIONS)
+
+
+def drawing(lens_ids: "list[int]") -> list[tuple[Composition, "django_models.QuerySet"]]:
+    """Every registered composition kind, with its rows that draw through any of these lenses."""
+    return [
+        (composition, composition.model.objects.filter(**{f"{composition.lens_relation}__in": lens_ids}).distinct())
+        for composition in _COMPOSITIONS
+        if composition.lens_relation is not None
+    ]
 
 
 def no_composition_over() -> dict[str, bool]:

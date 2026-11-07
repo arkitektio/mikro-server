@@ -147,7 +147,9 @@ class Command(BaseCommand):
 
     def _converge_windowed(self, noun: str, container: object) -> None:
         kind = coordinate_system_logic.lens_kind_for(container)
-        axis_names = [axis.name for axis in container.coordinate_system.axes.all()]  # type: ignore[attr-defined]
+        # A table lens may gate on a numeric column as well as window an axis: the same names it
+        # was cut against, so a gate is normalized, never stripped.
+        axis_names = coordinate_system_logic.windowable_names(container)
         if not kind.objects.filter(**{kind.CONTAINER_FIELD: container}, windows=[]).exists():
             self.counts["backfilled"] += 1
             self.stdout.write(f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of {noun} {container.pk}")  # type: ignore[attr-defined]

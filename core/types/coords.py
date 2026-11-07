@@ -37,6 +37,7 @@ from arkitekt_datalayer.types import FabriksStore, KonnektionStore, KulisseStore
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map
 from core.logic import compositions
+from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import space_graph
@@ -78,6 +79,10 @@ class Axis:
     unit: kanne_scalars.Unit | None
     long_name: str | None
     description: str | None
+
+    @strawberry.field(description="The metric group this axis is in: the axes that share one distance with it. What it declared, else 'space' for a SPACE axis, else null -- an axis that shares a distance with nothing. A rotation, a distance and a scene's render axes need one group; a per-axis scale, an offset and an affine map do not")
+    def metric_group(self) -> str | None:
+        return coords_logic.effective_metric_group(self.type, self.metric_group)
 
 
 # The container a system hangs off, as one field rather than seven mostly-null ones. Every

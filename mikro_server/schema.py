@@ -669,7 +669,7 @@ class Mutation:
         resolver=mutations.create_lens,
         description="The array lens making a selection over a dataset by slices: the one that exists for that selection, or a new one with its coordinate system and its edge back into the dataset's grid",
     )
-    create_table_lens = mutation(resolver=mutations.create_table_lens, description="The lens keeping these windows of a table dataset's coordinate columns: the one that exists, or a new one. It lives in the table's own space")
+    create_table_lens = mutation(resolver=mutations.create_table_lens, description="The lens keeping these windows of a table dataset's columns -- a coordinate (a region of space) or a numeric measurement (a gate, `area >= 50`): the one that exists, or a new one. It lives in the table's own space")
     create_sparse_lens = mutation(resolver=mutations.create_sparse_lens, description="The lens keeping these windows of a sparse dataset's axes: the one that exists, or a new one. A subset of positions, never a re-indexing")
     create_fixture_lens = mutation(resolver=mutations.create_fixture_lens, description="The lens keeping these windows of a fixture's own space -- a clip box: the one that exists, or a new one")
     create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
@@ -715,7 +715,7 @@ class Mutation:
 
     create_chart = mutation(
         resolver=chart_mutations.create_chart,
-        description="Create a chart: a composition of data laid out along one metric axis. Over an existing coordinate system with exactly one metric, unit-carrying axis, or over one created from a single axis",
+        description="Create a chart over a world: values drawn as position. An AXIS chart draws its world's one metric, unit-carrying axis (an existing space, or one created from `axis`); a VALUES chart's world is a table's space -- whose rows -- and its layers draw those rows at the values of columns, for scatters and histograms",
     )
     create_chart_from_coordinate_system = mutation(
         resolver=chart_mutations.create_chart_from_coordinate_system,
@@ -734,6 +734,18 @@ class Mutation:
     create_annotation_chart_layer = mutation(
         resolver=chart_mutations.create_annotation_chart_layer,
         description="Draw an annotation collection's marks in a chart, or make a new drawing surface for the chart when no collection is named",
+    )
+    create_table_plot = mutation(
+        resolver=chart_mutations.create_table_plot,
+        description="Plot a table's columns in one call: a VALUES chart over the table's space and one POINTS or DISTRIBUTION layer drawing its rows at the values of the named columns. One transaction",
+    )
+    create_points_chart_layer = mutation(
+        resolver=chart_mutations.create_points_chart_layer,
+        description="Draw a table lens' rows as points in a VALUES chart: placed in its world (whose rows), each drawn at the values of two columns (a scatter), or three for depth",
+    )
+    create_distribution_chart_layer = mutation(
+        resolver=chart_mutations.create_distribution_chart_layer,
+        description="Summarise the values of one column of a table lens' rows in a VALUES chart: a histogram or a box, over every row or once per value of a grouping column such as a condition",
     )
     update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer. View state only")
     delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")

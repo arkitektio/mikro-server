@@ -480,12 +480,12 @@ def flat_columns(
     declared = []
     for column in columns:
         entry: dict = {"name": column["name"], "dtype": column.get("dtype", "DOUBLE")}
-        if column.get("role") == "COORDINATE":
+        if column.get("role") == "COORDINATE" or (column.get("role") is None and column.get("axisType") is not None):
             # COORDINATE is not a role the wire may claim: it follows from `axisType`.
             entry["axisType"] = column["axisType"]
         elif column.get("role") is not None:
             entry["role"] = column["role"]
-        for key in ("unit", "longName", "description"):
+        for key in ("unit", "longName", "description", "variesOver"):
             if column.get(key) is not None:
                 entry[key] = column[key]
         identifications = list(sources.get(column["name"], []))

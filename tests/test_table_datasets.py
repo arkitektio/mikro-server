@@ -257,10 +257,11 @@ async def test_the_spatial_axes_keep_the_order_they_were_declared_in(authenticat
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_coordinate_column_must_be_a_permitted_axis_type(authenticated_context: HttpContext):
-    """A CHANNEL axis is not a coordinate: it indexes acquisitions, not positions.
+    """SPACE, TIME, INDEX and CHANNEL are the permitted set; a SPECTRUM coordinate is held back.
 
-    SPACE, TIME and INDEX are the permitted set -- INDEX because an id column's values are the
-    coordinates of the space a label mask's pixels point into, exactly as an `x` column's are.
+    INDEX because an id column's values are the coordinates of the space a label mask's pixels
+    point into, exactly as an `x` column's are; CHANNEL for a long-form table, one row per
+    (object, channel). MICROTIME and SPECTRUM pass every check but nothing draws them yet.
     """
     result = await _create(
         authenticated_context,
@@ -269,10 +270,10 @@ async def test_a_coordinate_column_must_be_a_permitted_axis_type(authenticated_c
         columns=[
             {"name": "y", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
             {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE"},
-            {"name": "c", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "CHANNEL"},
+            {"name": "c", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "SPECTRUM"},
         ],
     )
-    assert result.errors, "a coordinate column must be SPACE, TIME or INDEX"
+    assert result.errors, "a coordinate column must be SPACE, TIME, INDEX or CHANNEL"
 
 
 @pytest.mark.django_db(transaction=True)

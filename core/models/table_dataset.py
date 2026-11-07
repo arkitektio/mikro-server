@@ -230,10 +230,15 @@ class Column(models.Model):
     name = models.CharField(max_length=255, help_text="The column name, matching the Parquet column")
     dtype = models.CharField(max_length=64, help_text="The column's data type, as a DuckDB type string, e.g. 'DOUBLE', 'BIGINT'")
     role = TextChoicesField(choices_enum=enums.ColumnRoleChoices, default=enums.ColumnRoleChoices.ATTRIBUTE, help_text="What the column is for: a coordinate that places the row, or data hanging off it")
-    axis_type = TextChoicesField(choices_enum=enums.AxisTypeChoices, null=True, blank=True, help_text="(coordinate) The semantic axis type this column samples, SPACE or TIME")
+    axis_type = TextChoicesField(choices_enum=enums.AxisTypeChoices, null=True, blank=True, help_text="(coordinate) The semantic axis type this column samples: SPACE, TIME, INDEX or CHANNEL")
     unit = models.CharField(max_length=64, null=True, blank=True, help_text="The unit the column's values are in, e.g. 'nanometer' for a coordinate or 'micrometer**2' for a measured area. A pint unit, validated at the API boundary. Null for pixel-index coordinates and for anything not measured (an id, a label, a colour, which refuse one)")
     long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the column")
     description = models.CharField(max_length=1000, null=True, blank=True, help_text="A free-form description of what the column holds, e.g. 'mean GFP intensity within the segmented object'")
+    varies_over = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="(long form) The CHANNEL coordinate columns this column's value changes along. A per-cell value in a (cell, c) table varies over nothing and is counted once per cell; a per-channel one varies over c. Null when undeclared, read as every CHANNEL coordinate",
+    )
 
     class Meta:
         """Meta options for the table column."""
@@ -253,6 +258,7 @@ class Column(models.Model):
             dtype=self.dtype,
             references=self.references_id is not None,
             node_references=self.node_references_id,
+            varies_over=None if self.varies_over is None else tuple(self.varies_over),
         )
 
     def __str__(self) -> str:

@@ -205,7 +205,7 @@ class Axis(models.Model):
 
     coordinate_system = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="axes", help_text="The coordinate system this axis belongs to")
     order = models.PositiveSmallIntegerField(help_text="This axis' position in the system's canonical axis order. For an array-backed system it is the index into the array shape; for a table system it is the order of the coordinate columns")
-    name = models.CharField(max_length=32, help_text="The name of the axis, e.g. 'z', 'c' or 'tau'. Free-form")
+    name = models.CharField(max_length=255, help_text="The name of the axis, e.g. 'z', 'c' or 'tau'. Free-form; as long as a table column's name, because a table's coordinate columns name its axes")
     type = TextChoicesField(
         choices_enum=enums.AxisTypeChoices,
         default=enums.AxisTypeChoices.SPACE.value,
@@ -216,6 +216,15 @@ class Axis(models.Model):
         null=True,
         blank=True,
         help_text="The physical unit of the axis, e.g. 'micrometer'. A pint unit (the kanne `Unit` scalar), validated on write; 'a.u.' for arbitrary units. Set on unit-carrying axes (a physical space, a world), always null on pixel-grid axes",
+    )
+    metric_group = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        help_text=(
+            "The axes that share one distance with this one, as a label: a step along one is comparable to a step along another. Null means the default -- 'space' for a SPACE "
+            "axis, no group for any other -- which lives in code (`core.logic.coords.effective_metric_group`) so that every space written before groups existed keeps its frame"
+        ),
     )
     # Kept beside `description` on purpose: this is the short label a picker searches and a
     # UI prints, that one is prose about what the axis measures. Folding them would cost the label.

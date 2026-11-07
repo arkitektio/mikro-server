@@ -143,9 +143,18 @@ def resolve_reference(reference: str, app_identifier: str | None) -> tuple[str, 
     return reference, app_identifier
 
 
-def _axis_signature(axes: Iterable) -> list[tuple[str, str, str]]:
-    """Name, type and normalized unit of each axis, in order: what makes two frames the same frame."""
-    return [(axis.name, axis.type.value if hasattr(axis.type, "value") else axis.type, kanne_scalars.parse_unit(axis.unit)) for axis in axes]
+def _axis_signature(axes: Iterable) -> list[tuple[str, str, str | None, str | None]]:
+    """Name, type, normalized unit and effective metric group of each axis, in order: what makes two frames the same frame.
+
+    The metric group is part of it: an atlas whose ``(y, x)`` share a distance and one whose
+    axes merely sit side by side are different claims about the same names.
+    """
+    signature = []
+    for axis in axes:
+        axis_type = axis.type.value if hasattr(axis.type, "value") else axis.type
+        unit = kanne_scalars.parse_unit(axis.unit) if axis.unit is not None else None
+        signature.append((axis.name, axis_type, unit, coords_logic.effective_metric_group(axis_type, axis.metric_group)))
+    return signature
 
 
 def _assert_same_frame(system: "models.CoordinateSystem", *, axes: list, epoch: datetime.datetime | None) -> None:
@@ -542,6 +551,9 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
 
     table_axes = [axis.name for axis in own_system.axes.all()]
     own_axes = set(table_axes)
+    # A long-form table's CHANNEL is the reader's to pick unless the source shares it by name (an
+    # image's `c`, passed through): no source has to supply it.
+    reader_selected = graph_logic.reader_selected_axes(own_system)
     # Hoisted out of the per-entry loop below: two ORM traversals, and the answer is a
     # property of `own_system` alone -- nothing in the loop touches it. It was recomputed
     # once per keying source.
@@ -561,7 +573,7 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
             # half of a table indexed by a pair. One definition, shared with the rank check;
             # computed once above, since it depends on `own_system` and nothing else.
             consumed = [axis for axis in source_axes if axis not in own_axes]
-            produced = [axis for axis in table_axes if axis not in supplied and axis not in identified]
+            produced = [axis for axis in table_axes if axis not in supplied and axis not in identified and axis not in reader_selected]
 
             if not consumed:
                 raise ValueError(
@@ -754,6 +766,22 @@ def _container_provenance(container: object) -> dict[str, int | None]:
     }
 
 
+def windowable_names(container: object) -> list[str]:
+    """What a windowed lens of this container may bound: its space's axes, and for a table its numeric columns too.
+
+    A window keeps the rows whose value along a name lies in ``[min, max]``. On a coordinate it
+    bounds a region of space as well; on a measurement -- a table's `area` -- it bounds nothing
+    in space and is a **gate**: the rows with `area >= 50`, a lens like any other, which a
+    layer draws through and data can be derived from. Axes first in space order, then the
+    numeric columns in the table's order: the one spelling ``normalize_windows`` keeps.
+    """
+    system = getattr(container, "coordinate_system", None)
+    names = [axis.name for axis in system.axes.all()] if system is not None else []
+    if isinstance(container, models.TableDataset):
+        names += [column.name for column in container.columns.all() if column.name not in names and column.axis_type is None and coords_logic.is_numeric_dtype(column.dtype)]
+    return names
+
+
 def create_windowed_lens(container: object, windows: list, ctx: CreationContext) -> "models.Lens":
     """The lens keeping these windows of a container that is not an array: the one that exists, or a new one.
 
@@ -769,7 +797,7 @@ def create_windowed_lens(container: object, windows: list, ctx: CreationContext)
     system = getattr(container, "coordinate_system", None)
     if system is None:
         raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
-    normalized = coords_logic.normalize_windows([axis.name for axis in system.axes.all()], windows)
+    normalized = coords_logic.normalize_windows(windowable_names(container), windows)
     if not normalized:
         return whole_lens(container)
 

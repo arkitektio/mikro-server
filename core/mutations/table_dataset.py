@@ -46,13 +46,20 @@ _INDEX_AXES = [AxisInputModel(name="object", type=enums.AxisType.INDEX)]
 #: The coordinate axis types a table column may declare. MICROTIME/SPECTRUM pass the unit and
 #: ordering checks but nothing renders them from a table yet, so they are held back.
 #:
+#: CHANNEL is the long form of a per-channel measurement: a `(cell, c, mean)` table, one row per
+#: (object, channel), says what the wide `(cell, mean_dapi, mean_gfp)` says with its channel an
+#: axis -- one an image's `c` can be identified with. Its positions are ids, like an INDEX's.
+#:
 #: INDEX is here for lineage, not rendering: an id column whose values are a label mask's
 #: pixels is the *coordinate* of the space those pixels point into, exactly as an `x` column
 #: in nanometres is the coordinate of a spatial axis. A coordinate column's values are always
 #: its coordinates -- that rule is what makes this consistent rather than an exception. The
 #: rendering rationale that holds MICROTIME back does not reach it, and it cannot leak into a
 #: layer: both layer paths filter coordinate columns to SPACE.
-_COORDINATE_AXIS_TYPES = {enums.AxisType.SPACE, enums.AxisType.TIME, enums.AxisType.INDEX}
+_COORDINATE_AXIS_TYPES = {enums.AxisType.SPACE, enums.AxisType.TIME, enums.AxisType.INDEX, enums.AxisType.CHANNEL}
+
+#: The coordinate types that enumerate and so carry no unit.
+_UNITLESS_COORDINATE_TYPES = {enums.AxisType.INDEX, enums.AxisType.CHANNEL}
 
 #: The roles a unit means something on. A coordinate's position and a measurement's value are
 #: both quantities -- an area is 'micrometer**2', a marker level is 'a.u.' -- and a client that
@@ -75,6 +82,7 @@ class ColumnInputModel(BaseModel):
     long_name: str | None = None
     description: str | None = None
     identified_by: list[IdentificationSpec] = Field(default_factory=list)
+    varies_over: list[str] | None = None
 
 
 @kante.pydantic_input(
@@ -133,6 +141,14 @@ class ColumnInput:
             "ATTRIBUTE/ID column referencing a table of tracks: the edge of the join graph `colorBys` walks). A NETWORK_COLLECTION_NODES likewise authors none and says an INDEX "
             "axis' positions are that collection's node ids, scoped by a sibling INDEX axis keyed by the same collection's objects -- one such axis makes the table per-node, two "
             "make it per-edge (source, target, in column order). Refused on SPACE/TIME axes, whose values are positions and cannot also be ids"
+        ),
+    )
+    varies_over: list[str] | None = strawberry.field(
+        default=None,
+        description=(
+            "For a long-form table: the CHANNEL coordinate columns this data column's value changes along. In a `(cell, c, volume, mean)` table a per-cell `volume` varies over "
+            "nothing (`[]`) and is read once per cell, a per-channel `mean` over `[\"c\"]`. Omit it to read the column as varying over every CHANNEL coordinate. Refused on a "
+            "coordinate column and on a name that is not a CHANNEL coordinate of this table"
         ),
     )
 
@@ -324,7 +340,7 @@ def _validate_declaration(
             )
         if column.role == enums.ColumnRole.COORDINATE:
             raise ValueError(
-                f"Column '{column.name}' of '{name}' is declared COORDINATE, but a coordinate column is an axis: say so with `axisType` (SPACE, TIME or INDEX), which is what "
+                f"Column '{column.name}' of '{name}' is declared COORDINATE, but a coordinate column is an axis: say so with `axisType` (SPACE, TIME, INDEX or CHANNEL), which is what "
                 "makes it one -- its role follows from that."
             )
         if column.axis_type is None and column.unit is not None and (column.role or enums.ColumnRole.ATTRIBUTE) not in _UNIT_BEARING_ROLES:
@@ -334,17 +350,38 @@ def _validate_declaration(
             )
         if column.axis_type is not None and column.axis_type not in _COORDINATE_AXIS_TYPES:
             raise ValueError(
-                f"Column '{column.name}' of '{name}' has axisType {column.axis_type.value}, but a table's axes are SPACE, TIME or INDEX -- a row holds a position, an instant "
-                "or an enumeration, and nothing else is one of those."
+                f"Column '{column.name}' of '{name}' has axisType {column.axis_type.value}, but a table's axes are SPACE, TIME, INDEX or CHANNEL -- a row is placed by a "
+                "position, an instant, an enumeration or a channel, and nothing else is one of those."
             )
         # An INDEX axis enumerates -- object 3, object 4 -- and the distance between two of
         # them is not a small number, it is not a number. A unit would name a metric that does
         # not exist. Refused here because `assert_unit_matches_type` cannot: INDEX is absent
         # from its dimension map, which reads as "any unit is fine".
-        if column.axis_type == enums.AxisType.INDEX and column.unit is not None:
+        if column.axis_type in _UNITLESS_COORDINATE_TYPES and column.unit is not None:
             raise ValueError(
-                f"Column '{column.name}' of '{name}' is an INDEX axis, which has no metric -- the distance between object 3 and object 4 means nothing -- so it carries no "
-                "unit. Drop `unit`."
+                f"Column '{column.name}' of '{name}' is an {column.axis_type.value} axis, which enumerates and has no metric -- the distance between object 3 and object 4, or "
+                "channel 0 and channel 1, means nothing -- so it carries no unit. Drop `unit`."
+            )
+
+    # A long-form column says which channel axes its value changes along, so a reader counts a
+    # per-cell value once per cell rather than once per channel. Named among the CHANNEL
+    # coordinates this table declares -- the only axes a row repeats along.
+    channels = {column.name for column in columns if column.axis_type == enums.AxisType.CHANNEL}
+    for column in columns:
+        if column.varies_over is None:
+            continue
+        if column.axis_type is not None:
+            raise ValueError(f"Column '{column.name}' of '{name}' is a coordinate column and declares `variesOver`. A coordinate is part of the row's key, not a value that varies along it -- drop `variesOver`.")
+        if column.role not in (None, enums.ColumnRole.ATTRIBUTE, enums.ColumnRole.LABEL, enums.ColumnRole.GROUP_ID):
+            raise ValueError(f"Column '{column.name}' of '{name}' has role {column.role.value} and declares `variesOver`, which only a value a row carries -- an ATTRIBUTE, LABEL or GROUP_ID -- can.")
+        repeated = sorted({axis for axis in column.varies_over if column.varies_over.count(axis) > 1})
+        if repeated:
+            raise ValueError(f"Column '{column.name}' of '{name}' names {repeated} more than once in `variesOver`.")
+        unknown = [axis for axis in column.varies_over if axis not in channels]
+        if unknown:
+            raise ValueError(
+                f"Column '{column.name}' of '{name}' varies over {unknown}, which {'is' if len(unknown) == 1 else 'are'} not a CHANNEL coordinate column of this table "
+                f"({sorted(channels) or 'it declares none'}). `variesOver` names the channel axes a long-form row repeats along."
             )
 
     for role, label in ((enums.ColumnRole.TRACK_ID, "TRACK_ID"), (enums.ColumnRole.ID, "ID")):
@@ -469,6 +506,7 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             description=column.description,
             references=reference_targets.get(column.name),
             node_references=node_reference_targets.get(column.name),
+            varies_over=column.varies_over,
         )
         for index, column in enumerate(model.columns)
     ]

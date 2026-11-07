@@ -99,6 +99,65 @@ class AxisUnitError(ValueError):
     """Raised when a calibrated axis' unit does not have the dimension its type requires."""
 
 
+class MetricGroupError(ValueError):
+    """Raised when axes claim one distance they cannot share, or a map needs one they do not."""
+
+
+#: The metric group every SPACE axis belongs to unless it declares another. In code, not in
+#: the rows: a space written before metric groups existed is already a spatial frame, and a
+#: default that lives here needs no migration to be true of it.
+SPACE_METRIC_GROUP = "space"
+
+
+def effective_metric_group(axis_type: str, declared: str | None) -> str | None:
+    """The metric group an axis is in: what it declared, else ``"space"`` for a SPACE axis, else none.
+
+    A metric group is the set of axes that share one distance -- a step along one is comparable
+    to a step along another. That is what a rotation, a distance and an isotropic zoom need,
+    and what a per-axis scale, an offset or an affine map do not. Physical space is the group
+    everybody already assumes, so a SPACE axis is in it by default; every other axis shares a
+    distance with nothing until it says so (two spectral axes of one detector, a phasor plane).
+    """
+    if declared:
+        return declared
+    if axis_type == enums.AxisTypeChoices.SPACE.value:
+        return SPACE_METRIC_GROUP
+    return None
+
+
+def assert_metric_groups(axes: Sequence[tuple[str, str, str | None, str | None]]) -> None:
+    """Refuse a declared metric group that cannot be one: on an enumerating axis, or across dimensions.
+
+    ``axes`` is ``(name, type, unit, declared_group)``. Two rules, both about what "one
+    distance" can mean:
+
+    * **Only measured axes may share a distance.** An INDEX, CATEGORY or CHANNEL axis has no
+      distance at all, and a value axis (COORDINATE, DISPLACEMENT, VALUE) enumerates
+      components; a group on any of them is a claim with nothing to stand on.
+    * **One group, one dimension.** Micrometres beside micrometres is a frame; micrometres
+      beside seconds is not, and neither is a unitless axis beside a calibrated one. ``a.u.``
+      declines to claim and so is compatible with anything, as everywhere else.
+    """
+    by_group: dict[str, list[tuple[str, str | None]]] = {}
+    for name, axis_type, unit, declared in axes:
+        if not declared:
+            continue
+        if axis_type not in METRIC_AXIS_TYPES:
+            raise MetricGroupError(f"Axis '{name}' is a {axis_type} axis, which has no distance to share, so it cannot declare metric group '{declared}'. Only measured axes ({', '.join(sorted(METRIC_AXIS_TYPES))}) can.")
+        by_group.setdefault(declared, []).append((name, unit))
+
+    for group, members in by_group.items():
+        dimensions: dict[str, list[str]] = {}
+        for name, unit in members:
+            if unit is not None and kanne_scalars.is_arbitrary_unit(unit):
+                continue
+            key = "unitless" if unit is None else str(dict(kanne_scalars.get_registry().Unit(kanne_scalars.normalize_compact_units(unit)).dimensionality))
+            dimensions.setdefault(key, []).append(name)
+        if len(dimensions) > 1:
+            described = "; ".join(f"{', '.join(names)} ({key})" for key, names in dimensions.items())
+            raise MetricGroupError(f"Metric group '{group}' says its axes share one distance, but they measure different things: {described}. Put axes in one group only when a step along one is comparable to a step along another.")
+
+
 class NonAffineTransformError(ValueError):
     """Raised when a transformation that must be affine is not (e.g. a displacement field)."""
 
@@ -128,6 +187,10 @@ class AxisSpec:
 
     name: str
     type: str
+    #: The metric group the axis *declared* -- not the effective one, which
+    #: :func:`effective_metric_group` derives (a SPACE axis is in ``"space"`` unless it says
+    #: otherwise). Optional, so every caller that only knows a name and a type still builds one.
+    metric_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -285,6 +348,16 @@ ENUMERATING_AXIS_TYPES: frozenset[str] = frozenset(
     {
         enums.AxisTypeChoices.CHANNEL.value,
         enums.AxisTypeChoices.INDEX.value,
+        enums.AxisTypeChoices.CATEGORY.value,
+    }
+)
+
+#: The axis types whose positions are values rather than indices or measurements: a CATEGORY,
+#: positioned by the values it enumerates. No array's grid has one -- an array is indexed by
+#: position, and what it holds are its contents, not its dimensions.
+RECORD_AXIS_TYPES: frozenset[str] = frozenset(
+    {
+        enums.AxisTypeChoices.CATEGORY.value,
     }
 )
 
@@ -352,6 +425,8 @@ class ColumnSpec:
     references: bool = False
     #: The network collection whose node ids the column holds (`Column.node_references`), or None.
     node_references: int | None = None
+    #: The CHANNEL coordinate columns a long-form column's value changes along (`Column.varies_over`), or None for undeclared.
+    varies_over: tuple[str, ...] | None = None
 
 
 #: The placement spec each SPACE-coordinate-column count denotes. Any count past the table

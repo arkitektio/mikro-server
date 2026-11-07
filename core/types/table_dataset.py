@@ -17,7 +17,8 @@ from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped
+from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped, build_prescoped_queryset
+from core.logic import compositions
 from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
@@ -51,6 +52,13 @@ class Column:
     unit: kanne_scalars.Unit | None
     long_name: str | None
     description: str | None
+    varies_over: List[str] | None = kante.django_field(
+        description=(
+            "For a long-form table, the CHANNEL coordinate columns this column's value changes along, as declared. In a `(cell, c, volume, mean)` table a per-cell `volume` "
+            "varies over nothing and is read once per cell; a per-channel `mean` varies over `c`. Null when undeclared: read as varying over every CHANNEL coordinate, which "
+            "counts nothing twice that should not be"
+        )
+    )
     table: "TableDataset" = kante.django_field(
         description="The table this column is declared on. Trivial when the column was read through its table, load-bearing when it was not -- an options list is flat, and a column with no table on it cannot be named in a `colorBy`"
     )
@@ -101,6 +109,17 @@ class TableDataset(OrgScoped):
         if windowed is None:
             return list(lenses)
         return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+
+    @kante.django_field(
+        description=(
+            "The compositions that draw this table: every scene and chart with a layer through any lens of it -- its whole lens or a window of it. Derived, never "
+            "stored, kind by kind in registration order and oldest first within a kind"
+        )
+    )
+    def visualizations(self, info: Info) -> List[Annotated["Visualization", strawberry.lazy("core.types.visualization")]]:
+        """The scenes and charts with a layer through a lens of this table."""
+        lens_ids = list(self.lenses.values_list("pk", flat=True))
+        return [row for _composition, rows in compositions.drawing(lens_ids) for row in build_prescoped_queryset(info, rows).order_by("pk")]
 
     @kante.django_field(description="The lens that selects this whole table dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every table dataset is created with one")
     def full_lens(self, info: Info) -> Optional[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:

@@ -15,7 +15,7 @@ request cannot go stale. See :mod:`core.models.coords`.
 import dataclasses
 import heapq
 import math
-from typing import TYPE_CHECKING, Callable, Iterable, Sequence
+from typing import TYPE_CHECKING, Callable, Iterable, Protocol, Sequence
 
 from django.db.models import F, Q
 
@@ -120,6 +120,53 @@ def _assert_no_value_axis(system: "models.CoordinateSystem", specs: list) -> Non
         )
 
 
+class AxisLike(Protocol):
+    """What an axis writer reads off what it is handed: an ingest input model, or an ``Axis`` row being copied."""
+
+    name: str
+    type: "enums.AxisType | str"
+    metric_group: str | None
+    long_name: str | None
+    description: str | None
+
+
+def _type_of(axis: AxisLike) -> str:
+    """An axis' type as its stored string, whether it arrived as the strawberry enum or the string."""
+    return axis.type.value if isinstance(axis.type, enums.AxisType) else str(axis.type)
+
+
+def _axis_spec(axis: AxisLike) -> coords_logic.AxisSpec:
+    """The derivation's view of one axis as a writer is handed it."""
+    return coords_logic.AxisSpec(name=axis.name, type=_type_of(axis), metric_group=axis.metric_group)
+
+
+def reader_selected_axes(system: "models.CoordinateSystem") -> set[str]:
+    """A table's CHANNEL coordinate axes: the ones a long-form row repeats along, which no key has to supply.
+
+    A `(cell, c, mean)` table is keyed by the cell; which channel a reader wants is theirs to
+    pick (a lens pins it), and a source that has a `c` of its own -- the image the means were
+    measured in -- may pass it through by name instead. Empty for every other space.
+    """
+    if not system.table_datasets.exists():
+        return set()
+    return {axis.name for axis in system.axes.all() if axis.type == enums.AxisTypeChoices.CHANNEL.value}
+
+
+def _assert_no_record_axis(system: "models.CoordinateSystem", specs: list) -> None:
+    """Refuse a CATEGORY axis on a grid: an array's pixels, a collection's vertex space are indexed by position, not by value."""
+    record_axes = [spec.name for spec in specs if spec.type in coords_logic.RECORD_AXIS_TYPES]
+    if record_axes:
+        raise ValueError(
+            f"Coordinate system '{system.name}' declares a CATEGORY axis ({', '.join(record_axes)}), whose positions are the values it enumerates. A grid of pixels or vertices is "
+            "indexed by position; enumerate it with an INDEX or CHANNEL axis."
+        )
+
+
+def _assert_metric_groups(axes: "Sequence[AxisLike]", units: "Sequence[str | None]") -> None:
+    """Hold the declared metric groups of a set of axes to :func:`coords_logic.assert_metric_groups`."""
+    coords_logic.assert_metric_groups([(axis.name, _type_of(axis), unit, axis.metric_group) for axis, unit in zip(axes, units, strict=True)])
+
+
 def create_pixel_axes(system: "models.CoordinateSystem", axes: list, *, shape: "Sequence[int] | None" = None, drawing: bool = False) -> list["models.Axis"]:
     """Write a pixel-space system's axes, enumerating them so `order` is the array index.
 
@@ -137,11 +184,15 @@ def create_pixel_axes(system: "models.CoordinateSystem", axes: list, *, shape: "
     one: a VALUE axis is where a mark's height is drawn, and nothing that *holds* data has
     such a direction -- an array's values are its contents, not one of its dimensions.
     """
-    axis_specs = [coords_logic.AxisSpec(name=axis.name, type=axis.type.value if hasattr(axis.type, "value") else axis.type) for axis in axes]
+    axis_specs = [_axis_spec(axis) for axis in axes]
     if not drawing:
+        # A drawing space is drawn *in*, so it takes whatever axes the space it registers into
+        # has -- a VALUE axis for a mark's height, a CATEGORY when its world enumerates by value.
         _assert_no_value_axis(system, axis_specs)
+        _assert_no_record_axis(system, axis_specs)
     coords_logic.assert_axis_names_unique(axis_specs)
     coords_logic.assert_at_most_one_time_axis(axis_specs)
+    _assert_metric_groups(axes, [None] * len(axes))
 
     rows = []
     for index, axis in enumerate(axes):
@@ -153,6 +204,7 @@ def create_pixel_axes(system: "models.CoordinateSystem", axes: list, *, shape: "
                 name=axis.name,
                 type=axis_type,
                 unit=None,
+                metric_group=axis.metric_group or None,
                 long_name=axis.long_name,
                 description=axis.description,
             )
@@ -209,22 +261,30 @@ def create_physical_axes(system: "models.CoordinateSystem", axes: list) -> list[
         # rather than left to be discovered by whatever tries to use it.
         raise ValueError(f"Coordinate system '{system.name}' was given no axes. A coordinate space needs at least one axis.")
 
-    specs = [coords_logic.AxisSpec(name=axis.name, type=axis.type.value if hasattr(axis.type, "value") else axis.type) for axis in axes]
+    specs = [_axis_spec(axis) for axis in axes]
     coords_logic.assert_axis_names_unique(specs)
     coords_logic.assert_at_most_one_time_axis(specs)
     _assert_no_value_axis(system, specs)
 
     rows = []
+    units: list[str | None] = []
     for index, axis in enumerate(axes):
-        axis_type = axis.type.value if hasattr(axis.type, "value") else axis.type
-        if axis.unit is None:
+        axis_type = _type_of(axis)
+        unit: str | None
+        if axis_type == enums.AxisTypeChoices.CATEGORY.value:
+            # A category is counted, not measured: there is no unit for it to be wrong in.
+            if axis.unit is not None:
+                raise ValueError(f"Axis '{axis.name}' is a CATEGORY axis, whose positions are the values a column holds; it has no unit, but was given '{axis.unit}'.")
+            unit = None
+        elif axis.unit is None:
             raise ValueError(f"Axis '{axis.name}' of unit-carrying system '{system.name}' has no unit. Use 'a.u.' for arbitrary units; a unitless axis belongs to a pixel system.")
-
-        # Parseable first, then dimensionally right: a unit pint cannot read has no
-        # dimension to check, and "furlongs_per_fortnight is not a valid unit" is the
-        # more useful of the two errors to hand back.
-        unit = kanne_scalars.parse_unit(axis.unit)
-        coords_logic.assert_unit_matches_type(axis.name, axis_type, unit)
+        else:
+            # Parseable first, then dimensionally right: a unit pint cannot read has no
+            # dimension to check, and "furlongs_per_fortnight is not a valid unit" is the
+            # more useful of the two errors to hand back.
+            unit = kanne_scalars.parse_unit(axis.unit)
+            coords_logic.assert_unit_matches_type(axis.name, axis_type, unit)
+        units.append(unit)
 
         rows.append(
             models.Axis(
@@ -233,10 +293,12 @@ def create_physical_axes(system: "models.CoordinateSystem", axes: list) -> list[
                 name=axis.name,
                 type=axis_type,
                 unit=unit,
+                metric_group=axis.metric_group or None,
                 long_name=axis.long_name,
                 description=axis.description,
             )
         )
+    _assert_metric_groups(axes, units)
     created = models.Axis.objects.bulk_create(rows)
     _restore_space(system)
     return created
@@ -1200,6 +1262,21 @@ def assert_edge_rank(
             raise ValueError(
                 f"A {kind} transformation does arithmetic on a coordinate, but {', '.join(indexed)} is an INDEX axis, which has no metric: the distance between object 3 and object 4 means nothing, so scaling or offsetting it does too. Relate an index space with FIELD (its values are the map) or UNMAPPABLE (nothing corresponds)."
             )
+        # A CATEGORY has even less: its positions are the values a column holds -- 'control',
+        # 'treated' -- so there is no number to scale. A whole edge cannot leave it out (it acts
+        # on every axis), which is why a space with a CATEGORY axis takes its arithmetic as
+        # BY_DIMENSION parts naming the axes they act on, and an IDENTITY part for the category.
+        categorical = [
+            f"'{axis.name}' on '{system.name}'"
+            for system in (input_system, output_system)
+            for axis in system.axes.all()
+            if axis.type == enums.AxisTypeChoices.CATEGORY.value
+        ]
+        if categorical:
+            raise ValueError(
+                f"A {kind} transformation does arithmetic on every axis of its spaces, but {', '.join(categorical)} is a CATEGORY axis, whose positions are a column's values and have no metric. "
+                "Use BY_DIMENSION: name the measured axes in the parts that act on them, and pass the category through with an IDENTITY part."
+            )
 
     if kind == enums.TransformKindChoices.IDENTITY.value:
         # IDENTITY carries no parameters, so nothing below would check it -- and it is the
@@ -1316,6 +1393,43 @@ def assert_edge_rank(
             raise ValueError(f"A {kind} transformation's `affine` has one row per output axis: expected {rank_out} rows, got {len(affine)}")
         if any(len(row) != rank_in + 1 for row in affine):
             raise ValueError(f"A {kind} transformation's `affine` rows have one column per input axis plus the translation: expected {rank_in + 1} entries per row, got {[len(row) for row in affine]}")
+        if kind == enums.TransformKindChoices.ROTATION.value:
+            assert_mixed_axes_share_metric(affine, list(input_system.axes.all()), list(output_system.axes.all()), noun=f"This ROTATION from '{input_system.name}' to '{output_system.name}'")
+
+
+def _mixes(vector: "Sequence[float]") -> bool:
+    """Whether one row or column of a linear part draws on more than one axis."""
+    return sum(1 for value in vector if abs(value) > 1e-12) > 1
+
+
+def assert_mixed_axes_share_metric(affine: "Sequence[Sequence[float]]", input_axes: "Sequence[models.Axis]", output_axes: "Sequence[models.Axis]", *, noun: str) -> None:
+    """Refuse a rotation that mixes axes which share no distance.
+
+    A rotation is a claim about lengths and angles -- `invariance_of` reports it as an
+    ISOMETRY -- and both need one distance across the axes it turns into each other. Physical
+    space has one (a SPACE axis is in ``"space"`` by default); area beside volume does not,
+    and neither does a time axis beside x, so a "rotation" between them is an affine map
+    claiming a guarantee nobody can keep. It is refused, and AFFINE says the same map honestly.
+
+    Only the axes the matrix **mixes** need the distance: an axis whose column (or row) is a
+    unit vector is passed through, so a full-grid rotation of ``(t, z, y, x)`` that turns only
+    y and x needs nothing of t. A signed permutation mixes nothing and passes too.
+    """
+    rank_in = len(input_axes)
+    linear = [list(row[:rank_in]) for row in affine]
+    mixed_inputs = [input_axes[column] for column in range(rank_in) if _mixes([row[column] for row in linear])]
+    mixed_outputs = [output_axes[index] for index, row in enumerate(linear) if index < len(output_axes) and _mixes(row)]
+    for side, axes in (("input", mixed_inputs), ("output", mixed_outputs)):
+        if not axes:
+            continue
+        groups = {axis.name: coords_logic.effective_metric_group(axis.type, axis.metric_group) for axis in axes}
+        distinct = set(groups.values())
+        if None in distinct or len(distinct) > 1:
+            described = ", ".join(f"'{name}' ({group or 'no metric group'})" for name, group in groups.items())
+            raise coords_logic.MetricGroupError(
+                f"{noun} turns the {side} axes {described} into one another, and a rotation needs one distance across the axes it mixes -- they must share a metric group. "
+                "Declare `metricGroup` on axes that genuinely share one (two spectral axes of one detector), or use AFFINE, which maps without claiming lengths and angles survive."
+            )
 
 
 def write_relation_edge(
@@ -1764,6 +1878,15 @@ def assert_parts(
         pairs = _axis_pairs(input_system, output_system, consumed, produced)
         if len(consumed) == len(produced):
             _assert_axis_types_correspond(kind=f"{kind} part", pairs=pairs, input_system=input_system, output_system=output_system)
+        if kind != enums.PartKind.IDENTITY.value:
+            categorical = [name for name in consumed if inputs[name].type == enums.AxisTypeChoices.CATEGORY.value]
+            categorical += [name for name in produced if outputs[name].type == enums.AxisTypeChoices.CATEGORY.value]
+            if categorical:
+                raise ValueError(
+                    f"A BY_DIMENSION's {noun} does arithmetic on {sorted(set(categorical))}, but a CATEGORY axis' positions are a column's values ('control', 'treated') and have no number to compute with. Pass a category through with an IDENTITY part."
+                )
+        if kind == enums.PartKind.ROTATION.value:
+            assert_mixed_axes_share_metric(params["affine"], [inputs[name] for name in consumed], [outputs[name] for name in produced], noun=f"The BY_DIMENSION's {noun}")
         if kind == enums.PartKind.IDENTITY.value:
             # The same positions said twice, *converted*: `_by_dimension_forms` applies the factor
             # between the two units, so a nanometre axis onto a micrometre one is a pass-through
@@ -1786,7 +1909,10 @@ def assert_parts(
             raise ValueError(
                 f"A key into '{output_system.name}' names {overlap}, which that space already identifies by `references`. An axis is accounted for once: either a part supplies it or its own declaration does, and two answers to 'what are these positions' is the ambiguity `references` on a coordinate exists to avoid."
             )
-        accountable = sorted(set(outputs) - identified)
+        # A CHANNEL of a long-form table is selected by the reader unless the source passes it
+        # through (an image's `c`), so it is accounted for either way.
+        optional = reader_selected_axes(output_system) - seen_out
+        accountable = sorted(set(outputs) - identified - optional)
         if sorted(seen_out) != accountable:
             unaccounted = "" if not identified else f" ('{output_system.name}' identifies {sorted(identified)} by `references`, which the parts are not expected to supply)"
             raise ValueError(
@@ -2068,10 +2194,10 @@ def table_keys(table: "models.TableDataset") -> list[tuple[object, list[str], li
     The read side of ``write_key_edges``: every key edge (a dereferencing FIELD part,
     :func:`dereference_q`) landing on the table's space, by the container it leaves from --
     a label mask whose pixel values are the ids, a mesh collection whose objects are. Each
-    comes with the table axes it PRODUCES (the id axis: the table's axes the source lacks
-    and the table does not identify itself, the rule the write side derives it by) and the
-    axes that PASS THROUGH by name (``t`` of a per-frame mask). Creator order; a container
-    keying the table twice is listed once.
+    comes with the table axes it PRODUCES (the id axis, its FIELD part's outputs) and the
+    axes that PASS THROUGH by name (``t`` of a per-frame mask, its IDENTITY parts' outputs),
+    read off the edge's own parts -- the split the write side derived and stored. Creator
+    order; a container keying the table twice is listed once.
     """
     system = table.coordinate_system
     if system is None:
@@ -2079,13 +2205,10 @@ def table_keys(table: "models.TableDataset") -> list[tuple[object, list[str], li
     edges = list(
         models.Transformation.objects.filter(dereference_q(), output=system)
         .select_related("input")
-        .prefetch_related("input__axes")
         .order_by("pk")
     )
     if not edges:
         return []
-    table_axes = [axis.name for axis in system.axes.all()]
-    identified = identified_axes(system)
     keys = _keys_for(edges)
 
     first_edge: dict[tuple, "models.Transformation"] = {}
@@ -2106,9 +2229,9 @@ def table_keys(table: "models.TableDataset") -> list[tuple[object, list[str], li
         container = found.get(key)
         if container is None:
             continue
-        source_axes = {axis.name for axis in edge.input.axes.all()}
-        produces = [axis for axis in table_axes if axis not in source_axes and axis not in identified]
-        passes = [axis for axis in table_axes if axis in source_axes]
+        parts = edge.parts or []
+        produces = [axis for part in parts if part.get("kind") == enums.PartKind.FIELD.value for axis in part.get("output_axes") or []]
+        passes = [axis for part in parts if part.get("kind") == enums.PartKind.IDENTITY.value for axis in part.get("output_axes") or []]
         answer.append((container, produces, passes))
     return answer
 

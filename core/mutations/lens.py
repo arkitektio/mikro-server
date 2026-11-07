@@ -98,7 +98,7 @@ class CreateTableLensInputModel(BaseModel):
     windows: list[base_models.WindowInputModel] | None = Field(default=None, description="Windows, one per axis to restrict, each keeping the positions whose value lies between its min and its max (an omitted side is open). Omit for everything: the table dataset's whole lens, or the lens cut from")
 
 
-@kante.pydantic_input(CreateTableLensInputModel, description="Input for the lens making a selection over a table dataset, by windows on its coordinate columns")
+@kante.pydantic_input(CreateTableLensInputModel, description="Input for the lens making a selection over a table dataset, by windows on its columns: a coordinate column bounds a region of space, a numeric measurement column is a gate (`area >= 50`) -- the rows whose value lies in the window")
 class CreateTableLensInput:
     table_dataset: strawberry.ID | None = strawberry.field(default=None, description="The table dataset to select over. Exactly one of this and `lens`")
     lens: strawberry.ID | None = strawberry.field(default=None, description=_WITHIN)

@@ -16,6 +16,7 @@ agent's to say (``mikro_server.hook_agent``), a different thing with its own con
 """
 
 
+from chart import enums as chart_enums
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
 from metric import logic as metric_logic
@@ -104,7 +105,9 @@ scene = service.structure(models.Scene, "@mikro/scene", describe=scene_descripto
 
 
 def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
-    """A chart's descriptors: what its one axis measures, and in what unit."""
+    """A chart's descriptors: what its one drawn axis measures and in what unit -- or, for a VALUES chart, which draws no world axis, VALUE."""
+    if chart.kind == chart_enums.ChartKindChoices.VALUES.value:
+        return {"@mikro/axis_type": "VALUE", "@mikro/axis_unit": "None"}
     axis = chart_logic.chart_axis(chart.world)
     return {"@mikro/axis_type": str(axis.type), "@mikro/axis_unit": str(axis.unit)}
 
