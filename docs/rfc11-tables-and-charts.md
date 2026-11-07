@@ -112,13 +112,12 @@ windowed: a layer's `filterBys` filters by value.
 
 ### Charts
 Every chart has a **world -- the domain its layers live in** -- and every layer is placed into
-it. What positions a layer on screen is the layer's own, read off its kind
-(`ChartLayer.positioning`), never the chart's:
+it. What positions a layer on screen is the layer's own -- its kind says it -- never the chart's:
 
-| Positioning | Kinds | Needs of the world | x comes from | A layer's placement says |
+| Positioned | Kinds | Needs of the world | x comes from | A layer's placement says |
 |---|---|---|---|---|
-| `ALONG_AXIS` | TRACE, SERIES, ANNOTATION | exactly one measured axis with a unit, e.g. `t` (`Chart.axis`) | the placement: where along `t` | where along `t` each value sits (`asAffine` is one row) |
-| `BY_VALUES` | POINTS, DISTRIBUTION | its rows placed in it -- `cell_id`, a table's frame | the values of the columns it names | which rows are the same rows |
+| along the axis | TRACE, SERIES, ANNOTATION | exactly one measured axis with a unit, e.g. `t` (`Chart.axis`) | the placement: where along `t` | where along `t` each value sits (`asAffine` is one row) |
+| by their values | POINTS, DISTRIBUTION | its rows placed in it -- `cell_id`, a table's frame | the values of the columns it names | which rows are the same rows |
 
 - **Along the axis:** TRACE, SERIES and ANNOTATION are laid along the world's one axis. Over a
   world that is not one measured axis (a table's INDEX, an image's `(y, x)`) they are refused,

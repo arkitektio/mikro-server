@@ -20,7 +20,7 @@ class Chart(Described):
     data through lenses and own none of it.
 
     **Every chart has a world -- the domain its layers live in -- and each layer says where its
-    positions come from** (``enums.ChartLayerPositioning``). An *along-axis* layer (TRACE,
+    positions come from**, by its kind. An *along-axis* layer (TRACE,
     SERIES, ANNOTATION) is laid along the world's one measured axis by the edges into it --
     intensity against `t` -- so it needs a world of exactly one measured axis with a unit. A
     *value* layer (POINTS, DISTRIBUTION) has its rows placed in the world -- a table's space,

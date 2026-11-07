@@ -84,7 +84,7 @@ class Chart(OrgScoped, core_types.Visualization):
         "`placementValidity`, `placementInvariance` -- is derived from the graph on read and stored nowhere, so refining one registration moves every layer that looks "
         "through it. A value layer is placed the same way -- its rows into the chart's world, which says they are the same rows as the others' -- and drawn at the "
         "values of the columns it names. The concrete kind says what the layer reads: TraceChartLayer an array, SeriesChartLayer a table's value column, "
-        "AnnotationChartLayer drawn marks -- along the chart's axis -- and PointsChartLayer and DistributionChartLayer a table's columns, by their values; `positioning` says which, and one chart may hold both"
+        "AnnotationChartLayer drawn marks -- along the chart's axis -- and PointsChartLayer and DistributionChartLayer a table's columns, by their values -- the kind says which, and one chart may hold both"
     ),
 )
 class ChartLayer:
@@ -98,16 +98,6 @@ class ChartLayer:
     order: int
     opacity: float
     color: list[float] | None = kante.django_field(description="The colour the layer is drawn in, as RGBA. Null lets the viewer choose")
-
-    @kante.django_field(
-        description=(
-            "Where this layer's positions come from, read off its kind: ALONG_AXIS (TRACE, SERIES, ANNOTATION) -- laid along the chart's `axis` by the graph; BY_VALUES "
-            "(POINTS, DISTRIBUTION) -- drawn at the values of the columns it names. What a renderer groups layers into panels by"
-        )
-    )
-    def positioning(self, info: Info) -> enums.ChartLayerPositioning:
-        """Along the world axis, or by its values."""
-        return enums.ChartLayerPositioning(chart_logic.positioning_of(str(self.kind)))
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):  # noqa: ANN001, ANN003, ANN206 - strawberry_django's hook

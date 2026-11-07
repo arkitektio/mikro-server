@@ -33,7 +33,7 @@ of them, and deleting a chart deletes no space. The world can be:
 - **both at once**: a table framed by `t` is an axis and rows, so a SERIES along `t` and a
   scatter of the same time points' columns share one chart.
 
-What positions a layer is the layer's (`ChartLayer.positioning`, read off its kind), never the
+What positions a layer is the layer's -- its kind says it -- never the
 chart's: a position along a world axis and a measurement are not one kind of thing, so they are
 never one *axis* -- but they can be two panels of one chart.
 
@@ -43,13 +43,13 @@ nothing about where the data sits; a value layer stores which columns it reads.
 
 **Kind.** What a layer reads.
 
-| Kind | Positioning | Reads | Shape it requires |
+| Kind | Positioned | Reads | Shape it requires |
 | --- | --- | --- | --- |
-| `TRACE` | ALONG_AXIS | an array lens | one metric axis free, laid along the chart; optionally one enumerating axis free, drawn as one line per position; every other axis fixed |
-| `SERIES` | ALONG_AXIS | a table lens | one coordinate column laid along the chart, and one numeric attribute column as the value |
-| `ANNOTATION` | ALONG_AXIS | an annotation lens | a space with an axis laid along the chart |
-| `POINTS` | BY_VALUES | a table lens | `xColumn`, `yColumn` (and `zColumn`): numeric columns, each row drawn at their values |
-| `DISTRIBUTION` | BY_VALUES | a table lens | `valueColumn`, numeric, summarised; optionally `groupColumn` (a text/boolean attribute, label, group id or long-form CHANNEL), one summary per value |
+| `TRACE` | along the axis | an array lens | one metric axis free, laid along the chart; optionally one enumerating axis free, drawn as one line per position; every other axis fixed |
+| `SERIES` | along the axis | a table lens | one coordinate column laid along the chart, and one numeric attribute column as the value |
+| `ANNOTATION` | along the axis | an annotation lens | a space with an axis laid along the chart |
+| `POINTS` | by its values | a table lens | `xColumn`, `yColumn` (and `zColumn`): numeric columns, each row drawn at their values |
+| `DISTRIBUTION` | by its values | a table lens | `valueColumn`, numeric, summarised; optionally `groupColumn` (a text/boolean attribute, label, group id or long-form CHANNEL), one summary per value |
 
 A value layer's rows are placed in the world (`assert_value_layer`). Neither the kinds nor the units of a chart's layers
 need agree: `Chart.layout` (remembered) draws a row or panel per layer (STACKED) or overlays the layers that read their

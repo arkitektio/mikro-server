@@ -52,7 +52,7 @@ mutation D($input: CreateDistributionChartLayerInput!) {
 """
 
 POSITIONING = """
-query P($id: ID!) { chart(id: $id) { layers { id positioning } } }
+query P($id: ID!) { chart(id: $id) { axis { name } layers { __typename id } } }
 """
 
 SERIES = """
@@ -192,7 +192,7 @@ async def test_a_layer_says_where_its_positions_come_from(authenticated_context:
     series = (await _ok(ctx, SERIES, {"input": {"chart": chart["id"], "lens": table["fullLens"]["id"], "valueColumn": "intensity"}}))["createSeriesChartLayer"]
     points = (await _ok(ctx, POINTS, {"input": {"chart": chart["id"], "lens": table["fullLens"]["id"], "xColumn": "area", "yColumn": "intensity"}}))["createPointsChartLayer"]
     shown = (await _ok(ctx, POSITIONING, {"id": chart["id"]}))["chart"]["layers"]
-    assert {layer["id"]: layer["positioning"] for layer in shown} == {series["id"]: "ALONG_AXIS", points["id"]: "BY_VALUES"}
+    assert {layer["id"]: layer["__typename"] for layer in shown} == {series["id"]: "SeriesChartLayer", points["id"]: "PointsChartLayer"}, "the kind says how each is positioned"
 
     _, lens, space = await _nuclei(ctx)
     rows = await _values_chart(ctx, space)

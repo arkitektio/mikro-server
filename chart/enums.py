@@ -14,7 +14,7 @@ class ChartKindChoices(TextChoices):
     """History only: what `Chart.kind` held until migration 0006 dropped it. Migrations 0002-0005 still import it.
 
     A chart has no kind any more -- each layer says where its positions come from
-    (:class:`ChartLayerPositioning`). Do not use this in new code.
+    (its kind: along the world's axis, or by its values). Do not use this in new code.
     """
 
     AXIS = "axis", "Axis (laid along its world's one measured axis)"
@@ -83,8 +83,8 @@ class ChartLayout(str, Enum):
 
 @strawberry.enum(
     description=(
-        "The kind of a chart layer, which says what it reads -- never how it looks. Three are laid along the chart's world axis by the graph (`ChartLayerPositioning` ALONG_AXIS): TRACE "
-        "reads an array along one axis, SERIES one value column of a table along its coordinate, ANNOTATION drawn marks. Two are drawn by their values (BY_VALUES), their rows placed "
+        "The kind of a chart layer, which says what it reads -- never how it looks. Three are laid along the chart's world axis by the graph: TRACE "
+        "reads an array along one axis, SERIES one value column of a table along its coordinate, ANNOTATION drawn marks. Two are drawn by their values, their rows placed "
         "in the chart's world: POINTS at two or three columns (a scatter), DISTRIBUTION summarising one column (a histogram, a box), once per value of a "
         "grouping column. One chart may hold both. A line, markers, a histogram or a box is `ChartMark`, a setting on the layer."
     )
@@ -97,20 +97,6 @@ class ChartLayerKind(str, Enum):
     ANNOTATION = "annotation"
     POINTS = "points"
     DISTRIBUTION = "distribution"
-
-
-@strawberry.enum(
-    description=(
-        "Where a chart layer's positions come from. ALONG_AXIS: laid along the chart's world axis by the graph's edges -- TRACE, SERIES and ANNOTATION, which need a world "
-        "of one measured axis (`Chart.axis`). BY_VALUES: drawn at the values of the columns it names, its rows placed in the chart's world -- POINTS and DISTRIBUTION. One "
-        "chart may hold both; its layout lays them out (along-axis layers share the axis, value layers their panels)"
-    )
-)
-class ChartLayerPositioning(str, Enum):
-    """Where a chart layer's positions come from."""
-
-    ALONG_AXIS = "along_axis"
-    BY_VALUES = "by_values"
 
 
 @strawberry.enum(
@@ -140,10 +126,10 @@ SOURCE_FIELD: dict[str, str] = {
     ChartLayerKindChoices.DISTRIBUTION.value: "lens",
 }
 
-#: The layer kinds laid along the chart's world axis (ALONG_AXIS): they need a world of one measured axis.
+#: The layer kinds laid along the chart's world axis: they need a world of one measured axis.
 PLACED_KINDS: frozenset[str] = frozenset({ChartLayerKindChoices.TRACE.value, ChartLayerKindChoices.SERIES.value, ChartLayerKindChoices.ANNOTATION.value})
 
-#: The layer kinds drawn by their values (BY_VALUES): rows placed in the chart's world, drawn at their columns' values.
+#: The layer kinds drawn by their values: rows placed in the chart's world, drawn at their columns' values.
 VALUE_KINDS: frozenset[str] = frozenset({ChartLayerKindChoices.POINTS.value, ChartLayerKindChoices.DISTRIBUTION.value})
 
 #: The looks each kind may take, the first its default. ANNOTATION draws marks, which have no look here.

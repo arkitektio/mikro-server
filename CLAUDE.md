@@ -125,10 +125,10 @@ with a `c`. A **gate** is a table lens window on a numeric column (`area >= 50`,
 **A scene shows where, a chart shows how much**: in a scene every screen axis is a world axis
 and values are appearance; in a chart values are position and at most one axis comes from the
 graph. Every chart has a world -- the domain its layers live in -- and every layer is placed
-into it; **what positions a layer is the layer's** (`ChartLayer.positioning`, read off its kind),
-never the chart's: TRACE, SERIES and ANNOTATION are laid ALONG_AXIS -- the world's one measured
+into it; **what positions a layer is the layer's** -- its kind says it (`chart.enums.PLACED_KINDS`,
+`VALUE_KINDS`), never the chart's: TRACE, SERIES and ANNOTATION are laid along the world's one measured
 axis (`Chart.axis`; refused, naming why, over any other world) -- and POINTS (`x/y/z_column`) and
-DISTRIBUTION (`value_column`, `group_column`, `bins`) are drawn BY_VALUES, their rows placed in the
+DISTRIBUTION (`value_column`, `group_column`, `bins`) are drawn by their values, their rows placed in the
 world and binding columns by name (`chart.assert_value_layer`: placed, numeric). One chart may hold
 both -- a table framed by `t` takes a SERIES along `t` and a scatter of the same time points --
 and neither kinds nor units need agree: `Chart.layout` STACKED/SHARED/OVERLAY, remembered with the

@@ -1,7 +1,7 @@
 """What a chart is and what may be drawn in one. The rules, and the writers that obey them.
 
 A chart draws values as position. **Every chart has a world -- the domain its layers live
-in -- and each layer says where its positions come from** (:func:`positioning_of`). TRACE,
+in -- and each layer's kind says where its positions come from** (``enums.PLACED_KINDS``, ``enums.VALUE_KINDS``). TRACE,
 SERIES and ANNOTATION are laid *along* the world's one measured axis, so they need a world of
 exactly one (:func:`chart_axis`). POINTS and DISTRIBUTION are drawn *by their values*: their
 rows are placed in the world and drawn at the values of the columns they name. One chart may
@@ -82,11 +82,6 @@ def world_axis(world: "core_models.CoordinateSystem") -> "core_models.Axis | Non
         return chart_axis(world)
     except ValueError:
         return None
-
-
-def positioning_of(kind: str) -> str:
-    """Where a layer of this kind takes its positions from: along the world axis, or by its values."""
-    return enums.ChartLayerPositioning.ALONG_AXIS.value if kind in enums.PLACED_KINDS else enums.ChartLayerPositioning.BY_VALUES.value
 
 
 def create_chart(
