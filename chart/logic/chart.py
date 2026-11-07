@@ -318,19 +318,18 @@ def assert_value_layer(
     group: str | None,
     bins: int | None,
     mark: str,
-    updating: "models.ChartLayer | None" = None,
     check_placement: bool = True,
 ) -> dict[str, object]:
     """Check a value layer's column bindings and return them as the row's fields.
 
     The lens' rows are placed into the chart's world -- its own table's space, or one its table
     is registered or derived into, so two layers are about the same rows -- and drawn at the
-    values of the columns named. Each must exist and hold numbers, and the layers of one chart
-    draw one kind. Their units need not agree: a chart lays layers in different units beside
-    each other (`Chart.layout`), and overlays only those that measure the same thing.
+    values of the columns named. Each must exist and hold numbers. Neither the kinds nor the
+    units of a chart's layers need agree: a chart lays a scatter beside a histogram, or `area`
+    beside `cluster_id`, as panels (`Chart.layout`), and overlays only the layers that read
+    their axes the same way.
 
-    ``updating`` is the layer being edited: it is compared with the chart's OTHER layers, never
-    with its own old columns. ``check_placement`` is false when an edit keeps the lens: an
+    ``check_placement`` is false when an edit keeps the lens: an
     existing layer is not re-litigated for a placement it already has.
     """
     table = lens.table_dataset
@@ -363,11 +362,6 @@ def assert_value_layer(
     for position, name in bound.items():
         if name is not None:
             numeric_column(table, name, role=f"the {position} position")
-
-    others = [other for other in chart.layers.all() if updating is None or other.pk != updating.pk]
-    for other in others:
-        if other.kind != kind:
-            raise ValueError(f"Chart '{chart.name}' draws {other.kind.upper()} layers; a VALUES chart draws one kind, and a {kind.upper()} reads its axes differently. Make another chart.")
 
     fields: dict[str, object] = {}
     if kind == enums.ChartLayerKindChoices.POINTS.value:
@@ -519,7 +513,6 @@ def update_layer(
                     group=None if is_points else merged("group_column"),
                     bins=None if is_points else merged_bins,
                     mark=merged_mark,
-                    updating=layer,
                     check_placement=rebound,
                 )
             )

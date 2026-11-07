@@ -70,7 +70,7 @@ class ChartMarkChoices(TextChoices):
 @strawberry.enum(
     description=(
         "How a chart's layers share the screen, remembered with the chart. STACKED: one row (AXIS) or one panel (VALUES) per layer, each on its own scale. SHARED: layers "
-        "measuring the same thing overlaid on one scale -- the same unit on an AXIS chart's value axis, the same x and y units in a VALUES chart's panel -- and the rest "
+        "measuring the same thing overlaid on one scale -- the same unit on an AXIS chart's value axis; one kind, one mark and the same x and y units in a VALUES chart's panel -- and the rest "
         "beside them. OVERLAY (AXIS charts only): every layer in one plot, each on its own scale"
     )
 )

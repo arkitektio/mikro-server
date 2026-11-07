@@ -126,8 +126,8 @@ into it. A chart draws at most one axis of it (`Chart.kind`):
   and DISTRIBUTION -- `valueColumn` as a HISTOGRAM (`bins`) or a BOX, once per value of an
   optional `groupColumn` (a text or boolean attribute, a label, a group id, or a long-form
   CHANNEL). A layer's lens must be placed in the world (its own table's space, or one its table
-  is derived or registered into); every bound column exists and holds numbers; the layers of one
-  chart draw one kind. Their units need not agree: the chart's remembered `layout` lays them
+  is derived or registered into); every bound column exists and holds numbers. Neither their
+  kinds nor their units need agree (a scatter beside a histogram): the chart's remembered `layout` lays them
   out -- STACKED, a panel per layer; SHARED, layers in the same units overlaid and the rest
   beside them -- so `area` against `volume` and `cluster_id` against `arclength` share a chart
   without sharing an axis.
