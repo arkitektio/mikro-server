@@ -33,7 +33,6 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.logic import placement
-from kanne_server import scalars as kanne_scalars
 
 #: The axis types that measure, and the ones that enumerate. A chart's axis is metric, and
 #: so is the axis a trace is read along; an enumerating axis is the one a trace may leave
@@ -77,6 +76,15 @@ def chart_axis(world: "core_models.CoordinateSystem") -> "core_models.Axis":
     return axis
 
 
+def assert_layout(chart_name: str, kind: str, layout: str) -> None:
+    """Refuse a layout the kind cannot draw: a VALUES chart has no second scale to give each layer in one plot."""
+    if kind == enums.ChartKindChoices.VALUES.value and layout not in enums.VALUES_LAYOUTS:
+        raise ValueError(
+            f"Chart '{chart_name}' draws rows at their values, where a layer's scale IS its axis: OVERLAY would give each layer its own scale in one plot. "
+            "Use STACKED (a panel per layer) or SHARED (layers in the same units overlaid, the rest beside them)."
+        )
+
+
 def create_chart(
     *,
     name: str,
@@ -85,6 +93,7 @@ def create_chart(
     world: "core_models.CoordinateSystem | None" = None,
     axis: object | None = None,
     kind: str = enums.ChartKindChoices.AXIS.value,
+    layout: str = enums.ChartLayoutChoices.SHARED.value,
 ) -> "models.Chart":
     """Create a chart over a world: an adopted existing space, or one minted from a single axis.
 
@@ -96,6 +105,7 @@ def create_chart(
     """
     if (world is None) == (axis is None):
         raise ValueError("A chart is created over exactly one of `coordinateSystem` (an existing space to adopt) or `axis` (the one axis of a space to create).")
+    assert_layout(name, kind, layout)
 
     with transaction.atomic():
         if world is None:
@@ -106,6 +116,7 @@ def create_chart(
             name=name,
             description=description,
             kind=kind,
+            layout=layout,
             world=world,
             creator=ctx.user,
             organization=ctx.organization,
@@ -288,17 +299,6 @@ def grouping_column(table: "core_models.TableDataset", name: str) -> "core_model
     return column
 
 
-def _units_agree(first: "str | None", second: "str | None") -> bool:
-    """Whether two declared units name one dimension: both absent, or both present and convertible."""
-    if first is None or second is None:
-        return first is None and second is None
-    registry = kanne_scalars.get_registry()
-    try:
-        return dict(registry.Unit(kanne_scalars.normalize_compact_units(first)).dimensionality) == dict(registry.Unit(kanne_scalars.normalize_compact_units(second)).dimensionality)
-    except Exception:  # noqa: BLE001 - an unparseable stored unit agrees with nothing
-        return False
-
-
 def _bindings(kind: str, *, x: str | None, y: str | None, z: str | None, value: str | None) -> dict[str, str | None]:
     """The position a value layer reads each of its columns into: a distribution's value is its horizontal axis."""
     if kind == enums.ChartLayerKindChoices.POINTS.value:
@@ -325,9 +325,9 @@ def assert_value_layer(
 
     The lens' rows are placed into the chart's world -- its own table's space, or one its table
     is registered or derived into, so two layers are about the same rows -- and drawn at the
-    values of the columns named. Each must exist and hold numbers. The layers of one chart draw
-    one kind, and agree on the units of each position -- `area` in µm² and `area_mm2` may
-    share x; a volume may not, because a chart's axis is one quantity.
+    values of the columns named. Each must exist and hold numbers, and the layers of one chart
+    draw one kind. Their units need not agree: a chart lays layers in different units beside
+    each other (`Chart.layout`), and overlays only those that measure the same thing.
 
     ``updating`` is the layer being edited: it is compared with the chart's OTHER layers, never
     with its own old columns. ``check_placement`` is false when an edit keeps the lens: an
@@ -360,28 +360,14 @@ def assert_value_layer(
                 raise ValueError(f"A distribution of '{value}' is not grouped by '{value}' itself.")
 
     bound = _bindings(kind, x=x, y=y, z=z, value=value)
-    units = {position: numeric_column(table, name, role=f"the {position} position").unit for position, name in bound.items() if name is not None}
+    for position, name in bound.items():
+        if name is not None:
+            numeric_column(table, name, role=f"the {position} position")
 
     others = [other for other in chart.layers.all() if updating is None or other.pk != updating.pk]
-    # The lens is polymorphic: read the table lenses as themselves, not through the base row.
-    tables = {lens.pk: lens.table_dataset for lens in core_models.TableLens.objects.filter(pk__in=[other.lens_id for other in others]).select_related("table_dataset").prefetch_related("table_dataset__columns")}
     for other in others:
         if other.kind != kind:
             raise ValueError(f"Chart '{chart.name}' draws {other.kind.upper()} layers; a VALUES chart draws one kind, and a {kind.upper()} reads its axes differently. Make another chart.")
-        other_table = tables.get(other.lens_id)
-        if other_table is None:
-            continue
-        other_bound = _bindings(other.kind, x=other.x_column, y=other.y_column, z=other.z_column, value=other.value_column)
-        for position, unit in units.items():
-            name = other_bound.get(position)
-            if name is None:
-                continue
-            other_unit = next((column.unit for column in other_table.columns.all() if column.name == name), None)
-            if not _units_agree(unit, other_unit):
-                raise ValueError(
-                    f"Chart '{chart.name}' draws '{name}' ({other_unit or 'no unit'}) at its {position} position, and '{bound[position]}' is in {unit or 'no unit'}. "
-                    "One axis of a chart is one quantity: draw columns whose units convert, or make another chart."
-                )
 
     fields: dict[str, object] = {}
     if kind == enums.ChartLayerKindChoices.POINTS.value:

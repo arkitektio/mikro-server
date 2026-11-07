@@ -22,6 +22,7 @@ class CreateChartInputModel(BaseModel):
     coordinate_system: str | None = None
     axis: PhysicalAxisInputModel | None = None
     kind: enums.ChartKind = enums.ChartKind.AXIS
+    layout: enums.ChartLayout = enums.ChartLayout.SHARED
 
 
 @prose_errors
@@ -55,6 +56,10 @@ class CreateChartInput:
         ),
     )
     kind: enums.ChartKind = strawberry.field(default=enums.ChartKind.AXIS, description="AXIS (the default): draw the world's one axis and lay layers along it. VALUES: draw the world's rows at the values of the columns each layer names")
+    layout: enums.ChartLayout = strawberry.field(
+        default=enums.ChartLayout.SHARED,
+        description="How the layers share the screen: SHARED (the default; overlaid where they measure the same thing), STACKED (a row or panel each), OVERLAY (AXIS only)",
+    )
 
 
 def create_chart(info: Info, input: CreateChartInput) -> types.Chart:
@@ -63,7 +68,7 @@ def create_chart(info: Info, input: CreateChartInput) -> types.Chart:
     ctx = CreationContext.from_info(info)
 
     world = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system) if model.coordinate_system else None
-    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, kind=model.kind.value, ctx=ctx)
+    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, kind=model.kind.value, layout=model.layout.value, ctx=ctx)
 
 
 class ChartPolicyInputModel(BaseModel):
@@ -112,15 +117,18 @@ class UpdateChartInputModel(BaseModel):
     id: str
     name: str | None = None
     description: str | None = None
+    layout: enums.ChartLayout | None = None
 
 
-@kante.pydantic_input(UpdateChartInputModel, description="Input for renaming or re-describing a chart. Its world is not editable: a chart along another axis is another chart")
+@prose_errors
+@kante.pydantic_input(UpdateChartInputModel, description="Input for renaming, re-describing or re-laying-out a chart. Its world and kind are not editable: a chart along another axis is another chart")
 class UpdateChartInput:
     """Input for updating a chart."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the chart to update")
     name: str | None = strawberry.field(default=None, description="A new name. Omit to leave it as it is")
     description: str | None = strawberry.field(default=None, description="A new description. Omit to leave it as it is")
+    layout: enums.ChartLayout | None = strawberry.field(default=None, description="How the layers share the screen, remembered for everyone who opens the chart. Omit to leave it as it is")
 
 
 def update_chart(info: Info, input: UpdateChartInput) -> types.Chart:
@@ -136,6 +144,10 @@ def update_chart(info: Info, input: UpdateChartInput) -> types.Chart:
     if parsed.description is not None:
         chart.description = parsed.description
         updated.append("description")
+    if parsed.layout is not None:
+        chart_logic.assert_layout(chart.name, str(chart.kind), parsed.layout.value)
+        chart.layout = parsed.layout.value
+        updated.append("layout")
 
     if updated:
         with transaction.atomic():

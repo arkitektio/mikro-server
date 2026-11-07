@@ -127,8 +127,10 @@ into it. A chart draws at most one axis of it (`Chart.kind`):
   optional `groupColumn` (a text or boolean attribute, a label, a group id, or a long-form
   CHANNEL). A layer's lens must be placed in the world (its own table's space, or one its table
   is derived or registered into); every bound column exists and holds numbers; the layers of one
-  chart draw one kind and agree on units per position (`area` in µm² and `area_mm2` may share x;
-  a volume may not).
+  chart draw one kind. Their units need not agree: the chart's remembered `layout` lays them
+  out -- STACKED, a panel per layer; SHARED, layers in the same units overlaid and the rest
+  beside them -- so `area` against `volume` and `cluster_id` against `arclength` share a chart
+  without sharing an axis.
 - **Same world, same rows.** A PCA written as a table derived from the measurements with
   IDENTITY over the frame is placed in their world, so `pc1` and `area` draw in one VALUES chart,
   and a board can link selection between them (RFC-12).

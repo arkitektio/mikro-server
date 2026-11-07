@@ -72,9 +72,10 @@ async def test_an_edit_is_held_to_the_rules_of_creation(authenticated_context: H
     assert "both set and cleared" in await _refused(ctx, UPDATE_POINTS, {"input": {"id": layer["id"], "zColumn": "area_mm", "clearZColumn": True}})
     assert "MARKERS, LINE" in await _refused(ctx, UPDATE_POINTS, {"input": {"id": layer["id"], "mark": "BOX"}})
 
-    # With a second layer, units are checked against it -- and only against it.
+    # Beside a second layer, a unitless x is fine: the chart draws it in a panel of its own.
     await _ok(ctx, POINTS, {"input": {"chart": chart["id"], "lens": lens, "xColumn": "area_mm", "yColumn": "volume"}})
-    assert "One axis of a chart is one quantity" in await _refused(ctx, UPDATE_POINTS, {"input": {"id": layer["id"], "xColumn": "intensity"}})
+    moved = (await _ok(ctx, UPDATE_POINTS, {"input": {"id": layer["id"], "xColumn": "intensity"}}))["updatePointsChartLayer"]
+    assert moved["xUnit"] is None
 
 
 @pytest.mark.django_db(transaction=True)

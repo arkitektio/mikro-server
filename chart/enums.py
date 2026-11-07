@@ -15,6 +15,12 @@ class ChartKindChoices(TextChoices):
     VALUES = "values", "Values (rows drawn at the values of their columns; the world is whose rows)"
 
 
+class ChartLayoutChoices(TextChoices):
+    STACKED = "stacked", "Stacked (one row or panel per layer, each on its own scale)"
+    SHARED = "shared", "Shared (layers measuring the same thing overlaid on one scale; the rest beside them)"
+    OVERLAY = "overlay", "Overlay (every layer in one plot, each on its own scale; AXIS charts only)"
+
+
 class ChartLayerKindChoices(TextChoices):
     TRACE = "trace", "Trace (an array read along one axis)"
     SERIES = "series", "Series (a table's value column against a coordinate column)"
@@ -40,6 +46,25 @@ class ChartMarkChoices(TextChoices):
         "grouping column. A line, markers, a histogram or a box is `ChartMark`, a setting on the layer."
     )
 )
+@strawberry.enum(
+    description=(
+        "How a chart's layers share the screen, remembered with the chart. STACKED: one row (AXIS) or one panel (VALUES) per layer, each on its own scale. SHARED: layers "
+        "measuring the same thing overlaid on one scale -- the same unit on an AXIS chart's value axis, the same x and y units in a VALUES chart's panel -- and the rest "
+        "beside them. OVERLAY (AXIS charts only): every layer in one plot, each on its own scale"
+    )
+)
+class ChartLayout(str, Enum):
+    """How a chart's layers share the screen."""
+
+    STACKED = "stacked"
+    SHARED = "shared"
+    OVERLAY = "overlay"
+
+
+#: The layouts a VALUES chart takes: a scatter has no second scale to give each layer in one plot.
+VALUES_LAYOUTS: frozenset[str] = frozenset({ChartLayoutChoices.STACKED.value, ChartLayoutChoices.SHARED.value})
+
+
 class ChartLayerKind(str, Enum):
     """The kind of a chart layer: what it reads."""
 

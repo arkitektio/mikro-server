@@ -112,14 +112,14 @@ async def test_a_scatter_draws_rows_at_their_values(authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_one_axis_is_one_quantity(authenticated_context: HttpContext):
+async def test_layers_in_other_units_are_drawn_beside_each_other(authenticated_context: HttpContext):
+    """Units need not agree: a chart lays layers in other units beside each other (its layout) and overlays only those that measure the same thing. One kind per chart stays."""
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
     await _ok(ctx, POINTS, {"input": {"chart": chart["id"], "lens": lens, "xColumn": "area", "yColumn": "volume"}})
-
-    message = await _refused(ctx, POINTS, {"input": {"chart": chart["id"], "lens": lens, "xColumn": "volume", "yColumn": "area"}})
-    assert "one quantity" in message
+    flipped = (await _ok(ctx, POINTS, {"input": {"chart": chart["id"], "lens": lens, "xColumn": "volume", "yColumn": "area"}}))["createPointsChartLayer"]
+    assert (flipped["xUnit"], flipped["yUnit"]) == ("micrometer ** 3", "micrometer ** 2")
 
     message = await _refused(ctx, DISTRIBUTION, {"input": {"chart": chart["id"], "lens": lens, "valueColumn": "area"}})
     assert "one kind" in message

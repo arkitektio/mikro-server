@@ -34,6 +34,12 @@ class Chart(Described):
     name = models.CharField(max_length=255)
     description = models.CharField(max_length=1000, null=True, blank=True)
     kind = TextChoicesField(choices_enum=enums.ChartKindChoices, default=enums.ChartKindChoices.AXIS.value, help_text="What the world is to the chart: the one axis it draws (AXIS), or whose rows it draws at their values (VALUES). Fixed for the life of the row")
+    layout = TextChoicesField(
+        choices_enum=enums.ChartLayoutChoices,
+        default=enums.ChartLayoutChoices.SHARED.value,
+        db_default=enums.ChartLayoutChoices.SHARED.value,
+        help_text="How the layers share the screen: one row or panel each (STACKED), overlaid where they measure the same thing (SHARED), or all in one plot (OVERLAY, AXIS only). A remembered view choice",
+    )
     world = models.ForeignKey(
         "core.CoordinateSystem",
         on_delete=models.RESTRICT,

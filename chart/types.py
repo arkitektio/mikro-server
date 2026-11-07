@@ -56,6 +56,7 @@ class Chart(OrgScoped, core_types.Visualization):
         description="The layers drawn in this chart, back to front (a heterogeneous list of layer kinds)",
     )
     kind: enums.ChartKind = kante.django_field(description="What the world is to this chart: AXIS, the one axis it draws and lays its layers along; VALUES, whose rows it draws at the values of their columns")
+    layout: enums.ChartLayout = kante.django_field(description="How the layers share the screen, remembered with the chart: STACKED (one row or panel each), SHARED (overlaid where they measure the same thing) or OVERLAY (all in one plot; AXIS only)")
     world_coordinate_system: core_types.CoordinateSystem = kante.django_field(
         field_name="world",
         description=(

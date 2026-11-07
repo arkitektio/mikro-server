@@ -49,8 +49,9 @@ nothing about where the data sits; a value layer stores which columns it reads.
 | `POINTS` | VALUES | a table lens | `xColumn`, `yColumn` (and `zColumn`): numeric columns, each row drawn at their values |
 | `DISTRIBUTION` | VALUES | a table lens | `valueColumn`, numeric, summarised; optionally `groupColumn` (a text/boolean attribute, label, group id or long-form CHANNEL), one summary per value |
 
-The layers of a VALUES chart are placed in its world, draw one kind, and agree on units per position: `area` (µm²) and
-`area_mm2` (mm²) may share x; a volume may not (`assert_value_layer`). Their placement fields
+The layers of a VALUES chart are placed in its world and draw one kind (`assert_value_layer`). Their units need not
+agree: `Chart.layout` (remembered) draws a panel per layer (STACKED) or overlays the layers whose units are the same and
+lays the rest beside them (SHARED); OVERLAY, every layer in one plot on its own scale, is an AXIS chart's only. Their placement fields
 (`asAffine`, `placement`, ...) answer for the rows' place in the world -- for a table's own
 space, the identity. A gate -- the rows with `area >= 50` -- is a
 table lens window on that column, drawn through like any lens.
