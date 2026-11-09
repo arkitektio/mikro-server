@@ -19,6 +19,7 @@ from core.render.layer.models import LayerRenderGraphModel, PhasorRenderModel
 from core.render.camera.types import CameraState
 from core.render.camera.models import CameraStateModel
 from core.inputs.coords import CoordinateInput, at_map
+from core.inputs import SliceInput
 from core.types.visualization import Visualization
 from core.types.coords import (
     AffinePlacement,
@@ -165,6 +166,17 @@ class ArrayDataset(OrgScoped):
     """A multi-dimensional array dataset with named dimensions, described by its intrinsic pixel-grid coordinate system."""
 
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+
+    @kante.django_field(
+        description=(
+            "The descriptors `createLens(input: {dataset: <this>, slices:})` would give the lens it returns, without making it: what that selection provides to an action's port "
+            "(one plane of a stack is an IMAGE, a pinned frame or channel counts one). The slices are dataset indices, spelled as `createLens` takes them. Null where the cut would be "
+            "refused -- an axis the dataset lacks, an axis sliced twice, a window that selects nothing"
+        )
+    )
+    def descriptors_sliced(self, info: Info, slices: List[SliceInput]) -> Optional[JSON]:
+        """The descriptors of this dataset's lens for ``slices``, computed over an unsaved lens."""
+        return coordinate_system_logic.sliced_descriptors(self, slices)
 
     @kante.django_field(description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:

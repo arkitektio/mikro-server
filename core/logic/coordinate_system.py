@@ -1123,6 +1123,22 @@ def cut_descriptors(lens: "models.ArrayLens", annotation: "models.Annotation") -
     return descriptors_logic.array_lens_descriptors(models.ArrayLens(dataset=lens.dataset, slices=normalized))
 
 
+def sliced_descriptors(dataset: "models.ArrayDataset", slices: "Sequence[coords_logic.SliceLike]") -> "descriptors_logic.Descriptors | None":
+    """The descriptors ``createLens(dataset:, slices:)`` would give the lens it returns, without making it.
+
+    The same normalization the mutation runs (:func:`coords_logic.normalize_slices`), described
+    over an unsaved lens -- a lens' descriptors read only its dataset and its slices. None where
+    the cut would be refused: an axis the dataset lacks, an axis sliced twice, an empty window.
+    Asked by ``ArrayDataset.descriptorsSliced``, for a viewer offering the actions that fit the
+    plane or box on screen before it makes the lens.
+    """
+    try:
+        normalized = coords_logic.normalize_slices(dataset.shape_list, dataset.axis_names, slices)
+    except ValueError:
+        return None
+    return descriptors_logic.array_lens_descriptors(models.ArrayLens(dataset=dataset, slices=normalized))
+
+
 def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "models.Annotation", ctx: CreationContext, *, within: "models.ArrayLens | None" = None) -> "models.ArrayLens":
     """The dataset's lens that bounds an annotation: the voxels under the shape's stored box, in the frame the collection states it in.
 
