@@ -57,6 +57,10 @@ async def test_a_dataset_says_what_a_selection_provides_without_making_it(authen
     assert one_channel == await _cut(ctx, str(dataset.pk), channel), "it is what the cut then gives"
     assert some_rows == await _cut(ctx, str(dataset.pk), rows)
 
+    everything = await _sliced(ctx, str(dataset.pk), [])
+    assert everything["@mikro/is_whole"] is True, "no slices is the whole lens"
+    assert everything == await _cut(ctx, str(dataset.pk), [])
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
