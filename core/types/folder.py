@@ -158,7 +158,7 @@ class Folder(OrgScoped):
         return embedding_of(self)
 
     created_at: datetime.datetime
-    creator: User | None
+    creator: User
     created_through: Optional[Task] = kante.django_field(description="The task this folder was created through, if any")
     created_through_by: Optional[User] = kante.django_field(description="The assigner of the creating task, if any")
 

@@ -59,7 +59,7 @@ class FileLink:
     direction: enums.FileLinkDirection = kante.django_field(
         description="Which side was made from the other: SOURCE when the container was produced from the file (an ingest), RENDITION when the file was written from the container (an export)"
     )
-    series_identifier: str | None = kante.django_field(
+    series_identifier: str = kante.django_field(
         description="Which part of the file this link concerns -- the series of a multi-series LIF or CZI. Empty when the file holds one thing. Part of the link's identity, so a dataset fused from two series of one file has two links"
     )
     value_relation: enums.ValueRelation | None = kante.django_field(

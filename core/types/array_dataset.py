@@ -738,7 +738,7 @@ class Lens:
         return enums.LensKind(type(self).KIND)
 
     @kante.django_field(select_related=["coordinate_system"], description=_LENS_SYSTEM_DESCRIPTION)
-    def coordinate_system(self, info: Info) -> CoordinateSystem | None:
+    def coordinate_system(self, info: Info) -> CoordinateSystem:
         """The system the lens' selection is expressed in: its own, or its container's."""
         return self.coordinate_system
 
