@@ -37,7 +37,7 @@ from core.types.coords import (
 import kante
 from strawberry.scalars import JSON
 from arkitekt_datalayer.types import MediaStore, ZarrStore
-from core.scoping import scope_queryset
+from core.scoping import for_org, scope_queryset
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.type_gen import create_stats_type
 
@@ -1813,6 +1813,19 @@ class Annotation:
     # Nullable: the creator FK is SET_NULL, so a shape outlives the user who drew it.
     creator: User | None = kante.django_field(description="The user that drew this annotation, or null when that user is gone or a client created it without one")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation")
+
+    @kante.django_field(
+        only=["traced_on"],
+        description=(
+            "The lens the shape was traced on -- the channel or layer the person was looking at, e.g. the marker a neurite was traced in. Metadata only: it neither pins the shape "
+            "(`coordinates`) nor places it (the collection's own edges). Null when the drawer did not say, or the lens is gone"
+        ),
+    )
+    def traced_on(self, info: Info) -> Optional["Lens"]:
+        """The traced-on lens as its concrete kind (the FK descriptor hands back the polymorphic base)."""
+        if self.traced_on_id is None:
+            return None
+        return for_org(models.Lens, info).filter(pk=self.traced_on_id).first()
 
     @kante.django_field(description="The coordinate system this annotation's vectors are expressed in: its collection's own system")
     def coordinate_system(self, info: Info) -> CoordinateSystem | None:

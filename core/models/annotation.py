@@ -231,6 +231,18 @@ class Annotation(Described):
     stroke_width = models.FloatField(default=1.0, help_text="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale (RFC-8)")
     filled = models.BooleanField(default=False, help_text="Whether the geometry is filled with fill_color")
 
+    # Metadata only, like the creator: which data the person was looking at when they drew,
+    # e.g. the channel a neurite was traced on. Never a pin (that is `coordinates`) and never
+    # a placement -- the collection's own edges place the shape, so nothing here is walked.
+    traced_on = models.ForeignKey(
+        "core.Lens",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="traced_annotations",
+        help_text="The lens the shape was traced on -- the channel or layer it was drawn against. Metadata only: it neither pins nor places the shape",
+    )
+
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,

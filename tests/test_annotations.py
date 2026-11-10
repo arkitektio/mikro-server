@@ -672,6 +672,41 @@ async def test_bulk_create(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_traced_on_is_metadata_and_org_scoped(db, authenticated_context: HttpContext, other_org_context: HttpContext):
+    """`tracedOn` reads back as the lens' concrete kind, pins nothing, and a lens of another organization is refused."""
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx)
+    dataset = await seed.create_array_dataset(ctx)
+    channel = await seed.channel_lens(ctx, await seed.create_lens(ctx, dataset), index=1)
+    foreign = await seed.create_lens(other_org_context, await seed.create_array_dataset(other_org_context))
+
+    bulk = """
+    mutation Bulk($input: CreateAnnotationsInput!) {
+      createAnnotations(input: $input) { name coordinates { name } tracedOn { __typename id } }
+    }
+    """
+    specs = [
+        {"kind": "PATH", "name": "traced", "vectors": [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]], "tracedOn": str(channel.id)},
+        {"kind": "POINT", "name": "untraced", "vectors": [[0.0, 0.0, 0.0]]},
+    ]
+    result = await schema.execute(bulk, context_value=ctx, variable_values={"input": {"scene": str(scene.id), "annotations": specs}})
+    assert not result.errors, result.errors
+    traced, untraced = result.data["createAnnotations"]
+    assert traced["tracedOn"] == {"__typename": "ArrayLens", "id": str(channel.id)}
+    assert traced["coordinates"] == [], "traced on a channel lens is not pinned to that channel"
+    assert untraced["tracedOn"] is None
+
+    refused = await schema.execute(
+        bulk,
+        context_value=ctx,
+        variable_values={"input": {"scene": str(scene.id), "annotations": [{**specs[0], "tracedOn": str(foreign.id)}]}},
+    )
+    assert refused.errors and "does not exist in this organization" in refused.errors[0].message
+    assert await models.Annotation.objects.acount() == 2, "a refused tracedOn draws nothing"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_annotation_lists_are_org_scoped(db, authenticated_context: HttpContext, other_org_context: HttpContext):
     """The root lists never leak across organizations -- the hole the old dataRois field had."""
     ctx = authenticated_context

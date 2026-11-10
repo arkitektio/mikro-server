@@ -28,7 +28,7 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
-from core.scoping import get_for_org, get_in_org_unshared
+from core.scoping import for_org, get_for_org, get_in_org_unshared
 from mikro_server.contract import ANNOTATOR, EDITOR
 
 
@@ -72,6 +72,22 @@ _DERIVED_FROM_DESCRIPTION = (
 )
 
 
+_TRACED_ON_DESCRIPTION = (
+    "The lens the shape was traced on: the channel or layer the person was looking at, e.g. the marker a neurite was traced in. Metadata only -- it neither pins the shape "
+    "(that is `coordinates`) nor places it (the collection's own edges do), and a lens of any kind, of any container, is accepted"
+)
+
+
+def _traced_on(info: Info, lens: str | None) -> "models.Lens | None":
+    """The lens named as `tracedOn`, refused by name when the caller cannot see it."""
+    if lens is None:
+        return None
+    found = for_org(models.Lens, info).filter(pk=lens).first()
+    if found is None:
+        raise ValueError(f"tracedOn names lens {lens}, which does not exist in this organization.")
+    return found
+
+
 @prose_errors
 @kante.pydantic_input(annotation_lineage.AnnotationSourceInputModel, description="One shape a new shape was made from, and how")
 class AnnotationSourceInput:
@@ -92,6 +108,7 @@ class CreateAnnotationInputModel(_ShapeInputModel):
     stroke_width: float | None = None
     filled: bool | None = None
     derived_from: list[annotation_lineage.AnnotationSourceInputModel] | None = None
+    traced_on: str | None = None
 
 
 @prose_errors
@@ -119,6 +136,7 @@ class CreateAnnotationInput:
     stroke_width: float | None = strawberry.field(default=None, description="Stroke width, in the drawing space's units (default 1.0)")
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
     derived_from: list[AnnotationSourceInput] | None = strawberry.field(default=None, description=_DERIVED_FROM_DESCRIPTION)
+    traced_on: strawberry.ID | None = strawberry.field(default=None, description=_TRACED_ON_DESCRIPTION)
 
 
 def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
@@ -277,6 +295,7 @@ def create_annotation(
         raise ValueError(f"Annotation collection {collection.pk} has no coordinate system to draw in.")
 
     sources = annotation_lineage.resolve_sources(info, child_kind=model.kind.value, entries=model.derived_from or [])
+    traced_on = _traced_on(info, model.traced_on)
     vectors = model.vectors or []
 
     # Pushed through every corner of the box, not just the two extremes: an
@@ -303,6 +322,7 @@ def create_annotation(
             fill_color=model.fill_color,
             stroke_width=model.stroke_width if model.stroke_width is not None else 1.0,
             filled=model.filled if model.filled is not None else False,
+            traced_on=traced_on,
             creator=ctx.user,
             **ctx.provenance_kwargs(),
         )
@@ -317,6 +337,7 @@ class UpdateAnnotationInputModel(_ShapeInputModel):
     coordinates: list[CoordinateInputModel] | None = None
     stroke_width: float | None = None
     filled: bool | None = None
+    traced_on: str | None = None
 
 
 @prose_errors
@@ -334,6 +355,7 @@ class UpdateAnnotationInput:
     fill_color: list[int] | None = strawberry.field(default=None, description="A new fill color, as RGBA: four components, each 0..255")
     stroke_width: float | None = strawberry.field(default=None, description="A new stroke width, in the drawing space's units")
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color")
+    traced_on: strawberry.ID | None = strawberry.field(default=None, description="A new lens the shape was traced on. Metadata only, see `CreateAnnotationInput.tracedOn`")
 
 
 def update_annotation(info: Info, input: UpdateAnnotationInput) -> types.Annotation:
@@ -358,6 +380,8 @@ def update_annotation(info: Info, input: UpdateAnnotationInput) -> types.Annotat
         annotation.stroke_width = model.stroke_width
     if model.filled is not None:
         annotation.filled = model.filled
+    if model.traced_on is not None:
+        annotation.traced_on = _traced_on(info, model.traced_on)
     if model.vectors is not None:
         annotation.vectors = model.vectors
         system = annotation.collection.coordinate_system_or_none
@@ -379,6 +403,7 @@ class AnnotationSpecInputModel(_ShapeInputModel):
     stroke_width: float | None = None
     filled: bool | None = None
     derived_from: list[annotation_lineage.AnnotationSourceInputModel] | None = None
+    traced_on: str | None = None
 
 
 @prose_errors
@@ -396,6 +421,7 @@ class AnnotationSpecInput:
     stroke_width: float | None = strawberry.field(default=None, description="Stroke width, in the drawing space's units (default 1.0)")
     filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
     derived_from: list[AnnotationSourceInput] | None = strawberry.field(default=None, description=_DERIVED_FROM_DESCRIPTION)
+    traced_on: strawberry.ID | None = strawberry.field(default=None, description=_TRACED_ON_DESCRIPTION)
 
 
 class CreateAnnotationsInputModel(BaseModel):
@@ -456,6 +482,8 @@ def create_annotations(
         annotation_lineage.resolve_sources(info, child_kind=spec.kind.value, entries=spec.derived_from or [], position=f"annotations[{index}].derivedFrom")
         for index, spec in enumerate(model.annotations)
     ]
+    # One lookup per distinct lens, and all of them before the insert.
+    traced_on = {lens: _traced_on(info, lens) for lens in {spec.traced_on for spec in model.annotations} if lens is not None}
 
     rows = []
     for spec in model.annotations:
@@ -476,6 +504,7 @@ def create_annotations(
                 fill_color=spec.fill_color,
                 stroke_width=spec.stroke_width if spec.stroke_width is not None else 1.0,
                 filled=spec.filled if spec.filled is not None else False,
+                traced_on=traced_on.get(spec.traced_on) if spec.traced_on is not None else None,
                 creator=ctx.user,
                 **ctx.provenance_kwargs(),
             )
