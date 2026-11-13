@@ -1104,7 +1104,7 @@ wheels = [
 
 [[package]]
 name = "kante"
-version = "2.4.1"
+version = "2.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "channels" },
@@ -1115,9 +1115,9 @@ dependencies = [
     { name = "strawberry-graphql", extra = ["channels"] },
     { name = "strawberry-graphql-django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/5e/2eae9bcbc671b421e99815ee7742999d458c2cf39226a7fd31458df359c0/kante-2.4.1.tar.gz", hash = "sha256:372baf6c042517be4b68b755c9da6d88e4aba16d84167f5965105c17776b193b", size = 38727, upload-time = "2026-10-18T09:04:53.189Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/80/418a14344bae5ec30c804d3da8ebf81c3d9276967a644db241ee30f4f20d/kante-2.4.2.tar.gz", hash = "sha256:abdaadabeffaa2092a20cfbc36b2c03bc4a5cd27b3c056ce9b9a0bd009d55986", size = 38929, upload-time = "2026-11-13T19:56:14.7Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/bc/d03b7bcfc56eaafb91e55cd1cb278ab272c1afa9e21e2bdc5a128adf4064/kante-2.4.1-py3-none-any.whl", hash = "sha256:fea02626bb0a861f6be1bb320418a67793104a86787bcd6eacdd193f594af680", size = 45935, upload-time = "2026-10-18T09:04:51.751Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/a5/6ada678906e8315fc1f95997cc553054376c68f1d8881271b748f98856f0/kante-2.4.2-py3-none-any.whl", hash = "sha256:c2aaf004d7083f543d293259c4eccb6b35ee06381446b60ff0f066384ab34c47", size = 46277, upload-time = "2026-11-13T19:56:13.689Z" },
 ]
 
 [[package]]
