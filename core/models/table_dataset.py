@@ -55,8 +55,8 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
     disagree.
     """
 
-    name = models.CharField(max_length=1000, help_text="The name of this table dataset")
-    description = models.CharField(max_length=1000, null=True, blank=True, help_text="The description of this table dataset")
+    name = models.CharField(max_length=8000, help_text="The name of this table dataset")
+    description = models.CharField(max_length=8000, null=True, blank=True, help_text="The description of this table dataset")
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`.
     folder = models.ForeignKey(
