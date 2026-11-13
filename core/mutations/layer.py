@@ -855,6 +855,7 @@ def _build_sparse_color_by(info: Info, system, color_by, *, source: str, reachab
         colormap=color_by.colormap,
         min=color_by.min,
         max=color_by.max,
+        hide_below_min=color_by.hide_below_min,
     )
 
 
@@ -955,6 +956,8 @@ def _build_color_by(info: Info, system, color_by: layer_inputs.ColorByInputModel
         )
     if not is_measure and (color_by.min is not None or color_by.max is not None):
         raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are categorical, so a `min`/`max` window would impose an order they do not have. Drop them.")
+    if not is_measure and color_by.hide_below_min:
+        raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are categorical, so there is no bottom of a window for `hideBelowMin` to hide. Drop it, or filter the values out with a `filterBys` rule.")
 
     # A node/edge table's entry carries the granularity its shape derives -- STAMPED here,
     # never sent: the caller has no field for it on a COLUMN entry, and re-deriving at every
@@ -978,6 +981,7 @@ def _build_color_by(info: Info, system, color_by: layer_inputs.ColorByInputModel
         colormap=color_by.colormap,
         min=color_by.min,
         max=color_by.max,
+        hide_below_min=color_by.hide_below_min,
     )
 
 
@@ -1055,6 +1059,9 @@ def build_color_bys(
             # colormap over two windows is two colourings someone might genuinely switch between.
             checked.min,
             checked.max,
+            # And so is what happens at its bottom: the same ramp with and without its low end
+            # drawn is the pair someone switches between over an image.
+            checked.hide_below_min,
         )
         if key in seen:
             if checked.kind == "COLUMN":

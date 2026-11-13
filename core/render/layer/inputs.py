@@ -154,6 +154,9 @@ class ColorByInputModel(BaseModel):
     colormap: enums.ColorMap | None = None
     min: float | None = None
     max: float | None = None
+    # Not draw the objects at or below the window's bottom. Only the label spelling of this
+    # input publishes it; see `ColorByModel.hide_below_min`.
+    hide_below_min: bool = False
     # The caption a picker row shows. Deliberately not what distinguishes two entries: the
     # same rendering twice under two names is refused at the mutation boundary.
     label: str | None = None
@@ -173,6 +176,15 @@ class ColorByInputModel(BaseModel):
         if self.colormap in enums.QUALITATIVE_COLORMAPS and (self.min is not None or self.max is not None):
             raise ValueError(
                 f"`min`/`max` window a colormap -- the values mapped to its bottom and its top -- and '{self.colormap.value}' is qualitative, so it has no bottom or top to window. Drop them, or name a continuous colormap"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _the_bottom_belongs_to_a_ramp(self) -> "ColorByInputModel":
+        # The same shape rule as the window: "at or below the bottom" needs a bottom.
+        if self.hide_below_min and self.colormap in enums.QUALITATIVE_COLORMAPS:
+            raise ValueError(
+                f"`hideBelowMin` hides the objects at or below the bottom of the colormap's window, and '{self.colormap.value}' is qualitative, so it has no bottom. Drop it, or name a continuous colormap"
             )
         return self
 
@@ -388,6 +400,7 @@ class LabelColorByInput:
     colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the column's value is mapped through. Which *sort* follows from the column's role, never from a choice here: a measure column (COORDINATE, ATTRIBUTE) takes a continuous one over its range with an optional `min`/`max` window, a categorical one (ID, TRACK_ID, LABEL, COLOR) takes a qualitative one -- a colour per distinct value, no order implied and no window to set")
     min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map from the smallest value it reads")
     max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map to the largest value it reads")
+    hide_below_min: bool = strawberry.field(default=False, description="Whether objects whose value sits at or below the bottom of the colormap's window (`min`, or the smallest value read when it is omitted) are not drawn at all, instead of taking the colormap's first colour. For a measure read over an image: a gene's zero bins stop covering the tissue. Refused with a qualitative colormap, which has no bottom (default false)")
     label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker, e.g. 'Area' or 'Cell type'. A caption only -- two entries that render identically are refused however they are labelled")
     join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
 
@@ -408,6 +421,8 @@ class LabelColorByInput:
             "colormap": self.colormap,
             "min": self.min,
             "max": self.max,
+            # Only when set, like every other optional here: False is what omitting it means.
+            "hide_below_min": self.hide_below_min or None,
             "label": self.label,
         }
         data = {name: value for name, value in supplied.items() if value is not None and value != []}
@@ -520,6 +535,9 @@ class ColorByInputBase(BaseModel):
     colormap: enums.ColorMap | None = None
     min: float | None = None
     max: float | None = None
+    # Carried by the base so the label spelling can send it; the mesh and network spellings
+    # have no field for it, so it never arrives through them.
+    hide_below_min: bool = False
     label: str | None = None
     model_config = ConfigDict(extra="forbid")
 

@@ -155,6 +155,8 @@ async def test_a_mesh_layer_colours_by_a_keyed_table(authenticated_context: Http
     # these, because `ColorByModel(**entry)` fills the default. `dataset`/`at` are the other
     # variant's fields, null here -- and `attribute`/`target` are the GRAPH variant's, null
     # for the same reason on every non-network entry.
+    # `hide_below_min` is the shared model's too: only a label entry can
+    # set it, so here it is always its default.
     assert stored.mesh_color_bys == [
         {
             "kind": "COLUMN",
@@ -167,6 +169,7 @@ async def test_a_mesh_layer_colours_by_a_keyed_table(authenticated_context: Http
             "colormap": "viridis",
             "min": None,
             "max": None,
+            "hide_below_min": False,
             "label": "Volume",
         }
     ]

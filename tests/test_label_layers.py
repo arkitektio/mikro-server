@@ -36,7 +36,7 @@ mutation Create($input: CreateLabelLayerInput!) {
       contour
       selected
       showUnselected
-      colorBys { table column colormap label joinPath { table column } }
+      colorBys { table column colormap label hideBelowMin joinPath { table column } }
       activeColorBy
       filterBys { table column min max values exclude label }
       activeFilterBys
@@ -1283,3 +1283,50 @@ async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(a
     )
     assert missing.errors
     assert "requires `lens`" in str(missing.errors[0])
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_colouring_can_leave_the_bottom_of_its_window_undrawn(authenticated_context: HttpContext):
+    """`hideBelowMin` is stored on the entry, defaults off, and is part of what a colouring is.
+
+    A measure read over an image: the objects at the bottom of the window are not painted with
+    the colormap's first colour, they are not drawn. The same ramp with and without its low end
+    is a pair someone switches between, so the two are not duplicates of each other.
+    """
+    mask, scene, lens = await _mask_scene_lens(authenticated_context)
+    table = await _object_table(authenticated_context, mask)
+
+    result = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {
+            "colorBys": [
+                {"table": table, "column": "area", "colormap": "MAGMA", "label": "Area"},
+                {"table": table, "column": "area", "colormap": "MAGMA", "hideBelowMin": True, "label": "Area, over the image"},
+            ],
+            "activeColorBy": 1,
+        },
+    )
+    assert not result.errors, result.errors
+    plain, over_image = result.data["createLabelLayer"]["labelRender"]["colorBys"]
+    assert plain["hideBelowMin"] is False, "omitted means everything is painted, as it always was"
+    assert over_image["hideBelowMin"] is True
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_hiding_the_bottom_needs_a_window_with_a_bottom(authenticated_context: HttpContext):
+    """A qualitative colormap has no bottom, so there is nothing for `hideBelowMin` to hide."""
+    mask, scene, lens = await _mask_scene_lens(authenticated_context)
+    table = await _object_table(authenticated_context, mask)
+
+    result = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {"colorBys": [{"table": table, "column": "cell_type", "colormap": "HUES", "hideBelowMin": True}]},
+    )
+    assert result.errors
+    assert "hideBelowMin" in str(result.errors[0])

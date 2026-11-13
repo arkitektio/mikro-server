@@ -117,6 +117,13 @@ class ColorByModel(BaseModel):
     # None, which is exactly what they meant: stretch over what you see.
     min: float | None = None
     max: float | None = None
+    # Whether an object whose value sits at or below the window's bottom is not drawn at all,
+    # rather than painted with the colormap's first colour. What makes a measure readable OVER
+    # an image: most bins of a gene's slice are zero, and zero through a black-based ramp is a
+    # black bin covering the tissue. Part of the colouring rather than a filter, because it
+    # follows the window -- raise `min` and more of the low end goes with it. Defaulted, so a
+    # dump written before it existed rehydrates to what it meant: everything is painted.
+    hide_below_min: bool = False
 
     @model_validator(mode="after")
     def _one_source(self) -> "ColorByModel":
