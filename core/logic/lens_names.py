@@ -92,6 +92,21 @@ def compose(pinned: dict[str, int | float], anchors: Iterable[models.CoordinateA
     return SEPARATOR.join(names) if names else None
 
 
+def named_axes(lens: models.Lens) -> set[str]:
+    """The axes a lens' name already speaks for: those of the anchors whose labels make it up.
+
+    Empty for a lens nothing names, without a query. What :attr:`~core.models.Lens.detail`
+    leaves out of the selection it spells.
+    """
+    real = lens._real()
+    if not (real.name or "").strip() or type(real) not in ANCHOR_FIELD:
+        return set()
+    pinned = coords_logic.pins(real.selection)
+    if not pinned:
+        return set()
+    return {axis for anchor in holding_anchors(pinned, labelled_anchors(real.container)) for axis in anchor.coordinates}
+
+
 def _cut_names(lens_ids: Sequence[int]) -> dict[int, str]:
     """The name of the first shape each array lens was cut to, by lens id."""
     names: dict[int, str] = {}

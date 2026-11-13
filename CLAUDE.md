@@ -21,7 +21,8 @@ whose every axis it holds to the same position, most specific only, a person's `
 a crop cut to a shape, by that shape's name. `Lens.name` caches the result for search; its
 inputs change, so their writers refresh it in the same transaction (`core/logic/lens_names.py`,
 wired in `core/signals.py`; `_mint` names a lens as it is made) and `merge_duplicate_lenses`
-repairs drift. The container's name is never in it; `Lens.label` puts it in front.
+repairs drift. The container's name is never in it; `Lens.label` puts it beside (`title · origin · detail`, name first), and
+a picker that groups by container asks for the three parts instead.
 **Every layer and chart layer draws through a lens**, whatever its kind; a layer mutation
 takes the lens or the container (its whole lens), and a point, track or series layer hands
 its lens' windows on as `windowFilters`, a collection layer as `clip` -- derived, never

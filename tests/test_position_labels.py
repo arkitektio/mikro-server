@@ -21,7 +21,7 @@ from tests.test_lens_geometry import CREATE_LENS, _collection_on, _draw
 from tests.test_table_specs import TRACKS
 from tests.test_table_specs import _create as _create_table
 
-NAME = "mutation N($input: SetPositionLabelInput!) { setPositionLabel(input: $input) { id name label nameAnchors { coordinates positionLabel { label } channelLabel { label } } } }"
+NAME = "mutation N($input: SetPositionLabelInput!) { setPositionLabel(input: $input) { id name label title origin detail nameAnchors { coordinates positionLabel { label } channelLabel { label } } } }"
 FROM_LENS = "mutation F($input: CreateSceneFromLensInput!) { createSceneFromLens(input: $input) { id name } }"
 UPDATE_ANNOTATION = "mutation U($input: UpdateAnnotationInput!) { updateAnnotation(input: $input) { id name } }"
 
@@ -85,7 +85,13 @@ async def test_a_label_names_every_lens_through_its_position_and_no_other(authen
 
     named = await _name(ctx, channel, "GFP")
 
-    assert named["name"] == "GFP" and named["label"] == "Stack · GFP · c[1:2]", "the selection stays beside a name every lens through channel 1 shares"
+    assert named["name"] == "GFP" and named["label"] == "GFP · Stack", "the name first, and it has already said c[1:2]"
+    assert (named["title"], named["origin"], named["detail"]) == ("GFP", "Stack", ""), "the parts of the label, for a picker that groups by container"
+    parts = lambda lens: sync_to_async(lambda: (lambda row: (row.title, row.origin, row.detail, row.label))(models.Lens.objects.get(pk=lens.pk)))()
+    assert await parts(crop) == ("GFP", "Stack", "y[0:16]", "GFP · Stack · y[0:16]"), "what the name does not say stays beside it: a crop is told from its channel"
+    assert await parts(plane) == ("GFP", "Stack", "z[5:6]", "GFP · Stack · z[5:6]"), "a pinned axis no label speaks for is still spelled"
+    assert await parts(other) == ("Stack", "Stack", "c[0:1]", "Stack · c[0:1]"), "an unnamed lens is called by its container and keeps its whole selection"
+    assert await parts(whole) == ("Stack", "Stack", "", "Stack"), "a whole lens is its container"
     assert [anchor["coordinates"] for anchor in named["nameAnchors"]] == [{"c": 1}]
     assert await _name_of(crop) == "GFP" and await _name_of(plane) == "GFP"
     assert await _name_of(other) is None and await _name_of(whole) is None
@@ -183,7 +189,7 @@ async def test_renaming_a_dataset_touches_no_lens(authenticated_context: HttpCon
 
     row = await models.Lens.objects.aget(pk=channel.pk)
     assert row.name == "GFP"
-    assert await sync_to_async(lambda: row.label)() == "After · GFP · c[1:2]"
+    assert await sync_to_async(lambda: row.label)() == "GFP · After"
 
 
 @pytest.mark.django_db(transaction=True)

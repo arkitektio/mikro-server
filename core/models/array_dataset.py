@@ -857,18 +857,46 @@ class Lens(PolymorphicModel, Described):
         return not self.selection
 
     @property
+    def origin(self) -> str:
+        """The name of the container this lens selects over. Never empty: a container nobody named is called by its lens' kind and id."""
+        real = self._real()
+        return (getattr(real.container, "name", None) or "").strip() or f"{type(real).__name__} {self.pk}"
+
+    @property
+    def title(self) -> str:
+        """What a layer drawing this lens is called: its own name when something names it, else its container's.
+
+        Never empty. The short half of :attr:`label`: a reader already told the container (a
+        heading over its lenses) needs only this.
+        """
+        return (self.name or "").strip() or self.origin
+
+    @property
+    def detail(self) -> str:
+        """What this lens selects that its name does not already say: ``y[0:32]`` for a crop of "GFP", empty for the channel itself.
+
+        An axis the lens holds to one position, at an anchor whose label is in the name, is
+        left out: "GFP" has said ``c[1:2]``. Every other axis stays, which is what tells a
+        name's lenses apart -- a name is shared by every lens through the same positions.
+        An unnamed lens keeps its whole selection; a whole lens has none.
+        """
+        from core.logic import lens_names
+
+        real = self._real()
+        named = lens_names.named_axes(real)
+        return selection_label([entry for entry in real.selection if entry.get("axis") not in named])
+
+    @property
     def label(self) -> str:
-        """What to call this lens in a list: its container's name, its own name when something names it, and what it selects.
+        """What to call this lens in a list, on one line: its title, its container when the title is not already it, and what else it selects.
 
         Never empty, which is the point: most lenses are never named, and a picker's row has
-        to say something. One line, the container first because that is what a person
-        recognises; a whole lens is its container. The selection stays beside the name: a
-        name is shared by every lens through the same positions, so "GFP" alone would not
-        tell the channel from a crop of it.
+        to say something. The title first, because a row is cut at its end and the title is
+        what tells one container's lenses apart; a whole lens is its container. The parts are
+        :attr:`title`, :attr:`origin` and :attr:`detail`, for a reader that lays them out itself.
         """
-        real = self._real()
-        container = getattr(real.container, "name", None) or f"{type(real).__name__} {self.pk}"
-        parts = [container, (self.name or "").strip(), selection_label(real.selection)]
+        title, origin = self.title, self.origin
+        parts = [title, origin if origin != title else "", self.detail]
         return " · ".join(part for part in parts if part)
 
     @property

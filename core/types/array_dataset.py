@@ -751,8 +751,23 @@ class Lens:
     )
     label: str = kante.django_field(
         description=(
-            "What to call this lens in a list, never empty: its container's name, its `name` when something names it, and what it selects (`cells.zarr · GFP · c[1:2], y[0:32]`); "
-            "a whole lens is called by its container. What a picker shows for an option"
+            "What to call this lens in a list on one line, never empty: its `title`, its `origin` when the title is not already it, and its `detail` (`GFP · cells.zarr · y[0:32]`); "
+            "a whole lens is called by its container. The title comes first because a row is cut at its end. A reader that lays the parts out itself asks for them instead"
+        )
+    )
+    title: str = kante.django_field(
+        description=(
+            "What a layer drawing this lens is called, never empty: its `name` when something names it, else its container's name. The short half of `label`: what a picker's row "
+            "says under a heading that already names the container (`origin`)"
+        )
+    )
+    origin: str = kante.django_field(
+        description="The name of the container this lens selects over, never empty: what `title` falls back to, and what a picker groups a container's lenses under"
+    )
+    detail: str = kante.django_field(
+        description=(
+            "What this lens selects that its name does not already say, or empty: `y[0:32]` for a crop of the channel named 'GFP', nothing for that channel itself. An axis held to "
+            "one position at an anchor whose label is in `name` is left out; an unnamed lens keeps its whole selection (`c[1:2], y[0:32]`), a whole lens has none"
         )
     )
 
