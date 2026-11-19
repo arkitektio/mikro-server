@@ -45,7 +45,7 @@ from core import scalars as core_scalars
 from kanne_server import scalars as kanne_scalars
 from strawberry.schema.config import StrawberryConfig
 from core.scoping import get_for_org
-from arkitekt_service.graphql import CollaborationGate, annotate_schema
+from arkitekt_service.graphql import CollaborationGate, TelemetryExtension, annotate_schema
 from arkitekt_service.collaborations import graphql as collaboration_types
 from mikro_server.service import service as mikro_service
 from mikro_server.contract import EDITOR, ANNOTATOR
@@ -1089,6 +1089,7 @@ schema = Schema(
     subscription=Subscription,
     mutation=Mutation,
     extensions=[
+        TelemetryExtension,
         # `only` optimization off, the rest on. It narrows the SELECT to the columns the
         # selection set names, which drops `kind` -- the column every discriminated
         # interface (Layer, Transformation) resolves its concrete type by. `is_type_of`
