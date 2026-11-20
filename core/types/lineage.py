@@ -59,7 +59,7 @@ class RootFilter:
     )
     search: str | None = strawberry.field(
         default=None,
-        description="Only what is named with this text, anywhere in the name, ignoring case. A file also matches by the name of a series converted out of it. An unnamed mesh or network collection never matches",
+        description="Only what is named with this text, anywhere in the name, ignoring case, or (array and table datasets) whose name and description mean something close to it. A file also matches by the name of a series converted out of it. An unnamed mesh or network collection never matches. Ranked instead of newest first: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning",
     )
     spec: List[enums.ArrayDatasetSpec] | None = strawberry.field(
         default=None,

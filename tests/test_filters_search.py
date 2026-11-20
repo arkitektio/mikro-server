@@ -124,6 +124,22 @@ async def test_ranking_lexical_first_then_by_distance(db, authenticated_context:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
+async def test_name_tiers_rank_before_distance(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
+    """Exact name, then prefix, then lexical hits by trigram similarity, then semantic-only; distance never lifts a tier."""
+    ctx = authenticated_context
+    e0 = np.asarray(engine.embed_query(QUERY))
+    await _pin(model, await seed(ctx, "Near", None), e0, 0.01)
+    await _pin(model, await seed(ctx, "Fast detect cells in 3D stacks", None), e0, 0.05)
+    await _pin(model, await seed(ctx, "Do detect cells", None), e0, 0.3)
+    await _pin(model, await seed(ctx, "Detect cells in stacks", None), e0, 0.4)
+    await _pin(model, await seed(ctx, "Detect Cells", None), e0, 0.5)
+
+    assert await _names(ctx, field, filter_name, order_name, QUERY) == ["Detect Cells", "Detect cells in stacks", "Do detect cells", "Fast detect cells in 3D stacks", "Near"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
 async def test_explicit_ordering_replaces_the_ranking(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
     """A client's ``ordering`` wins over the distance ranking."""
     ctx = authenticated_context
@@ -161,7 +177,7 @@ def test_nested_search_stays_lexical() -> None:
     from embeddings.search import hybrid_search
 
     lexical = Q(folder__name__search="detect")
-    queryset, predicate = hybrid_search(Folder.objects.all(), "folder__", "detect", lexical)
+    queryset, predicate = hybrid_search(Folder.objects.all(), "folder__", "detect", lexical, "name")
 
     assert predicate == lexical
     assert not queryset.query.annotations

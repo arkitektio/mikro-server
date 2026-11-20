@@ -19,8 +19,8 @@ The contract, in one place:
   as it starts (``<service>_server/asgi.py``); ``manage.py migrate`` and every other
   management command leave it alone.
 * **Search is hybrid.** :func:`embeddings.search.hybrid_search` ORs the existing lexical
-  predicate with "cosine distance below the threshold", ranks lexical hits first and then by
-  distance, and degrades to lexical-only whenever embeddings are off or unavailable.
+  predicate with "cosine distance below the threshold", ranks an exact name, then a prefix, then other
+  lexical hits by trigram similarity (``pg_trgm``), then semantic hits by distance, and degrades to lexical-only whenever embeddings are off or unavailable.
 """
 
 from embeddings.engine import (

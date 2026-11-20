@@ -38,6 +38,8 @@ from core import enums, models
 from core.logic.graph import _KEYING_ORDER, CONTAINERS, MODEL_BY_KEY
 from core.models.array_dataset import selection_label
 from core.scoping import organization_path
+from embeddings import engine
+from embeddings.search import query_vector
 
 #: The file's node key. A file has no coordinate system and keys to no container, so it is
 #: named here rather than in ``CONTAINERS``.
@@ -893,7 +895,8 @@ class RootFilter:
     are read off one series, so a file matches only when one of its series meets both. A file
     is in a collaboration when it, or a series converted out of it, was put there.
     ``search`` matches a name, ignoring case, anywhere in it; a file also matches by the name
-    of a series converted out of it.
+    of a series converted out of it. A kind that carries an embedding also matches by meaning,
+    and the result is ranked as ``embeddings.search.hybrid_search`` ranks, then newest first.
     """
 
     owner: str | None = None
@@ -934,6 +937,24 @@ def _name_sql(alias: str, model: type) -> str:
     return f"{alias}.{_q(_column(model, 'name'))} ILIKE %(search)s"
 
 
+def _search_sql(key: str, model: type, semantic: bool) -> tuple[str, str, str, str]:
+    """One arm's ``search`` as ``(match, rank, similarity, distance)``: the tiers of ``embeddings.search.hybrid_search``.
+
+    A file has no embedding, so it matches by name only (its own or a converted series').
+    """
+    name = f"x.{_q(_column(model, 'name'))}"
+    named = _name_sql("x", model)
+    if key == FILE:
+        named = f"({named} OR {_series_sql(f'x.{_q(model._meta.pk.column)}', _name_sql('d', models.ArrayDataset))})"
+    rank = f"CASE WHEN {name} ILIKE %(search_exact)s THEN 0 WHEN {name} ILIKE %(search_prefix)s THEN 1 WHEN {named} THEN 2 ELSE 3 END"
+    similarity = f"CASE WHEN {named} THEN similarity({name}, %(search_text)s) ELSE 0 END"
+    if not (semantic and _has_field(model, "embedding")):
+        return named, rank, similarity, "NULL::float8"
+    # A NULL embedding gives a NULL distance, which is never below the threshold.
+    distance = f"x.{_q(_column(model, 'embedding'))} <=> %(search_vector)s::vector"
+    return f"({named} OR {distance} < %(search_threshold)s)", rank, similarity, distance
+
+
 def _spec_sql(alias: str) -> str:
     """Whether ``alias`` carries every asked spec: ``stored_spec`` contains them, as the list filter asks."""
     return f"{alias}.{_q(_column(models.ArrayDataset, 'stored_spec'))} @> %(spec)s::jsonb"
@@ -968,7 +989,7 @@ def _series_sql(x_pk: str, condition: str) -> str:
     )
 
 
-def _root_arm_filters(key: str, model: type, shape: tuple[str, ...]) -> list[str] | None:
+def _root_arm_filters(key: str, model: type, shape: tuple[str, ...], semantic: bool = False) -> list[str] | None:
     """The extra conditions on one kind's arm, or ``None`` when the filter rules the kind out."""
     pk = f"x.{_q(model._meta.pk.column)}"
     clauses = []
@@ -985,10 +1006,7 @@ def _root_arm_filters(key: str, model: type, shape: tuple[str, ...]) -> list[str
             held = f"({held} OR {_series_sql(pk, _in_collaboration_sql(models.ArrayDataset, f'd.{_q(models.ArrayDataset._meta.pk.column)}'))})"
         clauses.append(held)
     if "search" in shape:
-        named = _name_sql("x", model)
-        if key == FILE:
-            named = f"({named} OR {_series_sql(pk, _name_sql('d', models.ArrayDataset))})"
-        clauses.append(named)
+        clauses.append(_search_sql(key, model, semantic)[0])
     created = _q(_column(model, "created_at"))
     if "created_after" in shape:
         clauses.append(f"x.{created} >= %(created_after)s")
@@ -1017,7 +1035,7 @@ def _not_a_field_sql() -> str:
 
 
 @cache
-def _roots_sql(kinds: tuple[str, ...], shape: tuple[str, ...] = ()) -> str | None:
+def _roots_sql(kinds: tuple[str, ...], shape: tuple[str, ...] = (), semantic: bool = False) -> str | None:
     """The newest nodes with no up-hop, across ``kinds``, as ``(kind, pk, created_at)``.
 
     "No up-hop" is :func:`_step` upward, the very hop the lineage walk takes, so a root here
@@ -1026,11 +1044,14 @@ def _roots_sql(kinds: tuple[str, ...], shape: tuple[str, ...] = ()) -> str | Non
     exported from. Each kind's arm stops at ``offset + limit`` of its newest roots, which is
     all the outer order can use. ``shape`` names the :class:`RootFilter` fields that are set;
     their values ride as parameters. ``None`` when the filter rules out every kind.
+    With ``search`` the order is its ranking first (:func:`_search_sql`; ``semantic`` adds
+    the vector leg), newest within a tie.
     """
+    searched = "search" in shape
     arms = []
     for key in kinds:
         model = models.File if key == FILE else MODEL_BY_KEY[key]
-        extra = _root_arm_filters(key, model, shape)
+        extra = _root_arm_filters(key, model, shape, semantic)
         if extra is None:
             continue
         table = _q(model._meta.db_table)
@@ -1043,17 +1064,23 @@ def _roots_sql(kinds: tuple[str, ...], shape: tuple[str, ...] = ()) -> str | Non
             # what it places, never listed beside it.
             extra = [*extra, _not_a_field_sql()]
         narrowed = "".join(f" AND {clause}" for clause in extra)
+        ranking, ranked = "", ""
+        if searched:
+            _, rank, similarity, distance = _search_sql(key, model, semantic)
+            ranking = f", {rank} AS srank, {similarity} AS ssim, {distance} AS sdist"
+            ranked = "srank, ssim DESC, sdist NULLS LAST, "
         arms.append(
-            f"(SELECT n.kind, n.pk, x.{created} AS created_at, x.{pk}::bigint AS sort FROM {table} x"
+            f"(SELECT n.kind, n.pk, x.{created} AS created_at, x.{pk}::bigint AS sort{ranking} FROM {table} x"
             f" CROSS JOIN LATERAL (SELECT '{key}'::text AS kind, x.{pk}::text AS pk) n"
             f" WHERE x.{org} = %(org)s AND NOT EXISTS (SELECT 1 FROM ({_step('n', down=False)}) up LIMIT 1){narrowed}"
-            f" ORDER BY x.{created} DESC, x.{pk} DESC LIMIT %(window)s)"
+            f" ORDER BY {ranked}x.{created} DESC, x.{pk} DESC LIMIT %(window)s)"
         )
     if not arms:
         return None
+    ranked = "r.srank, r.ssim DESC, r.sdist NULLS LAST, " if searched else ""
     return (
         f"SELECT r.kind, r.pk, r.created_at FROM ({' UNION ALL '.join(arms)}) r"
-        " ORDER BY r.created_at DESC, r.kind, r.sort DESC OFFSET %(offset)s LIMIT %(limit)s"
+        f" ORDER BY {ranked}r.created_at DESC, r.kind, r.sort DESC OFFSET %(offset)s LIMIT %(limit)s"
     )
 
 
@@ -1067,6 +1094,8 @@ def roots(
 ) -> list[LineageNode]:
     """The newest parentless data of an organization, whatever its kind: what a home page lists.
 
+    With ``filters.search`` the best match comes first instead (see :class:`RootFilter`).
+
     Two round trips: the walk-backed root test for every kind at once, then the names. A
     file's converted series and a dataset's mask are not roots -- they are reached from
     their parent -- and neither is a file exported from a dataset. ``filters`` narrows it by
@@ -1077,14 +1106,20 @@ def roots(
     limit, offset = max(1, min(limit, MAX_LIMIT)), max(0, offset)
     filters = filters or RootFilter()
     shape = _shape(filters)
-    sql = _roots_sql(wanted, shape) if wanted else None
+    params = {name: getattr(filters, name) for name in shape}
+    semantic = False
+    if "search" in params:
+        needle = params["search"].strip()
+        # A literal substring: the LIKE wildcards in what was typed match only themselves.
+        escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.update(search=f"%{escaped}%", search_exact=escaped, search_prefix=f"{escaped}%", search_text=needle)
+        vector = query_vector(needle) if needle else None
+        if vector is not None:
+            semantic = True
+            params.update(search_vector=str(vector), search_threshold=engine.distance_threshold())
+    sql = _roots_sql(wanted, shape, semantic) if wanted else None
     if sql is None:
         return []
-    params = {name: getattr(filters, name) for name in shape}
-    if "search" in params:
-        # A literal substring: the LIKE wildcards in what was typed match only themselves.
-        escaped = params["search"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        params["search"] = f"%{escaped}%"
     if "spec" in params:
         params["spec"] = json.dumps(list(params["spec"]))
     with connection.cursor() as cursor:

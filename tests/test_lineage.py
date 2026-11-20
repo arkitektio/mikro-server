@@ -631,6 +631,25 @@ async def test_roots_narrow_by_creator_collaboration_and_time(authenticated_cont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_roots_search_ranks_like_the_list_search(authenticated_context: HttpContext) -> None:
+    """Exact name, prefix, other substring hits, then a semantic-only hit; the newest-first order gives way."""
+    import numpy as np
+
+    from embeddings import engine
+    from tests.test_filters_search import QUERY, _vec
+
+    for name in ("Detect Cells", "Near", "Fast detect cells in 3D stacks", "Detect cells in stacks"):
+        dataset = await seed.create_array_dataset(authenticated_context, name, axes=seed.YX_AXES, shapes=[[16, 16]])
+        if name == "Near":
+            await models.ArrayDataset.objects.filter(pk=dataset.pk).aupdate(embedding=_vec(np.asarray(engine.embed_query(QUERY)), 0.01))
+
+    result = await schema.execute(ROOTS, context_value=authenticated_context, variable_values={"filters": {"search": QUERY}})
+    assert not result.errors, result.errors
+    assert [row["name"] for row in result.data["roots"]] == ["Detect Cells", "Detect cells in stacks", "Fast detect cells in 3D stacks", "Near"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_roots_cost_does_not_grow_with_the_page(authenticated_context: HttpContext) -> None:
     for index in range(8):
         acquired = await seed.create_array_dataset(authenticated_context, f"Acquired{index}", axes=seed.YX_AXES, shapes=[[16, 16]])

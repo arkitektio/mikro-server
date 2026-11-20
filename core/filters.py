@@ -233,20 +233,20 @@ class NameSearchFilterMixin:
 class SemanticSearchFilterMixin:
     """``search`` = full-text on the name OR semantic similarity to name + description."""
 
-    @kante.filter_field(description="Search by name (full-text) or by the meaning of the query against name and description. Textual matches rank first, then by similarity; an explicit `ordering` replaces that ranking")
+    @kante.filter_field(description="Search by name (full-text) or by the meaning of the query against name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking")
     def search(self, info: Info, queryset: QuerySet, value: str, prefix: str) -> tuple[QuerySet, Q]:
         """Annotate the distance and OR the semantic predicate onto the full-text one."""
-        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__search": value}))
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__search": value}), "name")
 
 
 @strawberry.input
 class SemanticNameSearchFilterMixin:
     """``search`` = substring of the name OR semantic similarity to name + description."""
 
-    @kante.filter_field(description="Search by name (case-insensitive substring) or by the meaning of the query against name and description. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking")
+    @kante.filter_field(description="Search by name (case-insensitive substring) or by the meaning of the query against name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking")
     def search(self, info: Info, queryset: QuerySet, value: str, prefix: str) -> tuple[QuerySet, Q]:
         """Annotate the distance and OR the semantic predicate onto the substring one."""
-        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}))
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}), "name")
 
 
 @strawberry.input
