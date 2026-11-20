@@ -1314,6 +1314,15 @@ def assert_edge_rank(
                 f"A MAP_AXIS transformation permutes the axes of one coordinate vector, so both systems carry the same axis names -- but '{input_system.name}' has {sorted(input_names)} and '{output_system.name}' has {sorted(output_names)}. "
                 "Use BY_DIMENSION, naming the axes it acts on, to relate two different sets of axes."
             )
+        if set(input_axes) != set(output_axes):
+            # The named axes are the cycle the permutation runs; an axis it does not name stays
+            # where it is. So the two lists must name the same axes: `[y] -> [x]` sends y to x
+            # while x also stays x, which sums two axes into one and leaves y empty -- a
+            # collapse, not a relabelling, and `invert_step` would "undo" it by swapping lists.
+            raise ValueError(
+                f"A MAP_AXIS transformation permutes the axes it names among themselves, so `inputAxes` and `outputAxes` must name the same axes in some order -- but {input_axes} and {output_axes} do not. "
+                "Name every axis the permutation moves on both sides, e.g. inputAxes ['y', 'x'] and outputAxes ['x', 'y']."
+            )
 
         # The named pairs must relate the same *kind* of coordinate. Checked after the
         # existence and one-for-one rules above, so the pairing this reads is already known

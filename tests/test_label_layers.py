@@ -1048,6 +1048,33 @@ async def test_the_field_edge_a_picker_reaches_through_is_protected(authenticate
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_the_edge(authenticated_context: HttpContext):
+    """`deleteRegistration(dataset: mask, world: <the table's space>)` matches the crossing too.
+
+    It used to delete it with no guard at all, stranding the picker `deleteTransformation`
+    would have protected.
+    """
+    mask, scene, lens = await _mask_scene_lens(authenticated_context)
+    table = await _object_table(authenticated_context, mask)
+    created = await _create(authenticated_context, scene, lens, {"colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}], "activeColorBy": 0})
+    assert not created.errors, created.errors
+
+    world = await sync_to_async(lambda: str(models.TableDataset.objects.get(pk=table).coordinate_system_id))()
+    crossings = await sync_to_async(lambda: list(models.Transformation.objects.filter(graph_logic.dereference_q()).values_list("pk", flat=True)))()
+    assert len(crossings) == 1
+
+    refused = await schema.execute(
+        "mutation Unregister($input: DeleteRegistrationInput!) { deleteRegistration(input: $input) }",
+        context_value=authenticated_context,
+        variable_values={"input": {"dataset": str(mask.pk), "world": world}},
+    )
+    assert refused.errors, "the only crossing a picker reaches through is protected whichever mutation names it"
+    assert "cannot be deleted" in str(refused.errors[0]), str(refused.errors[0])
+    assert await models.Transformation.objects.filter(pk=crossings[0]).aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_the_guard_finds_a_table_a_join_path_only_passes_through(authenticated_context: HttpContext):
     """The half that is easy to forget: a hop table is named nowhere but inside `joinPath`.
 

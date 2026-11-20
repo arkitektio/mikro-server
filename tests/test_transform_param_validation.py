@@ -453,6 +453,24 @@ async def test_a_map_axis_between_different_axis_sets_is_refused(authenticated_c
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_map_axis_naming_different_axes_on_each_side_is_refused(authenticated_context: HttpContext) -> None:
+    """`[y] -> [x]` over (y, x) is not a permutation: x' = y + x and y is left with nothing.
+
+    It used to be stored, reported invertible and an ISOMETRY, and "inverted" by swapping the
+    two lists -- which is not its inverse.
+    """
+    intrinsic, world = await _dataset_and_world(authenticated_context)
+
+    result = await _create(authenticated_context, intrinsic, world, {"kind": "MAP_AXIS", "inputAxes": ["y"], "outputAxes": ["x"]})
+    assert result.errors, "a MAP_AXIS that names different axes on each side collapses an axis"
+    assert "must name the same axes in some order" in str(result.errors[0]), str(result.errors[0])
+
+    swap = await _create(authenticated_context, intrinsic, world, {"kind": "MAP_AXIS", "inputAxes": ["y", "x"], "outputAxes": ["x", "y"]})
+    assert not swap.errors, swap.errors
+
+
+@pytest.mark.django_db(transaction=True)
 def test_the_logic_layer_holds_the_same_line_for_internal_callers(authenticated_context: HttpContext) -> None:
     """The writers below the API refuse what the union makes unrepresentable above it.
 
@@ -955,3 +973,36 @@ async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offs
         await sync_to_async(graph_logic.build_registration_edge)(
             input_system=morning, output_system=scaled, kind="BY_DIMENSION", parts=[{"kind": "SCALE", "input_axes": ["t"], "output_axes": ["t"], "scale": [1.000012]}], ctx=ctx
         )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_only_an_edges_owner_refines_it(authenticated_context: HttpContext, bot_context: HttpContext) -> None:
+    """A refinement moves everything placed through the edge, for everyone: held to the owners its delete is."""
+    intrinsic, world = await _dataset_and_world(authenticated_context)
+    created = await _create(authenticated_context, intrinsic, world, {"kind": "SCALE", "scale": [0.5, 0.5]})
+    assert not created.errors, created.errors
+    edge_id = created.data["createTransformation"]["id"]
+
+    refused = await schema.execute(UPDATE_TRANSFORM, context_value=bot_context, variable_values={"input": {"id": edge_id, "scale": [0.25, 0.25]}})
+    assert refused.errors and "Only the creator or assignee can refine this" in str(refused.errors[0]), str(refused.errors and refused.errors[0])
+    edge = await sync_to_async(models.Transformation.objects.get)(pk=edge_id)
+    assert edge.params == {"scale": [0.5, 0.5]}
+
+    allowed = await schema.execute(UPDATE_TRANSFORM, context_value=authenticated_context, variable_values={"input": {"id": edge_id, "scale": [0.25, 0.25]}})
+    assert not allowed.errors, allowed.errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_crop_edge_is_its_slices_and_is_not_refined(authenticated_context: HttpContext) -> None:
+    """A lens is one row for everyone selecting those voxels; its edge rewritten would draw it elsewhere in every scene."""
+    dataset = await seed.create_array_dataset(authenticated_context, axes=seed.YX_AXES, shapes=[[64, 64]])
+    lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    edge = await sync_to_async(lambda: models.Transformation.objects.get(input_id=lens.coordinate_system_id, output_id=dataset.coordinate_system_id))()
+
+    result = await schema.execute(UPDATE_TRANSFORM, context_value=authenticated_context, variable_values={"input": {"id": str(edge.pk), "translation": [9.0, 0.0]}})
+    assert result.errors and "is a lens' crop" in str(result.errors[0]), str(result.errors and result.errors[0])
+    result = await schema.execute(UPDATE_TRANSFORM, context_value=authenticated_context, variable_values={"input": {"id": str(edge.pk), "validity": "UNKNOWN"}})
+    assert result.errors and "is a lens' crop" in str(result.errors[0])
+    assert (await sync_to_async(models.Transformation.objects.get)(pk=edge.pk)).params == {"translation": [8.0, 0.0]}

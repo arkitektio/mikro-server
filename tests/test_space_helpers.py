@@ -230,6 +230,31 @@ async def test_delete_registration_guards_the_edges_author(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_delete_registration_takes_all_of_its_edges_or_none(authenticated_context: HttpContext, bot_context: HttpContext):
+    """Yours goes only if every rival matched goes too: a refusal leaves nothing half done.
+
+    The caller's edge is the lower pk, so it was deleted before the rival someone else authored
+    refused the request -- an error, with the caller's registration already gone.
+    """
+    dataset = await seed.create_array_dataset(authenticated_context, "Rivals", axes=seed.YX_AXES, shapes=[[64, 64]])
+    space = await sync_to_async(_make_space)(authenticated_context)
+    intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
+    mine = await sync_to_async(_register_into)(bot_context, intrinsic, space)
+    rival = await sync_to_async(_register_into)(authenticated_context, intrinsic, space)
+    assert mine.pk < rival.pk
+
+    result = await schema.execute(
+        DELETE_REGISTRATION,
+        context_value=bot_context,
+        variable_values={"input": {"dataset": str(dataset.pk), "world": str(space.pk)}},
+    )
+    assert result.errors and "Only the creator" in str(result.errors[0])
+    remaining = await sync_to_async(lambda: set(models.Transformation.objects.filter(pk__in=[mine.pk, rival.pk]).values_list("pk", flat=True)))()
+    assert remaining == {mine.pk, rival.pk}, "the refused request deleted nothing"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_orphan_sweep_takes_only_true_orphans_you_own(authenticated_context: HttpContext, bot_context: HttpContext, other_org_context: HttpContext):
     """The sweep deletes ownerless spaces nothing points at -- scoped to your own unless admin.
 

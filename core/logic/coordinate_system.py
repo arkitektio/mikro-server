@@ -965,6 +965,24 @@ def layers_drawing_through(lens: "models.Lens") -> "QuerySet[models.Layer]":
     return models.Layer.objects.filter(query).distinct()
 
 
+def assert_edge_refinable(edge: "models.Transformation") -> None:
+    """Refuse to refine an edge the server derived from shapes or slices.
+
+    A sliced lens' edge into its dataset's grid *is* its slices, and a pyramid level's edge is
+    its shape: neither was a judgement, so neither has a better value to be refined to. A lens
+    is one row for everyone who selects those voxels, so a rewritten crop edge would draw that
+    selection in the wrong place in every scene, and `createLens` with the same slices would
+    keep handing out the row whose edge no longer matches them.
+    """
+    if models.ArrayLens.objects.filter(coordinate_system_id=edge.input_id, dataset__coordinate_system_id=edge.output_id).exists():
+        raise ValueError(
+            f"Transformation {edge.pk} is a lens' crop: the server derives it from the lens' slices, so it is exact and is not refined. "
+            "Cut the selection you mean with createLens, or register the lens' data elsewhere with a new edge."
+        )
+    if models.DataArray.objects.filter(coordinate_system_id=edge.input_id, dataset__coordinate_system_id=edge.output_id).exists():
+        raise ValueError(f"Transformation {edge.pk} places a pyramid level in its dataset's grid: the server derives it from the level's shape, so it is not refined.")
+
+
 def lens_own_edges(lens: "models.ArrayLens") -> "Iterable[models.Transformation]":
     """The top-level edge(s) from a sliced array lens' own system into its dataset's intrinsic system; none for a whole lens."""
     if lens.coordinate_system_id == lens.dataset.coordinate_system_id:

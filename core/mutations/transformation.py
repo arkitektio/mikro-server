@@ -20,6 +20,7 @@ no flag to record which way round a matrix runs, because half the graph would
 end up pointing the wrong way and nothing would tell you.
 """
 
+from django.db import transaction
 from django.db.models import Q
 from kante.types import Info
 import strawberry
@@ -29,6 +30,7 @@ import kante
 from core import enums, models, types
 from core.creation import CreationContext
 from core.inputs.coords import SelectorInput, SelectorInputModel, TransformInput, TransformSpec, assert_orthonormal
+from core.logic import compositions as compositions_logic
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
 from core.mutations._generic import assert_can_delete, creator_owner, make_delete
@@ -147,8 +149,13 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     model = input.to_pydantic()
 
     transformation = get_for_org(models.Transformation, info, id=model.id)
+    # The same owners as its delete: a refinement moves everything placed through the edge,
+    # in every scene, for everyone -- more than a delete of it would.
+    assert_can_delete(info, transformation, creator_owner, action="refine")
 
     supplied = [field for field in ("scale", "translation", "affine") if getattr(model, field) is not None]
+    if supplied or model.part is not None or model.validity is not None:
+        coordinate_system_logic.assert_edge_refinable(transformation)
     if transformation.kind == enums.TransformKind.UNMAPPABLE.value and supplied:
         # `assert_edge_rank` returns early for an UNMAPPABLE (it has no rank to check), so
         # without this the parameters would be written and simply never read -- a map that
@@ -276,11 +283,17 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
     if not edges:
         raise ValueError(f"Nothing to delete: no edge relates this source to '{world.name}'.")
 
-    deleted: list[strawberry.ID] = []
-    for edge in edges:
-        assert_can_delete(info, edge, creator_owner)
-        deleted.append(strawberry.ID(str(edge.pk)))
-        edge.delete()
+    # One transaction, and each edge authorised and guarded as `deleteTransformation` guards
+    # one: a rival somebody else authored refuses the whole request rather than leaving it
+    # half done, and a key edge a picker still reads through is refused by name. Guarded
+    # one by one *inside* it, so each guard sees the edges before it already gone -- two
+    # rival crossings are each harmless alone and strand a picker together.
+    deleted = [strawberry.ID(str(edge.pk)) for edge in edges]
+    with transaction.atomic():
+        for edge in edges:
+            assert_can_delete(info, edge, creator_owner)
+            compositions_logic.assert_deletable(edge)
+            edge.delete()
     return deleted
 
 

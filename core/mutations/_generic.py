@@ -29,19 +29,20 @@ def user_is_org_admin(info: Info) -> bool:
     return ADMIN in (getattr(membership, "roles", None) or [])
 
 
-def assert_can_delete(info: Info, item, owner) -> None:
-    """Raise unless the request user may delete ``item``.
+def assert_can_delete(info: Info, item, owner, *, action: str = "delete") -> None:
+    """Raise unless the request user may delete ``item`` -- or do ``action`` to it.
 
     Allowed if the user is an org admin, or their id is among the owner ids
     ``owner(item)`` returns (the item's creator and/or assigner, possibly
-    resolved through a parent row).
+    resolved through a parent row). An edit that rewrites what other people's
+    rows rest on (an edge's map) is held to the same owners as its delete.
     """
     if user_is_org_admin(info):
         return
     user_id = info.context.request.user.id
     allowed = {owner_id for owner_id in owner(item) if owner_id is not None}
     if user_id not in allowed:
-        raise PermissionError("Only the creator or assignee can delete this")
+        raise PermissionError(f"Only the creator or assignee can {action} this")
 
 
 def self_owner(item):
