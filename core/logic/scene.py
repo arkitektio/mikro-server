@@ -28,6 +28,7 @@ import dataclasses
 from collections.abc import Callable
 
 from django.db import transaction
+from django.db.models import Q
 
 from core import base_models, enums, models
 from core.creation import CreationContext
@@ -195,6 +196,10 @@ def _bootstrap_image_layers(
     and none of it was consulted: the hue came from an index cycle and the limits were left
     null for every viewer to work out again, differently.
 
+    **Inherited before inferred.** A dataset derived IDENTICAL from data whose producer
+    declared how to draw it gets a copy of that declaration (:func:`_inherited_layers`): a
+    stitch of photographs is one RGB layer because its tiles were, not because of its shape.
+
     ``kind`` overrides the recipe :func:`_infer_kind` would pick, and arrives from
     ``ScenePolicyInput.kind``. Worth having for LABEL alone: nothing structural distinguishes
     a label map from an image, so a mask whose derivation was never declared CATEGORIZED is
@@ -227,8 +232,6 @@ def _bootstrap_image_layers(
     kept = _kept_channels(dataset, lens, render.intensity)
     recorded = _channel_labels(dataset, render.intensity) if render.intensity is not None else {}
     labels = {local: recorded[channel] for local, channel in enumerate(kept) if channel in recorded}
-    resolved_kind = kind or _infer_kind(dataset, render, size, labels)
-    blending = _LAYER_BLENDING[resolved_kind]
 
     def channel_lens(channel: int | None) -> "models.ArrayLens":
         """The lens drawing one of the dataset's channels: the lens itself when it already pins one, else the cut from it."""
@@ -236,6 +239,15 @@ def _bootstrap_image_layers(
             return lens
         local = kept.index(channel)
         return coordinate_system_logic.create_sub_lens(lens, [base_models.SliceInputModel(axis=render.intensity, start=local, stop=local + 1)], ctx)
+
+    # Values identical to data whose producer declared how to draw them are drawn the same
+    # way: the declaration is copied, before anything is inferred. An explicit kind still wins.
+    inherited = None if kind is not None else _inherited_layers(dataset, kept, render.intensity)
+    if inherited:
+        return [_create_inherited_layer(plan, scene, channel_lens, order + offset) for offset, plan in enumerate(inherited)]
+
+    resolved_kind = kind or _infer_kind(dataset, render, size, labels)
+    blending = _LAYER_BLENDING[resolved_kind]
 
     if resolved_kind == enums.BootstrapLayerKind.LABEL:
         return [
@@ -621,6 +633,159 @@ def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "model
         visible=True,
         order=order,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Inherited declarations: IDENTICAL values are drawn the way their producer said #
+# --------------------------------------------------------------------------- #
+#: The layer kinds a declaration is copied for, and the columns each one copies. The lenses
+#: are not among them: they are the target's, cut for the channels the declaration names.
+_INHERITED_FIELDS = {
+    enums.LayerKind.INTENSITY.value: ("name", "colormap", "color", "clim_min", "clim_max", "gamma", "blending", "opacity", "visible", "projection_mode"),
+    enums.LayerKind.RGB.value: ("name", "clim_min", "clim_max", "blending", "opacity", "visible", "white_balance"),
+    enums.LayerKind.LABEL.value: ("name", "label_render", "blending", "opacity", "visible"),
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class _InheritedLayer:
+    """One layer of a declaration, readied for the derived dataset.
+
+    ``channels`` are the *derived* dataset's channel positions the layer draws: one for an
+    intensity or label layer, red, green and blue for an RGB one; ``None`` where the dataset
+    has no channel axis. ``fields`` are the copied columns.
+    """
+
+    kind: str
+    channels: tuple[int | None, ...]
+    fields: dict
+
+
+def _channel_of(dataset: "models.ArrayDataset", lens_id: int, axis: str | None) -> "int | None | bool":
+    """The one channel position of ``dataset`` a lens pins; None without a channel axis; False when it keeps several."""
+    if axis is None:
+        return None
+    lens = models.ArrayLens.objects.get(pk=lens_id)
+    kept = _kept_channels(dataset, lens, axis)
+    return kept[0] if len(kept) == 1 else False
+
+
+def _declared_layers(source: "models.ArrayDataset") -> "list[models.Layer]":
+    """How the producer of ``source`` said to draw it: its first scene's layers over it.
+
+    The first layer ever made over a dataset is its producer's -- openuc's RGB layer, a
+    converter's channels -- and the other layers over the dataset in that layer's scene
+    complete the declaration. Scenes made later, and edits to them, say nothing here.
+    """
+    over = Q(lens__arraylens__dataset=source) | Q(red_lens__dataset=source)
+    first = models.Layer.objects.filter(over).order_by("pk").first()
+    if first is None:
+        return []
+    return list(models.Layer.objects.filter(over, scene_id=first.scene_id).order_by("order", "pk"))
+
+
+def _declaration_through(edge: "models.Transformation", dataset: "models.ArrayDataset", axis: str | None) -> "list[_InheritedLayer] | None":
+    """The source's declaration, in the derived dataset's channel positions; None when there is none or it does not map.
+
+    The derivation is IDENTICAL, so the derived dataset's channels are the ones the edge's
+    source lens kept, in order. Anything else -- a different count, a layer over several
+    channels at once -- maps nowhere, and nothing is inherited.
+    """
+    source_lens = models.ArrayLens.objects.filter(coordinate_system=edge.output).select_related("dataset").first()
+    source = source_lens.dataset if source_lens is not None else graph_logic.system_dataset(edge.output)
+    if source is None:
+        return None
+    declared = _declared_layers(source)
+    if not declared:
+        return None
+
+    source_axis = coords_logic.resolve_render_axes(source.axis_specs).intensity
+    if source_axis is None:
+        source_positions: list[int | None] = [None]
+    elif source_lens is not None:
+        source_positions = list(_kept_channels(source, source_lens, source_axis))
+    else:
+        source_positions = list(range(source.shape_list[source.axis_names.index(source_axis)]))
+    target_positions: list[int | None] = list(range(dataset.shape_list[dataset.axis_names.index(axis)])) if axis is not None else [None]
+    if len(source_positions) != len(target_positions):
+        return None
+    to_target = dict(zip(source_positions, target_positions, strict=True))
+
+    plans = []
+    for layer in declared:
+        kind = str(getattr(layer.kind, "value", layer.kind))
+        if kind not in _INHERITED_FIELDS:
+            continue
+        lens_ids = (layer.red_lens_id, layer.green_lens_id, layer.blue_lens_id) if kind == enums.LayerKind.RGB.value else (layer.lens_id,)
+        channels = []
+        for lens_id in lens_ids:
+            channel = _channel_of(source, lens_id, source_axis) if lens_id is not None else False
+            if channel is False or channel not in to_target:
+                return None
+            channels.append(to_target[channel])
+        plans.append(_InheritedLayer(kind=kind, channels=tuple(channels), fields={name: getattr(layer, name) for name in _INHERITED_FIELDS[kind]}))
+    return plans or None
+
+
+def _inherited_layers(dataset: "models.ArrayDataset", kept: list[int], axis: str | None) -> "list[_InheritedLayer] | None":
+    """The layers a dataset derived IDENTICAL from declared data inherits, or None to fall through to inference.
+
+    **The rule.** How values are drawn is declared by their first producer, as the layers of
+    the scene it made with them (:func:`_declared_layers`). A derivation that keeps the values
+    -- IDENTICAL: a crop, a stitch, an axis reorder -- keeps what is true of drawing them, so
+    the derived dataset is drawn the same way: same kinds, same channel mapping, same colours
+    and contrast limits. It is a copy made now: a later edit of either scene reaches neither.
+
+    Every derivation edge has to be IDENTICAL, and with several (a stitch of tiles) every
+    source's declaration has to agree in its kinds and channels; the contrast limits are then
+    the union of the sources' windows, which holds every one of them. A layer whose channel
+    the staged lens does not keep is left out; nothing kept, nothing inherited.
+    """
+    edges = graph_logic.derivation_edges(dataset)
+    if not edges or any(edge.value_relation != enums.ValueRelationChoices.IDENTICAL.value for edge in edges):
+        return None
+    declarations = []
+    for edge in edges:
+        declaration = _declaration_through(edge, dataset, axis)
+        if declaration is None:
+            return None
+        declarations.append(declaration)
+
+    first = declarations[0]
+    if any([(plan.kind, plan.channels) for plan in other] != [(plan.kind, plan.channels) for plan in first] for other in declarations[1:]):
+        return None
+
+    keeps = set(kept) if axis is not None else {None}
+    merged = []
+    for index, plan in enumerate(first):
+        if not set(plan.channels) <= keeps:
+            continue
+        fields = dict(plan.fields)
+        if "clim_min" in fields:
+            lows = [d[index].fields["clim_min"] for d in declarations if d[index].fields["clim_min"] is not None]
+            highs = [d[index].fields["clim_max"] for d in declarations if d[index].fields["clim_max"] is not None]
+            fields["clim_min"] = min(lows) if lows else None
+            fields["clim_max"] = max(highs) if highs else None
+        merged.append(dataclasses.replace(plan, fields=fields))
+    return merged or None
+
+
+def _create_inherited_layer(plan: _InheritedLayer, scene: "models.Scene", channel_lens: "Callable[[int | None], models.ArrayLens]", order: int) -> "models.Layer":
+    """One inherited layer, over the derived dataset's lenses."""
+    if plan.kind == enums.LayerKind.RGB.value:
+        red, green, blue = plan.channels
+        return models.Layer.objects.create(
+            kind=enums.LayerKind.RGB,
+            lens=channel_lens(None),
+            scene=scene,
+            order=order,
+            red_lens=channel_lens(red),
+            green_lens=channel_lens(green),
+            blue_lens=channel_lens(blue),
+            **plan.fields,
+        )
+    (channel,) = plan.channels
+    return models.Layer.objects.create(kind=plan.kind, lens=channel_lens(channel), scene=scene, order=order, **plan.fields)
 
 
 def _infer_rgb(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes, size: Callable[[str | None], int], labels: dict[int, str]) -> bool:
