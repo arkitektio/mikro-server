@@ -809,6 +809,7 @@ def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[
       creation, and never after, which is what makes resolving an open bound safe;
     * ``stop`` is the first index past the last *selected* position, so a stepped slice
       with a ragged stop (``0:10:3`` and ``0:12:3`` both pick 0, 3, 6, 9) spells the same;
+    * a slice that keeps one position has step 1, whatever it was given: ``2:3:2`` is ``2:3``;
     * a slice that keeps a whole axis at step 1 is dropped: it selects nothing narrower
       than the array, and a lens that carries one would be a second whole lens;
     * dataset axis order, explicit ints, all four keys, ``step`` always present.
@@ -837,6 +838,11 @@ def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[
         count = len(range(start, stop, step))
         if count == 0:
             raise ValueError(f"Slice over axis '{axis}' ({selection.start}:{selection.stop}:{selection.step}) selects nothing of its {size} positions")
+        if count == 1:
+            # One position has no stride: `2:3:2` and `2:3` keep the same voxel, and a step
+            # kept here would make them two rows -- and a stepped edge (a SCALE) for a crop.
+            # It is also what lets a size-1 axis sliced at any step drop as whole below.
+            step = 1
         stop = start + (count - 1) * step + 1
         if start == 0 and stop == size and step == 1:
             continue

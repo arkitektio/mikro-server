@@ -57,6 +57,20 @@ def test_a_crop_of_a_crop_is_the_crop_numpy_takes(parent: list, child: list) -> 
     assert got.shape == expected.shape and np.array_equal(got, expected), (composed, normalized)
 
 
+def test_one_kept_position_has_no_stride() -> None:
+    """`2:3:2` and `2:3` keep one voxel; spelled two ways, they would be two lenses and a SCALE edge for a crop."""
+    stepped = coords.normalize_slices(SHAPE, AXES, [_Slice("y", 2, 3, 2)])
+    assert stepped == coords.normalize_slices(SHAPE, AXES, [_Slice("y", 2, 3)]) == [{"axis": "y", "start": 2, "stop": 3, "step": 1}]
+    assert coords.lens_to_parent(AXES, [_Slice(**entry) for entry in stepped])[0] == "TRANSLATION"
+
+    # Reached through a stepped parent too: the composed slice is renormalized.
+    composed = coords.compose_slices(SHAPE, AXES, [_Slice("y", 0, 6, 2)], [_Slice("y", 1, 2)])
+    assert coords.normalize_slices(SHAPE, AXES, [_Slice(**entry) for entry in composed]) == [{"axis": "y", "start": 2, "stop": 3, "step": 1}]
+
+    # And a size-1 axis sliced at any step is the whole axis.
+    assert coords.normalize_slices([1, 6, 8], AXES, [_Slice("c", 0, 1, 5)]) == []
+
+
 @pytest.mark.parametrize(
     "kept, box",
     [

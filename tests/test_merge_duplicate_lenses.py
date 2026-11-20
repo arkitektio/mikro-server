@@ -149,3 +149,34 @@ async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(authe
         assert f"lens {open_window.pk} of table dataset {table.pk} duplicates lens {whole.pk} but is left in place" in report
         assert "1 duplicate lens(es) left in place" in report
     assert (await models.TableLens.objects.aget(pk=open_window.pk)).windows == [{"axis": "x", "min": None, "max": None}]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_single_voxel_stride_is_dropped_and_its_edge_becomes_a_translation(authenticated_context: HttpContext):
+    """`x 3:10:7` keeps one voxel; it was stored with its step and written a SEQUENCE edge scaling by 7.
+
+    The job folds the stepped spelling onto the plain crop when both exist, and otherwise
+    rewrites the row and its edge to what `createLens` writes now.
+    """
+    ctx = authenticated_context
+    dataset = await seed.create_array_dataset(ctx, "Image", shapes=[[3, 64, 64]])
+    intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
+    (whole_id,) = await _lens_ids(dataset)
+
+    lone = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "x", "start": 3, "stop": 10, "step": 7}])
+    plain = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": 5, "stop": 6, "step": None}])
+    stepped_twin = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": 5, "stop": 6, "step": 4}])
+    edge = await models.Transformation.objects.aget(input_id=lone.coordinate_system_id, output=intrinsic)
+    assert edge.kind == enums.TransformKindChoices.SEQUENCE.value, "the old code scaled a single voxel by its step"
+
+    report = await _run()
+
+    assert f"merged lens {stepped_twin.pk} into lens {plain.pk}" in report
+    assert await _lens_ids(dataset) == [whole_id, lone.pk, plain.pk]
+    assert (await models.ArrayLens.objects.aget(pk=lone.pk)).slices == [{"axis": "x", "start": 3, "stop": 4, "step": 1}]
+    edge = await models.Transformation.objects.aget(input_id=lone.coordinate_system_id, output=intrinsic)
+    assert (edge.kind, edge.params, edge.steps) == (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.0, 0.0, 3.0]}, [])
+
+    again = await _run()
+    assert "normalized 0 lens(es), repaired 0 edge(s)" in again

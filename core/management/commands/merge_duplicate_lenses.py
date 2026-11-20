@@ -221,6 +221,13 @@ class Command(BaseCommand):
 
         kind, params = coords_logic.lens_to_parent(lens.dataset.axis_names, lens.slices_list)
         for edge in coordinate_system_logic.lens_own_edges(lens):
+            if kind == enums.TransformKindChoices.TRANSLATION.value and edge.kind == enums.TransformKindChoices.SEQUENCE.value:
+                # A lens whose only stepped axes kept one voxel each: its selection was stored
+                # with a stride that position does not have, and its edge scaled by it.
+                self.counts["edges_repaired"] += 1
+                self.stdout.write(f"{'would repair' if self.dry_run else 'repaired'} edge {edge.pk} of lens {lens.pk} (its own, into intrinsic): a single-voxel stride -> translation {params['translation']}")
+                models.Transformation.objects.filter(pk=edge.pk).update(kind=kind, params=params, steps=[])
+                continue
             if kind != enums.TransformKindChoices.TRANSLATION.value or edge.kind != kind:
                 # A stepped lens is a SEQUENCE of steps; its spelling never changed the
                 # scale, and its starts are left to a later pass if one is ever needed.
