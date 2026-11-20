@@ -96,7 +96,8 @@ def backend_stack():
         # The suite builds its schema with run-syncdb (migrations disabled), so the
         # extension migrations never run here -- but CREATE TABLE for
         # Annotation.bbox_cube needs `cube` and the embedding columns
-        # (Folder/ArrayDataset/TableDataset.embedding) need `vector`. Install them
+        # (Folder/ArrayDataset/TableDataset.embedding) need `vector`, and the
+        # `search` ranking calls `pg_trgm`'s similarity(). Install them
         # into template1 so the test database pytest-django creates from it inherits
         # them, and into testdb itself for anything connecting directly.
         for dbname in ("template1", "testdb"):
@@ -110,6 +111,7 @@ def backend_stack():
             ) as connection:
                 connection.execute("CREATE EXTENSION IF NOT EXISTS cube")
                 connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                connection.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
         yield db_port
 
