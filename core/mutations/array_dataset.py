@@ -174,18 +174,42 @@ class CoordinateAnchorInput:
     acquisition_window: AcquisitionWindowInput | None = strawberry.field(default=None, description="Optional acquisition window: when the data at these coordinates was acquired. An anchor holding over the whole dataset gives its span; one pinned to a frame gives that frame's. The dataset's `acquisitionStart`/`acquisitionEnd` are derived from these")
 
 
+_LEVEL_SCALE_DESCRIPTION = (
+    "This level's absolute scale per axis, in array order: level voxel i sits at scale * i + translation in level-0 voxels. "
+    "Stated with `translation` or not at all. Checked against the shapes -- the level must hold floor or ceil of level 0's extent over the scale -- "
+    "and needed whenever the shapes alone mislead: trimmed halvings (36 -> 18 -> 9 -> 4 is 8, not 36/4) and strides. "
+    "Omitted, the level is read as a resize: scale shape_0 / shape_level, translation (scale - 1) / 2. A categorical axis takes 1"
+)
+_LEVEL_TRANSLATION_DESCRIPTION = "This level's offset per axis, in level-0 voxels and array order: where its voxel 0's centre sits. 0 for a stride (`[::2]` keeps voxel 0); (scale - 1) / 2 for a block reduction (a mean or max of 2 voxels is centred at 0.5). Stated with `scale` or not at all. A categorical axis takes 0"
+
+
 class ScaleInputModel(BaseModel):
     level: int
     array: str = Field(..., description="The array-like object to create the image from")
     scale_method: enums.ScaleMethod | None = None
+    scale: list[float] | None = Field(default=None, description=_LEVEL_SCALE_DESCRIPTION)
+    translation: list[float] | None = Field(default=None, description=_LEVEL_TRANSLATION_DESCRIPTION)
+
+    @model_validator(mode="after")
+    def _both_or_neither(self) -> "ScaleInputModel":
+        # No translation is implied by a scale: a stride's is 0 and a block reduction's is a
+        # half voxel per halving, and only the writer knows which it ran.
+        if (self.scale is None) != (self.translation is None):
+            raise ValueError(f"Pyramid level {self.level}: state `scale` and `translation` together, or neither -- a scale alone does not say whether a voxel is a strided sample (offset 0) or a block's centre ((scale - 1) / 2)")
+        return self
 
 
-@kante.pydantic_input(ScaleInputModel, description="Input type for one pyramid level: the array backing it, and how it was downsampled. Its scale factor is derived from its actual shape, never supplied")
+@kante.pydantic_input(
+    ScaleInputModel,
+    description="Input type for one pyramid level: the array backing it, how it was downsampled, and -- from a writer that knows -- where it sits in level 0's grid. Without `scale` and `translation` the level is read as a resize covering all of level 0",
+)
 class ScaleInput:
     """Input for one pyramid level."""
 
     level: int = strawberry.field(description="The level of the scale, where 0 is the highest resolution scale and higher levels are lower resolution scales")
     array: scalars.ArrayLike = strawberry.field(description="The array-like object to create the image from")
+    scale: list[float] | None = strawberry.field(default=None, description=_LEVEL_SCALE_DESCRIPTION)
+    translation: list[float] | None = strawberry.field(default=None, description=_LEVEL_TRANSLATION_DESCRIPTION)
     scale_method: enums.ScaleMethod | None = strawberry.field(
         default=None,
         description="How this level's voxels were computed from the level above it. Stated, never derived -- nothing about two arrays says whether one was averaged or picked out of the other. **Required, and restricted to NEAREST or MODE, when this dataset's primary derivation is declared CATEGORIZED, or when any of its axes is an INDEX axis** -- an axis that enumerates objects: over an array of object ids every other method returns numbers that were not in the input, and an invented id is an object that does not exist",
@@ -208,7 +232,7 @@ class CreateArrayDatasetInput:
     """Input for creating an array dataset."""
 
     data: scalars.ArrayLike = strawberry.field(description="The array-like object to create the image from")
-    scales: list[ScaleInput] = strawberry.field(default_factory=list, description="The lower-resolution pyramid levels. Omit for a single-level dataset. Each level's absolute scale is derived from its actual shape against level 0's -- a pyramid whose axes do not halve cleanly is described correctly, and no caller can supply a wrong factor")
+    scales: list[ScaleInput] = strawberry.field(default_factory=list, description="The lower-resolution pyramid levels. Omit for a single-level dataset. A level placed by its `scale` and `translation`, checked against its shape; one that states neither is read as a resize of level 0, its scale level 0's shape over its own")
     name: str = strawberry.field(description="The name of the image")
     axes: list[AxisInput] = strawberry.field(
         description="The dataset's structural axes, in array order (slowest-varying first) -- they must describe the store's dimensions, and are checked against its shape. No ordering by type is required beyond that: (z, c, y, x) and (c, z, y, x) are both accepted as given. They carry no units: the intrinsic space is the pixel grid"
@@ -431,6 +455,7 @@ def create_array_dataset(
 
     levels = [(0, data_store)] + [(scale.level, get_for_org(models.ZarrStore, info, id=scale.array)) for scale in model.scales]
     scale_methods = {scale.level: scale.scale_method.value for scale in model.scales if scale.scale_method is not None}
+    stated = {scale.level: (scale.scale, scale.translation) for scale in model.scales if scale.scale is not None and scale.translation is not None}
 
     for level, store in levels:
         if level != 0:
@@ -479,6 +504,7 @@ def create_array_dataset(
             shape_level=store.shape,
             axis_specs=axis_specs,
             ctx=ctx,
+            stated=stated.get(level),
         )
 
     # The lens selecting all of it, from the start: it is the handle an action is handed for

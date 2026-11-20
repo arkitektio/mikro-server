@@ -241,10 +241,12 @@ class DataArray(models.Model):
     (see :attr:`space`).
 
     The old ``scale_factors`` column is gone. It stored *nominal* factors
-    (1, 2, 4, 8, ...), which a real pyramid does not obey: a 36-voxel axis floors
-    to 36, 18, 9, 4, 2, 1, whose true factors are 1, 2, 4, 9, 18, 36. The
-    absolute scale is now derived from the actual shapes at write time, by
-    :func:`core.logic.coords.pyramid_transform`, and stored on the edge.
+    (1, 2, 4, 8, ...) with nothing to check them against. The absolute scale and
+    offset are now fixed at write time and stored on the edge: stated by the writer
+    and checked against the shapes (:func:`core.logic.coords.stated_level_transform`),
+    or, from a writer that states nothing, read off the shapes as a resize
+    (:func:`core.logic.coords.pyramid_transform`) -- which is all the shapes can say,
+    since 36 -> 4 is a factor of 9 resized and of 8 as trimmed halvings.
     """
 
     store = models.ForeignKey(

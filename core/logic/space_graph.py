@@ -73,10 +73,10 @@ def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[
 
     Asked of the **data**, not of the space -- a space has no extent of its own, and under
     residence several residents may share one. A shape ``S`` spans ``[-0.5, S - 0.5]``, the
-    convention :func:`coords.vectors_bbox` encodes and that
-    :func:`coords.pyramid_transform`'s half-voxel translation exists to keep true across
-    levels: level 1's ``[-0.5, 31.5]`` maps onto level 0's ``[-0.5, 63.5]``, the same box,
-    which it would not if the origin were the voxel corner.
+    convention :func:`coords.vectors_bbox` encodes. Through a resized level's edge (its
+    half-voxel translation) level 1's ``[-0.5, 31.5]`` maps onto level 0's ``[-0.5, 63.5]``,
+    the same box; a level built by trimmed halvings truthfully maps onto less of it, and a
+    strided one onto a box shifted half a level-0 voxel back -- each level's own edge says which.
 
     None where the server holds no geometry: a mesh collection's vertices and a table's rows
     are in Parquet it never opens. A windowed lens is bounded exactly where its windows bound

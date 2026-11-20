@@ -431,22 +431,27 @@ def create_level_edge(
     shape_level: list[int],
     axis_specs: list[coords_logic.AxisSpec],
     ctx: CreationContext,
+    stated: tuple[list[float], list[float]] | None = None,
 ) -> "models.Transformation":
     """Store the edge placing one pyramid level in its dataset's intrinsic pixel space.
 
-    The scale is **absolute** and dimensionless, derived from the actual shapes --
-    so a pyramid whose axes do not halve cleanly (36 floors to 18, 9, 4, 2, 1,
-    giving factors 1, 2, 4, **9, 18, 36**, not 1, 2, 4, 8, 16, 32) is described
-    correctly rather than plausibly. The translation is the half-voxel offset the
-    downsample introduces; without it every level above 0 draws offset from level 0.
+    The scale is **absolute** and dimensionless. ``stated`` is the writer's own
+    ``(scale, translation)``, checked against the shapes
+    (:func:`coords_logic.stated_level_transform`): only whoever downsampled knows whether
+    36 -> 4 was a resize (9) or trimmed halvings (8), and whether a voxel is a block's centre
+    (a half-voxel offset) or a strided sample (none). Without it the level is read as a
+    resize (:func:`coords_logic.pyramid_transform`).
 
-    Derived once, here, at write time. If it were re-derived at read, every reader
+    Stored once, here, at write time. If it were re-derived at read, every reader
     would have to agree on how -- and one of them would not.
     """
-    scale, translation = coords_logic.pyramid_transform(shape_0, shape_level, axis_specs)
+    if stated is not None:
+        scale, translation = coords_logic.stated_level_transform(shape_0, shape_level, axis_specs, *stated)
+    else:
+        scale, translation = coords_logic.pyramid_transform(shape_0, shape_level, axis_specs)
 
     if all(offset == 0 for offset in translation):
-        # Level 0, or any level that happens not to be downsampled: a scale suffices.
+        # A level that is not offset -- not downsampled, or strided: a scale suffices.
         return models.Transformation.objects.create(
             kind=enums.TransformKindChoices.SCALE.value,
             input=array_system,

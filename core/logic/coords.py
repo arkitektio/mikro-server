@@ -707,14 +707,18 @@ def pyramid_transform(
     shape_level: Sequence[int],
     axes: Sequence[AxisSpec],
 ) -> tuple[list[float], list[float]]:
-    """The scale and translation taking a pyramid level into its dataset's intrinsic pixel space.
+    """The scale and translation taking a pyramid level into its dataset's intrinsic pixel space, for a writer that states neither.
 
-    Absolute, not relative -- and dimensionless. A real pyramid does not halve
-    cleanly: a 36-voxel z axis floors to 36, 18, 9, 4, 2, 1, so its true factors
-    are 1, 2, 4, **9, 18, 36** -- while a nominal ``2 ** level`` claims 1, 2, 4,
-    8, 16, 32. Levels 3 and up are compressed in z, and a model that stores the
-    nominal factors has no way to say so. It stays invisible for as long as every
-    axis happens to be a power of two, which is why xy never showed it.
+    **A fallback, and it assumes a resize.** The factor is level 0's extent over the level's,
+    which is exact for a level resampled to cover the whole of level 0 and only close for the
+    two other common builders: a chain of trimmed block reductions (36 -> 18 -> 9 -> 4 is a
+    factor of 8 whose four voxels cover the first 32; this says 9) and a stride (offset 0; this
+    says a half voxel). The shapes cannot tell them apart, so a writer that knows states its
+    placement and :func:`stated_level_transform` checks it instead.
+
+    Absolute, not relative -- and dimensionless. Read as a resize, a 36-voxel z axis
+    at 36, 18, 9, 4, 2, 1 has factors 1, 2, 4, **9, 18, 36** -- not the nominal
+    ``2 ** level``, which claims 8, 16, 32 and compresses every level from 3 up in z.
 
     The translation is the half-voxel offset a downsample introduces: level 0's
     voxel centres sit at 0, 1, 2, ... while level 1's sit at 0.5, 2.5, ... in
@@ -750,6 +754,62 @@ def pyramid_transform(
         translation.append((factor - 1) / 2)
 
     return scale, translation
+
+
+#: Slack for a stated factor against the shapes: a factor written as a float (1/3 of 3) must
+#: not miss the integer it means by a rounding error.
+_LEVEL_FACTOR_SLACK = 1e-9
+
+
+def stated_level_transform(
+    shape_0: Sequence[int],
+    shape_level: Sequence[int],
+    axes: Sequence[AxisSpec],
+    scale: Sequence[float],
+    translation: Sequence[float],
+) -> tuple[list[float], list[float]]:
+    """A pyramid level's placement as its writer states it, checked against what the shapes allow.
+
+    **Why a writer states it at all.** The shapes do not determine the map. 36 -> 4 is a factor
+    of 9 for a resize that stretches four voxels over all 36, and a factor of 8 for a chain of
+    trimmed halvings (36, 18, 9, 4) whose four voxels cover only the first 32 -- which is what
+    a block mean or max with the remainder dropped produces. And a stride (`[::2]`) keeps level-0
+    voxel ``2i`` exactly, so its offset is 0, where a block reduction's voxel sits at the centre
+    of its block, ``(f - 1) / 2``. Only whoever downsampled knows which, so they say it, and
+    :func:`pyramid_transform` remains the answer for a writer that does not.
+
+    ``scale`` and ``translation`` are per axis in array order and absolute -- level voxel ``i``
+    sits at ``scale * i + translation`` in level-0 voxels -- the shape OME-NGFF's multiscales
+    already record per level. What the shapes *can* refute is checked: the level must hold
+    between ``floor`` and ``ceil`` of ``shape_0 / scale`` voxels, which every honest
+    downsampler does (a trim floors, a stride ceils, a resize rounds either way). A translation
+    has no such witness and is taken as stated, finite. A categorical axis is not downsampled,
+    so it takes a scale of exactly 1 and no offset.
+    """
+    rank = len(axes)
+    if not len(shape_0) == len(shape_level) == rank:
+        raise ValueError(f"shape_0 ({len(shape_0)}), shape_level ({len(shape_level)}) and axes ({rank}) must agree in length")
+    if len(scale) != rank or len(translation) != rank:
+        raise ValueError(f"A pyramid level states one scale and one translation per axis, in array order {[axis.name for axis in axes]}: got {len(scale)} scale(s) and {len(translation)} translation(s)")
+
+    for index, axis in enumerate(axes):
+        factor, offset = float(scale[index]), float(translation[index])
+        size_0, size = shape_0[index], shape_level[index]
+        if not math.isfinite(factor) or not math.isfinite(offset):
+            raise ValueError(f"Axis '{axis.name}': a pyramid level's scale and translation must be finite numbers, got scale {scale[index]} and translation {translation[index]}")
+        if factor < 1:
+            raise ValueError(f"Axis '{axis.name}' has scale {factor}: a pyramid level is coarser than level 0 or as fine, never finer, so its scale is at least 1")
+        if axis.type not in _DOWNSAMPLABLE_TYPES and (factor != 1 or offset != 0 or size != size_0):
+            raise ValueError(f"Axis '{axis.name}' is of categorical type {axis.type} and must not be downsampled or shifted: it takes scale 1 and translation 0 and keeps its {size_0} positions")
+        covered = size_0 / factor
+        if not math.floor(covered + _LEVEL_FACTOR_SLACK) <= size <= math.ceil(covered - _LEVEL_FACTOR_SLACK):
+            raise ValueError(
+                f"Axis '{axis.name}': a scale of {factor} takes level 0's {size_0} voxels to {covered:g}, so the level would hold "
+                f"{math.floor(covered + _LEVEL_FACTOR_SLACK)} or {math.ceil(covered - _LEVEL_FACTOR_SLACK)} of them -- but it holds {size}. "
+                "State the factor relative to level 0, not to the level above."
+            )
+
+    return [float(value) for value in scale], [float(value) for value in translation]
 
 
 def lens_shape(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable) -> list[int]:

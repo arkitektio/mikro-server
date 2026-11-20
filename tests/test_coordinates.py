@@ -7,10 +7,11 @@ stack trace. They just put things in the wrong place, plausibly, and stay there
 for years. Every assertion below is aimed at one of those.
 
 The pyramid fixture deliberately uses a **36-voxel z axis**. 36 does not halve
-cleanly: it floors to 18, 9, 4, 2, 1, so the true downsample factors are
-1, 2, 4, **9, 18, 36** while a nominal ``2 ** level`` claims 1, 2, 4, 8, 16, 32.
-With a power-of-two axis the test passes either way and proves nothing -- which is
-exactly why the old bug survived in z while xy looked fine.
+cleanly: it floors to 18, 9, 4, 2, 1, so a level that states no placement -- read
+as a resize -- has factors 1, 2, 4, **9, 18, 36** while a nominal ``2 ** level``
+claims 1, 2, 4, 8, 16, 32. With a power-of-two axis the test passes either way and
+proves nothing. (Trimmed halvings would make 8 right; a writer that built them says
+so, and ``tests/test_stated_pyramid_levels.py`` holds that.)
 
 The intrinsic space is the level-0 **pixel grid**: pyramid scales are
 dimensionless ratios, ROI boxes are in pixels, and physical units only exist on
@@ -104,11 +105,12 @@ def test_extent_preserved():
 
 
 def test_z_factor_is_not_a_power_of_two():
-    """The z scales must follow the real shapes, not the nominal 2**level chain.
+    """A level that states no placement is read as a resize: its z scale follows the shapes, not 2**level.
 
     Level 3's z factor is 36/4 = 9, not 8. A model that stores nominal factors
-    says 8, and every level from 3 up is then compressed in z -- with nothing
-    anywhere to say so.
+    says 8, and a resized level from 3 up is then compressed in z -- with nothing
+    anywhere to say so. (Built by trimmed halvings it *is* 8, which only its writer
+    knows: `stated_level_transform`.)
     """
     z = _AXIS_SPECS.index(next(a for a in _AXIS_SPECS if a.name == "z"))
     expected = [1.0, 2.0, 4.0, 9.0, 18.0, 36.0]
