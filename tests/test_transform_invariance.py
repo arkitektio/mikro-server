@@ -244,6 +244,34 @@ async def test_a_by_dimension_takes_the_weakest_of_its_parts(authenticated_conte
     assert await _classify(authenticated_context, "BY_DIMENSION", parts=parts) == expected
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("parts", "expected"),
+    [
+        # Two similarities side by side are an anisotropic scale of (z, y, x).
+        ([("SCALE", ["z"], {"scale": [2.0]}), ("SCALE", ["y", "x"], {"scale": [0.1, 0.1]})], "AFFINE"),
+        ([("IDENTITY", ["y"], {}), ("SCALE", ["x"], {"scale": [3.0]})], "AFFINE"),
+        ([("AFFINE", ["z"], {"affine": [[2.0, 1.0]]}), ("AFFINE", ["y", "x"], {"affine": [[0.5, 0.0, 0.0], [0.0, 0.5, 0.0]]})], "AFFINE"),
+        # One stretch for every axis of the distance: still a similarity.
+        ([("SCALE", ["z"], {"scale": [2.0]}), ("SCALE", ["y", "x"], {"scale": [2.0, 2.0]})], "SIMILARITY"),
+        ([("IDENTITY", ["z"], {}), ("TRANSLATION", ["y", "x"], {"translation": [1.0, 2.0]})], "ISOMETRY"),
+        # A step in time shares no distance with a step in space.
+        ([("SCALE", ["t"], {"scale": [5.0]}), ("SCALE", ["y", "x"], {"scale": [2.0, 2.0]})], "SIMILARITY"),
+    ],
+)
+async def test_parts_that_each_keep_shape_must_keep_it_together(authenticated_context: HttpContext, parts: list, expected: str):
+    """Each part classed alone reads a split anisotropic scale as a similarity: the parts are compared too."""
+
+    def build() -> str:
+        space = models.CoordinateSystem.objects.create(name="tzyx", organization=authenticated_context.request.organization)
+        graph_logic.create_pixel_axes(space, [seed.axis("t", enums.AxisType.TIME), *SPATIAL_AXES])
+        stored = [{"kind": kind, "input_axes": axes, "output_axes": axes, "params": params} for kind, axes, params in parts]
+        return graph_logic.invariance_of(_edge(authenticated_context, "BY_DIMENSION", parts=stored, input=space, output=space))
+
+    assert await sync_to_async(build)() == expected
+
+
 # --- the path aggregate -----------------------------------------------------------
 
 

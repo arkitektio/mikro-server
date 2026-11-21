@@ -752,8 +752,51 @@ def invariance_of(edge: "models.Transformation") -> str:
     claiming rigidity.
     """
     if edge.kind == enums.TransformKindChoices.BY_DIMENSION.value:
-        return weakest_invariance(_part_invariance(part) for part in edge.parts or [])
+        parts = edge.parts or []
+        weakest = weakest_invariance(_part_invariance(part) for part in parts)
+        if len(parts) > 1 and _INVARIANCE_RANK[weakest] >= _INVARIANCE_RANK[enums.TransformInvariance.SIMILARITY.value] and not _parts_scale_alike(edge, parts):
+            return enums.TransformInvariance.AFFINE.value
+        return weakest
     return _kind_invariance(edge.kind, edge.params or {}, edge.step_pairs)
+
+
+def _part_factors(part: dict) -> dict[str, float]:
+    """The stretch a similarity-or-better part applies to each output axis it produces.
+
+    Read only of parts already classed SIMILARITY or ISOMETRY, so a SCALE's vector or a diagonal
+    AFFINE's diagonal; an IDENTITY, TRANSLATION or ROTATION stretches nothing. A FIELD along time
+    or an index (the one non-matrix part that classes ISOMETRY) states no stretch to compare.
+    """
+    kind, params, outputs = part.get("kind"), part.get("params") or {}, list(part.get("output_axes") or [])
+    if kind == enums.TransformKindChoices.SCALE.value:
+        return {axis: abs(float(factor)) for axis, factor in zip(outputs, params.get("scale") or [], strict=False)}
+    if kind == enums.TransformKindChoices.AFFINE.value and params.get("affine"):
+        return {axis: abs(float(row[index])) for index, (axis, row) in enumerate(zip(outputs, params["affine"], strict=False))}
+    if kind == enums.PartKind.FIELD.value:
+        return {}
+    return dict.fromkeys(outputs, 1.0)
+
+
+def _parts_scale_alike(edge: "models.Transformation", parts: list[dict]) -> bool:
+    """Whether parts that each keep shape also keep it *together*: one stretch per shared distance.
+
+    Each part is classed on its own, so a SCALE z by 2 beside a SCALE (y, x) by 0.1 is two
+    similarities side by side -- and together an anisotropic scale of (z, y, x), which keeps no
+    angle. Axes are compared only within a metric group (`coords.effective_metric_group`): a
+    step in t and a step in x share no distance, so stretching one and not the other changes no
+    angle anyone can measure.
+    """
+    factors: dict[str, float] = {}
+    for part in parts:
+        factors.update(_part_factors(part))
+    if len(set(factors.values())) <= 1:
+        return True
+    groups: dict[str, set[float]] = {}
+    for axis in edge.output.axes.all():
+        group = coords_logic.effective_metric_group(axis.type.value if hasattr(axis.type, "value") else axis.type, axis.metric_group)
+        if group is not None and axis.name in factors:
+            groups.setdefault(group, set()).add(factors[axis.name])
+    return all(len(values) <= 1 for values in groups.values())
 
 
 def _kind_invariance(kind: str, params: dict, steps: tuple[tuple[str, dict], ...] = ()) -> str:
@@ -1174,10 +1217,11 @@ def _assert_epochs_agree(input_system: "models.CoordinateSystem", output_system:
     left, right = input_system.epoch, output_system.epoch
     if left is None or right is None or left == right:
         return
-    has_clock = any(axis.type == enums.AxisTypeChoices.TIME.value for axis in input_system.axes.all()) and any(axis.type == enums.AxisTypeChoices.TIME.value for axis in output_system.axes.all())
+    output_clock = next((axis.name for axis in output_system.axes.all() if axis.type == enums.AxisTypeChoices.TIME.value), None)
+    has_clock = output_clock is not None and any(axis.type == enums.AxisTypeChoices.TIME.value for axis in input_system.axes.all())
     if not has_clock:
         return
-    if _states_an_offset(kind, params or {}):
+    if _states_an_offset(kind, params or {}, clock=output_clock):
         return
     raise ValueError(
         f"'{input_system.name}' and '{output_system.name}' both carry a time axis but anchor it to different instants ({left.isoformat()} and {right.isoformat()}), and a {kind or 'relation'} "
@@ -1194,19 +1238,22 @@ _OFFSET_KINDS = frozenset({"TRANSLATION", "AFFINE", "ROTATION", "BY_DIMENSION", 
 _OFFSET_PART_KINDS = frozenset({"TRANSLATION", "AFFINE", "ROTATION", "FIELD"})
 
 
-def _states_an_offset(kind: str | None, params: dict) -> bool:
+def _states_an_offset(kind: str | None, params: dict, *, clock: str) -> bool:
     """Whether an edge of this kind, with these parameters, says where one zero sits on the other.
 
-    A SEQUENCE (whose steps are checked as they are written) counts; a BY_DIMENSION counts
-    only when one of its parts (handed in as ``params["parts"]``) can state an offset -- a
-    translation, a matrix, or a FIELD, whose values are the instants -- since a scale-only one
-    pins zero to zero exactly as a SCALE does.
+    A SEQUENCE (whose steps are checked as they are written) counts. A BY_DIMENSION is judged
+    by the part that produces the output's time axis ``clock`` (its parts handed in as
+    ``params["parts"]``): that part must be able to state an offset -- a translation, a matrix,
+    or a FIELD, whose values are the instants. Another part's offset says nothing about time: an
+    IDENTITY on ``t`` beside a TRANSLATION on ``x`` still equates the two zeros. A BY_DIMENSION
+    no part of which produces ``clock`` says nothing about time at all, so it equates nothing.
     """
     kind = getattr(kind, "value", kind)
     if kind not in _OFFSET_KINDS:
         return False
     if kind == "BY_DIMENSION":
-        return any(part.get("kind") in _OFFSET_PART_KINDS for part in params.get("parts") or [])
+        timed = [part for part in params.get("parts") or [] if clock in (part.get("output_axes") or [])]
+        return not timed or all(part.get("kind") in _OFFSET_PART_KINDS for part in timed)
     return True
 
 

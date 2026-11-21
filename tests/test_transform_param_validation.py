@@ -974,6 +974,33 @@ async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offs
             input_system=morning, output_system=scaled, kind="BY_DIMENSION", parts=[{"kind": "SCALE", "input_axes": ["t"], "output_axes": ["t"], "scale": [1.000012]}], ctx=ctx
         )
 
+    # An offset on another axis is not an offset on the clock: the part producing `t` decides.
+    def track(name: str, epoch) -> models.CoordinateSystem:
+        made = models.CoordinateSystem.objects.create(name=name, epoch=epoch, creator=ctx.user, organization=ctx.organization)
+        graph_logic.create_physical_axes(made, [seed.physical_axis("t", enums.AxisType.TIME, "second"), seed.physical_axis("x", enums.AxisType.SPACE, "micrometer")])
+        return made
+
+    early, late = await sync_to_async(track)("EarlyTrack", nine), await sync_to_async(track)("LateTrack", eleven)
+    with pytest.raises(ValueError, match="states no offset"):
+        await sync_to_async(graph_logic.build_registration_edge)(
+            input_system=early,
+            output_system=late,
+            kind="BY_DIMENSION",
+            parts=[{"kind": "IDENTITY", "input_axes": ["t"], "output_axes": ["t"]}, {"kind": "TRANSLATION", "input_axes": ["x"], "output_axes": ["x"], "translation": [5.0]}],
+            ctx=ctx,
+        )
+    await sync_to_async(graph_logic.build_registration_edge)(
+        input_system=early,
+        output_system=late,
+        kind="BY_DIMENSION",
+        parts=[{"kind": "TRANSLATION", "input_axes": ["t"], "output_axes": ["t"], "translation": [-7200.0]}, {"kind": "IDENTITY", "input_axes": ["x"], "output_axes": ["x"]}],
+        ctx=ctx,
+    )
+    # A BY_DIMENSION that maps no time says nothing about either clock.
+    await sync_to_async(graph_logic.build_registration_edge)(
+        input_system=early, output_system=late, kind="BY_DIMENSION", parts=[{"kind": "IDENTITY", "input_axes": ["x"], "output_axes": ["x"]}], ctx=ctx
+    )
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
