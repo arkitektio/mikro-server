@@ -89,6 +89,11 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
     )
 
     created_at = models.DateTimeField(auto_now_add=True, help_text="The time this table dataset was created")
+    row_count = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many rows the parquet holds, read off its footer (never by scanning). Null until the footer was read: `createTableDataset` reads it, `record_table_stats` reads it for older tables",
+    )
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created this table dataset")
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this table dataset belongs to")
     created_through = models.ForeignKey(
@@ -239,6 +244,11 @@ class Column(models.Model):
         blank=True,
         help_text="(long form) The CHANNEL coordinate columns this column's value changes along. A per-cell value in a (cell, c) table varies over nothing and is counted once per cell; a per-channel one varies over c. Null when undeclared, read as every CHANNEL coordinate",
     )
+    # The footer's facts (`core.logic.table_stats`): read, never scanned. Null until read, and
+    # for a column whose statistics are not numbers or that a row group states none for.
+    value_min = models.FloatField(null=True, blank=True, help_text="The smallest value in the column, from the parquet footer. Null for a non-numeric column, or until the footer was read")
+    value_max = models.FloatField(null=True, blank=True, help_text="The largest value in the column, from the parquet footer. Null for a non-numeric column, or until the footer was read")
+    null_count = models.BigIntegerField(null=True, blank=True, help_text="How many of the column's values are null, from the parquet footer. Null until the footer was read")
 
     class Meta:
         """Meta options for the table column."""
@@ -264,3 +274,25 @@ class Column(models.Model):
     def __str__(self) -> str:
         """The column's name and role."""
         return f"{self.name} ({self.role})"
+
+
+class ColumnSummary(models.Model):
+    """N:1 Spoke (Column Value Distribution): what a client computed over one column, pinned to an anchor of its table.
+
+    The table twin of ``ValueHistogram``. The server never scans a table's rows, so a
+    histogram or the distinct values of a column are computed by whoever holds an access grant
+    -- once -- and pinned here, where every later reader finds them. Pinned to an anchor like
+    every other spoke: the global anchor (``{}``) for the whole table, an anchor at ``t: 3`` for
+    the rows at that time. A parquet is immutable, so a summary never goes stale.
+    """
+
+    anchor = models.ForeignKey("CoordinateAnchor", related_name="column_summaries", on_delete=models.CASCADE)
+    column = models.ForeignKey(Column, related_name="summaries", on_delete=models.CASCADE, help_text="The column summarised")
+    histogram = models.JSONField(default=list, help_text="The counts per bin (y values)")
+    bins = models.JSONField(default=list, help_text="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
+    distinct_values = models.JSONField(null=True, blank=True, help_text="The column's distinct values, as many as the client listed, most frequent first. Null when not computed")
+    distinct_count = models.BigIntegerField(null=True, blank=True, help_text="How many distinct values the column holds. Null when not computed")
+    created_at = models.DateTimeField(auto_now=True, help_text="When this summary was last pinned")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["anchor", "column"], name="one_summary_per_anchor_column")]

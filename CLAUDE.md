@@ -232,9 +232,9 @@ What this service declares:
   positions and its cut give it (`Lens.name`, announcing nothing); the
   database refuses duplicates since the lens tables were split, so it is a guard for rows
   written by hand. It changes nothing the second time and reports what it leaves in place.
-- Other jobs: `purge_orphaned_stores` (from `arkitekt_datalayer`), `respec_datasets`, `backfill_parquet_schemas`. The backfill is safe
-  beside a serving release and reports what is still owed; it is not in the setup, so an
-  operator runs it. `prune_organizations` (from arkitekt-service, `-- --only <org> --yes` or
+- Other jobs: `purge_orphaned_stores` (from `arkitekt_datalayer`), `respec_datasets`, `backfill_parquet_schemas`,
+  `record_table_stats`. The two backfills are safe beside a serving release and report what is
+  still owed; they read S3, so they are not in the setup and an operator runs them. `prune_organizations` (from arkitekt-service, `-- --only <org> --yes` or
   `--keep`) deletes everything organizations own -- datasets, lenses, shapes, metrics, stores
   and their bytes at once -- and keeps the organizations; a metric it deletes gets its DELETED
   feed entry from the `pruning` signal (`metric.logic.record_pruned`), so kraph hears of it.

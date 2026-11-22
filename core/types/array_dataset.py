@@ -623,6 +623,9 @@ class CoordinateAnchor:
     # several axes -- neither of which the anchor's coordinates can pin.
     phasor_histograms: list[PhasorHistogram]
     phasor_calibrations: list[PhasorCalibration]
+    column_summaries: list[Annotated["ColumnSummary", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(
+        description="(table) What clients computed over the table's columns at this coordinate: one summary per column summarised"
+    )
 
     @kante.django_field(
         description=(

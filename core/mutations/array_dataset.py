@@ -70,6 +70,41 @@ class ValueHistogramInput:
     p99: float | None = strawberry.field(default=None, description="The 99th percentile pixel value of the histogram")
 
 
+#: One distinct value of a column, as the parquet holds it.
+DistinctValue = str | float | int | bool | None
+
+
+class ColumnSummaryInputModel(BaseModel):
+    column: str = Field(..., description="The name of the column summarised")
+    histogram: list[float] = Field(default_factory=list, description="The counts per bin (y values)")
+    bins: list[float] = Field(default_factory=list, description="The bins (x values): their edges, one more than the counts, or their centres, as many")
+    distinct_values: list[DistinctValue] | None = Field(None, description="The distinct values, most frequent first")
+    distinct_count: int | None = Field(None, ge=0, description="How many distinct values the column holds")
+
+    @model_validator(mode="after")
+    def _bins_fit_the_counts(self) -> "ColumnSummaryInputModel":
+        if self.histogram and len(self.bins) not in (len(self.histogram), len(self.histogram) + 1):
+            raise ValueError(
+                f"A histogram of {len(self.histogram)} counts has {len(self.histogram)} bin centres or {len(self.histogram) + 1} bin edges, but `bins` has {len(self.bins)} entries."
+            )
+        return self
+
+
+@kante.pydantic_input(
+    ColumnSummaryInputModel,
+    description=(
+        "What a client computed over one column of a table, pinned to an anchor of it so every later reader finds it: a histogram, the distinct values. The server never "
+        "scans a table's rows; whoever holds an access grant computes this once"
+    ),
+)
+class ColumnSummaryInput:
+    column: str = strawberry.field(description="The name of the column summarised. Must be a column of the anchor's table")
+    histogram: list[float] = strawberry.field(default_factory=list, description="The counts per bin (y values)")
+    bins: list[float] = strawberry.field(default_factory=list, description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
+    distinct_values: scalars.Any | None = strawberry.field(default=None, description="The column's distinct values as a JSON list, most frequent first, as many as you listed")
+    distinct_count: int | None = strawberry.field(default=None, description="How many distinct values the column holds")
+
+
 class PhasorHistogramInputModel(BaseModel):
     axis: str = Field(..., description="The axis the phasor was taken over")
     counts: list[float] = Field(..., description="The flattened bins x bins density")
@@ -159,6 +194,7 @@ class CoordinateAnchorInputModel(BaseModel):
     phasor_histogram: PhasorHistogramInputModel | None = None
     phasor_calibration: PhasorCalibrationInputModel | None = None
     acquisition_window: AcquisitionWindowInputModel | None = None
+    column_summaries: list[ColumnSummaryInputModel] | None = None
 
 
 @kante.pydantic_input(CoordinateAnchorInputModel, description="Input type for a coordinate anchor, which specifies a list of dimension anchors to anchor to")
@@ -172,6 +208,10 @@ class CoordinateAnchorInput:
     phasor_histogram: PhasorHistogramInput | None = strawberry.field(default=None, description="Optional phasor distribution to associate with the coordinate anchor, for a converter that already computed one. It is more usually attached after ingest with createPhasorHistogram, since computing it means reading the cube")
     phasor_calibration: PhasorCalibrationInput | None = strawberry.field(default=None, description="Optional instrument-response correction to associate with the coordinate anchor, taking a raw phasor at this coordinate to a calibrated one")
     acquisition_window: AcquisitionWindowInput | None = strawberry.field(default=None, description="Optional acquisition window: when the data at these coordinates was acquired. An anchor holding over the whole dataset gives its span; one pinned to a frame gives that frame's. The dataset's `acquisitionStart`/`acquisitionEnd` are derived from these")
+    column_summaries: list[ColumnSummaryInput] | None = strawberry.field(
+        default=None,
+        description="(table only) What you computed over columns of the table, one entry per column: a histogram, the distinct values. Pinned to the global anchor (no axis anchors) it summarises the whole table; a summary stated again for a column replaces the earlier one",
+    )
 
 
 _LEVEL_SCALE_DESCRIPTION = (
@@ -717,6 +757,28 @@ def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnc
 
     if input.phasor_calibration:
         _write_phasor_calibration(anchor, input.phasor_calibration, axis_specs or [])
+
+    if input.column_summaries:
+        _write_column_summaries(anchor, input.column_summaries)
+
+
+def _write_column_summaries(anchor: "models.CoordinateAnchor", summaries: list[ColumnSummaryInputModel]) -> None:
+    """Pin each column summary to ``anchor``, replacing one already pinned for that column."""
+    if anchor.table_id is None:
+        raise ValueError("Column summaries summarise a table's columns, so they pin to a table's anchor; this anchor is an array's or a sparse dataset's.")
+    columns = {column.name: column for column in models.Column.objects.filter(table_id=anchor.table_id)}
+    named = [summary.column for summary in summaries]
+    if len(set(named)) != len(named):
+        raise ValueError(f"A column is summarised once per anchor, but {named} repeats one.")
+    unknown = sorted(set(named) - set(columns))
+    if unknown:
+        raise ValueError(f"{unknown} {'is' if len(unknown) == 1 else 'are'} not a column of this table; its columns are {sorted(columns)}.")
+    for summary in summaries:
+        models.ColumnSummary.objects.update_or_create(
+            anchor=anchor,
+            column=columns[summary.column],
+            defaults={"histogram": summary.histogram, "bins": summary.bins, "distinct_values": summary.distinct_values, "distinct_count": summary.distinct_count},
+        )
 
 
 class CreatePhasorHistogramInputModel(PhasorHistogramInputModel):

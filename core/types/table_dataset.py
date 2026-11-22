@@ -75,6 +75,47 @@ class Column:
         )
     )
 
+    @kante.django_field(
+        only=["value_min", "value_max", "null_count"],
+        description="What the parquet footer says of this column: its range and how many values are null. Read once, never by scanning the rows. Null until the footer was read",
+    )
+    def stats(self, info: Info) -> Optional["ColumnStats"]:
+        """The footer's facts, when they were read."""
+        if self.value_min is None and self.value_max is None and self.null_count is None:
+            return None
+        return ColumnStats(min=self.value_min, max=self.value_max, null_count=self.null_count)
+
+    @kante.django_field(
+        description=(
+            "What a client computed over this column for the whole table -- its histogram, its distinct values -- pinned to the table's global anchor (`createCoordinateAnchor` "
+            "with `columnSummaries`). Null until someone computed it. A summary at a narrower coordinate is on that anchor's `columnSummaries`"
+        )
+    )
+    def summary(self, info: Info) -> Optional["ColumnSummary"]:
+        """The summary on the table's global anchor."""
+        return models.ColumnSummary.objects.filter(column=self, anchor__table_id=self.table_id, anchor__coordinates={}).first()
+
+
+@strawberry.type(description="What a parquet footer says of one column, read without scanning a row")
+class ColumnStats:
+    min: float | None = strawberry.field(description="The smallest value. Null for a column whose statistics are not numbers, or that a row group states none for")
+    max: float | None = strawberry.field(description="The largest value. Null for a column whose statistics are not numbers, or that a row group states none for")
+    null_count: int | None = strawberry.field(description="How many values are null. Null where a row group does not say")
+
+
+@kante.django_type(
+    models.ColumnSummary,
+    description="What a client computed over one column of a table and pinned to an anchor of it: a histogram, the distinct values. The table twin of `ValueHistogram`",
+)
+class ColumnSummary:
+    id: auto
+    column: Column = kante.django_field(description="The column summarised")
+    histogram: list[float] = kante.django_field(description="The counts per bin (y values)")
+    bins: list[float] = kante.django_field(description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
+    distinct_values: JSON | None = kante.django_field(description="The distinct values as a JSON list, most frequent first, as many as were listed. Null when not computed")
+    distinct_count: int | None = kante.django_field(description="How many distinct values the column holds. Null when not computed")
+    created_at: datetime.datetime = kante.django_field(description="When this summary was last pinned")
+
 
 #: The structure a keyed row is, by the container keying it. A mask label has none yet.
 _KEY_STRUCTURES: dict[type, str] = {models.MeshCollection: "@mikro/meshobject"}
@@ -185,6 +226,7 @@ class TableDataset(OrgScoped):
     name: auto
     description: str | None
     created_at: datetime.datetime = kante.django_field(description="When this table dataset was created")
+    row_count: int | None = kante.django_field(description="How many rows the parquet holds, read off its footer -- never by scanning. Null until the footer was read")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(
         description="Every change made to this table: who created it, and every subsequent rename or redescription, attributed to the client, user and task it happened under. Only `name` and `description` can change -- the store, the columns and the coordinate system derived from them are fixed at creation"
     )

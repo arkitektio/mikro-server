@@ -47,6 +47,7 @@ from .coords import (
 from .table_dataset import (
     TableDataset,
     Column,
+    ColumnSummary,
 )
 from .sparse_dataset import (
     SparseDataset,
@@ -90,6 +91,7 @@ from .array_dataset import (
 )
 
 __all__ = [
+    "ColumnSummary",
     "anchors_in_windows",
     # datalayer stores (re-exported for backwards compatibility)
     "ZarrStore",

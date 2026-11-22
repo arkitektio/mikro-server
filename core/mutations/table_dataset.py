@@ -25,6 +25,7 @@ from core.creation import CreationContext
 from core.inputs.file_link import SourceFileInput, SourceFileInputModel
 from core.inputs.coords import AxisInputModel, DerivedFromInput, DerivedFromSpec
 from core.inputs.identification import IdentificationInput, IdentificationSpec
+from core.logic import table_stats
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
@@ -568,6 +569,9 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
         # The lens selecting all of it, from the start: the handle an action is handed for the table.
         coordinate_system_logic.whole_lens(dataset)
 
+    # Outside the transaction: a footer read is an S3 round trip, and a table whose footer
+    # cannot be read now is still a table (`record_table_stats` reads it later).
+    table_stats.record_footer(dataset)
     return dataset
 
 
