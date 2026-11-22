@@ -1289,6 +1289,9 @@ class Scene(Described):
         help_text="The viewer background, as RGBA. Null to let the viewer use its own",
     )
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    # Nullable: a scene made before the column existed has the time its first history row
+    # records (migration 0014), and none when it has no such row -- never the migration's.
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, help_text="The time this scene was created")
 
     provenance = ProvenanceField()
 

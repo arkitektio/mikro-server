@@ -5,8 +5,8 @@ One per root list the UI has a page for, built like ``ArrayDatasetStats`` (see
 ``scope_queryset`` the lists go through, so a count is the length of its page). Each
 takes its list's filter, so ``filters: {createdAfter: ...}`` is "new this week".
 
-Annotations and scenes carry no timestamp: they count, but have no series and nothing to
-narrow "new" by.
+Annotations and scenes have carried a timestamp since migration 0013; the ones made before it
+have the time their history first records, or none, and a series leaves those out.
 """
 
 from core import filters, models
@@ -59,11 +59,13 @@ FileStats, FileStatsResolver = create_stats_type(
 AnnotationStats, AnnotationStatsResolver = create_stats_type(
     models.Annotation,
     allowed_fields={"pk": "id"},
+    allowed_datetime_fields=CREATED_AT,
     filters=filters.AnnotationFilter,
 )
 
 SceneStats, SceneStatsResolver = create_stats_type(
     models.Scene,
     allowed_fields={"pk": "id"},
+    allowed_datetime_fields=CREATED_AT,
     filters=filters.SceneFilter,
 )

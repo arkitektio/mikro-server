@@ -52,6 +52,7 @@ class DataArrayOrder:
 class AnnotationOrder:
     name: auto
     id: auto
+    created_at: auto
 
 
 @strawberry_django.order_type(models.AnnotationCollection)
@@ -77,6 +78,7 @@ class LayerOrder:
 class SceneOrder:
     name: auto
     id: auto
+    created_at: auto
 
 
 @strawberry_django.order_type(KoherentTask)

@@ -710,7 +710,7 @@ class AnnotationCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
 
 
 @kante.filter_type(models.Annotation)
-class AnnotationFilter(IdsFilterMixin):
+class AnnotationFilter(IdsFilterMixin, CreatedAtFilterMixin):
     id: auto
     name: Optional[FilterLookup[str]]
     description: Optional[FilterLookup[str]]
@@ -986,7 +986,7 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
 
 
 @kante.filter_type(models.Scene)
-class SceneFilter(IdsFilterMixin):
+class SceneFilter(IdsFilterMixin, CreatedAtFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(self, info: Info, queryset: QuerySet, value: list[DescriptorConstraintInput], prefix: str) -> tuple[QuerySet, Q]:
         return descriptor_filter.requires(models.Scene, queryset, value, prefix)

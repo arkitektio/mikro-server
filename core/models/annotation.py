@@ -267,6 +267,10 @@ class Annotation(Described):
         related_name="assigned_%(class)ss",
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
+    # Nullable: a shape drawn before the column existed has the time its first history row
+    # records (migration 0014), and none when it has no such row (a bulk draw writes none) --
+    # never the migration's.
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, help_text="The time this annotation was drawn")
 
     provenance = ProvenanceField()
 

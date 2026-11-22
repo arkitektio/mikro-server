@@ -676,6 +676,7 @@ class Scene(OrgScoped, Visualization):
 
     id: auto
     name: auto
+    created_at: datetime.datetime | None = kante.django_field(description="When this scene was created. Null for a scene made before the time was kept whose history records none")
     layers: List["Layer"] = kante.django_field(
         filters=filters.LayerFilter,
         ordering=order.LayerOrder,
@@ -1894,6 +1895,7 @@ class Annotation:
     descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
     # Nullable: the creator FK is SET_NULL, so a shape outlives the user who drew it.
     creator: User | None = kante.django_field(description="The user that drew this annotation, or null when that user is gone or a client created it without one")
+    created_at: datetime.datetime | None = kante.django_field(description="When this annotation was drawn. Null for a shape drawn before the time was kept whose history records none")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation")
 
     @kante.django_field(
