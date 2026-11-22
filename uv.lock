@@ -124,7 +124,7 @@ wheels = [
 
 [[package]]
 name = "arkitekt-service"
-version = "9.6.0"
+version = "9.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -135,9 +135,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/6e/babd2610bd2ffc018309bcd73ccc00c6ae3c6c16c6c03192d95da0512f6f/arkitekt_service-9.6.0.tar.gz", hash = "sha256:67bdef6520d98be95923f4292cb32e9312da811fa841ffb3da91d9835c9e8e6f", size = 95237, upload-time = "2026-11-21T12:24:53.061Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/c4/e02d31aa980de86b656174f5a450f62f1224bcbeada0733782c689ef3ea5/arkitekt_service-9.7.0.tar.gz", hash = "sha256:2b489d9372a2eff9a5af1c423792dfa2275eb5a5713689080f554f895143f992", size = 96143, upload-time = "2026-11-22T11:36:14.303Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/f1/ca4276114366504b67618b6c94392630232be562ef43232ce80053c06e70/arkitekt_service-9.6.0-py3-none-any.whl", hash = "sha256:1da0e039ca6dccc012de7f5dcce1bcb601988cf399e391f6a99c6ad85d0f559b", size = 121044, upload-time = "2026-11-21T12:24:51.938Z" },
+    { url = "https://files.pythonhosted.org/packages/72/94/cd3d054262e0c2b539e151863b460b45bc2fee9d0744408655e80cb17d48/arkitekt_service-9.7.0-py3-none-any.whl", hash = "sha256:238bc2d02de05541e4452e70c0d07842ebff35ead1a8252f53010639d753232b", size = 122047, upload-time = "2026-11-22T11:36:13.226Z" },
 ]
 
 [package.optional-dependencies]
@@ -1282,7 +1282,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
     { name = "arkitekt-datalayer", specifier = ">=3.0.0" },
-    { name = "arkitekt-service", extras = ["telemetry"], specifier = ">=9.6.0" },
+    { name = "arkitekt-service", extras = ["telemetry"], specifier = ">=9.7.0" },
     { name = "authentikate", specifier = ">=6.1" },
     { name = "boto3", specifier = ">=1.38.9" },
     { name = "channels-redis", specifier = ">=4.1.0,<5" },

@@ -145,6 +145,7 @@ class Query:
 
     collaborations: list[collaboration_types.Collaboration] = field(resolver=collaboration_api.collaborations, description="List the organization's collaborations: what a guest granted one sees of it (a guest: the collaborations granted to them)")
     collaboration: collaboration_types.Collaboration = field(resolver=collaboration_api.collaboration, description="Get a single collaboration by ID")
+    collaborations_stats: collaboration_types.CollaborationStats = field(resolver=collaboration_api.collaborations_stats, description="Count the collaborations `collaborations` lists, and the objects in them")
 
     charts: list[chart_types.Chart] = field(description="List charts (compositions of data laid out along one metric axis)")
     chart: chart_types.Chart = field(description="Get a single chart by ID")
