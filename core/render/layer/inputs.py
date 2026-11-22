@@ -38,6 +38,24 @@ class LookupStopInputModel(BaseModel):
         return value
 
 
+class ColorStopInputModel(BaseModel):
+    position: float
+    color: list[int]
+
+    @field_validator("position")
+    @classmethod
+    def _position_is_normalized(cls, position: float) -> float:
+        if not 0.0 <= position <= 1.0:
+            raise ValueError(f"A colour stop sits on the normalized 0..1 the colormap is indexed with, so its `position` runs from 0 to 1, but got {position}.")
+        return position
+
+    @field_validator("color")
+    @classmethod
+    def _color_is_rgba(cls, color: list[int]) -> list[int]:
+        assert_rgba(color, field="color", maximum=255)
+        return color
+
+
 class TransferFunctionInputModel(BaseModel):
     clim_min: float | None = None
     clim_max: float | None = None
@@ -47,6 +65,20 @@ class TransferFunctionInputModel(BaseModel):
     opacity: float | None = None
     invert: bool | None = None
     stops: list[LookupStopInputModel] | None = None
+    color_stops: list[ColorStopInputModel] | None = None
+
+    @field_validator("color_stops")
+    @classmethod
+    def _color_stops_draw_a_gradient(cls, stops: list[ColorStopInputModel] | None) -> list[ColorStopInputModel] | None:
+        # The same two rules as `stops`: a gradient needs an interval, and runs forwards.
+        if stops is None:
+            return stops
+        if len(stops) < 2:
+            raise ValueError(f"`colorStops` is a colour gradient, so it is drawn from at least two stops, but got {len(stops)}. Omit `colorStops` to use `colormap` or `color` instead.")
+        positions = [stop.position for stop in stops]
+        if positions != sorted(positions):
+            raise ValueError(f"`colorStops` runs from 0 to 1, so its positions cannot go backwards, but got {positions}.")
+        return stops
 
     @field_validator("stops")
     @classmethod
@@ -318,6 +350,13 @@ class LookupStopInput:
 
 
 @prose_errors
+@pydantic.input(ColorStopInputModel, description="One stop of a colour gradient: a position on the normalized 0..1 the colormap is indexed with, and the RGBA colour there")
+class ColorStopInput:
+    position: float = strawberry.field(description="Where the stop sits, from 0 (the bottom of the mapping) to 1 (the top)")
+    color: list[int] = strawberry.field(description="The colour at this stop, as RGBA: four components, each 0..255")
+
+
+@prose_errors
 @pydantic.input(TransferFunctionInputModel, description="Transfer-function settings for a channel source in a layer render graph")
 class TransferFunctionInput:
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
@@ -328,6 +367,7 @@ class TransferFunctionInput:
     opacity: float | None = strawberry.field(default=None, description="Per-channel opacity within the layer, from 0 (transparent) to 1 (opaque)")
     invert: bool | None = strawberry.field(default=None, description="Whether the contrast mapping is inverted")
     stops: list[LookupStopInput] | None = strawberry.field(default=None, description="An explicit intensity transfer curve, as at least two control points ordered by position. When given, the curve *is* the transfer: it supersedes `gamma` and the `climMin`/`climMax` window, which are the one-parameter and two-point special cases of the same mapping. Null uses those instead")
+    color_stops: list[ColorStopInput] | None = strawberry.field(default=None, description="A custom colour gradient, as at least two stops ordered by position. When given it is the colormap: it supersedes `colormap` and `color`. Null uses those instead")
 
 
 @prose_errors

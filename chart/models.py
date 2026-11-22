@@ -103,6 +103,9 @@ class ChartLayer(models.Model):
     line_width = models.FloatField(null=True, blank=True, help_text="(trace/series/points/distribution) How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
     marker_size = models.FloatField(null=True, blank=True, help_text="(trace/series/points) How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
     marker_shape = TextChoicesField(choices_enum=enums.ChartMarkerShapeChoices, null=True, blank=True, help_text="(trace/series/points) The symbol a marker is drawn as. Null to let the viewer choose (a circle)")
+    # --- value range (every kind) ---
+    value_min = models.FloatField(null=True, blank=True, help_text="The lowest value the layer's value scale shows, in the layer's own values. Null lets the viewer scale to the data")
+    value_max = models.FloatField(null=True, blank=True, help_text="The highest value the layer's value scale shows, in the layer's own values. Null lets the viewer scale to the data")
 
 
     class Meta:

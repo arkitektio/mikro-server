@@ -2155,6 +2155,7 @@ class TrackLayer(Layer):
         return self.lens.table_dataset
     color_by_column: str | None
     line_width: float | None
+    tail_window: int | None = kante.django_field(description="How many timepoints of each track's past are drawn behind the current one; 0 draws the whole track. Null lets the viewer choose")
     colormap: enums.ColorMap | None
 
     @kante.django_field(description="The dataset's TRACK_ID column, which groups rows into tracks")

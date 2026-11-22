@@ -3,7 +3,7 @@ import strawberry
 
 from core import types, models, enums
 import kante
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from core.logic import attribute_plans as attribute_plans_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
@@ -276,6 +276,7 @@ class UpdateTrackLayerInputModel(BaseModel):
     id: str
     color_by_column: str | None = None
     line_width: float | None = None
+    tail_window: int | None = Field(default=None, ge=0)
     colormap: enums.ColorMap | None = None
     blending: enums.Blending | None = None
     opacity: Alpha | None = None
@@ -289,6 +290,7 @@ class UpdateTrackLayerInput:
     id: strawberry.ID = strawberry.field(description="The ID of the track layer to update")
     color_by_column: str | None = strawberry.field(default=None, description="The measure column used to color tracks (used with colormap). A per-layer display choice among the dataset's columns -- never one of the coordinate or TRACK_ID columns, which the dataset declares by role")
     line_width: float | None = strawberry.field(default=None, description="The width of the track lines in scene units. A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
+    tail_window: int | None = strawberry.field(default=None, description="How many timepoints of each track's past to draw behind the current one; 0 draws the whole track")
     colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap used to color tracks by their color_by_column")
     blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
     opacity: float | None = strawberry.field(default=None, description="Layer alpha, from 0 to 1")
@@ -313,7 +315,7 @@ def update_track_layer(info: Info, input: UpdateTrackLayerInput) -> types.TrackL
     if layer.kind != enums.LayerKind.TRACK.value:
         raise ValueError(f"Layer {layer.pk} is a {layer.kind} layer, not a track layer, so it has no line width or track colouring to set.")
 
-    for field in ("color_by_column", "line_width", "colormap", "blending", "opacity", "visible", "order"):
+    for field in ("color_by_column", "line_width", "tail_window", "colormap", "blending", "opacity", "visible", "order"):
         value = getattr(model, field)
         if value is not None:
             setattr(layer, field, value)

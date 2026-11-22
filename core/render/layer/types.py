@@ -31,6 +31,12 @@ class LookupStop:
     value: float = strawberry.field(description="The normalized value that intensity maps to, from 0 to 1. This is what the colormap is indexed with")
 
 
+@pydantic.type(models.ColorStopModel, description="One stop of a colour gradient: a position on the normalized 0..1 the colormap is indexed with, and the RGBA colour there")
+class ColorStop:
+    position: float = strawberry.field(description="Where the stop sits, from 0 (the bottom of the mapping) to 1 (the top)")
+    color: list[int] = strawberry.field(description="The colour at this stop, as RGBA, each component 0..255")
+
+
 @pydantic.type(models.TransferFunctionModel, description="How a single channel's intensities are mapped to color before compositing")
 class TransferFunction:
     clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
@@ -41,6 +47,7 @@ class TransferFunction:
     opacity: float | None = strawberry.field(default=None, description="Per-channel opacity within the layer (0..1)")
     invert: bool | None = strawberry.field(default=None, description="Whether the contrast mapping is inverted")
     stops: list[LookupStop] | None = strawberry.field(default=None, description="An explicit intensity transfer curve, ordered by position. When present, the curve is the transfer and supersedes `gamma` and the `climMin`/`climMax` window -- which are the one-parameter and two-point special cases of it. Null means there is no curve, and those apply as they always did")
+    color_stops: list[ColorStop] | None = strawberry.field(default=None, description="A custom colour gradient, ordered by position. When present it is the colormap and supersedes `colormap` and `color`. Null means the colormap (or `color`) applies")
 
 
 _JOIN_PATH_DESCRIPTION = (

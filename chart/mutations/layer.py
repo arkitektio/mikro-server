@@ -9,7 +9,7 @@ import kante
 import strawberry
 from django.db import transaction
 from kante.types import Info
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from chart import enums, models, types
 from chart.logic import chart as chart_logic
@@ -35,6 +35,9 @@ class _Style(BaseModel):
     line_width: float | None = Field(default=None, gt=0)
     marker_size: float | None = Field(default=None, gt=0)
     marker_shape: enums.ChartMarkerShape | None = None
+    value_min: float | None = None
+    value_max: float | None = None
+    autoscale: bool | None = None
 
     @field_validator("color")
     @classmethod
@@ -43,13 +46,24 @@ class _Style(BaseModel):
             assert_rgba(color, field="color")
         return color
 
+    @model_validator(mode="after")
+    def _a_range_is_ordered(self) -> "_Style":
+        if self.autoscale and (self.value_min is not None or self.value_max is not None):
+            raise ValueError("`autoscale` forgets the stored value range; name a range or ask for autoscale, not both.")
+        if self.value_min is not None and self.value_max is not None and self.value_min >= self.value_max:
+            raise ValueError(f"The value range runs from its minimum to its maximum: {self.value_min} is not below {self.value_max}.")
+        return self
+
 
 def _settings(model: _Style) -> dict[str, object]:
     """The style a caller actually named, as column values."""
     named = {field: getattr(model, field) for field in ("name", "visible", "order", "opacity", "color") if getattr(model, field) is not None}
-    for field in ("line_width", "marker_size"):
+    for field in ("line_width", "marker_size", "value_min", "value_max"):
         if getattr(model, field) is not None:
             named[field] = getattr(model, field)
+    if model.autoscale:
+        named["value_min"] = None
+        named["value_max"] = None
     for field in ("mark", "marker_shape"):
         value = getattr(model, field)
         if value is not None:
@@ -66,6 +80,9 @@ _MARK = "How the values are drawn: a line, markers, both, or steps. A look, not 
 _LINE_WIDTH = "How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half -- never pixels. Omit to let the viewer choose"
 _MARKER_SIZE = "How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half -- never pixels. Omit to let the viewer choose"
 _MARKER_SHAPE = "The symbol a marker is drawn as: CIRCLE, SQUARE, TRIANGLE, DIAMOND, CROSS or PLUS. Omit to let the viewer choose (a circle)"
+_VALUE_MIN = "The lowest value the layer's value scale shows, in its own values. Omit to leave it (or, creating, to let the viewer scale to the data)"
+_VALUE_MAX = "The highest value the layer's value scale shows, in its own values. Above `valueMin` when both are given. Omit to leave it (or, creating, to let the viewer scale to the data)"
+_AUTOSCALE = "True forgets the stored value range, so the viewer scales to the data again. Not together with `valueMin` or `valueMax`"
 
 
 # --- trace --------------------------------------------------------------------
@@ -99,6 +116,8 @@ class CreateTraceChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
 
 
 def create_trace_chart_layer(info: Info, input: CreateTraceChartLayerInput) -> types.TraceChartLayer:
@@ -144,6 +163,8 @@ class CreateSeriesChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
 
 
 def create_series_chart_layer(info: Info, input: CreateSeriesChartLayerInput) -> types.SeriesChartLayer:
@@ -244,6 +265,8 @@ class CreatePointsChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
 
 
 def create_points_chart_layer(info: Info, input: CreatePointsChartLayerInput) -> types.PointsChartLayer:
@@ -330,6 +353,9 @@ class UpdateChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
+    autoscale: bool | None = strawberry.field(default=None, description=_AUTOSCALE)
 
 
 #: The settings that describe how a line of values is drawn, which marks do not have.
@@ -410,6 +436,9 @@ class UpdateTraceChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
+    autoscale: bool | None = strawberry.field(default=None, description=_AUTOSCALE)
 
 
 def update_trace_chart_layer(info: Info, input: UpdateTraceChartLayerInput) -> types.TraceChartLayer:
@@ -440,6 +469,9 @@ class UpdateSeriesChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
+    autoscale: bool | None = strawberry.field(default=None, description=_AUTOSCALE)
 
 
 def update_series_chart_layer(info: Info, input: UpdateSeriesChartLayerInput) -> types.SeriesChartLayer:
@@ -476,6 +508,9 @@ class UpdatePointsChartLayerInput:
     line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH)
     marker_size: float | None = strawberry.field(default=None, description=_MARKER_SIZE)
     marker_shape: enums.ChartMarkerShape | None = strawberry.field(default=None, description=_MARKER_SHAPE)
+    value_min: float | None = strawberry.field(default=None, description=_VALUE_MIN)
+    value_max: float | None = strawberry.field(default=None, description=_VALUE_MAX)
+    autoscale: bool | None = strawberry.field(default=None, description=_AUTOSCALE)
 
 
 def update_points_chart_layer(info: Info, input: UpdatePointsChartLayerInput) -> types.PointsChartLayer:

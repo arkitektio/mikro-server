@@ -98,6 +98,8 @@ class ChartLayer:
     order: int
     opacity: float
     color: list[float] | None = kante.django_field(description="The colour the layer is drawn in, as RGBA. Null lets the viewer choose")
+    value_min: float | None = kante.django_field(description="The lowest value the layer's value scale shows, as last set. Null lets the viewer scale to the data")
+    value_max: float | None = kante.django_field(description="The highest value the layer's value scale shows, as last set. Null lets the viewer scale to the data")
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):  # noqa: ANN001, ANN003, ANN206 - strawberry_django's hook

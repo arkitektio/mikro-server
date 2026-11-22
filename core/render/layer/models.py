@@ -28,6 +28,13 @@ class LookupStopModel(BaseModel):
     value: float
 
 
+class ColorStopModel(BaseModel):
+    """One stop of a colour gradient: where along the normalized 0..1 the colormap is indexed with, and the colour there."""
+
+    position: float
+    color: list[int]
+
+
 class TransferFunctionModel(BaseModel):
     """How a single channel's intensities are mapped to color before compositing."""
 
@@ -50,6 +57,10 @@ class TransferFunctionModel(BaseModel):
     # and a curve, when given, is the whole transfer. None means there is no curve, not an
     # empty one: the window and gamma apply exactly as they did before this field existed.
     stops: list[LookupStopModel] | None = None
+    # The colour side of the same mapping: what `colormap` names from a fixed list, spelled out.
+    # Indexed by the normalized value the curve (or the window) produced, so it composes with
+    # `stops` rather than competing with it. None means the colormap (or `color`) applies.
+    color_stops: list[ColorStopModel] | None = None
 
 
 class ChannelSourceModel(BaseModel):

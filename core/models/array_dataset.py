@@ -1622,6 +1622,7 @@ class Layer(models.Model):
     point_size = models.FloatField(null=True, blank=True, help_text="(point) The default point size, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
     color_by_column = models.CharField(max_length=100, null=True, blank=True, help_text="(track) The table column used to color tracks (used with colormap)")
     line_width = models.FloatField(null=True, blank=True, help_text="(track) The width of the track lines, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
+    tail_window = models.PositiveIntegerField(null=True, blank=True, help_text="(track) How many timepoints of each track's past are drawn behind the current one; 0 draws the whole track. Null lets the viewer choose")
 
     # --- mesh render settings (and a fixture's, which takes the same two) ---
     material_color = models.JSONField(default=None, null=True, blank=True, help_text="(mesh/cad model) The material (surface) color, RGBA. For a fixture null keeps the model's own materials, and a colour overrides all of them")
