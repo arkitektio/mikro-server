@@ -349,7 +349,14 @@ class Query:
     table_datasets: list[types.TableDataset] = field(description="List table datasets (Parquet-backed tables of scientific records: measurements, localizations, expression levels)")
     table_dataset: types.TableDataset = field(description="Get a single table dataset by ID")
 
-    children = field(resolver=queries.children, description="List the child folders of a folder")
+    children = field(
+        resolver=queries.children,
+        description="List what a folder holds -- sub-folders, files and every container -- ordered across all of them at once, then paged",
+    )
+    children_counts = field(
+        resolver=queries.children_counts,
+        description="Count what `children` pages through with the same filter: the total and one count per kind",
+    )
 
     scene_snapshots: list[types.SceneSnapshot] = field(description="List scene snapshots (pre-rendered pictures of a composition, for previewing it without compositing the layers)")
 

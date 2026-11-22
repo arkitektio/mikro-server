@@ -1199,6 +1199,21 @@ _describe(
 )
 
 
+@strawberry.enum(description="What sort of thing a folder holds: a sub-folder, a file, or one of the containers. The order here is the order a KIND sort lists them in")
+class FolderChildKind(str, Enum):
+    """One kind of thing filed in a folder."""
+
+    FOLDER = "FOLDER"
+    FILE = "FILE"
+    ARRAY_DATASET = "ARRAY_DATASET"
+    TABLE_DATASET = "TABLE_DATASET"
+    SPARSE_DATASET = "SPARSE_DATASET"
+    MESH_COLLECTION = "MESH_COLLECTION"
+    NETWORK_COLLECTION = "NETWORK_COLLECTION"
+    ANNOTATION_COLLECTION = "ANNOTATION_COLLECTION"
+    FIXTURE = "FIXTURE"
+
+
 @strawberry.enum(
     description=(
         "A coarse bucket for what sort of thing a file holds, for a picker that wants \"just the images\". **Derived at query time from the file's extension, never stored** -- "

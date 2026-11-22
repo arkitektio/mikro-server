@@ -34,6 +34,10 @@ import kante
 class FolderChildrenFilter:
     show_children: bool | None = None
     search: str | None = None
+    kinds: list[enums.FolderChildKind] | None = strawberry.field(
+        default=None,
+        description="Only these kinds of thing. Filtered before paging, so a page of tables is a page of tables however many folders and files sit beside them",
+    )
     show_converted: bool | None = strawberry.field(
         default=None,
         description=(
