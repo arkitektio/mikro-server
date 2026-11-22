@@ -3102,19 +3102,57 @@ def placeable_lens_dataset_ids(space: "models.CoordinateSystem", *, derived_only
     return set(residence_map(placeable_system_ids_in(space, derived_only=derived_only)).values())
 
 
-def placeable_container_ids(space: "models.CoordinateSystem", *, derived_only: bool = False) -> dict[type, set[int]]:
+def placeable_container_ids(space: "models.CoordinateSystem", *, derived_only: bool = False, placeable: set[int] | None = None) -> dict[type, set[int]]:
     """Every container placeable in this space, by model: the datasets whose lenses reach it, and the collections whose own system does.
 
     One walk of the placeable systems, one residency lookup for the datasets, then one query
     per collection model. A collection -- a table, a sparse dataset, a mesh, a network, an
     annotation collection -- owns its system one-to-one, so it is placeable exactly when that
-    system is in the set; a dataset is placeable when any of its systems is.
+    system is in the set; a dataset is placeable when any of its systems is. ``placeable``
+    is that walk's answer when the caller already has it (:func:`placeable_system_ids_memo`).
     """
-    placeable = placeable_system_ids_in(space, derived_only=derived_only)
+    if placeable is None:
+        placeable = placeable_system_ids_in(space, derived_only=derived_only)
     by_model: dict[type, set[int]] = {models.ArrayDataset: set(residence_map(placeable).values())}
     for container in COLLECTION_CONTAINERS:
         by_model[container.model] = set(container.model.objects.filter(coordinate_system_id__in=placeable).values_list("pk", flat=True)) if placeable else set()
     return by_model
+
+
+#: Keys for the per-request memos on the context's loader store (``kante`` ``_loaders``).
+_PLACEABLE_SYSTEMS_KEY = "placeable_system_ids"
+_PLACEABLE_CONTAINERS_KEY = "placeable_container_ids"
+
+
+def placeable_system_ids_memo(loaders: "dict[str, object] | None", space: "models.CoordinateSystem", *, derived_only: bool = False) -> set[int]:
+    """:func:`placeable_system_ids_in`, computed once per space per request.
+
+    The walk is not cheap -- a registrations fetch, a residence map (three queries), a
+    descendant closure, a lineage-closed edge fetch and a reverse BFS -- and a picker asks it
+    of one space many times in one request: `placedSystems`, and every aliased `placeableIn`
+    list (the Add Layer form asks ten). The same space cannot have two answers in one
+    request. Uncached when there is no request store (``loaders`` is None).
+    """
+    if loaders is None:
+        return placeable_system_ids_in(space, derived_only=derived_only)
+    memo = loaders.setdefault(_PLACEABLE_SYSTEMS_KEY, {})
+    assert isinstance(memo, dict)
+    key = space.pk if not derived_only else (space.pk, True)
+    if key not in memo:
+        memo[key] = placeable_system_ids_in(space, derived_only=derived_only)
+    return memo[key]
+
+
+def placeable_container_ids_memo(loaders: "dict[str, object] | None", space: "models.CoordinateSystem", *, derived_only: bool = False) -> dict[type, set[int]]:
+    """:func:`placeable_container_ids`, computed once per space per request (see :func:`placeable_system_ids_memo`)."""
+    if loaders is None:
+        return placeable_container_ids(space, derived_only=derived_only)
+    memo = loaders.setdefault(_PLACEABLE_CONTAINERS_KEY, {})
+    assert isinstance(memo, dict)
+    key = (space.pk, derived_only)
+    if key not in memo:
+        memo[key] = placeable_container_ids(space, derived_only=derived_only, placeable=placeable_system_ids_memo(loaders, space, derived_only=derived_only))
+    return memo[key]
 
 
 def placeable_table_dataset_ids(space: "models.CoordinateSystem") -> set[int]:

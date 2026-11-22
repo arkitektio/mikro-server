@@ -574,7 +574,8 @@ class ArrayDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
         space = _placeable_destination(info, value)
         if space is None:
             return Q(pk__in=[])
-        return Q(**{f"{prefix}id__in": graph_logic.placeable_lens_dataset_ids(space)})
+        placeable = graph_logic.placeable_system_ids_memo(getattr(info.context, "_loaders", None), space)
+        return Q(**{f"{prefix}id__in": set(graph_logic.residence_map(placeable).values())})
 
     @kante.filter_field(
         description="Filter to the datasets computed from this one -- the deconvolutions, segmentations and projections that named a space of it as their parent. Every child, not just the ones it places: a fusion that named it second is listed, and so is a child whose derivation is UNMAPPABLE, since it still came from here"
@@ -933,7 +934,8 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
         # `strawberry.UNSET` rather than None (see `AnnotationFilter._require_frame`), and
         # UNSET is not None -- which would send every unparameterised query down the
         # narrowed path below. Falsiness is right for UNSET, None and False alike.
-        placeable = graph_logic.placeable_container_ids(space, derived_only=bool(value.derived_only))
+        # Memoized per request: a picker asks several `asLayer`s of one space in one request.
+        placeable = graph_logic.placeable_container_ids_memo(getattr(info.context, "_loaders", None), space, derived_only=bool(value.derived_only))
         dataset_ids = placeable[models.ArrayDataset]
         if not value.as_layer:
             # The plain path, and it stays plain indexed `<container>_id__in` lookups, one per
@@ -1316,7 +1318,8 @@ class TableDatasetFilter(IdsFilterMixin, SemanticNameSearchFilterMixin, OwnedFil
         space = _placeable_destination(info, value)
         if space is None:
             return Q(pk__in=[])
-        return Q(**{f"{prefix}id__in": graph_logic.placeable_table_dataset_ids(space)})
+        placeable = graph_logic.placeable_system_ids_memo(getattr(info.context, "_loaders", None), space)
+        return Q(**{f"{prefix}coordinate_system_id__in": placeable})
 
 
 def _placeable_destination(info: Info, value: strawberry.ID) -> "models.CoordinateSystem | None":

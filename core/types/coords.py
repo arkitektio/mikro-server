@@ -113,31 +113,14 @@ Resident = Annotated[
 ]
 
 
-#: Key for the per-request placeable-set map on the context's loader store, by system pk.
-_PLACEABLE_KEY = "placeable_system_ids"
-
-
 def _placeable_ids(info: Info, system) -> set[int]:
-    """The systems placeable in this one, computed once per space per request.
-
-    `placeable_system_ids_in` is not cheap -- a registrations fetch, a residence map (three
-    queries), a descendant closure, a lineage-closed edge fetch and a reverse BFS -- and two
-    fields answer from it. Selecting both used to walk it twice per system, and over a *list*
-    of systems that is 2N walks; the fields it replaced on `Scene` were memoized and carried
-    a comment saying exactly this. Keyed by system, because that is what the answer depends
-    on: the same space asked twice in one request cannot have two answers.
+    """The systems placeable in this one, computed once per space per request (:func:`graph_logic.placeable_system_ids_memo`).
 
     Not routed through `space_graph.for_request`, which also fetches every resident of every
-    candidate space -- far more than this needs. Falls through uncached off-request, where
-    there is no store to cache in.
+    candidate space -- far more than this needs. Shared with the `placeableIn` filters, so a
+    picker asking `placedSystems` beside its candidate lists walks the space once.
     """
-    loaders = getattr(info.context, "_loaders", None)
-    if loaders is None:
-        return graph_logic.placeable_system_ids_in(system)
-    by_system = loaders.setdefault(_PLACEABLE_KEY, {})
-    if system.pk not in by_system:
-        by_system[system.pk] = graph_logic.placeable_system_ids_in(system)
-    return by_system[system.pk]
+    return graph_logic.placeable_system_ids_memo(getattr(info.context, "_loaders", None), system)
 
 
 @kante.django_type(

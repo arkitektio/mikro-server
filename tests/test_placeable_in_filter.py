@@ -493,3 +493,44 @@ async def test_a_lens_of_any_kind_is_placeable_where_its_container_is_and_as_lay
     assert await offered(scene.world_id, "TRACK") == {str(track_whole.pk)}, "only the table with a TRACK_ID column"
     assert await offered(scene.world_id, "MESH") == {str(mesh_whole.pk)}
     assert await offered(scene.world_id, "IMAGE") == set(), "no array lens is placeable here"
+
+
+PICKER = """
+query Picker {
+  %s
+}
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_picker_asking_several_layer_kinds_of_one_space_walks_it_once(authenticated_context: HttpContext):
+    """The Add Layer form asks one space for ten lists at once (`asLayer` IMAGE, LABEL, MESH, ...).
+
+    Each is a `placeableIn` filter over the same space, and the space cannot have two answers in
+    one request: the walk is memoized on the request, so a second list costs its own lens query
+    and nothing of the walk again -- nor does `placedSystems` beside them.
+    """
+    from tests.test_tile_query_cost import _count
+
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx, "Picker")
+    dataset = await seed.create_array_dataset(ctx, "Placed")
+    await seed.register_into_scene(ctx, scene, dataset)
+    space = scene.world_id
+
+    def lenses(alias: str, kind: str) -> str:
+        return f'{alias}: lenses(filters: {{ placeableIn: {{ space: "{space}", asLayer: {kind} }} }}) {{ id }}'
+
+    async def cost(body: str) -> int:
+        ctx._loaders.clear()
+        return await _count(ctx, PICKER % body)
+
+    await cost(lenses("a", "MESH"))  # warm-up: the first request also loads what every request caches
+    one = await cost(lenses("a", "MESH"))
+    two = await cost(lenses("a", "MESH") + "\n" + lenses("b", "NETWORK"))
+    placed_systems = f'c: coordinateSystem(id: "{space}") {{ placedSystems {{ id }} }}'
+    walk = await cost(placed_systems) - await cost(f'c: coordinateSystem(id: "{space}") {{ id }}')
+    three = await cost(lenses("a", "MESH") + "\n" + lenses("b", "NETWORK") + "\n" + placed_systems)
+    assert two - one <= 2, f"a second list over the same space re-walked it: {one} queries for one list, {two} for two"
+    assert three - two < walk / 2, f"placedSystems re-walked the space the filters already walked: {two} queries, {three} with it (a walk is {walk})"
