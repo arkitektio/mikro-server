@@ -117,3 +117,20 @@ async def test_a_column_summary_is_refused_where_it_cannot_belong(authenticated_
     assert "not a column of this table" in await refused({"table": table["id"], "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "area"}]}})
     assert "table's anchor" in await refused({"dataset": dataset["id"], "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "object"}]}})
     assert "bin edges" in await refused({"table": table["id"], "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "object", "histogram": [1, 2], "bins": [0]}]}})
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_counts_past_32_bits_are_answered_and_accepted(authenticated_context: HttpContext):
+    ctx = authenticated_context
+    created = await _create_table(ctx, "huge")
+    huge = 3 * 2**31
+    await models.TableDataset.objects.filter(pk=created["id"]).aupdate(row_count=huge)
+    await models.Column.objects.filter(table_id=created["id"]).aupdate(null_count=huge)
+
+    read = (await _query(ctx, "query Q($id: ID!) { tableDataset(id: $id) { rowCount columns { stats { nullCount } } } }", id=created["id"]))["tableDataset"]
+    assert read == {"rowCount": huge, "columns": [{"stats": {"nullCount": huge}}]}
+
+    summary = {"column": "object", "histogram": [1], "bins": [0, 1], "distinctCount": huge}
+    pinned = await _query(ctx, ANCHOR, input={"table": created["id"], "anchor": {"axisAnchors": [], "columnSummaries": [summary]}})
+    assert pinned["createCoordinateAnchor"]["columnSummaries"][0]["distinctCount"] == huge

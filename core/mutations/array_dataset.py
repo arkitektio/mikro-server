@@ -102,7 +102,7 @@ class ColumnSummaryInput:
     histogram: list[float] = strawberry.field(default_factory=list, description="The counts per bin (y values)")
     bins: list[float] = strawberry.field(default_factory=list, description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
     distinct_values: scalars.Any | None = strawberry.field(default=None, description="The column's distinct values as a JSON list, most frequent first, as many as you listed")
-    distinct_count: int | None = strawberry.field(default=None, description="How many distinct values the column holds")
+    distinct_count: scalars.RowCount | None = strawberry.field(default=None, description="How many distinct values the column holds")
 
 
 class PhasorHistogramInputModel(BaseModel):

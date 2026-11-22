@@ -29,11 +29,24 @@ KonnektionLike = NewType("KonnektionLike", str)
 SporadikLike = NewType("SporadikLike", str)
 ThreeDVector = NewType("ThreeDVector", list)
 Any = NewType("Any", object)
+#: A count of rows or values. Its own scalar because GraphQL's ``Int`` is 32-bit and a parquet can
+#: hold more than 2^31 rows; serialized as a plain JSON number (exact up to 2^53).
+RowCount = NewType("RowCount", int)
 
 
 def _identity(v: object) -> object:
     """Pass-through serialization: these scalars carry their JSON value unchanged."""
     return v
+
+
+def _parse_row_count(v: object) -> int:
+    """Accept an int, or a numeric string from a client that cannot hold one."""
+    if isinstance(v, bool) or not isinstance(v, (int, str)):
+        raise ValueError(f"RowCount must be an integer, got {v!r}")  # noqa: TRY004 - strawberry reports a ValueError as a GraphQL error
+    count = int(v)
+    if count < 0:
+        raise ValueError(f"RowCount cannot be negative, got {count}")
+    return count
 
 
 def _definition(name: str, description: str) -> ScalarDefinition:
@@ -60,4 +73,5 @@ SCALAR_MAP: dict[object, ScalarDefinition] = {
     ),
     ThreeDVector: _definition("ThreeDVector", "The `Vector` scalar type represents a matrix values as specified by"),
     Any: _definition("Any", "The `Any` scalar any type"),
+    RowCount: strawberry.scalar(name="RowCount", description="A count of rows or values: an integer that may pass 2^31 (GraphQL's `Int` is 32-bit), exact up to 2^53", serialize=_identity, parse_value=_parse_row_count),
 }

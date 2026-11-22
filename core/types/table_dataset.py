@@ -100,7 +100,7 @@ class Column:
 class ColumnStats:
     min: float | None = strawberry.field(description="The smallest value. Null for a column whose statistics are not numbers, or that a row group states none for")
     max: float | None = strawberry.field(description="The largest value. Null for a column whose statistics are not numbers, or that a row group states none for")
-    null_count: int | None = strawberry.field(description="How many values are null. Null where a row group does not say")
+    null_count: scalars.RowCount | None = strawberry.field(description="How many values are null. Null where a row group does not say")
 
 
 @kante.django_type(
@@ -113,7 +113,7 @@ class ColumnSummary:
     histogram: list[float] = kante.django_field(description="The counts per bin (y values)")
     bins: list[float] = kante.django_field(description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
     distinct_values: JSON | None = kante.django_field(description="The distinct values as a JSON list, most frequent first, as many as were listed. Null when not computed")
-    distinct_count: int | None = kante.django_field(description="How many distinct values the column holds. Null when not computed")
+    distinct_count: scalars.RowCount | None = kante.django_field(description="How many distinct values the column holds. Null when not computed")
     created_at: datetime.datetime = kante.django_field(description="When this summary was last pinned")
 
 
@@ -226,7 +226,7 @@ class TableDataset(OrgScoped):
     name: auto
     description: str | None
     created_at: datetime.datetime = kante.django_field(description="When this table dataset was created")
-    row_count: int | None = kante.django_field(description="How many rows the parquet holds, read off its footer -- never by scanning. Null until the footer was read")
+    row_count: scalars.RowCount | None = kante.django_field(description="How many rows the parquet holds, read off its footer -- never by scanning. Null until the footer was read")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(
         description="Every change made to this table: who created it, and every subsequent rename or redescription, attributed to the client, user and task it happened under. Only `name` and `description` can change -- the store, the columns and the coordinate system derived from them are fixed at creation"
     )
