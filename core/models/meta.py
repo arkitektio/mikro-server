@@ -1,6 +1,6 @@
-from django.db import models
-from koherent.fields import ProvenanceField, HistoricForeignKey
 from authentikate.models import Organization
+from django.db import models
+from koherent.fields import HistoricForeignKey, ProvenanceField
 
 from .folder import File
 
@@ -13,7 +13,11 @@ class MetaSchema(models.Model):
 
 
 class UnstructuredMeta(models.Model):
-    file = HistoricForeignKey(File, on_delete=models.CASCADE, related_name="unstructured_metas")
+    file = HistoricForeignKey(
+        File, on_delete=models.CASCADE, related_name="unstructured_metas"
+    )
     name = models.CharField(max_length=1000, help_text="The name of the meta data")
     meta = models.JSONField(help_text="The unstructured meta data of the file")
-    schema = models.ForeignKey(MetaSchema, on_delete=models.CASCADE, null=True, blank=True)
+    schema = models.ForeignKey(
+        MetaSchema, on_delete=models.CASCADE, null=True, blank=True
+    )

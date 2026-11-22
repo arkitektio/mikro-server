@@ -51,14 +51,28 @@ def _parse_row_count(v: object) -> int:
 
 def _definition(name: str, description: str) -> ScalarDefinition:
     """A pass-through ScalarDefinition for :data:`SCALAR_MAP`."""
-    return strawberry.scalar(name=name, description=description, serialize=_identity, parse_value=_identity)
+    return strawberry.scalar(
+        name=name, description=description, serialize=_identity, parse_value=_identity
+    )
 
 
 SCALAR_MAP: dict[object, ScalarDefinition] = {
-    ArrayLike: _definition("ArrayLike", "The `ArrayLike` scalar type represents a reference to a store previously created by the user on a datalayer"),
-    FileLike: _definition("FileLike", "The `FileLike` scalar type represents a reference to a big file storage previously created by the user on a datalayer"),
-    ImageFileLike: _definition("ImageFileLike", "The `ImageFileLike` scalar type represents a reference to a snapshot image previously created by the user on a datalayer"),
-    ParquetLike: _definition("ParquetLike", "The `ParquetLike` scalar type represents a reference to a parquet object previously created by the user on a datalayer"),
+    ArrayLike: _definition(
+        "ArrayLike",
+        "The `ArrayLike` scalar type represents a reference to a store previously created by the user on a datalayer",
+    ),
+    FileLike: _definition(
+        "FileLike",
+        "The `FileLike` scalar type represents a reference to a big file storage previously created by the user on a datalayer",
+    ),
+    ImageFileLike: _definition(
+        "ImageFileLike",
+        "The `ImageFileLike` scalar type represents a reference to a snapshot image previously created by the user on a datalayer",
+    ),
+    ParquetLike: _definition(
+        "ParquetLike",
+        "The `ParquetLike` scalar type represents a reference to a parquet object previously created by the user on a datalayer",
+    ),
     FabriksLike: _definition(
         "FabriksLike",
         "A reference to an uploaded **fabriks store**: one prefix holding `fabriks.json`, both catalogs and every octree level. Request it with `requestFabriksUpload`, write the tree, land the manifest last, then `finishFabriksUpload` -- which reads the manifest and refuses a prefix without one. A collection registered this way declares no grid and no encoding: the server reads them from the artifact, so they cannot be stated wrong",
@@ -71,7 +85,15 @@ SCALAR_MAP: dict[object, ScalarDefinition] = {
         "SporadikLike",
         "A reference to an uploaded **sporadik store**: one prefix holding one child per axis made contiguous, under `layouts/axis{k}`, each an anndata-spelled sparse group of `data`, `indices` and `indptr`. Named for the wire format the way `FabriksLike` is. Request it with `requestSparseUpload`, write the layouts, land the `sporadik` block last, then `finishSparseUpload` -- which reads that block and refuses a prefix without one, because zarr fills a missing chunk rather than failing and a torn upload is otherwise indistinguishable from a finished one. A dataset registered this way declares no encoding, no shape and no chunking: the server reads them from the artifact, so they cannot be stated wrong",
     ),
-    ThreeDVector: _definition("ThreeDVector", "The `Vector` scalar type represents a matrix values as specified by"),
+    ThreeDVector: _definition(
+        "ThreeDVector",
+        "The `Vector` scalar type represents a matrix values as specified by",
+    ),
     Any: _definition("Any", "The `Any` scalar any type"),
-    RowCount: strawberry.scalar(name="RowCount", description="A count of rows or values: an integer that may pass 2^31 (GraphQL's `Int` is 32-bit), exact up to 2^53", serialize=_identity, parse_value=_parse_row_count),
+    RowCount: strawberry.scalar(
+        name="RowCount",
+        description="A count of rows or values: an integer that may pass 2^31 (GraphQL's `Int` is 32-bit), exact up to 2^53",
+        serialize=_identity,
+        parse_value=_parse_row_count,
+    ),
 }

@@ -53,7 +53,10 @@ FILE = "file"
 ANNOTATION = "annotation"
 
 #: Every node kind that is no container, with the model its rows are.
-NON_CONTAINER_MODELS: dict[str, type] = {FILE: models.File, ANNOTATION: models.Annotation}
+NON_CONTAINER_MODELS: dict[str, type] = {
+    FILE: models.File,
+    ANNOTATION: models.Annotation,
+}
 
 #: How a hop was made: a derivation edge or a file link. Short tags, since they ride every
 #: row of the recursion.
@@ -88,6 +91,7 @@ def _as(kind: str, key: str, pk: str, cast: str = "bigint") -> str:
     with.
     """
     return f"CASE WHEN {kind} = '{key}' THEN ({pk})::{cast} END"
+
 
 MAX_DEPTH = 10
 MAX_LIMIT = 1000
@@ -138,7 +142,11 @@ def _source(container, priority: int) -> _Source:
             priority=priority,
         )
     pk = _q(model._meta.pk.column)
-    root = f"x.{pk}" if container.root_field == "pk" else f"x.{_q(_column(model, container.root_field.removesuffix('_id')))}"
+    root = (
+        f"x.{pk}"
+        if container.root_field == "pk"
+        else f"x.{_q(_column(model, container.root_field.removesuffix('_id')))}"
+    )
     return _Source(
         key=container.key,
         from_sql=f"{table} x",
@@ -151,7 +159,9 @@ def _source(container, priority: int) -> _Source:
 
 @cache
 def _sources() -> tuple[_Source, ...]:
-    return tuple(_source(container, priority) for priority, container in enumerate(_KEYING_ORDER))
+    return tuple(
+        _source(container, priority) for priority, container in enumerate(_KEYING_ORDER)
+    )
 
 
 @cache
@@ -183,7 +193,10 @@ def _key_of(system_expr: str) -> str:
 
 def _systems_of(kind: str, pk: str) -> str:
     """Every space a container's own data lives in: the systems ``container_q`` matches for its key."""
-    return " UNION ALL ".join(f"SELECT {s.system} FROM {s.from_sql} WHERE {kind} = '{s.key}' AND {s.root} = {_as(kind, s.key, pk)}" for s in _sources())
+    return " UNION ALL ".join(
+        f"SELECT {s.system} FROM {s.from_sql} WHERE {kind} = '{s.key}' AND {s.root} = {_as(kind, s.key, pk)}"
+        for s in _sources()
+    )
 
 
 def _own_system_of(kind: str, pk: str) -> str:
@@ -216,7 +229,10 @@ _AD = _q(models.AnnotationDerivation._meta.db_table)
 
 
 def _transformation_columns() -> dict[str, str]:
-    return {name: _q(_column(models.Transformation, name)) for name in ("input", "output", "kind", "organization", "parts")}
+    return {
+        name: _q(_column(models.Transformation, name))
+        for name in ("input", "output", "kind", "organization", "parts")
+    }
 
 
 def _file_link_arm(n: str, *, from_file: bool, direction: str) -> list[str]:
@@ -247,7 +263,10 @@ def _shape_arms(n: str, *, down: bool) -> list[str]:
     deleted since leaves its link with no source, and no hop.
     """
     shape = _as(f"{n}.kind", ANNOTATION, f"{n}.pk", cast="uuid")
-    child, source, org = (_q(_column(models.AnnotationDerivation, name)) for name in ("child", "source", "organization"))
+    child, source, org = (
+        _q(_column(models.AnnotationDerivation, name))
+        for name in ("child", "source", "organization")
+    )
     if not down:
         return [
             f"SELECT '{ANNOTATION}'::text, d.{source}::text, '{VIA_ANNOTATION_DERIVATION}'::text, d.{_q('id')}::bigint FROM {_AD} d "
@@ -279,13 +298,17 @@ def _step(n: str, *, down: bool) -> str:
     # The edges first, through the FK index from the frontier's spaces, and fenced (`OFFSET 0`)
     # so the planner cannot pull the key lookups below the join: those run once per edge
     # actually touching the frontier, never once per candidate.
-    via_column, systems = (t["output"], _systems_of(f"{n}.kind", f"{n}.pk")) if down else (t["input"], _own_system_of(f"{n}.kind", f"{n}.pk"))
+    via_column, systems = (
+        (t["output"], _systems_of(f"{n}.kind", f"{n}.pk"))
+        if down
+        else (t["input"], _own_system_of(f"{n}.kind", f"{n}.pk"))
+    )
     edges = (
         f"SELECT t.{_q('id')} AS id, t.{t['input']} AS i, t.{t['output']} AS o FROM (SELECT DISTINCT * FROM ({systems}) u) sys(id) "
         f"JOIN {_T} t ON t.{via_column} = sys.id "
         # A key (`graph.is_dereference`) is never lineage: it says which object a pixel is.
         # Containment, as `graph.dereference_q`: false, never NULL, on an edge with no such part.
-        f"""WHERE NOT (t.{t['parts']} @> '[{{"kind": "FIELD", "params": {{"dereference": true}}}}]'::jsonb) """
+        f"""WHERE NOT (t.{t["parts"]} @> '[{{"kind": "FIELD", "params": {{"dereference": true}}}}]'::jsonb) """
         f"AND t.{t['organization']} = %(org)s OFFSET 0"
     )
     if down:
@@ -296,15 +319,21 @@ def _step(n: str, *, down: bool) -> str:
             f"WHERE (c.kind, c.pk) <> (p.kind, p.pk) AND (c.kind, c.pk) <> ({n}.kind, {n}.pk) "
             f"AND {_not_drawing_surface('c.kind', 'c.pk')}"
         )
-        links = _file_link_arm(n, from_file=True, direction=source) + _file_link_arm(n, from_file=False, direction=rendition)
+        links = _file_link_arm(n, from_file=True, direction=source) + _file_link_arm(
+            n, from_file=False, direction=rendition
+        )
     else:
         derivation = (
             f"SELECT p.kind, p.pk, '{VIA_TRANSFORMATION}'::text, e.id::bigint FROM ({edges}) e "
             f"CROSS JOIN LATERAL ({_key_of('e.o')}) p "
             f"WHERE (p.kind, p.pk) <> ({n}.kind, {n}.pk) AND {_not_drawing_surface(f'{n}.kind', f'{n}.pk')}"
         )
-        links = _file_link_arm(n, from_file=False, direction=source) + _file_link_arm(n, from_file=True, direction=rendition)
-    arms = " UNION ALL ".join(f"({arm})" for arm in [derivation, *links, *_shape_arms(n, down=down)])
+        links = _file_link_arm(n, from_file=False, direction=source) + _file_link_arm(
+            n, from_file=True, direction=rendition
+        )
+    arms = " UNION ALL ".join(
+        f"({arm})" for arm in [derivation, *links, *_shape_arms(n, down=down)]
+    )
     return f"SELECT st.kind, st.pk, st.via, st.via_id FROM ({arms}) st(kind, pk, via, via_id)"
 
 
@@ -433,23 +462,49 @@ class Lineage:
 @cache
 def _assert_direct_scoping() -> None:
     """Every table the walk filters by organization must carry it directly, or the filter would be the wrong one."""
-    for model in (models.Transformation, models.FileLink, models.File, models.AnnotationDerivation, *MODEL_BY_KEY.values()):
+    for model in (
+        models.Transformation,
+        models.FileLink,
+        models.File,
+        models.AnnotationDerivation,
+        *MODEL_BY_KEY.values(),
+    ):
         if organization_path(model) != "organization":
-            raise LookupError(f"{model.__name__} is not scoped by a direct organization FK; the lineage walk would not scope it")
+            raise LookupError(
+                f"{model.__name__} is not scoped by a direct organization FK; the lineage walk would not scope it"
+            )
 
 
-def _walk(cursor, root: tuple[str, int | str], *, down: bool, depth: int, limit: int, fanout: int, org: int) -> tuple[list[tuple], bool]:
+def _walk(
+    cursor,
+    root: tuple[str, int | str],
+    *,
+    down: bool,
+    depth: int,
+    limit: int,
+    fanout: int,
+    org: int,
+) -> tuple[list[tuple], bool]:
     if depth <= 0:
         return [], False
     cursor.execute(
         _walk_sql(down),
-        {"root_kind": root[0], "root_pk": str(root[1]), "depth": depth, "limit": limit + 1, "fanout": fanout, "org": org},
+        {
+            "root_kind": root[0],
+            "root_pk": str(root[1]),
+            "depth": depth,
+            "limit": limit + 1,
+            "fanout": fanout,
+            "org": org,
+        },
     )
     rows = [(kind, node_pk(kind, pk), depth) for kind, pk, depth in cursor.fetchall()]
     return rows[:limit], len(rows) > limit
 
 
-def _hydrate_nodes(nodes: dict[tuple[str, int | str], LineageNode], organization) -> None:
+def _hydrate_nodes(
+    nodes: dict[tuple[str, int | str], LineageNode], organization
+) -> None:
     """One query per node kind present. A node another organization owns is dropped, never named."""
     by_kind: dict[str, list[int | str]] = {}
     for kind, pk in nodes:
@@ -462,11 +517,21 @@ def _hydrate_nodes(nodes: dict[tuple[str, int | str], LineageNode], organization
         model = model_of(kind)
         query = model.objects.filter(pk__in=pks, organization=organization)
         has_task = any(field.name == "created_through" for field in model._meta.fields)
-        has_store = not has_task and any(field.name == "store" for field in model._meta.fields)
+        has_store = not has_task and any(
+            field.name == "store" for field in model._meta.fields
+        )
         if has_task:
-            rows = {row["id"]: row for row in query.values("id", "name", "created_at", "created_through__task_id")}
+            rows = {
+                row["id"]: row
+                for row in query.values(
+                    "id", "name", "created_at", "created_through__task_id"
+                )
+            }
         elif has_store:
-            rows = {row["id"]: row for row in query.values("id", "name", "created_at", "store__key")}
+            rows = {
+                row["id"]: row
+                for row in query.values("id", "name", "created_at", "store__key")
+            }
         else:
             rows = {row["id"]: row for row in query.values("id", "name", "created_at")}
         for pk in pks:
@@ -480,14 +545,18 @@ def _hydrate_nodes(nodes: dict[tuple[str, int | str], LineageNode], organization
             node.task_id = row.get("created_through__task_id")
 
 
-def _hydrate_shapes(nodes: dict[tuple[str, int | str], LineageNode], pks: list[int | str], organization) -> None:
+def _hydrate_shapes(
+    nodes: dict[tuple[str, int | str], LineageNode], pks: list[int | str], organization
+) -> None:
     """The shape nodes: named, and scoped through their collection, which is where a shape's organization is.
 
     A shape records no creation time of its own, so ``created_at`` stays unset.
     """
     rows = {
         str(row["id"]): row
-        for row in models.Annotation.objects.filter(pk__in=pks, collection__organization=organization).values("id", "name", "created_through__task_id")
+        for row in models.Annotation.objects.filter(
+            pk__in=pks, collection__organization=organization
+        ).values("id", "name", "created_through__task_id")
     }
     for pk in pks:
         row = rows.get(str(pk))
@@ -510,12 +579,26 @@ def _hydrate_arrays(nodes: dict[tuple[str, int], LineageNode]) -> None:
         return
     arrays: dict[int, list[dict]] = {}
     for row in models.DataArray.objects.filter(dataset_id__in=pks).values(
-        "dataset_id", "dataset__coordinate_system_id", "level", "shape", "chunk_shape", "store__chunks", "store__dtype"
+        "dataset_id",
+        "dataset__coordinate_system_id",
+        "level",
+        "shape",
+        "chunk_shape",
+        "store__chunks",
+        "store__dtype",
     ):
         arrays.setdefault(row["dataset_id"], []).append(row)
-    systems = {pk: rows[0]["dataset__coordinate_system_id"] for pk, rows in arrays.items() if rows[0]["dataset__coordinate_system_id"]}
+    systems = {
+        pk: rows[0]["dataset__coordinate_system_id"]
+        for pk, rows in arrays.items()
+        if rows[0]["dataset__coordinate_system_id"]
+    }
     axes: dict[int, list[dict]] = {}
-    for row in models.Axis.objects.filter(coordinate_system_id__in=set(systems.values())).order_by("order").values("coordinate_system_id", "name", "type"):
+    for row in (
+        models.Axis.objects.filter(coordinate_system_id__in=set(systems.values()))
+        .order_by("order")
+        .values("coordinate_system_id", "name", "type")
+    ):
         axes.setdefault(row["coordinate_system_id"], []).append(row)
 
     for pk, rows in arrays.items():
@@ -530,7 +613,9 @@ def _hydrate_arrays(nodes: dict[tuple[str, int], LineageNode]) -> None:
                 name=axis["name"],
                 type=axis["type"],
                 size=shape[index] if index < len(shape) else None,
-                chunk=chunks[index] if isinstance(chunks, list) and index < len(chunks) else None,
+                chunk=chunks[index]
+                if isinstance(chunks, list) and index < len(chunks)
+                else None,
             )
             for index, axis in enumerate(axes.get(systems.get(pk), []))
         ]
@@ -547,11 +632,24 @@ def _lens_shape(node: LineageNode, slices: list[dict]) -> list[int] | None:
         if entry is None:
             shape.append(axis.size)
         else:
-            shape.append(len(range(entry.get("start") or 0, axis.size if entry.get("stop") is None else entry["stop"], entry.get("step") or 1)))
+            shape.append(
+                len(
+                    range(
+                        entry.get("start") or 0,
+                        axis.size if entry.get("stop") is None else entry["stop"],
+                        entry.get("step") or 1,
+                    )
+                )
+            )
     return shape
 
 
-def _hydrate_lenses(nodes: dict[tuple[str, int], LineageNode], edges: list[LineageEdge], landed_in: dict[int, int], organization) -> None:
+def _hydrate_lenses(
+    nodes: dict[tuple[str, int], LineageNode],
+    edges: list[LineageEdge],
+    landed_in: dict[int, int],
+    organization,
+) -> None:
     """Every node's lenses, one query per container kind, and which of them each edge leaves from.
 
     A derivation lands in one of its parent's spaces: a sliced lens' own system, or the
@@ -571,9 +669,15 @@ def _hydrate_lenses(nodes: dict[tuple[str, int], LineageNode], edges: list[Linea
             continue
         container = f"{lens_model.CONTAINER_FIELD}_id"
         selection = "slices" if issubclass(lens_model, models.ArrayLens) else "windows"
-        query = lens_model.objects.filter(**{f"{container}__in": pks}, organization=organization).order_by("id")
-        for row in query.values("id", "name", "coordinate_system_id", selection, container):
-            rows_by_node.setdefault((kind, row[container]), []).append({**row, "selection": row[selection] or []})
+        query = lens_model.objects.filter(
+            **{f"{container}__in": pks}, organization=organization
+        ).order_by("id")
+        for row in query.values(
+            "id", "name", "coordinate_system_id", selection, container
+        ):
+            rows_by_node.setdefault((kind, row[container]), []).append(
+                {**row, "selection": row[selection] or []}
+            )
 
     def whole_of(rows: list[dict]) -> dict | None:
         return next((row for row in rows if not row["selection"]), None)
@@ -584,7 +688,11 @@ def _hydrate_lenses(nodes: dict[tuple[str, int], LineageNode], edges: list[Linea
             continue
         rows = rows_by_node.get(edge.parent, [])
         landed = landed_in.get(edge.via_id) if edge.via == VIA_TRANSFORMATION else None
-        there = [row for row in rows if landed is not None and row["coordinate_system_id"] == landed]
+        there = [
+            row
+            for row in rows
+            if landed is not None and row["coordinate_system_id"] == landed
+        ]
         # Two lenses in one space are the whole lens and nothing else: a sliced lens has its own.
         chosen = whole_of(there) or (there[0] if there else None) or whole_of(rows)
         if chosen is not None:
@@ -596,13 +704,22 @@ def _hydrate_lenses(nodes: dict[tuple[str, int], LineageNode], edges: list[Linea
         node.lens_count = len(rows)
         wanted = used.get(key, set())
         whole = whole_of(rows)
-        ordered = ([whole] if whole else []) + [row for row in rows if row is not whole and row["id"] in wanted] + [row for row in rows if row is not whole and row["id"] not in wanted]
+        ordered = (
+            ([whole] if whole else [])
+            + [row for row in rows if row is not whole and row["id"] in wanted]
+            + [row for row in rows if row is not whole and row["id"] not in wanted]
+        )
         # Only an array lens selects by index slices; every other kind stores windows.
         sliced = key[0] == "dataset"
         node.lenses = [
             LineageLens(
                 pk=row["id"],
-                label=(row["name"] or "").strip() or ("Whole" if not row["selection"] else selection_label(row["selection"])),
+                label=(row["name"] or "").strip()
+                or (
+                    "Whole"
+                    if not row["selection"]
+                    else selection_label(row["selection"])
+                ),
                 whole=not row["selection"],
                 shape=_lens_shape(node, row["selection"]) if sliced else None,
                 slices=list(row["selection"]) if sliced else [],
@@ -634,10 +751,16 @@ def lineage(
     org = organization.pk
     root = (root[0], node_pk(root[0], root[1]))
 
-    nodes: dict[tuple[str, int | str], LineageNode] = {root: LineageNode(kind=root[0], pk=root[1], depth=0)}
+    nodes: dict[tuple[str, int | str], LineageNode] = {
+        root: LineageNode(kind=root[0], pk=root[1], depth=0)
+    }
     with connection.cursor() as cursor:
-        down_rows, down_cut = _walk(cursor, root, down=True, depth=down, limit=limit, fanout=fanout, org=org)
-        up_rows, up_cut = _walk(cursor, root, down=False, depth=up, limit=limit, fanout=fanout, org=org)
+        down_rows, down_cut = _walk(
+            cursor, root, down=True, depth=down, limit=limit, fanout=fanout, org=org
+        )
+        up_rows, up_cut = _walk(
+            cursor, root, down=False, depth=up, limit=limit, fanout=fanout, org=org
+        )
 
         # Many paths can reach one node; it is drawn once, at its nearest.
         for rows, sign in ((down_rows, 1), (up_rows, -1)):
@@ -653,16 +776,31 @@ def lineage(
 
         if len(nodes) > limit:
             # Both walks together may overshoot: keep the nearest, downstream first on a tie.
-            kept = sorted(nodes.values(), key=lambda node: (abs(node.depth), node.depth < 0))[:limit]
+            kept = sorted(
+                nodes.values(), key=lambda node: (abs(node.depth), node.depth < 0)
+            )[:limit]
             nodes = {(node.kind, node.pk): node for node in kept}
             down_cut = True
 
         cursor.execute(
             _neighbours_sql(),
-            {"kinds": [kind for kind, _ in nodes], "pks": [str(pk) for _, pk in nodes], "probe": fanout + 1, "org": org},
+            {
+                "kinds": [kind for kind, _ in nodes],
+                "pks": [str(pk) for _, pk in nodes],
+                "probe": fanout + 1,
+                "org": org,
+            },
         )
         hops = [
-            (kind, node_pk(kind, pk), downward, other_kind, node_pk(other_kind, other_pk), via, via_id)
+            (
+                kind,
+                node_pk(kind, pk),
+                downward,
+                other_kind,
+                node_pk(other_kind, other_pk),
+                via,
+                via_id,
+            )
             for kind, pk, downward, other_kind, other_pk, via, via_id in cursor.fetchall()
         ]
 
@@ -698,23 +836,48 @@ def lineage(
                 nodes[here].has_more_up = True
 
     _hydrate_nodes(nodes, organization)
-    edges = {key: edge for key, edge in edges.items() if edge.parent in nodes and edge.child in nodes}
+    edges = {
+        key: edge
+        for key, edge in edges.items()
+        if edge.parent in nodes and edge.child in nodes
+    }
 
-    transformation_ids = [edge.via_id for edge in edges.values() if edge.via in (VIA_TRANSFORMATION, VIA_SHAPE_EDGE)]
+    transformation_ids = [
+        edge.via_id
+        for edge in edges.values()
+        if edge.via in (VIA_TRANSFORMATION, VIA_SHAPE_EDGE)
+    ]
     link_ids = [edge.via_id for edge in edges.values() if edge.via == VIA_FILE_LINK]
-    derivation_ids = [edge.via_id for edge in edges.values() if edge.via == VIA_ANNOTATION_DERIVATION]
+    derivation_ids = [
+        edge.via_id for edge in edges.values() if edge.via == VIA_ANNOTATION_DERIVATION
+    ]
     transformations = (
-        {row["id"]: row for row in models.Transformation.objects.filter(pk__in=transformation_ids, organization=organization).values("id", "kind", "value_relation", "annotation_id", "output_id")}
+        {
+            row["id"]: row
+            for row in models.Transformation.objects.filter(
+                pk__in=transformation_ids, organization=organization
+            ).values("id", "kind", "value_relation", "annotation_id", "output_id")
+        }
         if transformation_ids
         else {}
     )
     links = (
-        {row["id"]: row for row in models.FileLink.objects.filter(pk__in=link_ids, organization=organization).values("id", "direction", "value_relation", "created_through__task_id")}
+        {
+            row["id"]: row
+            for row in models.FileLink.objects.filter(
+                pk__in=link_ids, organization=organization
+            ).values("id", "direction", "value_relation", "created_through__task_id")
+        }
         if link_ids
         else {}
     )
     derivations = (
-        {row["id"]: row for row in models.AnnotationDerivation.objects.filter(pk__in=derivation_ids, organization=organization).values("id", "relation", "created_through__task_id")}
+        {
+            row["id"]: row
+            for row in models.AnnotationDerivation.objects.filter(
+                pk__in=derivation_ids, organization=organization
+            ).values("id", "relation", "created_through__task_id")
+        }
         if derivation_ids
         else {}
     )
@@ -725,31 +888,53 @@ def lineage(
             edge.kind = "DERIVATION"
             edge.transformation_kind = row.get("kind")
             edge.value_relation = row.get("value_relation")
-            edge.annotation_id = str(row["annotation_id"]) if row.get("annotation_id") else None
+            edge.annotation_id = (
+                str(row["annotation_id"]) if row.get("annotation_id") else None
+            )
             # Who made the child is who made the edge: a derivation is written with its product.
             edge.task_id = nodes[edge.child].task_id
             # A shape is never what places data: the edge that does is the child's T hop.
-            edge.primary = edge.via == VIA_TRANSFORMATION and first_derivation.get(edge.child) == edge.via_id
+            edge.primary = (
+                edge.via == VIA_TRANSFORMATION
+                and first_derivation.get(edge.child) == edge.via_id
+            )
         elif edge.via == VIA_ANNOTATION_DERIVATION:
             row = derivations.get(edge.via_id, {})
             edge.kind = "SHAPE_DERIVATION"
             edge.annotation_relation = row.get("relation")
-            edge.task_id = row.get("created_through__task_id") or nodes[edge.child].task_id
+            edge.task_id = (
+                row.get("created_through__task_id") or nodes[edge.child].task_id
+            )
         else:
             row = links.get(edge.via_id, {})
-            edge.kind = "INGEST" if row.get("direction") == enums.FileLinkDirectionChoices.SOURCE.value else "EXPORT"
+            edge.kind = (
+                "INGEST"
+                if row.get("direction") == enums.FileLinkDirectionChoices.SOURCE.value
+                else "EXPORT"
+            )
             edge.value_relation = row.get("value_relation")
             # The link's own task when it records one; otherwise whoever made the child -- a
             # converter writes the dataset (and its link) under one task, and not every writer
             # stamps the link row too.
-            edge.task_id = row.get("created_through__task_id") or nodes[edge.child].task_id
+            edge.task_id = (
+                row.get("created_through__task_id") or nodes[edge.child].task_id
+            )
 
     _hydrate_arrays(nodes)
-    _hydrate_lenses(nodes, list(edges.values()), {pk: row["output_id"] for pk, row in transformations.items()}, organization)
+    _hydrate_lenses(
+        nodes,
+        list(edges.values()),
+        {pk: row["output_id"] for pk, row in transformations.items()},
+        organization,
+    )
 
-    ordered_nodes = sorted(nodes.values(), key=lambda node: (node.depth, node.kind, node.pk))
+    ordered_nodes = sorted(
+        nodes.values(), key=lambda node: (node.depth, node.kind, node.pk)
+    )
     ordered_edges = sorted(edges.values(), key=lambda edge: (edge.via, edge.via_id))
-    return Lineage(nodes=ordered_nodes, edges=ordered_edges, truncated=down_cut or up_cut)
+    return Lineage(
+        nodes=ordered_nodes, edges=ordered_edges, truncated=down_cut or up_cut
+    )
 
 
 #: Roots one ``descendants`` call takes: a page of tiles, not an organization.
@@ -787,7 +972,9 @@ class Descendants:
     #: Whether something made from it was left out: past ``down``, past ``fanout`` or past the limit.
     more: bool = False
     #: What each node was made from on its nearest path: the root for the first hop.
-    parents: dict[tuple[str, int], tuple[str, int]] = dataclasses.field(default_factory=dict)
+    parents: dict[tuple[str, int], tuple[str, int]] = dataclasses.field(
+        default_factory=dict
+    )
 
 
 def descendants(
@@ -808,7 +995,9 @@ def descendants(
     _assert_direct_scoping()
     down = max(1, min(down, MAX_DEPTH))
     limit, fanout = max(1, min(limit, MAX_LIMIT)), max(1, min(fanout, MAX_FANOUT))
-    roots = list(dict.fromkeys((kind, node_pk(kind, pk)) for kind, pk in roots))[:MAX_ROOTS]
+    roots = list(dict.fromkeys((kind, node_pk(kind, pk)) for kind, pk in roots))[
+        :MAX_ROOTS
+    ]
     if not roots:
         return []
 
@@ -832,14 +1021,26 @@ def descendants(
             },
         )
         rows = [
-            (root_kind, node_pk(root_kind, root_pk), kind, node_pk(kind, pk), depth, parent_kind, node_pk(parent_kind, parent_pk) if parent_kind else None)
+            (
+                root_kind,
+                node_pk(root_kind, root_pk),
+                kind,
+                node_pk(kind, pk),
+                depth,
+                parent_kind,
+                node_pk(parent_kind, parent_pk) if parent_kind else None,
+            )
             for root_kind, root_pk, kind, pk, depth, parent_kind, parent_pk in cursor.fetchall()
         ]
     truncated = len(rows) > limit
     rows = rows[:limit]
 
-    found: dict[tuple[str, int], dict[tuple[str, int], LineageNode]] = {root: {} for root in roots}
-    parents: dict[tuple[str, int], dict[tuple[str, int], tuple[str, int]]] = {root: {} for root in roots}
+    found: dict[tuple[str, int], dict[tuple[str, int], LineageNode]] = {
+        root: {} for root in roots
+    }
+    parents: dict[tuple[str, int], dict[tuple[str, int], tuple[str, int]]] = {
+        root: {} for root in roots
+    }
     more: dict[tuple[str, int], bool] = {root: truncated for root in roots}
     children: dict[tuple[tuple[str, int], tuple[str, int]], set] = {}
     for root_kind, root_pk, kind, pk, depth, parent_kind, parent_pk in rows:
@@ -868,7 +1069,11 @@ def descendants(
         Descendants(
             root=root,
             nodes=sorted(
-                (dataclasses.replace(every[key], depth=node.depth) for key, node in found[root].items() if key in every),
+                (
+                    dataclasses.replace(every[key], depth=node.depth)
+                    for key, node in found[root].items()
+                    if key in every
+                ),
                 key=lambda node: (node.depth, node.kind, node.pk),
             ),
             more=more[root],
@@ -880,7 +1085,14 @@ def descendants(
 
 #: The kinds a home page lists as roots. An annotation collection is drawn rather than
 #: brought in, so it is not one of them.
-ROOT_KINDS = (FILE, "dataset", "tabledataset", "meshcollection", "sparsedataset", "networkcollection")
+ROOT_KINDS = (
+    FILE,
+    "dataset",
+    "tabledataset",
+    "meshcollection",
+    "sparsedataset",
+    "networkcollection",
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -915,7 +1127,11 @@ class RootFilter:
 
 def _shape(filters: RootFilter) -> tuple[str, ...]:
     """Which of a filter's fields are set: the shape of the SQL, so its cache key."""
-    return tuple(field.name for field in dataclasses.fields(filters) if getattr(filters, field.name) is not None)
+    return tuple(
+        field.name
+        for field in dataclasses.fields(filters)
+        if getattr(filters, field.name) is not None
+    )
 
 
 def _has_field(model: type, name: str) -> bool:
@@ -926,9 +1142,13 @@ def _acquired_sql(alias: str, shape: tuple[str, ...]) -> str:
     """The overlap of ``alias``'s acquisition window with the asked one, on the derived columns."""
     clauses = []
     if "acquired_after" in shape:
-        clauses.append(f"{alias}.{_q(_column(models.ArrayDataset, 'acquisition_end'))} >= %(acquired_after)s")
+        clauses.append(
+            f"{alias}.{_q(_column(models.ArrayDataset, 'acquisition_end'))} >= %(acquired_after)s"
+        )
     if "acquired_before" in shape:
-        clauses.append(f"{alias}.{_q(_column(models.ArrayDataset, 'acquisition_start'))} <= %(acquired_before)s")
+        clauses.append(
+            f"{alias}.{_q(_column(models.ArrayDataset, 'acquisition_start'))} <= %(acquired_before)s"
+        )
     return " AND ".join(clauses)
 
 
@@ -947,7 +1167,9 @@ def _search_sql(key: str, model: type, semantic: bool) -> tuple[str, str, str, s
     if key == FILE:
         named = f"({named} OR {_series_sql(f'x.{_q(model._meta.pk.column)}', _name_sql('d', models.ArrayDataset))})"
     rank = f"CASE WHEN {name} ILIKE %(search_exact)s THEN 0 WHEN {name} ILIKE %(search_prefix)s THEN 1 WHEN {named} THEN 2 ELSE 3 END"
-    similarity = f"CASE WHEN {named} THEN similarity({name}, %(search_text)s) ELSE 0 END"
+    similarity = (
+        f"CASE WHEN {named} THEN similarity({name}, %(search_text)s) ELSE 0 END"
+    )
     if not (semantic and _has_field(model, "embedding")):
         return named, rank, similarity, "NULL::float8"
     # A NULL embedding gives a NULL distance, which is never below the threshold.
@@ -957,7 +1179,9 @@ def _search_sql(key: str, model: type, semantic: bool) -> tuple[str, str, str, s
 
 def _spec_sql(alias: str) -> str:
     """Whether ``alias`` carries every asked spec: ``stored_spec`` contains them, as the list filter asks."""
-    return f"{alias}.{_q(_column(models.ArrayDataset, 'stored_spec'))} @> %(spec)s::jsonb"
+    return (
+        f"{alias}.{_q(_column(models.ArrayDataset, 'stored_spec'))} @> %(spec)s::jsonb"
+    )
 
 
 def _in_collaboration_sql(model: type, pk_sql: str) -> str:
@@ -989,7 +1213,9 @@ def _series_sql(x_pk: str, condition: str) -> str:
     )
 
 
-def _root_arm_filters(key: str, model: type, shape: tuple[str, ...], semantic: bool = False) -> list[str] | None:
+def _root_arm_filters(
+    key: str, model: type, shape: tuple[str, ...], semantic: bool = False
+) -> list[str] | None:
     """The extra conditions on one kind's arm, or ``None`` when the filter rules the kind out."""
     pk = f"x.{_q(model._meta.pk.column)}"
     clauses = []
@@ -1021,8 +1247,15 @@ def _root_arm_filters(key: str, model: type, shape: tuple[str, ...], semantic: b
             on = "d"
         else:
             return None
-        series = [*([_acquired_sql(on, shape)] if acquired else []), *([_spec_sql(on)] if "spec" in shape else [])]
-        clauses.append(" AND ".join(series) if key == "dataset" else _series_sql(pk, " AND ".join(series)))
+        series = [
+            *([_acquired_sql(on, shape)] if acquired else []),
+            *([_spec_sql(on)] if "spec" in shape else []),
+        ]
+        clauses.append(
+            " AND ".join(series)
+            if key == "dataset"
+            else _series_sql(pk, " AND ".join(series))
+        )
     return clauses
 
 
@@ -1035,7 +1268,9 @@ def _not_a_field_sql() -> str:
 
 
 @cache
-def _roots_sql(kinds: tuple[str, ...], shape: tuple[str, ...] = (), semantic: bool = False) -> str | None:
+def _roots_sql(
+    kinds: tuple[str, ...], shape: tuple[str, ...] = (), semantic: bool = False
+) -> str | None:
     """The newest nodes with no up-hop, across ``kinds``, as ``(kind, pk, created_at)``.
 
     "No up-hop" is :func:`_step` upward, the very hop the lineage walk takes, so a root here
@@ -1112,20 +1347,39 @@ def roots(
         needle = params["search"].strip()
         # A literal substring: the LIKE wildcards in what was typed match only themselves.
         escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        params.update(search=f"%{escaped}%", search_exact=escaped, search_prefix=f"{escaped}%", search_text=needle)
+        params.update(
+            search=f"%{escaped}%",
+            search_exact=escaped,
+            search_prefix=f"{escaped}%",
+            search_text=needle,
+        )
         vector = query_vector(needle) if needle else None
         if vector is not None:
             semantic = True
-            params.update(search_vector=str(vector), search_threshold=engine.distance_threshold())
+            params.update(
+                search_vector=str(vector), search_threshold=engine.distance_threshold()
+            )
     sql = _roots_sql(wanted, shape, semantic) if wanted else None
     if sql is None:
         return []
     if "spec" in params:
         params["spec"] = json.dumps(list(params["spec"]))
     with connection.cursor() as cursor:
-        cursor.execute(sql, {**params, "org": organization.pk, "window": offset + limit, "offset": offset, "limit": limit})
+        cursor.execute(
+            sql,
+            {
+                **params,
+                "org": organization.pk,
+                "window": offset + limit,
+                "offset": offset,
+                "limit": limit,
+            },
+        )
         rows = cursor.fetchall()
     rows = [(kind, node_pk(kind, pk), created) for kind, pk, created in rows]
-    nodes = {(kind, pk): LineageNode(kind=kind, pk=pk, depth=0, created_at=created) for kind, pk, created in rows}
+    nodes = {
+        (kind, pk): LineageNode(kind=kind, pk=pk, depth=0, created_at=created)
+        for kind, pk, created in rows
+    }
     _hydrate_nodes(nodes, organization)
     return [nodes[(kind, pk)] for kind, pk, _ in rows if (kind, pk) in nodes]

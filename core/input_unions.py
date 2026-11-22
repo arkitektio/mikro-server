@@ -38,14 +38,25 @@ _VALUE_ERROR_PREFIX = "Value error, "
 class unionElementOf:  # the lowercase class name IS the SDL directive name, and kabinet already fixed it
     """Marks an input type as one member of a flat discriminated union input."""
 
-    union: str = strawberry.field(description="The name of the flat input type this member belongs to")
-    discriminator: str = strawberry.field(description="The field of the flat input whose value selects a member")
-    key: str = strawberry.field(description="The discriminator value that selects this member")
+    union: str = strawberry.field(
+        description="The name of the flat input type this member belongs to"
+    )
+    discriminator: str = strawberry.field(
+        description="The field of the flat input whose value selects a member"
+    )
+    key: str = strawberry.field(
+        description="The discriminator value that selects this member"
+    )
 
 
-def union_memberships(*unions: str, key: str, discriminator: str = "kind") -> list[unionElementOf]:
+def union_memberships(
+    *unions: str, key: str, discriminator: str = "kind"
+) -> list[unionElementOf]:
     """The directive instances declaring one member input's place in each named union."""
-    return [unionElementOf(union=union, discriminator=discriminator, key=key) for union in unions]
+    return [
+        unionElementOf(union=union, discriminator=discriminator, key=key)
+        for union in unions
+    ]
 
 
 def parse_union_member(
@@ -72,12 +83,20 @@ def parse_union_member(
 
     member = members.get(kind)
     if member is None:
-        raise ValueError((unknown_kind_error or "A {noun} cannot be a {kind}.").format(kind=kind, noun=noun))
+        raise ValueError(
+            (unknown_kind_error or "A {noun} cannot be a {kind}.").format(
+                kind=kind, noun=noun
+            )
+        )
 
     try:
         return member.model_validate(data)
     except ValidationError as err:
-        raise ValueError(_member_mismatch(err, member=member, kind=kind, noun=noun, discriminator=discriminator)) from err
+        raise ValueError(
+            _member_mismatch(
+                err, member=member, kind=kind, noun=noun, discriminator=discriminator
+            )
+        ) from err
 
 
 def camel_field(name: str) -> str:
@@ -90,9 +109,20 @@ def _an(kind: str) -> str:
     return f"An {kind}" if kind[:1] in "AEIOU" else f"A {kind}"
 
 
-def _member_mismatch(err: ValidationError, *, member: type[BaseModel], kind: str, noun: str, discriminator: str) -> str:
+def _member_mismatch(
+    err: ValidationError,
+    *,
+    member: type[BaseModel],
+    kind: str,
+    noun: str,
+    discriminator: str,
+) -> str:
     reads = [camel_field(name) for name in member.model_fields if name != discriminator]
-    reads_clause = "it reads " + ", ".join(f"`{name}`" for name in reads) if reads else "it takes no parameters at all"
+    reads_clause = (
+        "it reads " + ", ".join(f"`{name}`" for name in reads)
+        if reads
+        else "it takes no parameters at all"
+    )
     for detail in err.errors():
         loc = [str(part) for part in detail["loc"] if str(part) != discriminator]
         field = camel_field(loc[0]) if loc else discriminator
@@ -126,10 +156,15 @@ def describe_validation_error(err: ValidationError) -> str:
     # Anything else is pydantic's own text for a constraint or a coercion. Name the field
     # by its full path, so an error on a nested input says which one -- `policy.nchildren`,
     # not `policy`. List indices stay bare, as they read better than `.0.`.
-    parts = [str(part) if isinstance(part, int) else camel_field(str(part)) for part in detail["loc"]]
+    parts = [
+        str(part) if isinstance(part, int) else camel_field(str(part))
+        for part in detail["loc"]
+    ]
     if not parts:
         return message
-    path = parts[0] + "".join(f"[{part}]" if part.isdigit() else f".{part}" for part in parts[1:])
+    path = parts[0] + "".join(
+        f"[{part}]" if part.isdigit() else f".{part}" for part in parts[1:]
+    )
     return f"`{path}`: {message}"
 
 

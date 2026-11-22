@@ -14,13 +14,12 @@ already say something different about.
 """
 
 import pytest
+from kante.context import HttpContext
 from pytest import approx
 
 from core import enums, models
-from kante.context import HttpContext
 from mikro_server.schema import schema
 from tests import seed
-
 
 DRAW = """
 mutation Create($input: CreateAnnotationInput!) {
@@ -45,13 +44,20 @@ def test_the_new_kinds_reach_the_graphql_enum():
 
     for member in ("CIRCLE", "SPHERE", "ELLIPSOID", "MULTI_POINT"):
         assert member in sdl, f"{member} missing from the AnnotationKind enum"
-        assert hasattr(enums.AnnotationKindChoices, member), f"{member} missing from AnnotationKindChoices"
-        assert enums.AnnotationKind[member].value == enums.AnnotationKindChoices[member].value, "a stored value and a requested value must be the same string"
+        assert hasattr(enums.AnnotationKindChoices, member), (
+            f"{member} missing from AnnotationKindChoices"
+        )
+        assert (
+            enums.AnnotationKind[member].value
+            == enums.AnnotationKindChoices[member].value
+        ), "a stored value and a requested value must be the same string"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_drawn_sphere_gets_its_box_for_free(db, authenticated_context: HttpContext):
+async def test_a_drawn_sphere_gets_its_box_for_free(
+    db, authenticated_context: HttpContext
+):
     """The kind-blind annotation write path already boxes a corner-encoded shape correctly.
 
     No branch in ``compute_intrinsic_bbox`` knows what a sphere is, and none needs
@@ -67,7 +73,9 @@ async def test_a_drawn_sphere_gets_its_box_for_free(db, authenticated_context: H
     result = await schema.execute(
         DRAW,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "kind": "SPHERE", "vectors": corners}},
+        variable_values={
+            "input": {"scene": str(scene.id), "kind": "SPHERE", "vectors": corners}
+        },
     )
     assert not result.errors, result.errors
     sphere = result.data["createAnnotation"]
@@ -79,19 +87,27 @@ async def test_a_drawn_sphere_gets_its_box_for_free(db, authenticated_context: H
     cube = await schema.execute(
         DRAW,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "kind": "CUBE", "vectors": corners}},
+        variable_values={
+            "input": {"scene": str(scene.id), "kind": "CUBE", "vectors": corners}
+        },
     )
     assert not cube.errors, cube.errors
-    assert cube.data["createAnnotation"]["intrinsicBbox"] == sphere["intrinsicBbox"], "same corners, same box: the round kind adds no second reading"
+    assert cube.data["createAnnotation"]["intrinsicBbox"] == sphere["intrinsicBbox"], (
+        "same corners, same box: the round kind adds no second reading"
+    )
 
     stored = await models.Annotation.objects.aget(id=sphere["id"])
     assert stored.kind == enums.AnnotationKindChoices.SPHERE.value
-    assert stored.bbox_cube is not None, "the GiST search copy is written like it is for every other kind"
+    assert stored.bbox_cube is not None, (
+        "the GiST search copy is written like it is for every other kind"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_drawn_point_set_is_hulled_not_connected(db, authenticated_context: HttpContext):
+async def test_a_drawn_point_set_is_hulled_not_connected(
+    db, authenticated_context: HttpContext
+):
     """MULTI_POINT stores every click; the box spans them all."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Counts")
@@ -101,12 +117,16 @@ async def test_a_drawn_point_set_is_hulled_not_connected(db, authenticated_conte
     result = await schema.execute(
         DRAW,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "kind": "MULTI_POINT", "vectors": points}},
+        variable_values={
+            "input": {"scene": str(scene.id), "kind": "MULTI_POINT", "vectors": points}
+        },
     )
     assert not result.errors, result.errors
     drawn = result.data["createAnnotation"]
 
-    assert drawn["vectors"] == points, "every point survives; a point set is one annotation, not three"
+    assert drawn["vectors"] == points, (
+        "every point survives; a point set is one annotation, not three"
+    )
     assert drawn["intrinsicBbox"]["min"] == approx([-0.5, 1.5, 0.5])
     assert drawn["intrinsicBbox"]["max"] == approx([0.5, 7.5, 9.5])
 
@@ -124,7 +144,9 @@ async def test_the_new_kinds_are_filterable(db, authenticated_context: HttpConte
         result = await schema.execute(
             DRAW,
             context_value=ctx,
-            variable_values={"input": {"scene": str(scene.id), "kind": kind, "vectors": corners}},
+            variable_values={
+                "input": {"scene": str(scene.id), "kind": kind, "vectors": corners}
+            },
         )
         assert not result.errors, result.errors
         drawn[kind] = result.data["createAnnotation"]["id"]

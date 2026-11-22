@@ -41,7 +41,9 @@ def paginate_querysets(
     return items
 
 
-def paginate_list(items: "list[Any]", offset: int = 0, limit: int | None = None) -> "list[Any]":
+def paginate_list(
+    items: "list[Any]", offset: int = 0, limit: int | None = None
+) -> "list[Any]":
     """Offset/limit over a list that is not a queryset.
 
     The sibling of :func:`paginate_querysets` for the computed queries -- the options a picker

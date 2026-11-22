@@ -17,12 +17,26 @@ class Command(BaseCommand):
     help = "Read the row count and per-column range and null count off the parquet footer of every table that has none."
 
     def handle(self, *args: object, **options: object) -> None:
-        pending = models.TableDataset.objects.filter(row_count__isnull=True, store__populated=True).select_related("store").order_by("pk")
+        pending = (
+            models.TableDataset.objects.filter(
+                row_count__isnull=True, store__populated=True
+            )
+            .select_related("store")
+            .order_by("pk")
+        )
         total = pending.count()
         if not total:
             self.stdout.write(self.style.SUCCESS("Every table records its footer."))
             return
-        recorded = sum(1 for table in pending.iterator() if table_stats.record_footer(table))
-        self.stdout.write(self.style.SUCCESS(f"Read the footer of {recorded} of {total} table(s)."))
+        recorded = sum(
+            1 for table in pending.iterator() if table_stats.record_footer(table)
+        )
+        self.stdout.write(
+            self.style.SUCCESS(f"Read the footer of {recorded} of {total} table(s).")
+        )
         if recorded < total:
-            self.stdout.write(self.style.WARNING(f"{total - recorded} table(s) could not be read and keep no row count; run this again once their parquet is reachable."))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{total - recorded} table(s) could not be read and keep no row count; run this again once their parquet is reachable."
+                )
+            )

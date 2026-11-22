@@ -89,7 +89,9 @@ def test_phasor_surface_exists():
         assert token in sdl, f"{token} missing from schema"
 
     assert "SPECTRUM" in sdl, "the SPECTRUM axis type is missing from schema"
-    assert "type PhasorNode implements LayerRenderNode" in sdl, "PhasorNode must implement the render-node interface"
+    assert "type PhasorNode implements LayerRenderNode" in sdl, (
+        "PhasorNode must implement the render-node interface"
+    )
 
 
 def test_polymorphic_layer_subtypes_exist():
@@ -108,18 +110,28 @@ def test_polymorphic_layer_subtypes_exist():
 def test_layer_alpha_compositing_fields_exist():
     """The polymorphic Layer interface carries the neuroglancer-style alpha compositing knobs."""
     sdl = schema.as_str()
-    layer_def = sdl[sdl.find("interface Layer ") : sdl.find("}", sdl.find("interface Layer "))]
+    layer_def = sdl[
+        sdl.find("interface Layer ") : sdl.find("}", sdl.find("interface Layer "))
+    ]
     for field in ["blending:", "opacity:", "visible:", "order:"]:
         assert field in layer_def, f"Layer.{field} missing from interface"
     # The ImageLayer carries its data source and the render graph; all rendering
     # (colormap/contrast/gamma) now lives inside the render graph, not on flat fields.
-    image_def = sdl[sdl.find("type ImageLayer implements") : sdl.find("}", sdl.find("type ImageLayer implements"))]
+    image_def = sdl[
+        sdl.find("type ImageLayer implements") : sdl.find(
+            "}", sdl.find("type ImageLayer implements")
+        )
+    ]
     for field in ["lens:", "renderGraph:"]:
         assert field in image_def, f"ImageLayer.{field} missing"
     for field in ["gamma:", "colormap:", "climMin:", "climMax:", "color:"]:
-        assert field not in image_def, f"vestigial flat render field ImageLayer.{field} should be gone (moved into the render graph)"
+        assert field not in image_def, (
+            f"vestigial flat render field ImageLayer.{field} should be gone (moved into the render graph)"
+        )
     # The NORMAL (alpha-over) blend mode must be available.
-    blending_def = sdl[sdl.find("enum Blending ") : sdl.find("}", sdl.find("enum Blending "))]
+    blending_def = sdl[
+        sdl.find("enum Blending ") : sdl.find("}", sdl.find("enum Blending "))
+    ]
     assert "NORMAL" in blending_def
 
 
@@ -141,7 +153,9 @@ def test_blending_enums_stay_in_sync():
 
 def test_legacy_order_argument_removed():
     sdl = schema.as_str()
-    listing = sdl[sdl.find("arrayDatasets(") : sdl.find(")", sdl.find("arrayDatasets("))]
+    listing = sdl[
+        sdl.find("arrayDatasets(") : sdl.find(")", sdl.find("arrayDatasets("))
+    ]
     assert "ordering:" in listing
     assert "order:" not in listing
 
@@ -163,7 +177,9 @@ def test_coordinate_enums_stay_in_sync():
     for graphql_enum, db_choices in pairs:
         graphql_values = {member.value for member in graphql_enum}
         db_values = set(db_choices.values)
-        assert graphql_values <= db_values, f"{graphql_enum.__name__}: {graphql_values - db_values}"
+        assert graphql_values <= db_values, (
+            f"{graphql_enum.__name__}: {graphql_values - db_values}"
+        )
 
 
 def test_polymorphic_transformation_subtypes_exist():
@@ -243,10 +259,14 @@ def test_attribute_plan_types_exist():
     # A table's column is declared once, on ColumnInput; the second declaration surface
     # (`TableAxisInput` + `CreateTableDatasetInput.axes`) was retired 2026-08-31 because it
     # and `ColumnInput.references` were two wire doors into the one `Column.references` FK.
-    assert "TableAxisInput" not in sdl, "the flat declaration must not grow its old sibling back"
+    assert "TableAxisInput" not in sdl, (
+        "the flat declaration must not grow its old sibling back"
+    )
     # The statement is derived from `keyColumns` + `attributes` by the worker now
     # (`core/logic/plan_sql.py`); a `sql` field would be a second copy of them, free to drift.
-    lookup = sdl[sdl.index("type LookupStep") : sdl.index("}", sdl.index("type LookupStep"))]
+    lookup = sdl[
+        sdl.index("type LookupStep") : sdl.index("}", sdl.index("type LookupStep"))
+    ]
     assert "sql:" not in lookup, "LookupStep must not carry the statement"
 
 
@@ -260,7 +280,9 @@ def test_a_column_reference_is_schema_not_geometry():
     sdl = schema.as_str()
     column_def = sdl[sdl.find("type Column ") : sdl.find("}", sdl.find("type Column "))]
     assert "references" in column_def, "Column must carry its declared foreign key"
-    table_def = sdl[sdl.find("type TableDataset ") : sdl.find("}", sdl.find("type TableDataset "))]
+    table_def = sdl[
+        sdl.find("type TableDataset ") : sdl.find("}", sdl.find("type TableDataset "))
+    ]
     assert "referencedBy" in table_def, "TableDataset must answer 'who keys into me'"
 
 
@@ -272,7 +294,9 @@ def test_no_to_world_resolver():
     ever fails, someone has added the field that makes the graph a lie.
     """
     sdl = schema.as_str()
-    assert "toWorld" not in sdl, "a toWorld resolver was added: the server must not compose paths (see core/models/coords.py)"
+    assert "toWorld" not in sdl, (
+        "a toWorld resolver was added: the server must not compose paths (see core/models/coords.py)"
+    )
 
 
 def test_nothing_mints_a_world_for_a_dataset():
@@ -287,14 +311,27 @@ def test_nothing_mints_a_world_for_a_dataset():
     another name, which the two symbol checks would miss.
     """
     sdl = schema.as_str()
-    for token in ["createSceneFromDataset", "CreateSceneFromDatasetInput", "bootstrapScene", "BootstrapSceneInput"]:
-        assert token not in sdl, f"`{token}` is back: a dataset is staged over its own space, not over a minted copy of one"
+    for token in [
+        "createSceneFromDataset",
+        "CreateSceneFromDatasetInput",
+        "bootstrapScene",
+        "BootstrapSceneInput",
+    ]:
+        assert token not in sdl, (
+            f"`{token}` is back: a dataset is staged over its own space, not over a minted copy of one"
+        )
 
     # The lightpath schema has a real optical mirror (`MirrorElement`, `ElementKind.MIRROR`)
     # and it is not what this is about. What must not come back is the *verb*: a description
     # saying one space mirrors another.
-    mirroring = [line.strip() for line in sdl.split("\n") if any(word in line.lower() for word in ("mirroring", "mirrors", "mirrored"))]
-    assert mirroring == [], f"the SDL describes one space as mirroring another: {mirroring}"
+    mirroring = [
+        line.strip()
+        for line in sdl.split("\n")
+        if any(word in line.lower() for word in ("mirroring", "mirrors", "mirrored"))
+    ]
+    assert mirroring == [], (
+        f"the SDL describes one space as mirroring another: {mirroring}"
+    )
 
 
 def test_a_scene_answers_for_its_layers_and_nothing_spatial():
@@ -311,11 +348,19 @@ def test_a_scene_answers_for_its_layers_and_nothing_spatial():
     # `type CoordinateSystem` (and `registrations` in `input CreateCoordinateSystemInput`).
     # The trailing space keeps `type Scene ` from matching `type SceneSnapshot`.
     scene_def = sdl[sdl.find("type Scene ") : sdl.find("}", sdl.find("type Scene "))]
-    assert "layers" in scene_def, "the slice must be the Scene block: a missed find() would make the assertions below pass on nothing"
+    assert "layers" in scene_def, (
+        "the slice must be the Scene block: a missed find() would make the assertions below pass on nothing"
+    )
     for token in ["registrations", "coordinateSystems", "annotations"]:
-        assert token not in scene_def, f"Scene must not answer `{token}`: it is a property of the world, identical for every scene over it"
+        assert token not in scene_def, (
+            f"Scene must not answer `{token}`: it is a property of the world, identical for every scene over it"
+        )
 
-    system_def = sdl[sdl.find("type CoordinateSystem ") : sdl.find("}", sdl.find("type CoordinateSystem "))]
+    system_def = sdl[
+        sdl.find("type CoordinateSystem ") : sdl.find(
+            "}", sdl.find("type CoordinateSystem ")
+        )
+    ]
     for token in ["registrations", "placedSystems", "annotations"]:
         assert token in system_def, f"the space is where `{token}` is read"
 
@@ -323,6 +368,10 @@ def test_a_scene_answers_for_its_layers_and_nothing_spatial():
 def test_layer_carries_no_spatial_fields():
     """Registration is a scene-level edge, not a property of a view of the data."""
     sdl = schema.as_str()
-    layer_def = sdl[sdl.find("interface Layer ") : sdl.find("}", sdl.find("interface Layer "))]
+    layer_def = sdl[
+        sdl.find("interface Layer ") : sdl.find("}", sdl.find("interface Layer "))
+    ]
     for token in ["affineMatrix", "xDim", "yDim", "zDim", "tDim"]:
-        assert token not in layer_def, f"Layer must not carry {token}: two layers over one dataset would carry two copies of one fact"
+        assert token not in layer_def, (
+            f"Layer must not carry {token}: two layers over one dataset would carry two copies of one fact"
+        )

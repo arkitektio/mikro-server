@@ -33,11 +33,12 @@ from embeddings import engine  # noqa: E402
 try:
     engine.warm_up()
 except engine.EmbeddingsUnavailable as e:
-    logging.getLogger(__name__).warning("%s. Rows are saved without a vector and search is lexical-only.", e)
+    logging.getLogger(__name__).warning(
+        "%s. Rows are saved without a vector and search is lexical-only.", e
+    )
 
 
 from kante.router import router  # noqa: E402
-
 
 from .schema import schema  # noqa: E402
 

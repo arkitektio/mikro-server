@@ -65,9 +65,15 @@ _CREATES = {
 
 def preview_layer(info: Info, input: PreviewLayerInput) -> types.Layer:
     """Run the create the input names in preview mode, and answer with the unsaved row."""
-    chosen = [(name, value) for name, value in vars(input).items() if value not in (None, strawberry.UNSET)]
+    chosen = [
+        (name, value)
+        for name, value in vars(input).items()
+        if value not in (None, strawberry.UNSET)
+    ]
     if len(chosen) != 1:
-        raise ValueError(f"Name exactly one layer to preview; got {len(chosen)}: {', '.join(name for name, _ in chosen) or 'none'}.")
+        raise ValueError(
+            f"Name exactly one layer to preview; got {len(chosen)}: {', '.join(name for name, _ in chosen) or 'none'}."
+        )
     name, value = chosen[0]
     with previewing():
         layer = _CREATES[name](info, value)

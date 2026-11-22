@@ -2,8 +2,8 @@
 
 import kante
 import strawberry
-from kante.types import Info
 from django.db import transaction
+from kante.types import Info
 from pydantic import BaseModel, model_validator
 
 from core import models, types
@@ -22,7 +22,9 @@ class AutoVisualizeInputModel(BaseModel):
     @model_validator(mode="after")
     def _names_one_thing(self) -> "AutoVisualizeInputModel":
         if (self.coordinate_system is None) == (self.lens is None):
-            raise ValueError("Name exactly one of `coordinateSystem` (show what resides in a space) or `lens` (show one selection, and nothing else of its container).")
+            raise ValueError(
+                "Name exactly one of `coordinateSystem` (show what resides in a space) or `lens` (show one selection, and nothing else of its container)."
+            )
         return self
 
 
@@ -40,7 +42,10 @@ class AutoVisualizeInputModel(BaseModel):
 class AutoVisualizeInput:
     """Input for showing a coordinate system, or one lens, as whichever composition fits it."""
 
-    coordinate_system: strawberry.ID | None = strawberry.field(default=None, description="The coordinate system to show. It becomes the world of the scene or chart as it is. Provide exactly one of this and `lens`")
+    coordinate_system: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The coordinate system to show. It becomes the world of the scene or chart as it is. Provide exactly one of this and `lens`",
+    )
     lens: strawberry.ID | None = strawberry.field(
         default=None,
         description=(
@@ -49,7 +54,10 @@ class AutoVisualizeInput:
             "lens' own space with the lens as its one layer. Provide exactly one of this and `coordinateSystem`"
         ),
     )
-    name: str | None = strawberry.field(default=None, description="The name of the scene or chart. Defaults to the coordinate system's name, or to the lens' container's label with the lens' name when it has one")
+    name: str | None = strawberry.field(
+        default=None,
+        description="The name of the scene or chart. Defaults to the coordinate system's name, or to the lens' container's label with the lens' name when it has one",
+    )
 
 
 def auto_visualize(info: Info, input: AutoVisualizeInput) -> types.Visualization:

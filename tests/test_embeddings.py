@@ -17,26 +17,51 @@ from mikro_server.schema import schema
 from tests.seed import _seed_parquet_store_sync, create_folder
 
 
-async def create_array_dataset(ctx: HttpContext, name: str, description: str | None = None) -> ArrayDataset:
+async def create_array_dataset(
+    ctx: HttpContext, name: str, description: str | None = None
+) -> ArrayDataset:
     """A bare array dataset (no coordinate graph -- these tests are about the text columns)."""
-    return await ArrayDataset.objects.acreate(name=name, description=description, creator=ctx.request.user, organization=ctx.request.organization)
+    return await ArrayDataset.objects.acreate(
+        name=name,
+        description=description,
+        creator=ctx.request.user,
+        organization=ctx.request.organization,
+    )
 
 
-async def create_table_dataset(ctx: HttpContext, name: str, description: str | None = None) -> TableDataset:
+async def create_table_dataset(
+    ctx: HttpContext, name: str, description: str | None = None
+) -> TableDataset:
     """A bare table dataset over a finished parquet store."""
     store = await sync_to_async(_seed_parquet_store_sync)(ctx, key=f"{name}.parquet")
-    return await TableDataset.objects.acreate(name=name, description=description, store=store, creator=ctx.request.user, organization=ctx.request.organization)
+    return await TableDataset.objects.acreate(
+        name=name,
+        description=description,
+        store=store,
+        creator=ctx.request.user,
+        organization=ctx.request.organization,
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_embeds_all_three_models(db, authenticated_context: HttpContext) -> None:
+async def test_create_embeds_all_three_models(
+    db, authenticated_context: HttpContext
+) -> None:
     """Each model gets a unit vector of the release's width."""
     ctx = authenticated_context
     rows = [
-        await create_folder(ctx, "Screen 12", description="Control and treated wells of the kinase screen"),
-        await create_array_dataset(ctx, "Plate 3 overview", "Widefield scan of the whole plate"),
-        await create_table_dataset(ctx, "Localizations", "Single-molecule localizations with drift corrected"),
+        await create_folder(
+            ctx,
+            "Screen 12",
+            description="Control and treated wells of the kinase screen",
+        ),
+        await create_array_dataset(
+            ctx, "Plate 3 overview", "Widefield scan of the whole plate"
+        ),
+        await create_table_dataset(
+            ctx, "Localizations", "Single-molecule localizations with drift corrected"
+        ),
     ]
     for row in rows:
         await row.arefresh_from_db()
@@ -47,9 +72,13 @@ async def test_create_embeds_all_three_models(db, authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_editing_the_description_reembeds(db, authenticated_context: HttpContext) -> None:
+async def test_editing_the_description_reembeds(
+    db, authenticated_context: HttpContext
+) -> None:
     """A changed description changes the vector; an unrelated ``update_fields`` save does not."""
-    folder = await create_folder(authenticated_context, "Experiment", description="control wells")
+    folder = await create_folder(
+        authenticated_context, "Experiment", description="control wells"
+    )
     before = list((await Folder.objects.aget(pk=folder.pk)).embedding)
 
     folder = await Folder.objects.aget(pk=folder.pk)
@@ -76,7 +105,9 @@ async def test_blank_text_stores_null(db, authenticated_context: HttpContext) ->
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_row_saved_without_the_model_has_no_vector_until_it_is_saved_again(db, authenticated_context: HttpContext, monkeypatch) -> None:
+async def test_a_row_saved_without_the_model_has_no_vector_until_it_is_saved_again(
+    db, authenticated_context: HttpContext, monkeypatch
+) -> None:
     """The write must not fail because the model did; the row's next save embeds it."""
 
     def unavailable() -> None:
@@ -84,7 +115,9 @@ async def test_a_row_saved_without_the_model_has_no_vector_until_it_is_saved_aga
 
     with monkeypatch.context() as patched:
         patched.setattr(engine, "_model", unavailable)
-        folder = await create_folder(authenticated_context, "Blur", description="Gaussian blur of an image")
+        folder = await create_folder(
+            authenticated_context, "Blur", description="Gaussian blur of an image"
+        )
     assert (await Folder.objects.aget(pk=folder.pk)).embedding is None
 
     folder = await Folder.objects.aget(pk=folder.pk)
@@ -95,15 +128,22 @@ async def test_a_row_saved_without_the_model_has_no_vector_until_it_is_saved_aga
 def test_history_does_not_know_the_column() -> None:
     """The vector is storage, not an edit: no historical model carries it."""
     for model in (Folder, ArrayDataset, TableDataset):
-        assert not any(field.name == "embedding" for field in model.provenance.model._meta.get_fields()), model.__name__
+        assert not any(
+            field.name == "embedding"
+            for field in model.provenance.model._meta.get_fields()
+        ), model.__name__
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_disabled_writes_no_vector(db, authenticated_context: HttpContext) -> None:
+async def test_disabled_writes_no_vector(
+    db, authenticated_context: HttpContext
+) -> None:
     """With embeddings off, saving leaves the column untouched."""
     with override_settings(EMBEDDINGS={**engine._settings(), "ENABLED": False}):
-        folder = await create_folder(authenticated_context, "Off", description="Nothing embeds")
+        folder = await create_folder(
+            authenticated_context, "Off", description="Nothing embeds"
+        )
         await folder.arefresh_from_db()
         assert folder.embedding is None
 
@@ -116,7 +156,11 @@ def test_no_system_check_loads_the_model(monkeypatch) -> None:
         raise AssertionError("a system check loaded the embedding model")
 
     monkeypatch.setattr(engine, "_model", loaded)
-    assert not [message for message in checks.run_checks(databases=["default"]) if message.id.startswith("embeddings.")]
+    assert not [
+        message
+        for message in checks.run_checks(databases=["default"])
+        if message.id.startswith("embeddings.")
+    ]
 
 
 def test_weights_baked_for_another_model_are_refused(tmp_path, monkeypatch) -> None:
@@ -137,7 +181,9 @@ EMBEDDING_QUERY = "query($id: ID!){ folder(id: $id){ name embedding } }"
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_stored_vector_is_published_with_its_model_id(authenticated_context: HttpContext) -> None:
+async def test_the_stored_vector_is_published_with_its_model_id(
+    authenticated_context: HttpContext,
+) -> None:
     """A vector without the model that produced it is not comparable to anything, so the
     descriptor travels inside the value rather than beside it."""
     from embeddings.strawberry import format_embedding
@@ -145,7 +191,11 @@ async def test_the_stored_vector_is_published_with_its_model_id(authenticated_co
     folder = await create_folder(authenticated_context, name="Segmentations")
     await folder.arefresh_from_db()
 
-    result = await schema.execute(EMBEDDING_QUERY, context_value=authenticated_context, variable_values={"id": str(folder.pk)})
+    result = await schema.execute(
+        EMBEDDING_QUERY,
+        context_value=authenticated_context,
+        variable_values={"id": str(folder.pk)},
+    )
     assert not result.errors, result.errors
     published = result.data["folder"]["embedding"]
 
@@ -158,11 +208,17 @@ async def test_the_stored_vector_is_published_with_its_model_id(authenticated_co
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_row_without_a_vector_publishes_null(authenticated_context: HttpContext) -> None:
+async def test_a_row_without_a_vector_publishes_null(
+    authenticated_context: HttpContext,
+) -> None:
     folder = await create_folder(authenticated_context, name="Unembedded")
     await Folder.objects.filter(pk=folder.pk).aupdate(embedding=None)
 
-    result = await schema.execute(EMBEDDING_QUERY, context_value=authenticated_context, variable_values={"id": str(folder.pk)})
+    result = await schema.execute(
+        EMBEDDING_QUERY,
+        context_value=authenticated_context,
+        variable_values={"id": str(folder.pk)},
+    )
     assert not result.errors, result.errors
 
     assert result.data["folder"]["embedding"] is None

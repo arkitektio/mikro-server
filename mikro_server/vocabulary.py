@@ -39,7 +39,13 @@ KEY_BY_AXIS_TYPE = {
 }
 #: The axis types an array counts: the client's five, and no more, so the seven array keys stay
 #: the ones its specs were written against. ``@mikro/spec`` is beside them and the server's own.
-ARRAY_AXIS_TYPES: tuple[str, ...] = ("SPACE", "TIME", "CHANNEL", "SPECTRUM", "MICROTIME")
+ARRAY_AXIS_TYPES: tuple[str, ...] = (
+    "SPACE",
+    "TIME",
+    "CHANNEL",
+    "SPECTRUM",
+    "MICROTIME",
+)
 #: What a record container -- a table, a sparse matrix -- counts: where its rows sit, and how
 #: many of its axes enumerate rather than measure.
 RECORD_AXIS_TYPES: tuple[str, ...] = ("SPACE", "TIME", "INDEX")
@@ -67,66 +73,153 @@ CONTAINER_KIND = "@mikro/container_kind"
 
 
 def _axis_counts(axis_types: Sequence[str]) -> list[Descriptor]:
-    return [Descriptor(key=KEY_BY_AXIS_TYPE[axis_type], type="INT", description=f"How many of its axes are {axis_type} axes") for axis_type in axis_types]
+    return [
+        Descriptor(
+            key=KEY_BY_AXIS_TYPE[axis_type],
+            type="INT",
+            description=f"How many of its axes are {axis_type} axes",
+        )
+        for axis_type in axis_types
+    ]
 
 
-_IS_WHOLE = Descriptor(key=IS_WHOLE, type="BOOL", description="Whether this selects everything: true of a container and of its whole lens, false of a crop or a window")
+_IS_WHOLE = Descriptor(
+    key=IS_WHOLE,
+    type="BOOL",
+    description="Whether this selects everything: true of a container and of its whole lens, false of a crop or a window",
+)
 
 
 def _spec(members: str, selection: str) -> Descriptor:
-    return Descriptor(key=SPEC, type="LIST", description=f"What it structurally is, as the members of its `spec`: {members}. Of a lens, the spec of what it selects: {selection}")
+    return Descriptor(
+        key=SPEC,
+        type="LIST",
+        description=f"What it structurally is, as the members of its `spec`: {members}. Of a lens, the spec of what it selects: {selection}",
+    )
 
 
 #: Every descriptor ``core.descriptors.array_descriptors`` produces, plus the value kind and
 #: whether it is whole -- what mikro declares an array dataset and an array lens carry.
 ARRAY_DESCRIPTORS = [
     *_axis_counts(ARRAY_AXIS_TYPES),
-    *(Descriptor(key=key, type="INT", description=f"Its total extent along its {axis_type} axes") for key, axis_type in EXTENT_KEYS.items()),
-    Descriptor(key=SIZE, type="INT", description="How many elements it has: the product of its shape"),
-    Descriptor(key=DSIZE, type="INT", description="How many bytes one element takes, from its dtype; its uncompressed size in bytes is size * dsize. Absent while it has no store"),
-    Descriptor(key=VALUE_KIND, type="STRING", description="What its values mean: categorical (a label image or segmentation mask of object ids, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity"),
-    Descriptor(key=DTYPE, type="STRING", description="The element (pixel) type of its values, as numpy spells it (uint8, uint16, float32, ...): an action typed on integers (labels, thresholds) or on floats asks for it"),
-    _spec("one spatial member (SCALAR, PROFILE, IMAGE, VOLUME, HYPERVOLUME), a modifier per non-spatial axis it has more than one position along, and TRACE for a curve", "an axis counts only when the lens keeps more than one position along it"),
+    *(
+        Descriptor(
+            key=key,
+            type="INT",
+            description=f"Its total extent along its {axis_type} axes",
+        )
+        for key, axis_type in EXTENT_KEYS.items()
+    ),
+    Descriptor(
+        key=SIZE,
+        type="INT",
+        description="How many elements it has: the product of its shape",
+    ),
+    Descriptor(
+        key=DSIZE,
+        type="INT",
+        description="How many bytes one element takes, from its dtype; its uncompressed size in bytes is size * dsize. Absent while it has no store",
+    ),
+    Descriptor(
+        key=VALUE_KIND,
+        type="STRING",
+        description="What its values mean: categorical (a label image or segmentation mask of object ids, from a derivation declared CATEGORIZED), vector (a DISPLACEMENT value axis), coordinates (a COORDINATE value axis) or intensity",
+    ),
+    Descriptor(
+        key=DTYPE,
+        type="STRING",
+        description="The element (pixel) type of its values, as numpy spells it (uint8, uint16, float32, ...): an action typed on integers (labels, thresholds) or on floats asks for it",
+    ),
+    _spec(
+        "one spatial member (SCALAR, PROFILE, IMAGE, VOLUME, HYPERVOLUME), a modifier per non-spatial axis it has more than one position along, and TRACE for a curve",
+        "an axis counts only when the lens keeps more than one position along it",
+    ),
     _IS_WHOLE,
 ]
 #: A table and a table lens: where its rows sit, and what its schema says the rows carry. No
 #: row count -- the server never scans a table.
 TABLE_DESCRIPTORS = [
     *_axis_counts(RECORD_AXIS_TYPES),
-    Descriptor(key="@mikro/n_coordinate_columns", type="INT", description="How many of its columns place a row (role COORDINATE): the axes of its space"),
-    Descriptor(key="@mikro/n_attribute_columns", type="INT", description="How many of its columns are measurements or properties (role ATTRIBUTE)"),
-    Descriptor(key="@mikro/has_track_ids", type="BOOL", description="Whether a column groups rows into trajectories, i.e. tracks (role TRACK_ID)"),
-    Descriptor(key="@mikro/has_group_ids", type="BOOL", description="Whether a column groups rows into connected objects (role GROUP_ID)"),
-    Descriptor(key="@mikro/has_labels", type="BOOL", description="Whether a column carries a per-row text label (role LABEL)"),
-    _spec("one placement member (RECORDS, POINTS_1D, POINTS_2D, POINTS_3D, POINTS_ND), a modifier per declared fact (TIMED, TRACKED, GROUPED, KEYED, NODE_TABLE, EDGE_TABLE), and SERIES for what a chart draws whole", "a coordinate column a window pins to one value no longer counts"),
+    Descriptor(
+        key="@mikro/n_coordinate_columns",
+        type="INT",
+        description="How many of its columns place a row (role COORDINATE): the axes of its space",
+    ),
+    Descriptor(
+        key="@mikro/n_attribute_columns",
+        type="INT",
+        description="How many of its columns are measurements or properties (role ATTRIBUTE)",
+    ),
+    Descriptor(
+        key="@mikro/has_track_ids",
+        type="BOOL",
+        description="Whether a column groups rows into trajectories, i.e. tracks (role TRACK_ID)",
+    ),
+    Descriptor(
+        key="@mikro/has_group_ids",
+        type="BOOL",
+        description="Whether a column groups rows into connected objects (role GROUP_ID)",
+    ),
+    Descriptor(
+        key="@mikro/has_labels",
+        type="BOOL",
+        description="Whether a column carries a per-row text label (role LABEL)",
+    ),
+    _spec(
+        "one placement member (RECORDS, POINTS_1D, POINTS_2D, POINTS_3D, POINTS_ND), a modifier per declared fact (TIMED, TRACKED, GROUPED, KEYED, NODE_TABLE, EDGE_TABLE), and SERIES for what a chart draws whole",
+        "a coordinate column a window pins to one value no longer counts",
+    ),
     _IS_WHOLE,
 ]
 #: A sparse matrix and a sparse lens: its rank, which axes enumerate, and how many of them a
 #: contiguous read can select along.
 SPARSE_DESCRIPTORS = [
     *_axis_counts(RECORD_AXIS_TYPES),
-    Descriptor(key="@mikro/n_axes", type="INT", description="Its rank: how many axes the matrix has"),
-    Descriptor(key="@mikro/n_layouts", type="INT", description="How many of its axes a contiguous read can select along: the layouts its store holds"),
-    _spec("one rank member (SCALAR, VECTOR, MATRIX, TENSOR) by how many axes have more than one position, and SLICE for what a picker reads", "an axis a window pins to one position no longer counts"),
+    Descriptor(
+        key="@mikro/n_axes",
+        type="INT",
+        description="Its rank: how many axes the matrix has",
+    ),
+    Descriptor(
+        key="@mikro/n_layouts",
+        type="INT",
+        description="How many of its axes a contiguous read can select along: the layouts its store holds",
+    ),
+    _spec(
+        "one rank member (SCALAR, VECTOR, MATRIX, TENSOR) by how many axes have more than one position, and SLICE for what a picker reads",
+        "an axis a window pins to one position no longer counts",
+    ),
     _IS_WHOLE,
 ]
 MESH_DESCRIPTORS = [*_axis_counts(GEOMETRY_AXIS_TYPES), _IS_WHOLE]
 NETWORK_DESCRIPTORS = [
     *_axis_counts(GEOMETRY_AXIS_TYPES),
-    Descriptor(key="@mikro/has_attributes", type="BOOL", description="Whether its manifest declares per-node value columns"),
+    Descriptor(
+        key="@mikro/has_attributes",
+        type="BOOL",
+        description="Whether its manifest declares per-node value columns",
+    ),
     _IS_WHOLE,
 ]
 #: A fixture and its lens: the axes of its space. It carries no data to count.
 FIXTURE_DESCRIPTORS = [*_axis_counts(GEOMETRY_AXIS_TYPES), _IS_WHOLE]
 ANNOTATION_DESCRIPTORS = [
     *_axis_counts(GEOMETRY_AXIS_TYPES),
-    Descriptor(key=N_ANNOTATIONS, type="INT", description="How many annotations the selection holds: every one of the collection's, or, for a windowed lens, those whose extent lies in its windows"),
+    Descriptor(
+        key=N_ANNOTATIONS,
+        type="INT",
+        description="How many annotations the selection holds: every one of the collection's, or, for a windowed lens, those whose extent lies in its windows",
+    ),
     _IS_WHOLE,
 ]
 #: One shape, not a selection of them: what it is drawn as, and the axes of the space it is
 #: drawn in (its collection's), which is what tells a box on a plane from one in a volume.
 ANNOTATION_SHAPE_DESCRIPTORS = [
-    Descriptor(key=ANNOTATION_KIND, type="STRING", description="The shape it is drawn as: POINT, MULTI_POINT, LINE, PATH, POLYGON, RECTANGLE, CUBE, CIRCLE, ELLIPSE, SPHERE or ELLIPSOID"),
+    Descriptor(
+        key=ANNOTATION_KIND,
+        type="STRING",
+        description="The shape it is drawn as: POINT, MULTI_POINT, LINE, PATH, POLYGON, RECTANGLE, CUBE, CIRCLE, ELLIPSE, SPHERE or ELLIPSOID",
+    ),
     *_axis_counts(GEOMETRY_AXIS_TYPES),
 ]
 
@@ -145,38 +238,94 @@ DESCRIPTORS_BY_KIND: dict[str, list[Descriptor]] = {
 
 #: A scene: how it composes, and how it asks to be opened.
 SCENE_DESCRIPTORS = [
-    Descriptor(key="@mikro/blending", type="STRING", description="How its layers are blended: additive, multiplicative or normal"),
-    Descriptor(key="@mikro/preferred_view", type="STRING", description="The view it asks to be opened in: two_d, three_d or auto"),
+    Descriptor(
+        key="@mikro/blending",
+        type="STRING",
+        description="How its layers are blended: additive, multiplicative or normal",
+    ),
+    Descriptor(
+        key="@mikro/preferred_view",
+        type="STRING",
+        description="The view it asks to be opened in: two_d, three_d or auto",
+    ),
 ]
 #: A chart: the one metric axis its world is, if it is one.
 CHART_DESCRIPTORS = [
-    Descriptor(key="@mikro/axis_type", type="STRING", description="What its world's one measured axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength) -- or VALUE when the world is not one measured axis (a table's rows), where only value layers (scatters, histograms) draw"),
-    Descriptor(key="@mikro/axis_unit", type="STRING", description="The unit of its world's one measured axis; 'None' when the world is not one, and the drawn axes are the units of the columns its layers read"),
+    Descriptor(
+        key="@mikro/axis_type",
+        type="STRING",
+        description="What its world's one measured axis measures: SPACE (a distance), TIME, MICROTIME (photon arrival time) or SPECTRUM (a wavelength) -- or VALUE when the world is not one measured axis (a table's rows), where only value layers (scatters, histograms) draw",
+    ),
+    Descriptor(
+        key="@mikro/axis_unit",
+        type="STRING",
+        description="The unit of its world's one measured axis; 'None' when the world is not one, and the drawn axes are the units of the columns its layers read",
+    ),
 ]
 #: A grid: what its rows and columns enumerate.
 GRID_DESCRIPTORS = [
-    Descriptor(key="@mikro/row_axis_type", type="STRING", description="What its rows enumerate: INDEX (objects, genes, row numbers), CHANNEL or CATEGORY (values such as a condition)"),
-    Descriptor(key="@mikro/column_axis_type", type="STRING", description="What its columns enumerate, as for its rows; 'None' for a grid of one axis"),
+    Descriptor(
+        key="@mikro/row_axis_type",
+        type="STRING",
+        description="What its rows enumerate: INDEX (objects, genes, row numbers), CHANNEL or CATEGORY (values such as a condition)",
+    ),
+    Descriptor(
+        key="@mikro/column_axis_type",
+        type="STRING",
+        description="What its columns enumerate, as for its rows; 'None' for a grid of one axis",
+    ),
 ]
 #: A metric: what was measured, its value, and the object it is about. Few and flat, because a
 #: metric is written by the thousand: a trigger reacts to a key, a value past a threshold, a code.
 METRIC_DESCRIPTORS = [
-    Descriptor(key="@mikro/metric_key", type="STRING", description="What was measured, namespaced by who measured it: ais_suite.measure_profile/threshold_distance"),
-    Descriptor(key="@mikro/magnitude", type="FLOAT", description="Its number, for a quantity; absent for a code"),
-    Descriptor(key="@mikro/unit", type="STRING", description="The unit of its magnitude, for a quantity; absent for a code"),
-    Descriptor(key="@mikro/metric_code", type="STRING", description="The category a process emitted, for a code; absent for a quantity"),
-    Descriptor(key="@mikro/target_identifier", type="STRING", description="The structure of the object it is about: @mikro/annotation, @mikro/arraydataset, @mikro/tabledataset or @mikro/sparsedataset"),
-    Descriptor(key="@mikro/target_object", type="STRING", description="The id of the object it is about"),
+    Descriptor(
+        key="@mikro/metric_key",
+        type="STRING",
+        description="What was measured, namespaced by who measured it: ais_suite.measure_profile/threshold_distance",
+    ),
+    Descriptor(
+        key="@mikro/magnitude",
+        type="FLOAT",
+        description="Its number, for a quantity; absent for a code",
+    ),
+    Descriptor(
+        key="@mikro/unit",
+        type="STRING",
+        description="The unit of its magnitude, for a quantity; absent for a code",
+    ),
+    Descriptor(
+        key="@mikro/metric_code",
+        type="STRING",
+        description="The category a process emitted, for a code; absent for a quantity",
+    ),
+    Descriptor(
+        key="@mikro/target_identifier",
+        type="STRING",
+        description="The structure of the object it is about: @mikro/annotation, @mikro/arraydataset, @mikro/tabledataset or @mikro/sparsedataset",
+    ),
+    Descriptor(
+        key="@mikro/target_object",
+        type="STRING",
+        description="The id of the object it is about",
+    ),
 ]
 #: A file as it was uploaded: what an importer is chosen by.
 FILE_DESCRIPTORS = [
-    Descriptor(key="@mikro/content_type", type="STRING", description="Its media (MIME) type, empty when unknown"),
+    Descriptor(
+        key="@mikro/content_type",
+        type="STRING",
+        description="Its media (MIME) type, empty when unknown",
+    ),
     Descriptor(
         key="@mikro/extension",
         type="STRING",
         description="Its file name's extension, lowercased and without the dot (czi, nd2, lif, tif, ome.tif, ome.zarr), empty when it has none: what picks an importer when the media type is only application/octet-stream",
     ),
-    Descriptor(key="@mikro/size_bytes", type="INT", description="Its size in bytes, 0 when unknown"),
+    Descriptor(
+        key="@mikro/size_bytes",
+        type="INT",
+        description="Its size in bytes, 0 when unknown",
+    ),
 ]
 #: A space of the coordinate graph: how many axes of each type it has.
 COORDINATE_SYSTEM_DESCRIPTORS = _axis_counts(tuple(KEY_BY_AXIS_TYPE))
@@ -187,16 +336,40 @@ TRANSFORMATION_DESCRIPTORS = [
         type="STRING",
         description="What kind of map it is: IDENTITY, SCALE, TRANSLATION, MAP_AXIS, AFFINE, ROTATION, SEQUENCE, BY_DIMENSION, FIELD or UNMAPPABLE",
     ),
-    Descriptor(key="@mikro/validity", type="STRING", description="How it is known: MANUAL, INFERRED, VALIDATED or UNKNOWN. A refining action asks for INFERRED or UNKNOWN"),
-    Descriptor(key="@mikro/value_relation", type="STRING", description="What the data it derives did to the values: IDENTICAL, TRANSFORMED or CATEGORIZED, empty when it is a placement, not a derivation"),
-    Descriptor(key="@mikro/n_input_axes", type="INT", description="How many axes the space it maps from has"),
-    Descriptor(key="@mikro/n_output_axes", type="INT", description="How many axes the space it maps to has"),
+    Descriptor(
+        key="@mikro/validity",
+        type="STRING",
+        description="How it is known: MANUAL, INFERRED, VALIDATED or UNKNOWN. A refining action asks for INFERRED or UNKNOWN",
+    ),
+    Descriptor(
+        key="@mikro/value_relation",
+        type="STRING",
+        description="What the data it derives did to the values: IDENTICAL, TRANSFORMED or CATEGORIZED, empty when it is a placement, not a derivation",
+    ),
+    Descriptor(
+        key="@mikro/n_input_axes",
+        type="INT",
+        description="How many axes the space it maps from has",
+    ),
+    Descriptor(
+        key="@mikro/n_output_axes",
+        type="INT",
+        description="How many axes the space it maps to has",
+    ),
 ]
-_CONTAINER_KIND = Descriptor(key=CONTAINER_KIND, type="STRING", description="Which kind of container (image, table, ...) it belongs to: ARRAY, TABLE, SPARSE, MESH or ANNOTATION")
+_CONTAINER_KIND = Descriptor(
+    key=CONTAINER_KIND,
+    type="STRING",
+    description="Which kind of container (image, table, ...) it belongs to: ARRAY, TABLE, SPARSE, MESH or ANNOTATION",
+)
 #: A position in a container that metadata is pinned to.
 COORDINATE_ANCHOR_DESCRIPTORS = [_CONTAINER_KIND]
 #: A file and the container holding the same data.
 FILE_LINK_DESCRIPTORS = [
-    Descriptor(key="@mikro/link_direction", type="STRING", description="Which was made from which: SOURCE (the container from the file) or RENDITION (the file from the container)"),
+    Descriptor(
+        key="@mikro/link_direction",
+        type="STRING",
+        description="Which was made from which: SOURCE (the container from the file) or RENDITION (the file from the container)",
+    ),
     _CONTAINER_KIND,
 ]

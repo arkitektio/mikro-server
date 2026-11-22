@@ -16,9 +16,13 @@ from kante.types import Info
 from core.scoping import get_for_org
 
 
-@strawberry.input(description="One object of a batch, by the structure it is known by and its id")
+@strawberry.input(
+    description="One object of a batch, by the structure it is known by and its id"
+)
 class CollaborationObjectRef:
-    identifier: str = strawberry.field(description="The structure the object is known by: @mikro/arraydataset")
+    identifier: str = strawberry.field(
+        description="The structure the object is known by: @mikro/arraydataset"
+    )
     object: strawberry.ID = strawberry.field(description="The object's id")
 
 
@@ -39,14 +43,20 @@ def _object(info: Info, ref: CollaborationObjectRef) -> Any:
     return get_for_org(structure.model, info, id=ref.object)
 
 
-def add_many_to_collaboration(info: Info, input: AddManyToCollaborationInput) -> collaboration_types.Collaboration:
+def add_many_to_collaboration(
+    info: Info, input: AddManyToCollaborationInput
+) -> collaboration_types.Collaboration:
     """Put several objects in a collaboration, all or none."""
-    target = collaboration_models.Collaboration.objects.get(pk=input.collaboration, organization=info.context.request.organization)
+    target = collaboration_models.Collaboration.objects.get(
+        pk=input.collaboration, organization=info.context.request.organization
+    )
     # Once each, first mention first: the order is what keeps a whole ahead of its parts.
     refs: dict[tuple[str, str], CollaborationObjectRef] = {}
     for ref in input.objects:
         refs.setdefault((ref.identifier, str(ref.object)), ref)
     with transaction.atomic():
         for ref in refs.values():
-            collaboration_items.add(target, _object(info, ref), by=info.context.request.user)
+            collaboration_items.add(
+                target, _object(info, ref), by=info.context.request.user
+            )
     return target  # type: ignore[return-value]

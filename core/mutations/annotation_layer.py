@@ -1,12 +1,12 @@
-from kante.types import Info
-import strawberry
-
-from core import types, models, enums
 import kante
+import strawberry
+from kante.types import Info
 from pydantic import BaseModel
-from core.logic import graph as graph_logic
+
+from core import enums, models, types
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
+from core.logic import graph as graph_logic
 from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
@@ -26,15 +26,33 @@ class CreateAnnotationLayerInputModel(BaseModel):
     description="Create a layer that renders an annotation collection's drawn shapes in a scene. The collection's own coordinate system is the layer's space, so it must already have a path to the scene's world",
 )
 class CreateAnnotationLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The annotation lens to draw through: which shapes, in the collection's own space. A collection's whole lens is its `fullLens`")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The annotation lens to draw through: which shapes, in the collection's own space. A collection's whole lens is its `fullLens`"
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal', i.e. alpha-over)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
-def create_annotation_layer(info: Info, input: CreateAnnotationLayerInput) -> types.AnnotationLayer:
+def create_annotation_layer(
+    info: Info, input: CreateAnnotationLayerInput
+) -> types.AnnotationLayer:
     """Place an existing annotation collection in a scene it is already placeable in.
 
     The explicit path: a scene-minted collection got its layer for free, and this is how
@@ -48,7 +66,11 @@ def create_annotation_layer(info: Info, input: CreateAnnotationLayerInput) -> ty
     lens = lens_of_kind(info, kind=models.AnnotationLens, lens=model.lens)
     collection = lens.annotation_collection
 
-    graph_logic.assert_placeable_in(scene.world, collection.coordinate_system_or_none, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        collection.coordinate_system_or_none,
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     return models.Layer.objects.create(
         kind=enums.LayerKind.ANNOTATION,

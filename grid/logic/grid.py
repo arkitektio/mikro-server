@@ -54,10 +54,22 @@ def grid_axes(world: "core_models.CoordinateSystem") -> list["core_models.Axis"]
     return axes
 
 
-def create_grid(*, name: str, world: "core_models.CoordinateSystem", ctx: CreationContext, description: str | None = None) -> "models.Grid":
+def create_grid(
+    *,
+    name: str,
+    world: "core_models.CoordinateSystem",
+    ctx: CreationContext,
+    description: str | None = None,
+) -> "models.Grid":
     """Create a grid over an existing space: adopted as it is, never minted, never owned."""
     grid_axes(world)
-    return models.Grid.objects.create(name=name, description=description, world=world, creator=ctx.user, organization=ctx.organization)
+    return models.Grid.objects.create(
+        name=name,
+        description=description,
+        world=world,
+        creator=ctx.user,
+        organization=ctx.organization,
+    )
 
 
 # --- placement ----------------------------------------------------------------
@@ -68,12 +80,22 @@ def layer_source_system(layer: "models.GridLayer") -> "core_models.CoordinateSys
     return layer.lens.coordinate_system
 
 
-def assert_covers(grid: "models.Grid", source_system: "core_models.CoordinateSystem", *, what: str) -> None:
+def assert_covers(
+    grid: "models.Grid", source_system: "core_models.CoordinateSystem", *, what: str
+) -> None:
     """Refuse a source not placed in the grid's world, or placed without a position along each of its axes."""
     world = grid.world
-    graph_logic.assert_placeable_in(world, source_system, destination=f"the world of grid '{grid.name}'")
-    condensed = placement.PlacementGraph(world, seed_systems=[source_system.pk]).condensed(source_system)
-    reached = (set(condensed.output_axes) | set(condensed.fields)) if condensed is not None else set()
+    graph_logic.assert_placeable_in(
+        world, source_system, destination=f"the world of grid '{grid.name}'"
+    )
+    condensed = placement.PlacementGraph(
+        world, seed_systems=[source_system.pk]
+    ).condensed(source_system)
+    reached = (
+        (set(condensed.output_axes) | set(condensed.fields))
+        if condensed is not None
+        else set()
+    )
     missing = [axis.name for axis in grid_axes(world) if axis.name not in reached]
     if missing:
         raise ValueError(
@@ -88,20 +110,30 @@ def assert_covers(grid: "models.Grid", source_system: "core_models.CoordinateSys
 def free_axes(lens: "core_models.Lens") -> list[str]:
     """The axes a lens leaves free: more than one position kept. What a heatmap spreads over the grid."""
     if isinstance(lens, core_models.ArrayLens):
-        return [name for name, extent in zip(lens.axis_names, lens.shape_list) if extent > 1]
+        return [
+            name for name, extent in zip(lens.axis_names, lens.shape_list) if extent > 1
+        ]
     if isinstance(lens, core_models.SparseLens):
         pinned = set(coords_logic.pinned_axes(lens.windows_list))
         names = lens.sparse_dataset.axis_names
         # A matrix whose store has not reported its shape yet: every axis a window does not pin.
         shape = lens.sparse_dataset.shape or [2] * len(names)
-        return [name for name, extent in zip(names, shape) if name not in pinned and extent > 1]
-    raise ValueError(f"Lens {lens.pk} is a {type(lens).__name__}; a heatmap reads an array or a sparse matrix.")
+        return [
+            name
+            for name, extent in zip(names, shape)
+            if name not in pinned and extent > 1
+        ]
+    raise ValueError(
+        f"Lens {lens.pk} is a {type(lens).__name__}; a heatmap reads an array or a sparse matrix."
+    )
 
 
 def assert_heatmap(grid: "models.Grid", lens: "core_models.Lens", *, what: str) -> None:
     """A heatmap's lens leaves free exactly as many axes as the grid lays out: one value per cell."""
     if not isinstance(lens, core_models.ArrayLens | core_models.SparseLens):
-        raise ValueError(f"{what} is not an array or a sparse lens; a heatmap reads values at each position of an array or a sparse matrix. A table is drawn as CELLS.")
+        raise ValueError(
+            f"{what} is not an array or a sparse lens; a heatmap reads values at each position of an array or a sparse matrix. A table is drawn as CELLS."
+        )
     free = free_axes(lens)
     grid_names = [axis.name for axis in grid_axes(grid.world)]
     if len(free) != len(grid_names):
@@ -113,7 +145,13 @@ def assert_heatmap(grid: "models.Grid", lens: "core_models.Lens", *, what: str) 
 
 def assert_cells(table: "core_models.TableDataset", value_column: str | None) -> str:
     """A table's cells are coloured by a numeric column of it: the one named, or the only one there could be."""
-    numeric = [column.name for column in table.columns.all() if column.axis_type is None and column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value and coords_logic.is_numeric_dtype(column.dtype)]
+    numeric = [
+        column.name
+        for column in table.columns.all()
+        if column.axis_type is None
+        and column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value
+        and coords_logic.is_numeric_dtype(column.dtype)
+    ]
     if value_column is None:
         if len(numeric) != 1:
             raise ValueError(
@@ -122,31 +160,47 @@ def assert_cells(table: "core_models.TableDataset", value_column: str | None) ->
             )
         return numeric[0]
     if value_column not in numeric:
-        raise ValueError(f"Column '{value_column}' is not a numeric attribute column of table dataset '{table.name}'. A cell is coloured by one of: {', '.join(numeric) or 'none'}.")
+        raise ValueError(
+            f"Column '{value_column}' is not a numeric attribute column of table dataset '{table.name}'. A cell is coloured by one of: {', '.join(numeric) or 'none'}."
+        )
     return value_column
 
 
 # --- writers ------------------------------------------------------------------
 
 
-def create_layer(grid: "models.Grid", *, kind: str, source: "core_models.Lens", value_column: str | None = None, order: int | None = None, **settings: object) -> "models.GridLayer":
+def create_layer(
+    grid: "models.Grid",
+    *,
+    kind: str,
+    source: "core_models.Lens",
+    value_column: str | None = None,
+    order: int | None = None,
+    **settings: object,
+) -> "models.GridLayer":
     """Draw a lens in a grid, refusing one not placed over its axes or not its kind's shape. Appended after the last layer unless an order is named."""
     what = f"{type(source).__name__} {source.pk}"
     values: dict[str, object] = {}
     if kind == enums.GridLayerKindChoices.HEATMAP.value:
         if value_column is not None:
-            raise ValueError("A HEATMAP's values are the array's or the matrix's own; `valueColumn` is how a table's CELLS are coloured.")
+            raise ValueError(
+                "A HEATMAP's values are the array's or the matrix's own; `valueColumn` is how a table's CELLS are coloured."
+            )
         assert_heatmap(grid, source, what=what)
     else:
         if not isinstance(source, core_models.TableLens):
-            raise ValueError(f"{what} is not a table lens; CELLS draw a table's rows, one cell per row. An array or a sparse matrix is drawn as a HEATMAP.")
+            raise ValueError(
+                f"{what} is not a table lens; CELLS draw a table's rows, one cell per row. An array or a sparse matrix is drawn as a HEATMAP."
+            )
         values["value_column"] = assert_cells(source.table_dataset, value_column)
     assert_covers(grid, source.coordinate_system, what=what)
 
     if order is None:
         last = grid.layers.order_by("-order").values_list("order", flat=True).first()
         order = 0 if last is None else last + 1
-    return models.GridLayer.objects.create(grid=grid, kind=kind, lens=source, order=order, **values, **settings)
+    return models.GridLayer.objects.create(
+        grid=grid, kind=kind, lens=source, order=order, **values, **settings
+    )
 
 
 # --- bootstrap ----------------------------------------------------------------
@@ -160,20 +214,34 @@ class Policy:
     nchildren: int = 32
 
 
-def _candidates(world: "core_models.CoordinateSystem", organization: object) -> list[tuple[str, object]]:
+def _candidates(
+    world: "core_models.CoordinateSystem", organization: object
+) -> list[tuple[str, object]]:
     """Everything strictly placed in a space that a grid layer could read, as ``(kind, container)``: matrices and arrays as heatmaps, tables as cells."""
     placed = graph_logic.placeable_system_ids_in(world) | {world.pk}
     found: list[tuple[str, object]] = []
-    for matrix in core_models.SparseDataset.objects.filter(organization=organization, coordinate_system__in=placed).order_by("pk"):
+    for matrix in core_models.SparseDataset.objects.filter(
+        organization=organization, coordinate_system__in=placed
+    ).order_by("pk"):
         found.append((enums.GridLayerKindChoices.HEATMAP.value, matrix))
-    for dataset in core_models.ArrayDataset.objects.filter(organization=organization, coordinate_system__in=placed).order_by("pk"):
+    for dataset in core_models.ArrayDataset.objects.filter(
+        organization=organization, coordinate_system__in=placed
+    ).order_by("pk"):
         found.append((enums.GridLayerKindChoices.HEATMAP.value, dataset))
-    for table in core_models.TableDataset.objects.filter(organization=organization, coordinate_system__in=placed).order_by("pk"):
+    for table in core_models.TableDataset.objects.filter(
+        organization=organization, coordinate_system__in=placed
+    ).order_by("pk"):
         found.append((enums.GridLayerKindChoices.CELLS.value, table))
     return found
 
 
-def bootstrap_grid_from_system(system: "core_models.CoordinateSystem", *, name: str | None, policy: Policy, ctx: CreationContext) -> "models.Grid":
+def bootstrap_grid_from_system(
+    system: "core_models.CoordinateSystem",
+    *,
+    name: str | None,
+    policy: Policy,
+    ctx: CreationContext,
+) -> "models.Grid":
     """A grid over an existing space, drawing what already lies over its axes. Authors no edges; a source its kind refuses is left out."""
     with transaction.atomic():
         grid = create_grid(name=name or system.name, world=system, ctx=ctx)
@@ -183,7 +251,12 @@ def bootstrap_grid_from_system(system: "core_models.CoordinateSystem", *, name: 
                 break
             try:
                 with transaction.atomic():
-                    create_layer(grid, kind=kind, source=coordinate_system_logic.whole_lens(container), name=container.name)
+                    create_layer(
+                        grid,
+                        kind=kind,
+                        source=coordinate_system_logic.whole_lens(container),
+                        name=container.name,
+                    )
             except ValueError:
                 continue
             drawn += 1

@@ -32,17 +32,14 @@ Flat-discriminated in the wire shape, following ``core.input_unions`` exactly as
 
 from typing import Annotated, ClassVar, Literal
 
+import kante
 import strawberry
 from pydantic import BaseModel, ConfigDict, Field
-
-import kante
 
 from core import enums
 from core.input_unions import parse_union_member, prose_errors, union_memberships
 
-_NAME_DESCRIPTION = (
-    "What to call the edge this authors, in a graph a person has to read. Defaults to `<source> -> <dataset>`. Only meaningful for the kinds that author one"
-)
+_NAME_DESCRIPTION = "What to call the edge this authors, in a graph a person has to read. Defaults to `<source> -> <dataset>`. Only meaningful for the kinds that author one"
 
 _AXIS_NAME_DESCRIPTION = (
     "The axis' name, free-form and unique within this dataset -- `bin`, `gene`, `metabolite`, `neuron`. It is the name a colouring names a position along, and the name the "
@@ -90,7 +87,9 @@ class DatasetIdentifiesInputModel(IdentificationInputBase):
 class MeshCollectionIdentifiesInputModel(IdentificationInputBase):
     """Identified by a mesh collection, through its vertex coordinate system."""
 
-    kind: Literal[enums.IdentificationKind.MESH_COLLECTION] = enums.IdentificationKind.MESH_COLLECTION
+    kind: Literal[enums.IdentificationKind.MESH_COLLECTION] = (
+        enums.IdentificationKind.MESH_COLLECTION
+    )
     mesh_collection: str
     SOURCE_FIELD: ClassVar[str] = "mesh_collection"
 
@@ -105,7 +104,9 @@ class NetworkCollectionIdentifiesInputModel(IdentificationInputBase):
     :class:`NetworkCollectionNodesIdentifiesInputModel`, declared beside this one on another axis.
     """
 
-    kind: Literal[enums.IdentificationKind.NETWORK_COLLECTION] = enums.IdentificationKind.NETWORK_COLLECTION
+    kind: Literal[enums.IdentificationKind.NETWORK_COLLECTION] = (
+        enums.IdentificationKind.NETWORK_COLLECTION
+    )
     network_collection: str
     SOURCE_FIELD: ClassVar[str] = "network_collection"
 
@@ -125,7 +126,9 @@ class NetworkCollectionNodesIdentifiesInputModel(IdentificationInputBase):
     be a second statement of one fact.
     """
 
-    kind: Literal[enums.IdentificationKind.NETWORK_COLLECTION_NODES] = enums.IdentificationKind.NETWORK_COLLECTION_NODES
+    kind: Literal[enums.IdentificationKind.NETWORK_COLLECTION_NODES] = (
+        enums.IdentificationKind.NETWORK_COLLECTION_NODES
+    )
     network_collection: str
     SOURCE_FIELD: ClassVar[str] = "network_collection"
     AUTHORS_EDGE: ClassVar[bool] = False
@@ -188,7 +191,9 @@ class IdentificationInput:
     and ``to_pydantic`` is where that flatness is corrected into the strict member.
     """
 
-    kind: enums.IdentificationKind = strawberry.field(description="Which sort of thing identifies this column or axis. It fixes which id field below is read; any other is rejected")
+    kind: enums.IdentificationKind = strawberry.field(
+        description="Which sort of thing identifies this column or axis. It fixes which id field below is read; any other is rejected"
+    )
     dataset: strawberry.ID | None = strawberry.field(
         default=None,
         description="(DATASET) The label dataset whose pixel values are the positions along this axis. Its own pixel grid is both the edge's input and its field, which is what a label mask is",
@@ -215,16 +220,24 @@ class IdentificationInput:
         ),
     )
     name: str | None = strawberry.field(default=None, description=_NAME_DESCRIPTION)
-    validity: enums.PlacementValidity | None = strawberry.field(default=None, description="How far the edge this authors may be trusted. Only meaningful for the kinds that author one")
+    validity: enums.PlacementValidity | None = strawberry.field(
+        default=None,
+        description="How far the edge this authors may be trusted. Only meaningful for the kinds that author one",
+    )
 
     def to_pydantic(self) -> BaseModel:
         """Match the flat wire fields to the member model `kind` selects, strictly."""
-        supplied = {name: getattr(self, name) for name in ("kind", "name", "validity", *_SOURCE_FIELDS)}
+        supplied = {
+            name: getattr(self, name)
+            for name in ("kind", "name", "validity", *_SOURCE_FIELDS)
+        }
         data = {name: value for name, value in supplied.items() if value is not None}
         return parse_union_member(IDENTIFICATION_MEMBERS, data, noun="identification")
 
 
-def _identification_member(model: type, key: "enums.IdentificationKind", description: str):  # noqa: ANN202 - a decorator factory
+def _identification_member(
+    model: type, key: "enums.IdentificationKind", description: str
+):  # noqa: ANN202 - a decorator factory
     """Publish one member input of the IdentificationInput union."""
     return kante.pydantic_input(
         model,
@@ -233,52 +246,96 @@ def _identification_member(model: type, key: "enums.IdentificationKind", descrip
     )
 
 
-@_identification_member(DatasetIdentifiesInputModel, enums.IdentificationKind.DATASET, "The fields a DATASET identification reads")
+@_identification_member(
+    DatasetIdentifiesInputModel,
+    enums.IdentificationKind.DATASET,
+    "The fields a DATASET identification reads",
+)
 class DatasetIdentifiesInput:
     """The DATASET member of the identification union."""
 
-    kind: enums.IdentificationKind = strawberry.field(description="The discriminator: which member of IdentificationInput this is")
-    dataset: strawberry.ID = strawberry.field(description="The label dataset whose pixel values are the positions along this axis")
+    kind: enums.IdentificationKind = strawberry.field(
+        description="The discriminator: which member of IdentificationInput this is"
+    )
+    dataset: strawberry.ID = strawberry.field(
+        description="The label dataset whose pixel values are the positions along this axis"
+    )
     name: str | None = strawberry.field(default=None, description=_NAME_DESCRIPTION)
-    validity: enums.PlacementValidity | None = strawberry.field(default=None, description="How far the edge this authors may be trusted")
+    validity: enums.PlacementValidity | None = strawberry.field(
+        default=None, description="How far the edge this authors may be trusted"
+    )
 
 
-@_identification_member(MeshCollectionIdentifiesInputModel, enums.IdentificationKind.MESH_COLLECTION, "The fields a MESH_COLLECTION identification reads")
+@_identification_member(
+    MeshCollectionIdentifiesInputModel,
+    enums.IdentificationKind.MESH_COLLECTION,
+    "The fields a MESH_COLLECTION identification reads",
+)
 class MeshCollectionIdentifiesInput:
     """The MESH_COLLECTION member of the identification union."""
 
-    kind: enums.IdentificationKind = strawberry.field(description="The discriminator: which member of IdentificationInput this is")
-    mesh_collection: strawberry.ID = strawberry.field(description="The mesh collection whose geometry rows carry the positions")
+    kind: enums.IdentificationKind = strawberry.field(
+        description="The discriminator: which member of IdentificationInput this is"
+    )
+    mesh_collection: strawberry.ID = strawberry.field(
+        description="The mesh collection whose geometry rows carry the positions"
+    )
     name: str | None = strawberry.field(default=None, description=_NAME_DESCRIPTION)
-    validity: enums.PlacementValidity | None = strawberry.field(default=None, description="How far the edge this authors may be trusted")
+    validity: enums.PlacementValidity | None = strawberry.field(
+        default=None, description="How far the edge this authors may be trusted"
+    )
 
 
-@_identification_member(NetworkCollectionIdentifiesInputModel, enums.IdentificationKind.NETWORK_COLLECTION, "The fields a NETWORK_COLLECTION identification reads")
+@_identification_member(
+    NetworkCollectionIdentifiesInputModel,
+    enums.IdentificationKind.NETWORK_COLLECTION,
+    "The fields a NETWORK_COLLECTION identification reads",
+)
 class NetworkCollectionIdentifiesInput:
     """The NETWORK_COLLECTION member of the identification union."""
 
-    kind: enums.IdentificationKind = strawberry.field(description="The discriminator: which member of IdentificationInput this is")
-    network_collection: strawberry.ID = strawberry.field(description="The network collection whose object ids are the positions along this axis -- one per traced object, never per node")
+    kind: enums.IdentificationKind = strawberry.field(
+        description="The discriminator: which member of IdentificationInput this is"
+    )
+    network_collection: strawberry.ID = strawberry.field(
+        description="The network collection whose object ids are the positions along this axis -- one per traced object, never per node"
+    )
     name: str | None = strawberry.field(default=None, description=_NAME_DESCRIPTION)
-    validity: enums.PlacementValidity | None = strawberry.field(default=None, description="How far the edge this authors may be trusted")
+    validity: enums.PlacementValidity | None = strawberry.field(
+        default=None, description="How far the edge this authors may be trusted"
+    )
 
 
-@_identification_member(NetworkCollectionNodesIdentifiesInputModel, enums.IdentificationKind.NETWORK_COLLECTION_NODES, "The fields a NETWORK_COLLECTION_NODES identification reads")
+@_identification_member(
+    NetworkCollectionNodesIdentifiesInputModel,
+    enums.IdentificationKind.NETWORK_COLLECTION_NODES,
+    "The fields a NETWORK_COLLECTION_NODES identification reads",
+)
 class NetworkCollectionNodesIdentifiesInput:
     """The NETWORK_COLLECTION_NODES member of the identification union."""
 
-    kind: enums.IdentificationKind = strawberry.field(description="The discriminator: which member of IdentificationInput this is")
+    kind: enums.IdentificationKind = strawberry.field(
+        description="The discriminator: which member of IdentificationInput this is"
+    )
     network_collection: strawberry.ID = strawberry.field(
         description="The network collection whose NODE ids the positions along this axis are, scoped by a sibling INDEX axis keyed by the same collection's object ids. Authors no edge. Two such axes over one collection are its edges' (source, target), in axis declaration order"
     )
 
 
-@_identification_member(TableIdentifiesInputModel, enums.IdentificationKind.TABLE, "The fields a TABLE identification reads")
+@_identification_member(
+    TableIdentifiesInputModel,
+    enums.IdentificationKind.TABLE,
+    "The fields a TABLE identification reads",
+)
 class TableIdentifiesInput:
     """The TABLE member of the identification union."""
 
-    kind: enums.IdentificationKind = strawberry.field(description="The discriminator: which member of IdentificationInput this is")
-    table: strawberry.ID = strawberry.field(description="The table whose rows this axis' positions are, keyed by its single INDEX coordinate column")
+    kind: enums.IdentificationKind = strawberry.field(
+        description="The discriminator: which member of IdentificationInput this is"
+    )
+    table: strawberry.ID = strawberry.field(
+        description="The table whose rows this axis' positions are, keyed by its single INDEX coordinate column"
+    )
 
 
 #: The member inputs published to the SDL, for the schema's ``types=[...]``. Dropping one erases

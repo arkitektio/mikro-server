@@ -35,7 +35,9 @@ fragment Edge on Transformation {
 }
 """
 
-QUERY = TRANSFORMATION + """
+QUERY = (
+    TRANSFORMATION
+    + """
 query Dataset($id: ID!) {
   arrayDataset(id: $id) {
     dataArrays {
@@ -49,22 +51,37 @@ query Dataset($id: ID!) {
   }
 }
 """
+)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_level_edges_resolve_with_their_steps(authenticated_context: HttpContext) -> None:
-    dataset = await seed.create_array_dataset(authenticated_context, "Pyramid", shapes=[[3, 64, 64], [3, 32, 32], [3, 16, 16]])
+async def test_level_edges_resolve_with_their_steps(
+    authenticated_context: HttpContext,
+) -> None:
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Pyramid", shapes=[[3, 64, 64], [3, 32, 32], [3, 16, 16]]
+    )
 
-    result = await schema.execute(QUERY, variable_values={"id": str(dataset.pk)}, context_value=authenticated_context)
+    result = await schema.execute(
+        QUERY,
+        variable_values={"id": str(dataset.pk)},
+        context_value=authenticated_context,
+    )
 
     assert not result.errors, result.errors
-    levels = sorted(result.data["arrayDataset"]["dataArrays"], key=lambda level: level["level"])
+    levels = sorted(
+        result.data["arrayDataset"]["dataArrays"], key=lambda level: level["level"]
+    )
     assert levels[0]["toParent"] is None
     for level in levels[1:]:
         edge = level["toParent"]
         assert edge is not None
         assert edge["input"]["axes"] and edge["output"]["axes"]
-        assert edge["__typename"] == "SequenceTransformation", "a level edge is scale-then-translate"
+        assert edge["__typename"] == "SequenceTransformation", (
+            "a level edge is scale-then-translate"
+        )
         assert [step["kind"] for step in edge["steps"]] == ["SCALE", "TRANSLATION"]
-        assert edge["steps"][0]["scale"] and edge["steps"][1]["translation"], "each step carries its own numbers"
+        assert edge["steps"][0]["scale"] and edge["steps"][1]["translation"], (
+            "each step carries its own numbers"
+        )

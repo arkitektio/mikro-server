@@ -14,10 +14,17 @@ class MetricTargetInputModel(BaseModel):
     object: str
 
 
-@kante.pydantic_input(MetricTargetInputModel, description="The object a metric is about: its structure and id, as rekuest's signals and STRUCTURE ports spell them")
+@kante.pydantic_input(
+    MetricTargetInputModel,
+    description="The object a metric is about: its structure and id, as rekuest's signals and STRUCTURE ports spell them",
+)
 class MetricTargetInput:
-    identifier: str = strawberry.field(description="@mikro/annotation, @mikro/arraydataset, @mikro/tabledataset or @mikro/sparsedataset")
-    object: strawberry.ID = strawberry.field(description="The id of the object within its structure")
+    identifier: str = strawberry.field(
+        description="@mikro/annotation, @mikro/arraydataset, @mikro/tabledataset or @mikro/sparsedataset"
+    )
+    object: strawberry.ID = strawberry.field(
+        description="The id of the object within its structure"
+    )
 
 
 class MetricInputModel(BaseModel):
@@ -29,7 +36,15 @@ class MetricInputModel(BaseModel):
     supersedes: str | None = None
 
     def spec(self) -> logic.MetricSpec:
-        return logic.MetricSpec(self.target.identifier, self.target.object, self.key, self.magnitude, self.unit, self.code, self.supersedes)
+        return logic.MetricSpec(
+            self.target.identifier,
+            self.target.object,
+            self.key,
+            self.magnitude,
+            self.unit,
+            self.code,
+            self.supersedes,
+        )
 
 
 _METRIC_FIELDS = dict(
@@ -42,14 +57,27 @@ _METRIC_FIELDS = dict(
 
 
 @prose_errors
-@kante.pydantic_input(MetricInputModel, description="One value about one object: a quantity (magnitude and unit) or a code, exactly one")
+@kante.pydantic_input(
+    MetricInputModel,
+    description="One value about one object: a quantity (magnitude and unit) or a code, exactly one",
+)
 class MetricInput:
-    target: MetricTargetInput = strawberry.field(description="The object the value is about")
+    target: MetricTargetInput = strawberry.field(
+        description="The object the value is about"
+    )
     key: str = strawberry.field(description=_METRIC_FIELDS["key"])
-    magnitude: float | None = strawberry.field(default=None, description=_METRIC_FIELDS["magnitude"])
-    unit: str | None = strawberry.field(default=None, description=_METRIC_FIELDS["unit"])
-    code: str | None = strawberry.field(default=None, description=_METRIC_FIELDS["code"])
-    supersedes: strawberry.ID | None = strawberry.field(default=None, description=_METRIC_FIELDS["supersedes"])
+    magnitude: float | None = strawberry.field(
+        default=None, description=_METRIC_FIELDS["magnitude"]
+    )
+    unit: str | None = strawberry.field(
+        default=None, description=_METRIC_FIELDS["unit"]
+    )
+    code: str | None = strawberry.field(
+        default=None, description=_METRIC_FIELDS["code"]
+    )
+    supersedes: strawberry.ID | None = strawberry.field(
+        default=None, description=_METRIC_FIELDS["supersedes"]
+    )
 
 
 class CreateMetricsInputModel(BaseModel):
@@ -57,9 +85,14 @@ class CreateMetricsInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateMetricsInputModel, description=f"Many metrics in one transaction, at most {logic.MAX_BATCH}")
+@kante.pydantic_input(
+    CreateMetricsInputModel,
+    description=f"Many metrics in one transaction, at most {logic.MAX_BATCH}",
+)
 class CreateMetricsInput:
-    metrics: list[MetricInput] = strawberry.field(description="The values to record, about any objects of the organization")
+    metrics: list[MetricInput] = strawberry.field(
+        description="The values to record, about any objects of the organization"
+    )
 
 
 class DeleteMetricInputModel(BaseModel):
@@ -78,10 +111,11 @@ def create_metric(info: Info, input: MetricInput) -> types.Metric:
 
 def create_metrics(info: Info, input: CreateMetricsInput) -> list[types.Metric]:
     """Record many metrics in one transaction. Announces none of them: the change feed has them all."""
-    return logic.create_metrics(info, [metric.spec() for metric in input.to_pydantic().metrics])
+    return logic.create_metrics(
+        info, [metric.spec() for metric in input.to_pydantic().metrics]
+    )
 
 
 def delete_metric(info: Info, input: DeleteMetricInput) -> strawberry.ID:
     """Delete a metric. One a correction supersedes is kept while the correction stands."""
     return strawberry.ID(logic.delete_metric(info, input.to_pydantic().id))
-

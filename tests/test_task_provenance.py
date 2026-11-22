@@ -1,12 +1,15 @@
 import pytest
 from asgiref.sync import sync_to_async
 from authentikate.provenance import ProvenanceToken
-from koherent.models import Task
 from kante.context import HttpContext
+from koherent.models import Task
+
 from mikro_server.schema import schema
 
 
-def make_provenance(task_id="task-1", parent=None, args_hash="sha256-args", sub="1", cid="oinsoins") -> ProvenanceToken:
+def make_provenance(
+    task_id="task-1", parent=None, args_hash="sha256-args", sub="1", cid="oinsoins"
+) -> ProvenanceToken:
     """Build a verified provenance token, as AuthentikateExtension would attach one.
 
     koherent>=4 resolves the task from a signature-verified provenance token
@@ -115,7 +118,9 @@ async def test_create_without_provenance(db, authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_task_row_shared_between_mutations(db, authenticated_context: HttpContext):
+async def test_task_row_shared_between_mutations(
+    db, authenticated_context: HttpContext
+):
     """Two creations under the same task share a single Task row."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-2"))
 

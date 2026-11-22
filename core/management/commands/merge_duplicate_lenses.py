@@ -46,12 +46,12 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from chart.models import ChartLayer
-from grid.models import GridLayer
 from core import descriptors as descriptors_logic
 from core import enums, models
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import lens_names as lens_names_logic
+from grid.models import GridLayer
 
 
 def _key(slices: list[dict[str, int | str]]) -> str:
@@ -77,14 +77,31 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:  # noqa: ANN001 - Django's ArgumentParser
         """Declare the command's options."""
-        parser.add_argument("--dry-run", action="store_true", help="Report what would change without writing anything.")
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Report what would change without writing anything.",
+        )
 
     def handle(self, *args, **options) -> None:
         """Converge every container's lenses, one transaction per container."""
         self.dry_run = options["dry_run"]
-        self.counts = {"normalized": 0, "edges_repaired": 0, "backfilled": 0, "merged_unsliced": 0, "merged_sliced": 0, "left": 0, "specified": 0, "named": 0}
+        self.counts = {
+            "normalized": 0,
+            "edges_repaired": 0,
+            "backfilled": 0,
+            "merged_unsliced": 0,
+            "merged_sliced": 0,
+            "left": 0,
+            "specified": 0,
+            "named": 0,
+        }
 
-        datasets = models.ArrayDataset.objects.filter(coordinate_system__isnull=False).order_by("pk").select_related("coordinate_system")
+        datasets = (
+            models.ArrayDataset.objects.filter(coordinate_system__isnull=False)
+            .order_by("pk")
+            .select_related("coordinate_system")
+        )
         for dataset in datasets.iterator():
             if dataset.data_arrays.order_by("level").first() is None:
                 continue
@@ -95,7 +112,10 @@ class Command(BaseCommand):
 
         # Every windowed kind the registry knows, so a seventh kind joins this job unasked.
         for noun, containers in (
-            (str(container_model._meta.verbose_name), container_model.objects.filter(coordinate_system__isnull=False))
+            (
+                str(container_model._meta.verbose_name),
+                container_model.objects.filter(coordinate_system__isnull=False),
+            )
             for container_model, lens_model in models.Lens.KIND_BY_CONTAINER.items()
             if lens_model is not models.ArrayLens
         ):
@@ -118,13 +138,17 @@ class Command(BaseCommand):
             )
         )
         if self.counts["left"]:
-            self.stdout.write(f"{self.counts['left']} duplicate lens(es) left in place; each is named above with the reason.")
+            self.stdout.write(
+                f"{self.counts['left']} duplicate lens(es) left in place; each is named above with the reason."
+            )
 
     # --- what every lens is --------------------------------------------------------
 
     def _specify(self) -> None:
         """Give every lens the spec its container and selection denote. After the convergence, so it reads the normalized selections."""
-        for lens in models.Lens.objects.with_sources().order_by("pk").iterator(chunk_size=500):
+        for lens in (
+            models.Lens.objects.with_sources().order_by("pk").iterator(chunk_size=500)
+        ):
             spec = [member.value for member in lens.derive_spec()]
             if spec == lens.stored_spec:
                 continue
@@ -140,7 +164,9 @@ class Command(BaseCommand):
         for container_model in models.Lens.KIND_BY_CONTAINER:
             for container in container_model.objects.order_by("pk").iterator():
                 with transaction.atomic():
-                    self.counts["named"] += lens_names_logic.refresh_container(container, announce=False)
+                    self.counts["named"] += lens_names_logic.refresh_container(
+                        container, announce=False
+                    )
                     if self.dry_run:
                         transaction.set_rollback(True)
 
@@ -151,33 +177,57 @@ class Command(BaseCommand):
         # A table lens may gate on a numeric column as well as window an axis: the same names it
         # was cut against, so a gate is normalized, never stripped.
         axis_names = coordinate_system_logic.windowable_names(container)
-        if not kind.objects.filter(**{kind.CONTAINER_FIELD: container}, windows=[]).exists():
+        if not kind.objects.filter(
+            **{kind.CONTAINER_FIELD: container}, windows=[]
+        ).exists():
             self.counts["backfilled"] += 1
-            self.stdout.write(f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of {noun} {container.pk}")  # type: ignore[attr-defined]
+            self.stdout.write(
+                f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of {noun} {container.pk}"  # type: ignore[attr-defined]
+            )
         coordinate_system_logic.whole_lens(container)
-        for lens in kind.objects.filter(**{kind.CONTAINER_FIELD: container}).order_by("pk"):
+        for lens in kind.objects.filter(**{kind.CONTAINER_FIELD: container}).order_by(
+            "pk"
+        ):
             try:
-                normalized = coords_logic.normalize_windows(axis_names, lens.windows_list)
+                normalized = coords_logic.normalize_windows(
+                    axis_names, lens.windows_list
+                )
             except ValueError as error:
-                self.stdout.write(f"lens {lens.pk} of {noun} {container.pk} left as is: its windows do not resolve ({error})")  # type: ignore[attr-defined]
+                self.stdout.write(
+                    f"lens {lens.pk} of {noun} {container.pk} left as is: its windows do not resolve ({error})"  # type: ignore[attr-defined]
+                )
                 continue
             if normalized != lens.windows:
                 # The database holds one row per spelling: a row whose one spelling another
                 # row already has is a duplicate, and is left where it is and named.
-                holder = kind.objects.filter(**{kind.CONTAINER_FIELD: container}, windows=normalized).exclude(pk=lens.pk).first()
+                holder = (
+                    kind.objects.filter(
+                        **{kind.CONTAINER_FIELD: container}, windows=normalized
+                    )
+                    .exclude(pk=lens.pk)
+                    .first()
+                )
                 if holder is not None:
                     self.counts["left"] += 1
-                    self.stdout.write(f"lens {lens.pk} of {noun} {container.pk} duplicates lens {holder.pk} but is left in place: it keeps its spelling {lens.windows}")  # type: ignore[attr-defined]
+                    self.stdout.write(
+                        f"lens {lens.pk} of {noun} {container.pk} duplicates lens {holder.pk} but is left in place: it keeps its spelling {lens.windows}"  # type: ignore[attr-defined]
+                    )
                     continue
                 self.counts["normalized"] += 1
-                self.stdout.write(f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.windows} -> {normalized}")
+                self.stdout.write(
+                    f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.windows} -> {normalized}"
+                )
                 kind.objects.filter(pk=lens.pk).update(windows=normalized)
 
     # --- one dataset ---------------------------------------------------------------
 
     def _converge(self, dataset: models.ArrayDataset) -> None:
         shape, axis_names = dataset.shape_list, dataset.axis_names
-        lenses = list(models.ArrayLens.objects.filter(dataset=dataset).order_by("pk").select_related("coordinate_system"))
+        lenses = list(
+            models.ArrayLens.objects.filter(dataset=dataset)
+            .order_by("pk")
+            .select_related("coordinate_system")
+        )
 
         # 1. The one spelling, computed for every row before anything is written: the database
         #    holds one row per spelling, so a row is rewritten only once the rows it would then
@@ -185,17 +235,27 @@ class Command(BaseCommand):
         groups: dict[str, list[tuple[models.ArrayLens, list]]] = {}
         for lens in lenses:
             try:
-                normalized = coords_logic.normalize_slices(shape, axis_names, lens.slices_list)
+                normalized = coords_logic.normalize_slices(
+                    shape, axis_names, lens.slices_list
+                )
             except ValueError as error:
-                self.stdout.write(f"lens {lens.pk} of dataset '{dataset.name}' ({dataset.pk}) left as is: its slices do not resolve ({error})")
+                self.stdout.write(
+                    f"lens {lens.pk} of dataset '{dataset.name}' ({dataset.pk}) left as is: its slices do not resolve ({error})"
+                )
                 continue
             groups.setdefault(_key(normalized), []).append((lens, normalized))
 
         # 2. The whole lens, whatever that group holds. Reads `whole_lens` so the row is the one
         #    `createArrayDataset` would have made, and so a dry run still names it.
-        if not any(lens.coordinate_system_id == dataset.coordinate_system_id and not lens.slices for lens, _ in groups.get(_key([]), [])):
+        if not any(
+            lens.coordinate_system_id == dataset.coordinate_system_id
+            and not lens.slices
+            for lens, _ in groups.get(_key([]), [])
+        ):
             self.counts["backfilled"] += 1
-            self.stdout.write(f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of dataset '{dataset.name}' ({dataset.pk})")
+            self.stdout.write(
+                f"{'would backfill' if self.dry_run else 'backfilled'} the whole lens of dataset '{dataset.name}' ({dataset.pk})"
+            )
         whole = cast(models.ArrayLens, coordinate_system_logic.whole_lens(dataset))
         for duplicate, _ in groups.pop(_key([]), []):
             if duplicate.pk != whole.pk:
@@ -208,50 +268,80 @@ class Command(BaseCommand):
             for duplicate, _ in duplicates:
                 self._merge(duplicate, into=keeper)
             if normalized != keeper.slices:
-                if models.ArrayLens.objects.filter(dataset=dataset, slices=normalized).exclude(pk=keeper.pk).exists():
-                    self.stdout.write(f"lens {keeper.pk} keeps its spelling {keeper.slices}: the normalized one {normalized} is held by a duplicate left in place")
+                if (
+                    models.ArrayLens.objects.filter(dataset=dataset, slices=normalized)
+                    .exclude(pk=keeper.pk)
+                    .exists()
+                ):
+                    self.stdout.write(
+                        f"lens {keeper.pk} keeps its spelling {keeper.slices}: the normalized one {normalized} is held by a duplicate left in place"
+                    )
                     continue
                 self._normalize(keeper, normalized)
 
-    def _normalize(self, lens: models.ArrayLens, normalized: list[dict[str, int | str]]) -> None:
+    def _normalize(
+        self, lens: models.ArrayLens, normalized: list[dict[str, int | str]]
+    ) -> None:
         self.counts["normalized"] += 1
-        self.stdout.write(f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.slices} -> {normalized}")
+        self.stdout.write(
+            f"{'would normalize' if self.dry_run else 'normalized'} lens {lens.pk}: {lens.slices} -> {normalized}"
+        )
         lens.slices = normalized
         models.ArrayLens.objects.filter(pk=lens.pk).update(slices=normalized)
 
-        kind, params = coords_logic.lens_to_parent(lens.dataset.axis_names, lens.slices_list)
+        kind, params = coords_logic.lens_to_parent(
+            lens.dataset.axis_names, lens.slices_list
+        )
         for edge in coordinate_system_logic.lens_own_edges(lens):
-            if kind == enums.TransformKindChoices.TRANSLATION.value and edge.kind == enums.TransformKindChoices.SEQUENCE.value:
+            if (
+                kind == enums.TransformKindChoices.TRANSLATION.value
+                and edge.kind == enums.TransformKindChoices.SEQUENCE.value
+            ):
                 # A lens whose only stepped axes kept one voxel each: its selection was stored
                 # with a stride that position does not have, and its edge scaled by it.
                 self.counts["edges_repaired"] += 1
-                self.stdout.write(f"{'would repair' if self.dry_run else 'repaired'} edge {edge.pk} of lens {lens.pk} (its own, into intrinsic): a single-voxel stride -> translation {params['translation']}")
-                models.Transformation.objects.filter(pk=edge.pk).update(kind=kind, params=params, steps=[])
+                self.stdout.write(
+                    f"{'would repair' if self.dry_run else 'repaired'} edge {edge.pk} of lens {lens.pk} (its own, into intrinsic): a single-voxel stride -> translation {params['translation']}"
+                )
+                models.Transformation.objects.filter(pk=edge.pk).update(
+                    kind=kind, params=params, steps=[]
+                )
                 continue
-            if kind != enums.TransformKindChoices.TRANSLATION.value or edge.kind != kind:
+            if (
+                kind != enums.TransformKindChoices.TRANSLATION.value
+                or edge.kind != kind
+            ):
                 # A stepped lens is a SEQUENCE of steps; its spelling never changed the
                 # scale, and its starts are left to a later pass if one is ever needed.
                 continue
             if edge.params == params:
                 continue
             self.counts["edges_repaired"] += 1
-            self.stdout.write(f"{'would repair' if self.dry_run else 'repaired'} edge {edge.pk} of lens {lens.pk} (its own, into intrinsic): translation {edge.params.get('translation')} -> {params['translation']}")
+            self.stdout.write(
+                f"{'would repair' if self.dry_run else 'repaired'} edge {edge.pk} of lens {lens.pk} (its own, into intrinsic): translation {edge.params.get('translation')} -> {params['translation']}"
+            )
             models.Transformation.objects.filter(pk=edge.pk).update(params=params)
 
     def _merge(self, duplicate: models.ArrayLens, *, into: models.ArrayLens) -> None:
-        sliced = duplicate.coordinate_system_id != duplicate.dataset.coordinate_system_id
+        sliced = (
+            duplicate.coordinate_system_id != duplicate.dataset.coordinate_system_id
+        )
         if sliced:
             reason = coordinate_system_logic.lens_space_is_shared_because(duplicate)
             if reason is not None:
                 self.counts["left"] += 1
-                self.stdout.write(f"lens {duplicate.pk} duplicates lens {into.pk} but is left in place: {reason} (system {duplicate.coordinate_system_id})")
+                self.stdout.write(
+                    f"lens {duplicate.pk} duplicates lens {into.pk} but is left in place: {reason} (system {duplicate.coordinate_system_id})"
+                )
                 return
 
         layers = models.Layer.objects.filter(lens=duplicate).count()
         chart_layers = ChartLayer.objects.filter(lens=duplicate).count()
         grid_layers = GridLayer.objects.filter(lens=duplicate).count()
         verb = "would merge" if self.dry_run else "merged"
-        self.stdout.write(f"{verb} lens {duplicate.pk} into lens {into.pk} ({layers} layer(s), {chart_layers} chart layer(s), {grid_layers} grid layer(s) repointed)")
+        self.stdout.write(
+            f"{verb} lens {duplicate.pk} into lens {into.pk} ({layers} layer(s), {chart_layers} chart layer(s), {grid_layers} grid layer(s) repointed)"
+        )
         models.Layer.objects.filter(lens=duplicate).update(lens=into)
         ChartLayer.objects.filter(lens=duplicate).update(lens=into)
         GridLayer.objects.filter(lens=duplicate).update(lens=into)
@@ -259,16 +349,24 @@ class Command(BaseCommand):
         # component, and as the source of a render-graph node. Those columns cascade, so a
         # name left on the duplicate would take its layer with it.
         for component in ("red_lens", "green_lens", "blue_lens"):
-            models.Layer.objects.filter(**{component: duplicate}).update(**{component: into})
+            models.Layer.objects.filter(**{component: duplicate}).update(
+                **{component: into}
+            )
         for layer in models.Layer.objects.filter(channel_lenses=duplicate):
-            _rename_graph_lens(layer.render_graph["root"], str(duplicate.pk), str(into.pk))
-            models.Layer.objects.filter(pk=layer.pk).update(render_graph=layer.render_graph)
+            _rename_graph_lens(
+                layer.render_graph["root"], str(duplicate.pk), str(into.pk)
+            )
+            models.Layer.objects.filter(pk=layer.pk).update(
+                render_graph=layer.render_graph
+            )
             layer.channel_lenses.remove(duplicate)
             layer.channel_lenses.add(into)
         # The scene the duplicate opens on, unless the keeper already nominates one.
         if into.default_scene_id is None and duplicate.default_scene_id is not None:
             into.default_scene_id = duplicate.default_scene_id
-            models.Lens.objects.filter(pk=into.pk).update(default_scene_id=duplicate.default_scene_id)
+            models.Lens.objects.filter(pk=into.pk).update(
+                default_scene_id=duplicate.default_scene_id
+            )
 
         # The row, and for a sliced one its edge and its system, as `deleteLens` takes them.
         coordinate_system_logic.delete_lens(duplicate)

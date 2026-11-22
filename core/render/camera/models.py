@@ -56,27 +56,39 @@ class CameraStateModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _orientations_are_quaternions(self) -> "CameraStateModel":
+    def _orientations_are_quaternions(self) -> CameraStateModel:
         """Reject an orientation that is not a quaternion.
 
         A three-component orientation is the plausible mistake here -- it reads like an
         euler triple and would be accepted silently by a bare ``list[float]``, then be
         meaningless to every viewer that unpacked it as x/y/z/w.
         """
-        for field, value in (("crossSectionOrientation", self.cross_section_orientation), ("projectionOrientation", self.projection_orientation)):
+        for field, value in (
+            ("crossSectionOrientation", self.cross_section_orientation),
+            ("projectionOrientation", self.projection_orientation),
+        ):
             if value is not None and len(value) != _QUATERNION_LENGTH:
-                raise ValueError(f"{field} is a quaternion, so it takes exactly {_QUATERNION_LENGTH} components (x, y, z, w), but got {len(value)}.")
+                raise ValueError(
+                    f"{field} is a quaternion, so it takes exactly {_QUATERNION_LENGTH} components (x, y, z, w), but got {len(value)}."
+                )
         return self
 
     @model_validator(mode="after")
-    def _zooms_are_positive(self) -> "CameraStateModel":
+    def _zooms_are_positive(self) -> CameraStateModel:
         """Reject a zoom of zero or less.
 
         A scale is world units *per screen pixel*, so it is a ratio a viewer divides by:
         zero has no view to describe, and a negative one describes a mirrored screen
         rather than a camera. Null is how a pose declines to set the zoom at all.
         """
-        for field, value in (("crossSectionScale", self.cross_section_scale), ("projectionScale", self.projection_scale)):
+        for field, value in (
+            ("crossSectionScale", self.cross_section_scale),
+            ("projectionScale", self.projection_scale),
+        ):
             if value is not None:
-                assert_positive(value, field=field, because="it is world units per screen pixel, which a viewer divides by")
+                assert_positive(
+                    value,
+                    field=field,
+                    because="it is world units per screen pixel, which a viewer divides by",
+                )
         return self

@@ -60,10 +60,22 @@ query Derived($id: ID!) {
 
 #: A (c, y, x) source into a (z, y, x) world: the space axes onto their counterparts, the channel
 #: onto nothing (a calibration never relates a CHANNEL axis to a SPACE one). y is shifted by 5.
-_REGISTRATION = {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, 0.0]}]}
+_REGISTRATION = {
+    "kind": "BY_DIMENSION",
+    "parts": [
+        {
+            "kind": "TRANSLATION",
+            "inputAxes": ["y", "x"],
+            "outputAxes": ["y", "x"],
+            "translation": [5.0, 0.0],
+        }
+    ],
+}
 
 
-async def _two_sources(ctx: HttpContext) -> tuple[models.ArrayDataset, models.Lens, models.ArrayDataset, models.Lens]:
+async def _two_sources(
+    ctx: HttpContext,
+) -> tuple[models.ArrayDataset, models.Lens, models.ArrayDataset, models.Lens]:
     """Two acquired datasets with a full lens each -- the parents of every fusion below."""
     left = await seed.create_array_dataset(ctx, "Left")
     left_lens = await seed.create_lens(ctx, left, slices=[])
@@ -74,7 +86,9 @@ async def _two_sources(ctx: HttpContext) -> tuple[models.ArrayDataset, models.Le
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_fusion_records_every_parent_in_declared_order(authenticated_context: HttpContext):
+async def test_a_fusion_records_every_parent_in_declared_order(
+    authenticated_context: HttpContext,
+):
     """`derivedFrom` is the declared list, not a pk lottery: swap the input and the order swaps."""
     _, left_lens, _, right_lens = await _two_sources(authenticated_context)
 
@@ -84,7 +98,18 @@ async def test_a_fusion_records_every_parent_in_declared_order(authenticated_con
             name,
             axes=seed.SIMPLE_AXES,
             shape=[3, 64, 64],
-            entries=[{"kind": "LENS", "lens": str(first.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(second.pk), "transform": {"kind": "IDENTITY"}}],
+            entries=[
+                {
+                    "kind": "LENS",
+                    "lens": str(first.pk),
+                    "transform": {"kind": "IDENTITY"},
+                },
+                {
+                    "kind": "LENS",
+                    "lens": str(second.pk),
+                    "transform": {"kind": "IDENTITY"},
+                },
+            ],
         )
         assert not result.errors, result.errors
         return result.data["createArrayDataset"]["id"]
@@ -95,11 +120,20 @@ async def test_a_fusion_records_every_parent_in_declared_order(authenticated_con
     left_space = str((await sync_to_async(lambda: left_lens.coordinate_system)()).pk)
     right_space = str((await sync_to_async(lambda: right_lens.coordinate_system)()).pk)
 
-    for dataset_id, expected in ((fused_id, [left_space, right_space]), (swapped_id, [right_space, left_space])):
-        result = await schema.execute(DERIVED, context_value=authenticated_context, variable_values={"id": dataset_id})
+    for dataset_id, expected in (
+        (fused_id, [left_space, right_space]),
+        (swapped_id, [right_space, left_space]),
+    ):
+        result = await schema.execute(
+            DERIVED,
+            context_value=authenticated_context,
+            variable_values={"id": dataset_id},
+        )
         assert not result.errors, result.errors
         edges = result.data["arrayDataset"]["derivedFrom"]
-        assert [edge["output"]["id"] for edge in edges] == expected, "the first entry is the primary parent, and only the creator says which that is"
+        assert [edge["output"]["id"] for edge in edges] == expected, (
+            "the first entry is the primary parent, and only the creator says which that is"
+        )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -113,9 +147,22 @@ async def test_a_duplicate_source_is_refused(authenticated_context: HttpContext)
         "DoubleCounted",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+        ],
     )
-    assert result.errors, "the same lens twice is not a fusion, it is a contradiction waiting to be written"
+    assert result.errors, (
+        "the same lens twice is not a fusion, it is a contradiction waiting to be written"
+    )
     # "source", not "lens": the duplicate check keys on (kind, id) now, so it catches two
     # entries naming the same table as readily as two naming the same lens -- and does not
     # collide two different kinds of source that happen to share a numeric id.
@@ -124,7 +171,9 @@ async def test_a_duplicate_source_is_refused(authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(authenticated_context: HttpContext):
+async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(
+    authenticated_context: HttpContext,
+):
     """The primary is the placing parent, so an UNMAPPABLE first entry ahead of a mappable one is refused.
 
     The walks refuse an UNMAPPABLE primary -- that is its contract -- so a mappable parent
@@ -139,11 +188,21 @@ async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(authenticated_
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
         entries=[
-            {"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "UNMAPPABLE", "reason": "geometry lost"}},
-            {"kind": "LENS", "lens": str(right_lens.pk), "transform": {"kind": "IDENTITY"}},
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "UNMAPPABLE", "reason": "geometry lost"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(right_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
         ],
     )
-    assert refused.errors, "a mappable parent must not hide behind an UNMAPPABLE primary"
+    assert refused.errors, (
+        "a mappable parent must not hide behind an UNMAPPABLE primary"
+    )
     assert "primary" in str(refused.errors[0])
 
     accepted = await _derive(
@@ -152,8 +211,16 @@ async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(authenticated_
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
         entries=[
-            {"kind": "LENS", "lens": str(right_lens.pk), "transform": {"kind": "IDENTITY"}},
-            {"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "UNMAPPABLE", "reason": "geometry lost"}},
+            {
+                "kind": "LENS",
+                "lens": str(right_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "UNMAPPABLE", "reason": "geometry lost"},
+            },
         ],
     )
     assert not accepted.errors, accepted.errors
@@ -161,7 +228,9 @@ async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(authenticated_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_unmappable(authenticated_context: HttpContext):
+async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_unmappable(
+    authenticated_context: HttpContext,
+):
     """History from several sources, geometry from none: the data is its own root, and its
     layer is refused with the impossibility message -- not the go-author-a-registration one,
     because there is no missing registration to author."""
@@ -173,38 +242,71 @@ async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_un
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
         entries=[
-            {"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "UNMAPPABLE", "reason": "reduced away"}},
-            {"kind": "LENS", "lens": str(right_lens.pk), "transform": {"kind": "UNMAPPABLE", "reason": "reduced away"}},
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "UNMAPPABLE", "reason": "reduced away"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(right_lens.pk),
+                "transform": {"kind": "UNMAPPABLE", "reason": "reduced away"},
+            },
         ],
     )
     assert not derived.errors, derived.errors
-    dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    dataset = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
     ancestors = await sync_to_async(graph_logic.lineage_ancestors)(dataset)
     root = await sync_to_async(graph_logic.primary_lineage_root)(dataset)
-    assert ancestors == [], "no parent maps, so none places -- the spatial lineage is empty"
+    assert ancestors == [], (
+        "no parent maps, so none places -- the spatial lineage is empty"
+    )
     assert root.pk == dataset.pk
 
-    scene_result = await schema.execute(CREATE_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "Sc"}})
+    scene_result = await schema.execute(
+        CREATE_SCENE,
+        context_value=authenticated_context,
+        variable_values={"input": {"name": "Sc"}},
+    )
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
-    assert made.errors, "data no parent can place cannot be composed into a shared scene"
-    assert "UNMAPPABLE" in str(made.errors[0]), "the error says nothing can place this, rather than sending someone to author an edge"
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "scene": scene_id,
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+            }
+        },
+    )
+    assert made.errors, (
+        "data no parent can place cannot be composed into a shared scene"
+    )
+    assert "UNMAPPABLE" in str(made.errors[0]), (
+        "the error says nothing can place this, rather than sending someone to author an edge"
+    )
     assert "createTransformation" not in str(made.errors[0])
 
     def claims_into_world() -> int:
         world_id = models.Scene.objects.get(pk=scene_id).world_id
         return models.Transformation.objects.filter(output_id=world_id).count()
 
-    assert await sync_to_async(claims_into_world)() == 0, "and nothing was fabricated on the way out"
+    assert await sync_to_async(claims_into_world)() == 0, (
+        "and nothing was fabricated on the way out"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_lineage_is_the_primary_chain_and_history_keeps_every_parent(authenticated_context: HttpContext):
+async def test_the_lineage_is_the_primary_chain_and_history_keeps_every_parent(
+    authenticated_context: HttpContext,
+):
     """`lineage_ancestors` is the fact tree's chain; `derivation_edges` is the full history.
 
     A fusion owes both parents historically, but it *sits* where its primary sits: the
@@ -218,24 +320,45 @@ async def test_the_lineage_is_the_primary_chain_and_history_keeps_every_parent(a
         "Fused",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(right_lens.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(right_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+        ],
     )
     assert not derived.errors, derived.errors
-    dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    dataset = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
 
     ancestors = await sync_to_async(graph_logic.lineage_ancestors)(dataset)
-    assert [ancestor.pk for ancestor in ancestors] == [left.pk], "the spatial lineage is the primary chain: the fusion sits where its first-declared parent sits"
+    assert [ancestor.pk for ancestor in ancestors] == [left.pk], (
+        "the spatial lineage is the primary chain: the fusion sits where its first-declared parent sits"
+    )
 
     edges = await sync_to_async(graph_logic.derivation_edges)(dataset)
-    assert len(edges) == 2, "history is not placement: derivedFrom still reports every parent"
+    assert len(edges) == 2, (
+        "history is not placement: derivedFrom still reports every parent"
+    )
 
     root = await sync_to_async(graph_logic.primary_lineage_root)(dataset)
-    assert root.pk == left.pk, "the root is reached by taking the FIRST edge at every hop, not any edge"
+    assert root.pk == left.pk, (
+        "the root is reached by taking the FIRST edge at every hop, not any edge"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unregistered_fusion_is_rejected_and_nothing_is_written(authenticated_context: HttpContext):
+async def test_an_unregistered_fusion_is_rejected_and_nothing_is_written(
+    authenticated_context: HttpContext,
+):
     """No parent is registered, so the fusion's layer is refused -- and the graph is untouched.
 
     The server used to pin the primary parent here. It no longer writes anything: two
@@ -250,28 +373,53 @@ async def test_an_unregistered_fusion_is_rejected_and_nothing_is_written(authent
         "Fused",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(right_lens.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(right_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+        ],
     )
     assert not derived.errors, derived.errors
-    dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    dataset = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
-    scene_result = await schema.execute(CREATE_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "Sc"}})
+    scene_result = await schema.execute(
+        CREATE_SCENE,
+        context_value=authenticated_context,
+        variable_values={"input": {"name": "Sc"}},
+    )
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
     channel = await seed.channel_lens(authenticated_context, lens)
     edge_count = await sync_to_async(models.Transformation.objects.count)()
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str(channel.pk)}})
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": scene_id, "lens": str(channel.pk)}},
+    )
     assert made.errors, "no parent is registered, so the fusion has no path to world"
     assert "createTransformation" in str(made.errors[0])
 
-    assert await sync_to_async(models.Transformation.objects.count)() == edge_count, "the refused mutation wrote no edge at all"
+    assert await sync_to_async(models.Transformation.objects.count)() == edge_count, (
+        "the refused mutation wrote no edge at all"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_fusion_places_through_either_parent(authenticated_context: HttpContext):
+async def test_a_fusion_places_through_either_parent(
+    authenticated_context: HttpContext,
+):
     """A fusion reaches the world through *whichever* parent is registered (RFC-9).
 
     The fact tree used to keep one parent edge per system, so registering only the SECONDARY
@@ -290,16 +438,38 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
         "Fused",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(left_lens.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(right_lens.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "LENS",
+                "lens": str(left_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(right_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+        ],
     )
     assert not derived.errors, derived.errors
-    dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    dataset = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
     scene_result = await schema.execute(
         CREATE_SCENE,
         context_value=authenticated_context,
-        variable_values={"input": {"name": "Sc", "axes": [{"name": "z", "type": "SPACE", "unit": "micrometer"}, {"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}]}},
+        variable_values={
+            "input": {
+                "name": "Sc",
+                "axes": [
+                    {"name": "z", "type": "SPACE", "unit": "micrometer"},
+                    {"name": "y", "type": "SPACE", "unit": "micrometer"},
+                    {"name": "x", "type": "SPACE", "unit": "micrometer"},
+                ],
+            }
+        },
     )
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
@@ -309,12 +479,29 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
     registered = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(right_intrinsic.pk), "output": world_id, "transform": _REGISTRATION}},
+        variable_values={
+            "input": {
+                "input": str(right_intrinsic.pk),
+                "output": world_id,
+                "transform": _REGISTRATION,
+            }
+        },
     )
     assert not registered.errors, registered.errors
 
-    placed = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
-    assert not placed.errors, f"the secondary parent's registration places the fusion too: {placed.errors}"
+    placed = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "scene": scene_id,
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+            }
+        },
+    )
+    assert not placed.errors, (
+        f"the secondary parent's registration places the fusion too: {placed.errors}"
+    )
 
     # And registering the primary as well leaves the fusion placed -- two routes now, which
     # is exactly the rival case the tie-break exists to settle.
@@ -322,21 +509,44 @@ async def test_a_fusion_places_through_either_parent(authenticated_context: Http
     registered = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(left_intrinsic.pk), "output": world_id, "transform": _REGISTRATION}},
+        variable_values={
+            "input": {
+                "input": str(left_intrinsic.pk),
+                "output": world_id,
+                "transform": _REGISTRATION,
+            }
+        },
     )
     assert not registered.errors, registered.errors
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}})
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "scene": scene_id,
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+            }
+        },
+    )
     assert not made.errors, made.errors
 
-    placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
+    placement = await schema.execute(
+        PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id}
+    )
     assert not placement.errors, placement.errors
 
     path = placement.data["scene"]["layers"][0]["pathToWorld"]
-    assert path is not None, "the primary parent's registration is what places the fusion"
-    assert path[-1]["transformation"]["output"]["residents"] == [], "the path ends in a space nothing lives in: a world"
+    assert path is not None, (
+        "the primary parent's registration is what places the fusion"
+    )
+    assert path[-1]["transformation"]["output"]["residents"] == [], (
+        "the path ends in a space nothing lives in: a world"
+    )
     hops = [step["transformation"]["input"]["id"] for step in path]
-    assert str(left_intrinsic.pk) in hops, "the walk goes through the primary parent's intrinsic system"
+    assert str(left_intrinsic.pk) in hops, (
+        "the walk goes through the primary parent's intrinsic system"
+    )
     assert str(right_intrinsic.pk) not in hops, "and never through the secondary's"
 
 
@@ -355,9 +565,12 @@ def _best_path(source_pk: int, target_pk: int):
     )
     return graph_logic._bfs_path(graph_logic.adjacency_of(edges), source_pk, target_pk)
 
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_validated_route_beats_a_shorter_unknown_one(authenticated_context: HttpContext):
+async def test_a_validated_route_beats_a_shorter_unknown_one(
+    authenticated_context: HttpContext,
+):
     """The rival case the tie-break exists to settle, now actually settled.
 
     The walk used to be an unweighted BFS: fewest hops, ties by edge pk, and `validity` never
@@ -371,53 +584,92 @@ async def test_a_validated_route_beats_a_shorter_unknown_one(authenticated_conte
     ctx = seed._creation(authenticated_context)
 
     def space(name: str) -> models.CoordinateSystem:
-        made = models.CoordinateSystem.objects.create(name=name, creator=ctx.user, organization=ctx.organization)
+        made = models.CoordinateSystem.objects.create(
+            name=name, creator=ctx.user, organization=ctx.organization
+        )
         graph_logic.create_pixel_axes(made, seed.YX_AXES)
         return made
 
-    source, midpoint, world = await sync_to_async(space)("Source"), await sync_to_async(space)("Midpoint"), await sync_to_async(space)("World")
+    source, midpoint, world = (
+        await sync_to_async(space)("Source"),
+        await sync_to_async(space)("Midpoint"),
+        await sync_to_async(space)("World"),
+    )
 
     # Authored first, so it is both the shortest route and the lowest pk.
     guess = await sync_to_async(graph_logic.build_registration_edge)(
-        input_system=source, output_system=world, kind="TRANSLATION", translation=[9.0, 9.0],
-        validity=enums.PlacementValidity.UNKNOWN.value, ctx=ctx,
+        input_system=source,
+        output_system=world,
+        kind="TRANSLATION",
+        translation=[9.0, 9.0],
+        validity=enums.PlacementValidity.UNKNOWN.value,
+        ctx=ctx,
     )
     # The longer, better-known route.
     await sync_to_async(graph_logic.build_registration_edge)(
-        input_system=source, output_system=midpoint, kind="TRANSLATION", translation=[1.0, 1.0],
-        validity=enums.PlacementValidity.VALIDATED.value, ctx=ctx,
+        input_system=source,
+        output_system=midpoint,
+        kind="TRANSLATION",
+        translation=[1.0, 1.0],
+        validity=enums.PlacementValidity.VALIDATED.value,
+        ctx=ctx,
     )
     await sync_to_async(graph_logic.build_registration_edge)(
-        input_system=midpoint, output_system=world, kind="TRANSLATION", translation=[2.0, 2.0],
-        validity=enums.PlacementValidity.VALIDATED.value, ctx=ctx,
+        input_system=midpoint,
+        output_system=world,
+        kind="TRANSLATION",
+        translation=[2.0, 2.0],
+        validity=enums.PlacementValidity.VALIDATED.value,
+        ctx=ctx,
     )
 
     path = await sync_to_async(_best_path)(source.pk, world.pk)
 
     assert path is not None
-    assert len(path) == 2, "the two-hop VALIDATED chain wins, though it is longer and later"
-    assert guess.pk not in {edge.pk for edge, _ in path}, "the shorter UNKNOWN guess is not the route"
-    assert graph_logic.weakest_validity([edge.validity for edge, _ in path]) == enums.PlacementValidityChoices.VALIDATED.value
+    assert len(path) == 2, (
+        "the two-hop VALIDATED chain wins, though it is longer and later"
+    )
+    assert guess.pk not in {edge.pk for edge, _ in path}, (
+        "the shorter UNKNOWN guess is not the route"
+    )
+    assert (
+        graph_logic.weakest_validity([edge.validity for edge, _ in path])
+        == enums.PlacementValidityChoices.VALIDATED.value
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_among_equally_known_routes_the_shortest_still_wins(authenticated_context: HttpContext):
+async def test_among_equally_known_routes_the_shortest_still_wins(
+    authenticated_context: HttpContext,
+):
     """Validity is the first key, not the only one: hops still break its ties."""
     ctx = seed._creation(authenticated_context)
 
     def space(name: str) -> models.CoordinateSystem:
-        made = models.CoordinateSystem.objects.create(name=name, creator=ctx.user, organization=ctx.organization)
+        made = models.CoordinateSystem.objects.create(
+            name=name, creator=ctx.user, organization=ctx.organization
+        )
         graph_logic.create_pixel_axes(made, seed.YX_AXES)
         return made
 
-    source, midpoint, world = await sync_to_async(space)("Source"), await sync_to_async(space)("Midpoint"), await sync_to_async(space)("World")
+    source, midpoint, world = (
+        await sync_to_async(space)("Source"),
+        await sync_to_async(space)("Midpoint"),
+        await sync_to_async(space)("World"),
+    )
 
     for a, b in ((source, midpoint), (midpoint, world), (source, world)):
         await sync_to_async(graph_logic.build_registration_edge)(
-            input_system=a, output_system=b, kind="TRANSLATION", translation=[1.0, 1.0],
-            validity=enums.PlacementValidity.VALIDATED.value, ctx=ctx,
+            input_system=a,
+            output_system=b,
+            kind="TRANSLATION",
+            translation=[1.0, 1.0],
+            validity=enums.PlacementValidity.VALIDATED.value,
+            ctx=ctx,
         )
 
     path = await sync_to_async(_best_path)(source.pk, world.pk)
-    assert path is not None and len(path) == 1, "all three edges are equally known, so the direct one wins on hops"
+    assert path is not None and len(path) == 1, (
+        "all three edges are equally known, so the direct one wins on hops"
+    )

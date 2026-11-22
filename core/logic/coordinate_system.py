@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING, cast
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
-from kanne_server import scalars as kanne_scalars
-
 from core import base_models, enums, models
 from core import descriptors as descriptors_logic
 from core.creation import CreationContext
@@ -37,6 +35,7 @@ from core.logic import lens_names as lens_names_logic
 from core.logic import pickers as pickers_logic
 from core.logic import placement as placement_logic
 from core.scoping import get_for_org
+from kanne_server import scalars as kanne_scalars
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -64,7 +63,9 @@ def create_world_space(
     """
     axes = axes or DEFAULT_WORLD_AXES
     with transaction.atomic():
-        world, _ = _get_or_create_space(name=name, axes=axes, epoch=epoch, reference=reference, ctx=ctx)
+        world, _ = _get_or_create_space(
+            name=name, axes=axes, epoch=epoch, reference=reference, ctx=ctx
+        )
     return world
 
 
@@ -74,7 +75,9 @@ def create_coordinate_system(
     axes: list,
     epoch: datetime.datetime | None = None,
     reference: str | None = None,
-    registrations: Sequence[tuple["models.CoordinateSystem", "models.ZarrStore | None", object]] = (),
+    registrations: Sequence[
+        tuple["models.CoordinateSystem", "models.ZarrStore | None", object]
+    ] = (),
     ctx: CreationContext,
 ) -> "models.CoordinateSystem":
     """Create a shared coordinate system, and author one edge per registered source into it.
@@ -94,7 +97,9 @@ def create_coordinate_system(
     reading the same atlas from two files land in one space rather than two that never compose.
     """
     with transaction.atomic():
-        system, _ = _get_or_create_space(name=name, axes=axes, epoch=epoch, reference=reference, ctx=ctx)
+        system, _ = _get_or_create_space(
+            name=name, axes=axes, epoch=epoch, reference=reference, ctx=ctx
+        )
 
         for source_system, parts, spec in registrations:
             lowered = spec.transform.lower() if spec.transform else IDENTITY_TRANSFORM
@@ -122,7 +127,9 @@ def create_coordinate_system(
 _URI_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:")
 
 
-def resolve_reference(reference: str, app_identifier: str | None) -> tuple[str, str | None]:
+def resolve_reference(
+    reference: str, app_identifier: str | None
+) -> tuple[str, str | None]:
     """The ``(reference, reference_app)`` pair a reference is stored and looked up under.
 
     The scope is read off the string, so it can never disagree with it: ``nifti:mni152``
@@ -131,8 +138,14 @@ def resolve_reference(reference: str, app_identifier: str | None) -> tuple[str, 
     re-minted on each fresh login, and keying by it would hand an app a new "stage" every
     time it logged in.
     """
-    if not reference or reference != reference.strip() or any(character.isspace() for character in reference):
-        raise ValueError(f"A space reference is a single token with no whitespace, got {reference!r}. Use a URI (`nifti:mni152`) for a frame everyone shares, or a plain key (`stage`) for one of your app's own.")
+    if (
+        not reference
+        or reference != reference.strip()
+        or any(character.isspace() for character in reference)
+    ):
+        raise ValueError(
+            f"A space reference is a single token with no whitespace, got {reference!r}. Use a URI (`nifti:mni152`) for a frame everyone shares, or a plain key (`stage`) for one of your app's own."
+        )
     if _URI_SCHEME.match(reference):
         return reference, None
     if app_identifier is None:
@@ -153,11 +166,20 @@ def _axis_signature(axes: Iterable) -> list[tuple[str, str, str | None, str | No
     for axis in axes:
         axis_type = axis.type.value if hasattr(axis.type, "value") else axis.type
         unit = kanne_scalars.parse_unit(axis.unit) if axis.unit is not None else None
-        signature.append((axis.name, axis_type, unit, coords_logic.effective_metric_group(axis_type, axis.metric_group)))
+        signature.append(
+            (
+                axis.name,
+                axis_type,
+                unit,
+                coords_logic.effective_metric_group(axis_type, axis.metric_group),
+            )
+        )
     return signature
 
 
-def _assert_same_frame(system: "models.CoordinateSystem", *, axes: list, epoch: datetime.datetime | None) -> None:
+def _assert_same_frame(
+    system: "models.CoordinateSystem", *, axes: list, epoch: datetime.datetime | None
+) -> None:
     """Refuse to hand back a referenced space a caller describes differently.
 
     Axes are the space's description, so a request with other axes is asking for another
@@ -175,10 +197,19 @@ def _assert_same_frame(system: "models.CoordinateSystem", *, axes: list, epoch: 
             "reference, or ask for this one as it is."
         )
     if epoch is not None and system.epoch != epoch:
-        raise ValueError(f"Coordinate system {system.pk} already holds the reference {system.reference!r} with epoch {system.epoch}, not {epoch}. A space has one clock.")
+        raise ValueError(
+            f"Coordinate system {system.pk} already holds the reference {system.reference!r} with epoch {system.epoch}, not {epoch}. A space has one clock."
+        )
 
 
-def _get_or_create_space(*, name: str, axes: list, epoch: datetime.datetime | None, reference: str | None, ctx: CreationContext) -> "tuple[models.CoordinateSystem, bool]":
+def _get_or_create_space(
+    *,
+    name: str,
+    axes: list,
+    epoch: datetime.datetime | None,
+    reference: str | None,
+    ctx: CreationContext,
+) -> "tuple[models.CoordinateSystem, bool]":
     """The space holding ``reference`` if there is one, else a new one; and whether it was created.
 
     Called inside the caller's transaction. The create runs in a savepoint so that two
@@ -186,7 +217,9 @@ def _get_or_create_space(*, name: str, axes: list, epoch: datetime.datetime | No
     insert trips the unique constraint, the savepoint rolls back, and the re-read finds it.
     """
     if reference is None:
-        system = models.CoordinateSystem.objects.create(name=name, epoch=epoch, creator=ctx.user, organization=ctx.organization)
+        system = models.CoordinateSystem.objects.create(
+            name=name, epoch=epoch, creator=ctx.user, organization=ctx.organization
+        )
         graph_logic.create_physical_axes(system, axes)
         return system, True
 
@@ -197,7 +230,9 @@ def _get_or_create_space(*, name: str, axes: list, epoch: datetime.datetime | No
     if existing is None:
         try:
             with transaction.atomic():
-                system = models.CoordinateSystem.objects.create(name=name, epoch=epoch, creator=ctx.user, **lookup)
+                system = models.CoordinateSystem.objects.create(
+                    name=name, epoch=epoch, creator=ctx.user, **lookup
+                )
                 graph_logic.create_physical_axes(system, axes)
             return system, True
         except IntegrityError:
@@ -207,7 +242,9 @@ def _get_or_create_space(*, name: str, axes: list, epoch: datetime.datetime | No
     return existing, False
 
 
-def assign_reference(system: "models.CoordinateSystem", reference: str, ctx: CreationContext) -> None:
+def assign_reference(
+    system: "models.CoordinateSystem", reference: str, ctx: CreationContext
+) -> None:
     """Give a space that has none a reference, so later get-or-creates find it.
 
     Set once: other callers may already be finding the space by it, and renaming it would
@@ -218,10 +255,20 @@ def assign_reference(system: "models.CoordinateSystem", reference: str, ctx: Cre
     if system.reference is not None:
         if (system.reference, system.reference_app) == (reference, app):
             return
-        raise ValueError(f"Coordinate system {system.pk} already has the reference {system.reference!r}; a reference is set once, because others find the space by it.")
-    holder = models.CoordinateSystem.objects.filter(organization=system.organization, reference=reference, reference_app=app).exclude(pk=system.pk).first()
+        raise ValueError(
+            f"Coordinate system {system.pk} already has the reference {system.reference!r}; a reference is set once, because others find the space by it."
+        )
+    holder = (
+        models.CoordinateSystem.objects.filter(
+            organization=system.organization, reference=reference, reference_app=app
+        )
+        .exclude(pk=system.pk)
+        .first()
+    )
     if holder is not None:
-        raise ValueError(f"The reference {reference!r} is already held by coordinate system {holder.pk}; register into that space instead.")
+        raise ValueError(
+            f"The reference {reference!r} is already held by coordinate system {holder.pk}; register into that space instead."
+        )
     system.reference, system.reference_app = reference, app
     system.save(update_fields=["reference", "reference_app"])
 
@@ -245,9 +292,23 @@ def resolve_source_system(
     Shared by registrations and derivations: both name "some container", and the answer to
     "which space stands for it" cannot sensibly differ between them.
     """
-    provided = [value for value in (dataset, lens, table_dataset, mesh_collection, network_collection, annotation_collection, coordinate_system) if value is not None]
+    provided = [
+        value
+        for value in (
+            dataset,
+            lens,
+            table_dataset,
+            mesh_collection,
+            network_collection,
+            annotation_collection,
+            coordinate_system,
+        )
+        if value is not None
+    ]
     if len(provided) != 1:
-        raise ValueError("A registration must name exactly one source: a dataset, a lens, a table dataset, a mesh collection, a network collection, an annotation collection, or a coordinate system.")
+        raise ValueError(
+            "A registration must name exactly one source: a dataset, a lens, a table dataset, a mesh collection, a network collection, an annotation collection, or a coordinate system."
+        )
 
     if coordinate_system is not None:
         return coordinate_system
@@ -259,30 +320,40 @@ def resolve_source_system(
     if dataset is not None:
         system = dataset.intrinsic_coordinate_system
         if system is None:
-            raise ValueError(f"Dataset '{dataset.name}' has no intrinsic coordinate system to register.")
+            raise ValueError(
+                f"Dataset '{dataset.name}' has no intrinsic coordinate system to register."
+            )
         return system
 
     if table_dataset is not None:
         system = table_dataset.coordinate_system_or_none
         if system is None:
-            raise ValueError(f"Table dataset '{table_dataset.name}' has no coordinate system to register.")
+            raise ValueError(
+                f"Table dataset '{table_dataset.name}' has no coordinate system to register."
+            )
         return system
 
     if annotation_collection is not None:
         system = annotation_collection.coordinate_system_or_none
         if system is None:
-            raise ValueError(f"Annotation collection '{annotation_collection.name}' has no coordinate system to register.")
+            raise ValueError(
+                f"Annotation collection '{annotation_collection.name}' has no coordinate system to register."
+            )
         return system
 
     if network_collection is not None:
         system = getattr(network_collection, "coordinate_system", None)
         if system is None:
-            raise ValueError(f"Network collection '{network_collection.label}' has no coordinate system to register.")
+            raise ValueError(
+                f"Network collection '{network_collection.label}' has no coordinate system to register."
+            )
         return system
 
     system = getattr(mesh_collection, "coordinate_system", None)
     if system is None:
-        raise ValueError(f"Mesh collection '{mesh_collection.label}' has no coordinate system to register.")
+        raise ValueError(
+            f"Mesh collection '{mesh_collection.label}' has no coordinate system to register."
+        )
     return system
 
 
@@ -293,16 +364,31 @@ def resolve_source_system(
 _DERIVATION_SOURCES: dict[str, tuple[type, str]] = {
     enums.DerivationSourceKind.LENS.value: (models.Lens, "lens"),
     enums.DerivationSourceKind.DATASET.value: (models.ArrayDataset, "dataset"),
-    enums.DerivationSourceKind.TABLE_DATASET.value: (models.TableDataset, "table_dataset"),
-    enums.DerivationSourceKind.MESH_COLLECTION.value: (models.MeshCollection, "mesh_collection"),
-    enums.DerivationSourceKind.ANNOTATION_COLLECTION.value: (models.AnnotationCollection, "annotation_collection"),
-    enums.DerivationSourceKind.COORDINATE_SYSTEM.value: (models.CoordinateSystem, "coordinate_system"),
+    enums.DerivationSourceKind.TABLE_DATASET.value: (
+        models.TableDataset,
+        "table_dataset",
+    ),
+    enums.DerivationSourceKind.MESH_COLLECTION.value: (
+        models.MeshCollection,
+        "mesh_collection",
+    ),
+    enums.DerivationSourceKind.ANNOTATION_COLLECTION.value: (
+        models.AnnotationCollection,
+        "annotation_collection",
+    ),
+    enums.DerivationSourceKind.COORDINATE_SYSTEM.value: (
+        models.CoordinateSystem,
+        "coordinate_system",
+    ),
     # `write_key_edges` looks identification kinds up here too -- the two vocabularies share
     # their spellings on purpose. NETWORK_COLLECTION is an `IdentificationKind` only:
     # `DerivationSourceKind` has no such member, so this entry is unreachable from a
     # `derivedFrom` and exists for `keyedBy` alone. A network can be a derivation *child*,
     # never a named derivation source.
-    enums.IdentificationKind.NETWORK_COLLECTION.value: (models.NetworkCollection, "network_collection"),
+    enums.IdentificationKind.NETWORK_COLLECTION.value: (
+        models.NetworkCollection,
+        "network_collection",
+    ),
 }
 
 
@@ -314,7 +400,11 @@ def source_label(model: type, source) -> str:  # noqa: ANN001 - any container ro
     (its name, or its store's key), and reading the wrong attribute is an AttributeError rather
     than a sentence, so the fallback chain lives here and every caller shares it.
     """
-    return getattr(source, "name", None) or getattr(source, "label", None) or f"{model.__name__} {source.pk}"
+    return (
+        getattr(source, "name", None)
+        or getattr(source, "label", None)
+        or f"{model.__name__} {source.pk}"
+    )
 
 
 #: The lens kinds that are never a named derivation source: a network is a derivation *child*
@@ -348,7 +438,9 @@ class SourceNarrowing:
 WHOLE_SOURCE = SourceNarrowing()
 
 
-def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, str, SourceNarrowing]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
+def resolve_derivation_source(
+    info, lowered
+) -> "tuple[models.CoordinateSystem, str, SourceNarrowing]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
     """The space a derivation derives *from*, a label for the edge's name, and the shape it names.
 
     **One path for every spelling.** A source is a lens or a bare space: an entry naming a
@@ -369,7 +461,10 @@ def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, 
     collection's vertex space, and which object.
     """
     if lowered.source_kind == enums.DerivationSourceKind.ANNOTATION.value:
-        annotation = cast(models.Annotation, get_for_org(models.Annotation, info, id=lowered.source_id))
+        annotation = cast(
+            models.Annotation,
+            get_for_org(models.Annotation, info, id=lowered.source_id),
+        )
         collection = annotation.collection
         return (
             whole_lens(collection).coordinate_system,
@@ -377,11 +472,16 @@ def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, 
             SourceNarrowing(annotation=annotation),
         )
     if lowered.source_kind == enums.DerivationSourceKind.MESH_OBJECT.value:
-        mesh_collection = cast(models.MeshCollection, get_for_org(models.MeshCollection, info, id=lowered.source_id))
+        mesh_collection = cast(
+            models.MeshCollection,
+            get_for_org(models.MeshCollection, info, id=lowered.source_id),
+        )
         return (
             whole_lens(mesh_collection).coordinate_system,
             f"{source_label(models.MeshCollection, mesh_collection)} / object {lowered.source_object}",
-            SourceNarrowing(mesh_collection=mesh_collection, mesh_object=lowered.source_object),
+            SourceNarrowing(
+                mesh_collection=mesh_collection, mesh_object=lowered.source_object
+            ),
         )
     model, keyword = _DERIVATION_SOURCES[lowered.source_kind]
     source = get_for_org(model, info, id=lowered.source_id)
@@ -389,10 +489,24 @@ def resolve_derivation_source(info, lowered) -> "tuple[models.CoordinateSystem, 
         return source, source_label(model, source), WHOLE_SOURCE
     lens = source if keyword == "lens" else whole_lens(source)
     if isinstance(lens, _NEVER_A_SOURCE):
-        raise ValueError(f"Lens {lens.pk} is a {type(lens).KIND.lower()} lens; a {type(lens.container).__name__} is never a named derivation source -- it is derived, not derived from.")
-    return lens.coordinate_system, source_label(type(lens.container), lens.container), WHOLE_SOURCE
+        raise ValueError(
+            f"Lens {lens.pk} is a {type(lens).KIND.lower()} lens; a {type(lens.container).__name__} is never a named derivation source -- it is derived, not derived from."
+        )
+    return (
+        lens.coordinate_system,
+        source_label(type(lens.container), lens.container),
+        WHOLE_SOURCE,
+    )
 
-def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSystem", derived_from: Sequence, ctx: CreationContext) -> list["models.Transformation"]:
+
+def write_derivation_edges(
+    info,
+    *,
+    name: str,
+    own_system: "models.CoordinateSystem",
+    derived_from: Sequence,
+    ctx: CreationContext,
+) -> list["models.Transformation"]:
     """Write one edge per source this data was computed from, child space -> source space.
 
     The one writer for every container. An array dataset, a table, a mesh collection and an
@@ -417,7 +531,9 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
 
     lowered = [entry.lower() for entry in derived_from]
     unmappable = enums.TransformKind.UNMAPPABLE.value
-    if lowered[0].transform.kind == unmappable and any(low.transform.kind != unmappable for low in lowered):
+    if lowered[0].transform.kind == unmappable and any(
+        low.transform.kind != unmappable for low in lowered
+    ):
         raise ValueError(
             "The first derivedFrom entry is the primary parent -- the one that places this data -- so it cannot be UNMAPPABLE while a mappable entry follows. "
             "An entry with no `transform` *is* UNMAPPABLE: naming a source claims no geometry. Put the mappable source first, or state its transform"
@@ -437,16 +553,33 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
 
     def collides(index: int) -> bool:
         system, shape = resolved[index]
-        return any(other != index and system == other_system and (shape is None or other_shape is None or shape == other_shape) for other, (other_system, other_shape) in enumerate(resolved))
+        return any(
+            other != index
+            and system == other_system
+            and (shape is None or other_shape is None or shape == other_shape)
+            for other, (other_system, other_shape) in enumerate(resolved)
+        )
 
-    duplicates = sorted({label for index, (_, label, _) in enumerate(sources) if collides(index)})
+    duplicates = sorted(
+        {label for index, (_, label, _) in enumerate(sources) if collides(index)}
+    )
     if duplicates:
-        raise ValueError(f"Each derivedFrom entry must name a distinct source, but {', '.join(duplicates)} appear{'s' if len(duplicates) == 1 else ''} more than once (a container and its whole lens are one source). One entry per source: its transform already says everything about how the data maps back")
-    resolved_parts = [graph_logic.resolve_part_fields(low.transform.parts, lambda id: get_for_org(models.CoordinateSystem, info, id=id)) for low in lowered]
+        raise ValueError(
+            f"Each derivedFrom entry must name a distinct source, but {', '.join(duplicates)} appear{'s' if len(duplicates) == 1 else ''} more than once (a container and its whole lens are one source). One entry per source: its transform already says everything about how the data maps back"
+        )
+    resolved_parts = [
+        graph_logic.resolve_part_fields(
+            low.transform.parts,
+            lambda id: get_for_org(models.CoordinateSystem, info, id=id),
+        )
+        for low in lowered
+    ]
 
     edges: list[models.Transformation] = []
     with transaction.atomic():
-        for low, (source_system, label, narrowing), parts in zip(lowered, sources, resolved_parts):
+        for low, (source_system, label, narrowing), parts in zip(
+            lowered, sources, resolved_parts
+        ):
             transform = low.transform
             edges.append(
                 graph_logic.write_relation_edge(
@@ -471,7 +604,15 @@ def write_derivation_edges(info, *, name: str, own_system: "models.CoordinateSys
     return edges
 
 
-def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", keyed_by: Sequence, ctx: CreationContext, produces: Sequence[str] | None = None) -> list["models.Transformation"]:  # noqa: ANN001 - kante's Info, and a list of KeyedByInput members
+def write_key_edges(
+    info,
+    *,
+    name: str,
+    own_system: "models.CoordinateSystem",
+    keyed_by: Sequence,
+    ctx: CreationContext,
+    produces: Sequence[str] | None = None,
+) -> list["models.Transformation"]:  # noqa: ANN001 - kante's Info, and a list of KeyedByInput members
     """Write one FIELD edge per source keying this table, source space -> table space.
 
     The sibling of :func:`write_derivation_edges`, and deliberately not folded into it: a
@@ -542,12 +683,22 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
                 f"authors no edge. Keyable kinds are {', '.join(sorted(_DERIVATION_SOURCES))}."
             ) from None
         source = get_for_org(model, info, id=entry.source_id)
-        resolved.append((entry, source_label(model, source), resolve_source_system(**{keyword: source})))
+        resolved.append(
+            (
+                entry,
+                source_label(model, source),
+                resolve_source_system(**{keyword: source}),
+            )
+        )
 
     named = [system.pk for _, _, system in resolved]
-    duplicates = sorted({label for (_, label, system) in resolved if named.count(system.pk) > 1})
+    duplicates = sorted(
+        {label for (_, label, system) in resolved if named.count(system.pk) > 1}
+    )
     if duplicates:
-        raise ValueError(f"Each keyedBy entry must name a distinct source, but {', '.join(duplicates)} appears more than once. A second edge between the same pair says nothing the first did not")
+        raise ValueError(
+            f"Each keyedBy entry must name a distinct source, but {', '.join(duplicates)} appears more than once. A second edge between the same pair says nothing the first did not"
+        )
 
     table_axes = [axis.name for axis in own_system.axes.all()]
     own_axes = set(table_axes)
@@ -561,7 +712,9 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
 
     stated = list(produces) if produces is not None else [None] * len(resolved)
     if len(stated) != len(resolved):
-        raise ValueError(f"'{name}' names {len(resolved)} keying sources but {len(stated)} produced axes; they are one per entry, in the same order")
+        raise ValueError(
+            f"'{name}' names {len(resolved)} keying sources but {len(stated)} produced axes; they are one per entry, in the same order"
+        )
 
     edges: list[models.Transformation] = []
     with transaction.atomic():
@@ -573,7 +726,13 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
             # half of a table indexed by a pair. One definition, shared with the rank check;
             # computed once above, since it depends on `own_system` and nothing else.
             consumed = [axis for axis in source_axes if axis not in own_axes]
-            produced = [axis for axis in table_axes if axis not in supplied and axis not in identified and axis not in reader_selected]
+            produced = [
+                axis
+                for axis in table_axes
+                if axis not in supplied
+                and axis not in identified
+                and axis not in reader_selected
+            ]
 
             if not consumed:
                 raise ValueError(
@@ -620,10 +779,28 @@ def write_key_edges(info, *, name: str, own_system: "models.CoordinateSystem", k
             # The key, stated in full: the source's own values give the id (a FIELD part over its
             # own system -- its pixels are the map), and every axis the two share -- a
             # timelapse's t -- is a pass-through, stated as an IDENTITY part.
-            shared = [axis for axis in table_axes if axis in source_axes and axis not in identified]
-            parts = [{"kind": enums.PartKind.FIELD.value, "input_axes": consumed, "output_axes": produced, "field": source_system}]
+            shared = [
+                axis
+                for axis in table_axes
+                if axis in source_axes and axis not in identified
+            ]
+            parts = [
+                {
+                    "kind": enums.PartKind.FIELD.value,
+                    "input_axes": consumed,
+                    "output_axes": produced,
+                    "field": source_system,
+                }
+            ]
             if shared:
-                parts.insert(0, {"kind": enums.PartKind.IDENTITY.value, "input_axes": shared, "output_axes": shared})
+                parts.insert(
+                    0,
+                    {
+                        "kind": enums.PartKind.IDENTITY.value,
+                        "input_axes": shared,
+                        "output_axes": shared,
+                    },
+                )
             edges.append(
                 graph_logic.build_registration_edge(
                     input_system=source_system,
@@ -663,13 +840,16 @@ DEFAULT_WORLD_AXES = [
 #: shared space two datasets are registered into.
 NAVIGABLE_TYPES = (enums.AxisTypeChoices.TIME.value, enums.AxisTypeChoices.SPACE.value)
 
+
 def _assert_lens_placeable(dataset: "models.ArrayDataset") -> "models.CoordinateSystem":
     """The intrinsic system a lens over this dataset is measured against, or a refusal in prose."""
     intrinsic = dataset.intrinsic_coordinate_system
     if intrinsic is None:
         raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system")
     if dataset.data_arrays.order_by("level").first() is None:
-        raise ValueError(f"Dataset {dataset.pk} has no level-0 data array to place the lens against")
+        raise ValueError(
+            f"Dataset {dataset.pk} has no level-0 data array to place the lens against"
+        )
     return intrinsic
 
 
@@ -677,18 +857,29 @@ def lens_kind_for(container: object) -> "type[models.Lens]":
     """The lens model that selects over this container, or a refusal naming what can be selected over."""
     kind = models.Lens.KIND_BY_CONTAINER.get(type(container))
     if kind is None:
-        raise ValueError(f"A {type(container).__name__} is not something a lens selects over; a lens selects over one of: {', '.join(sorted(model.__name__ for model in models.Lens.KIND_BY_CONTAINER))}")
+        raise ValueError(
+            f"A {type(container).__name__} is not something a lens selects over; a lens selects over one of: {', '.join(sorted(model.__name__ for model in models.Lens.KIND_BY_CONTAINER))}"
+        )
     return kind
 
 
-def _get_or_create(kind: "type[models.Lens]", *, container: object, selection: list, make: "Callable[[], models.Lens]") -> "models.Lens":
+def _get_or_create(
+    kind: "type[models.Lens]",
+    *,
+    container: object,
+    selection: list,
+    make: "Callable[[], models.Lens]",
+) -> "models.Lens":
     """The one row for (container, selection), making it when it is not there.
 
     The database holds the identity (a unique constraint per kind), so two requests
     minting the same selection at once resolve by one of them losing the race and reading
     what the other wrote: no lock, and no second row.
     """
-    field, column = kind.CONTAINER_FIELD, "slices" if kind is models.ArrayLens else "windows"
+    field, column = (
+        kind.CONTAINER_FIELD,
+        "slices" if kind is models.ArrayLens else "windows",
+    )
     lookup = {field: container, column: selection}
     existing = kind.objects.filter(**lookup).first()
     if existing is not None:
@@ -739,7 +930,9 @@ def whole_lens(container: object) -> "models.Lens":
     else:
         system = getattr(container, "coordinate_system", None)
         if system is None:
-            raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
+            raise ValueError(
+                f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in"  # type: ignore[attr-defined]
+            )
 
     def make() -> "models.Lens":
         # The lens is the last thing a container's creation writes, after its axes, its arrays,
@@ -778,11 +971,19 @@ def windowable_names(container: object) -> list[str]:
     system = getattr(container, "coordinate_system", None)
     names = [axis.name for axis in system.axes.all()] if system is not None else []
     if isinstance(container, models.TableDataset):
-        names += [column.name for column in container.columns.all() if column.name not in names and column.axis_type is None and coords_logic.is_numeric_dtype(column.dtype)]
+        names += [
+            column.name
+            for column in container.columns.all()
+            if column.name not in names
+            and column.axis_type is None
+            and coords_logic.is_numeric_dtype(column.dtype)
+        ]
     return names
 
 
-def create_windowed_lens(container: object, windows: list, ctx: CreationContext) -> "models.Lens":
+def create_windowed_lens(
+    container: object, windows: list, ctx: CreationContext
+) -> "models.Lens":
     """The lens keeping these windows of a container that is not an array: the one that exists, or a new one.
 
     A window re-indexes nothing, so the lens lives in the container's own system and no edge
@@ -793,10 +994,14 @@ def create_windowed_lens(container: object, windows: list, ctx: CreationContext)
     """
     kind = lens_kind_for(container)
     if kind is models.ArrayLens:
-        raise ValueError("An array dataset is selected over by slices (`createLens`), not by windows")
+        raise ValueError(
+            "An array dataset is selected over by slices (`createLens`), not by windows"
+        )
     system = getattr(container, "coordinate_system", None)
     if system is None:
-        raise ValueError(f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in")  # type: ignore[attr-defined]
+        raise ValueError(
+            f"{type(container).__name__} {container.pk} has no coordinate system, so there is no space to select in"  # type: ignore[attr-defined]
+        )
     normalized = coords_logic.normalize_windows(windowable_names(container), windows)
     if not normalized:
         return whole_lens(container)
@@ -837,7 +1042,9 @@ def create_lens(
     row. Lenses are immutable, so the decision is final at creation.
     """
     intrinsic = _assert_lens_placeable(dataset)
-    normalized = coords_logic.normalize_slices(dataset.shape_list, dataset.axis_names, slices)
+    normalized = coords_logic.normalize_slices(
+        dataset.shape_list, dataset.axis_names, slices
+    )
     if not normalized:
         return cast(models.ArrayLens, whole_lens(dataset))
 
@@ -873,7 +1080,12 @@ def create_lens(
         )
         return lens
 
-    return cast(models.ArrayLens, _get_or_create(models.ArrayLens, container=dataset, selection=normalized, make=make))
+    return cast(
+        models.ArrayLens,
+        _get_or_create(
+            models.ArrayLens, container=dataset, selection=normalized, make=make
+        ),
+    )
 
 
 def lens_space_derived_containers(lens: "models.Lens") -> list:
@@ -883,10 +1095,21 @@ def lens_space_derived_containers(lens: "models.Lens") -> list:
     was derived there is the container's, not the lens'.
     """
     container = lens.container
-    if lens.coordinate_system_id is None or lens.coordinate_system_id == container.coordinate_system_id:
+    if (
+        lens.coordinate_system_id is None
+        or lens.coordinate_system_id == container.coordinate_system_id
+    ):
         return []
-    edges = list(models.Transformation.objects.filter(output_id=lens.coordinate_system_id).select_related("input", "output").order_by("pk"))
-    own = ("dataset", container.pk) if isinstance(container, models.ArrayDataset) else (type(container).__name__.lower(), container.pk)
+    edges = list(
+        models.Transformation.objects.filter(output_id=lens.coordinate_system_id)
+        .select_related("input", "output")
+        .order_by("pk")
+    )
+    own = (
+        ("dataset", container.pk)
+        if isinstance(container, models.ArrayDataset)
+        else (type(container).__name__.lower(), container.pk)
+    )
     return graph_logic._containers_derived_through(edges, own=own)
 
 
@@ -900,7 +1123,9 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
     """
     if lens.is_whole:
         container = lens.container
-        raise ValueError(f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk} and cannot be deleted on its own: it is the container's handle, and goes with the container.")
+        raise ValueError(
+            f"Lens {lens.pk} selects the whole of {type(container).__name__} {container.pk} and cannot be deleted on its own: it is the container's handle, and goes with the container."
+        )
 
     derived = lens_space_derived_containers(lens)
     if derived:
@@ -921,8 +1146,14 @@ def assert_lens_deletable(lens: "models.Lens") -> None:
     total = drawing.count() + lens.chart_layers.count() + lens.grid_layers.count()
     described = (
         [f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers]
-        + [f"chart layer {layer.pk} in chart '{layer.chart.name}'" for layer in chart_layers]
-        + [f"grid layer {layer.pk} in grid '{layer.grid.name}'" for layer in grid_layers]
+        + [
+            f"chart layer {layer.pk} in chart '{layer.chart.name}'"
+            for layer in chart_layers
+        ]
+        + [
+            f"grid layer {layer.pk} in grid '{layer.grid.name}'"
+            for layer in grid_layers
+        ]
     )
     more = f" (and {total - len(described)} more)" if total > len(described) else ""
     raise ValueError(
@@ -945,19 +1176,34 @@ def lens_ids_within(lens: "models.Lens") -> list[int]:
         shape, names = dataset.shape_list, dataset.axis_names
         return [
             candidate.pk
-            for candidate in models.ArrayLens.objects.filter(dataset_id=lens.dataset_id).order_by("pk")
-            if coords_logic.lens_within(shape, names, lens.slices_list, candidate.slices_list)
+            for candidate in models.ArrayLens.objects.filter(
+                dataset_id=lens.dataset_id
+            ).order_by("pk")
+            if coords_logic.lens_within(
+                shape, names, lens.slices_list, candidate.slices_list
+            )
         ]
     kind = type(lens)
-    siblings = kind.objects.filter(**{f"{kind.CONTAINER_FIELD}_id": lens.container_id}).order_by("pk")
-    return [candidate.pk for candidate in siblings if coords_logic.windows_within(lens.windows_list, candidate.windows_list)]  # type: ignore[attr-defined]
+    siblings = kind.objects.filter(
+        **{f"{kind.CONTAINER_FIELD}_id": lens.container_id}
+    ).order_by("pk")
+    return [
+        candidate.pk
+        for candidate in siblings
+        if coords_logic.windows_within(lens.windows_list, candidate.windows_list)  # type: ignore[attr-defined]
+    ]
 
 
 def layers_drawing_through(lens: "models.Lens") -> "QuerySet[models.Layer]":
     """Every layer whose picture this lens is part of: its own; for an array lens those naming it as an RGB component or a render-graph source; for a sparse lens those whose pickers read its slice."""
     query = Q(lens=lens)
     if isinstance(lens, models.ArrayLens):
-        query |= Q(red_lens=lens) | Q(green_lens=lens) | Q(blue_lens=lens) | Q(channel_lenses=lens)
+        query |= (
+            Q(red_lens=lens)
+            | Q(green_lens=lens)
+            | Q(blue_lens=lens)
+            | Q(channel_lenses=lens)
+        )
     if isinstance(lens, models.SparseLens):
         # A colour or filter picker names the slice it reads by id inside a JSON document; the
         # guard is the PROTECT a foreign key would be.
@@ -976,20 +1222,28 @@ def assert_edge_refinable(edge: "models.Transformation") -> None:
     selection in the wrong place in every scene, and `createLens` with the same slices would
     keep handing out the row whose edge no longer matches them.
     """
-    if models.ArrayLens.objects.filter(coordinate_system_id=edge.input_id, dataset__coordinate_system_id=edge.output_id).exists():
+    if models.ArrayLens.objects.filter(
+        coordinate_system_id=edge.input_id, dataset__coordinate_system_id=edge.output_id
+    ).exists():
         raise ValueError(
             f"Transformation {edge.pk} is a lens' crop: the server derives it from the lens' slices, so it is exact and is not refined. "
             "Cut the selection you mean with createLens, or register the lens' data elsewhere with a new edge."
         )
-    if models.DataArray.objects.filter(coordinate_system_id=edge.input_id, dataset__coordinate_system_id=edge.output_id).exists():
-        raise ValueError(f"Transformation {edge.pk} places a pyramid level in its dataset's grid: it was fixed with the level's bytes when the dataset was created, so it is not refined.")
+    if models.DataArray.objects.filter(
+        coordinate_system_id=edge.input_id, dataset__coordinate_system_id=edge.output_id
+    ).exists():
+        raise ValueError(
+            f"Transformation {edge.pk} places a pyramid level in its dataset's grid: it was fixed with the level's bytes when the dataset was created, so it is not refined."
+        )
 
 
 def lens_own_edges(lens: "models.ArrayLens") -> "Iterable[models.Transformation]":
     """The top-level edge(s) from a sliced array lens' own system into its dataset's intrinsic system; none for a whole lens."""
     if lens.coordinate_system_id == lens.dataset.coordinate_system_id:
         return ()
-    return models.Transformation.objects.filter(input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id)
+    return models.Transformation.objects.filter(
+        input_id=lens.coordinate_system_id, output_id=lens.dataset.coordinate_system_id
+    )
 
 
 def lens_space_is_shared_because(lens: "models.ArrayLens") -> str | None:
@@ -1015,7 +1269,11 @@ def lens_space_is_shared_because(lens: "models.ArrayLens") -> str | None:
     except ValueError:
         return "a scene or chart is laid out over its system"
     own = [edge.pk for edge in lens_own_edges(lens)]
-    if models.Transformation.objects.filter(Q(input=system) | Q(output=system)).exclude(pk__in=own).exists():
+    if (
+        models.Transformation.objects.filter(Q(input=system) | Q(output=system))
+        .exclude(pk__in=own)
+        .exists()
+    ):
         return "its system has registration edges besides its own"
     if system.fields_of.exists():
         return "its system is the field of a transformation"
@@ -1031,17 +1289,24 @@ def delete_lens(lens: "models.Lens") -> str | None:
     -- its system is PROTECTed by it -- then the edges in and out of the system, then the
     system; its axes cascade. A windowed lens and a whole lens own nothing and simply go.
     """
-    sliced = isinstance(lens, models.ArrayLens) and lens.coordinate_system_id != lens.dataset.coordinate_system_id
+    sliced = (
+        isinstance(lens, models.ArrayLens)
+        and lens.coordinate_system_id != lens.dataset.coordinate_system_id
+    )
     reason = lens_space_is_shared_because(lens) if sliced else None
     system = lens.coordinate_system if sliced and reason is None else None
     lens.delete()
     if system is not None:
-        models.Transformation.objects.filter(Q(input=system) | Q(output=system)).delete()
+        models.Transformation.objects.filter(
+            Q(input=system) | Q(output=system)
+        ).delete()
         system.delete()
     return reason
 
 
-def create_sub_lens(parent: "models.ArrayLens", slices: list, ctx: CreationContext) -> "models.ArrayLens":
+def create_sub_lens(
+    parent: "models.ArrayLens", slices: list, ctx: CreationContext
+) -> "models.ArrayLens":
     """A crop of a crop: ``slices`` stated in the parent lens' own index space, as the dataset's lens that selects those voxels.
 
     Composed through the parent's slices (:func:`core.logic.coords.compose_slices`) and then
@@ -1050,17 +1315,33 @@ def create_sub_lens(parent: "models.ArrayLens", slices: list, ctx: CreationConte
     is the identity, which is how every ``createLens`` goes through here.
     """
     dataset = parent.dataset
-    composed = coords_logic.compose_slices(dataset.shape_list, dataset.axis_names, parent.slices_list, slices)
-    return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in composed], ctx)
+    composed = coords_logic.compose_slices(
+        dataset.shape_list, dataset.axis_names, parent.slices_list, slices
+    )
+    return create_lens(
+        dataset, [base_models.SliceInputModel(**entry) for entry in composed], ctx
+    )
 
 
-def create_sub_windowed_lens(parent: "models.Lens", windows: list, ctx: CreationContext) -> "models.Lens":
+def create_sub_windowed_lens(
+    parent: "models.Lens", windows: list, ctx: CreationContext
+) -> "models.Lens":
     """A window of a window: the tighter of the two bounds per axis, as the container's lens keeping them (:func:`core.logic.coords.intersect_windows`)."""
     narrowed = coords_logic.intersect_windows(parent.windows_list, windows)  # type: ignore[attr-defined]
-    return create_windowed_lens(parent.container, [base_models.WindowInputModel(**entry) for entry in narrowed], ctx)
+    return create_windowed_lens(
+        parent.container,
+        [base_models.WindowInputModel(**entry) for entry in narrowed],
+        ctx,
+    )
 
 
-def _box_to_dataset_slices(dataset: "models.ArrayDataset", system: "models.CoordinateSystem", bounds: dict[str, list[float]], *, pins: dict[str, int] | None = None) -> list[dict[str, int | str]]:
+def _box_to_dataset_slices(
+    dataset: "models.ArrayDataset",
+    system: "models.CoordinateSystem",
+    bounds: dict[str, list[float]],
+    *,
+    pins: dict[str, int] | None = None,
+) -> list[dict[str, int | str]]:
     """A box in ``system``, as the dataset's slices: composed into its pixel grid along the one placement path, then cut on the half-open voxel rule.
 
     The same walk a layer's `asAffine` takes (:class:`core.logic.placement.PlacementGraph`),
@@ -1073,34 +1354,80 @@ def _box_to_dataset_slices(dataset: "models.ArrayDataset", system: "models.Coord
     names = [axis.name for axis in system.axes.all()]
     unknown = [axis for axis in bounds if axis not in names]
     if unknown:
-        raise ValueError(f"The box names axes {unknown} that coordinate system '{system.name}' does not have; its axes are {names}")
+        raise ValueError(
+            f"The box names axes {unknown} that coordinate system '{system.name}' does not have; its axes are {names}"
+        )
     mins = [bounds[axis][0] if axis in bounds else -math.inf for axis in names]
     maxs = [bounds[axis][1] if axis in bounds else math.inf for axis in names]
     if system.pk == intrinsic.pk:
-        forms = {axis: coords_logic.AxedForm(coefficients=tuple(1.0 if index == column else 0.0 for column in range(len(names))), constant=0.0) for index, axis in enumerate(names)}
+        forms = {
+            axis: coords_logic.AxedForm(
+                coefficients=tuple(
+                    1.0 if index == column else 0.0 for column in range(len(names))
+                ),
+                constant=0.0,
+            )
+            for index, axis in enumerate(names)
+        }
         source_axes = names
     else:
-        graph_logic.assert_placeable_in(intrinsic, system, destination=f"the pixel grid of dataset '{dataset.name}'")
-        condensed = placement_logic.PlacementGraph(intrinsic, seed_systems=[system.pk]).condensed(system)
+        graph_logic.assert_placeable_in(
+            intrinsic, system, destination=f"the pixel grid of dataset '{dataset.name}'"
+        )
+        condensed = placement_logic.PlacementGraph(
+            intrinsic, seed_systems=[system.pk]
+        ).condensed(system)
         if condensed is None:
-            raise ValueError(f"Coordinate system '{system.name}' has no placement path into the pixel grid of dataset '{dataset.name}', so a box stated in it cannot be cut from the dataset")
+            raise ValueError(
+                f"Coordinate system '{system.name}' has no placement path into the pixel grid of dataset '{dataset.name}', so a box stated in it cannot be cut from the dataset"
+            )
         by_axis = dict(zip(names, zip(mins, maxs)))
         source_axes = list(condensed.input_axes)
-        mins = [by_axis[axis][0] if axis in by_axis else -math.inf for axis in source_axes]
-        maxs = [by_axis[axis][1] if axis in by_axis else math.inf for axis in source_axes]
-        forms = coords_logic._forms_from_matrix(condensed.matrix, condensed.output_axes, len(source_axes))
-    return coords_logic.box_to_slices(forms, source_axes, mins, maxs, dataset.axis_names, dataset.shape_list, pins=pins)
+        mins = [
+            by_axis[axis][0] if axis in by_axis else -math.inf for axis in source_axes
+        ]
+        maxs = [
+            by_axis[axis][1] if axis in by_axis else math.inf for axis in source_axes
+        ]
+        forms = coords_logic._forms_from_matrix(
+            condensed.matrix, condensed.output_axes, len(source_axes)
+        )
+    return coords_logic.box_to_slices(
+        forms,
+        source_axes,
+        mins,
+        maxs,
+        dataset.axis_names,
+        dataset.shape_list,
+        pins=pins,
+    )
 
 
-def create_lens_from_box(dataset: "models.ArrayDataset", system: "models.CoordinateSystem", windows: list, ctx: CreationContext) -> "models.ArrayLens":
+def create_lens_from_box(
+    dataset: "models.ArrayDataset",
+    system: "models.CoordinateSystem",
+    windows: list,
+    ctx: CreationContext,
+) -> "models.ArrayLens":
     """The dataset's lens for the voxels under a box stated in another coordinate system -- micrometres in a physical space, a sibling's grid through a shared world."""
-    normalized = coords_logic.normalize_windows([axis.name for axis in system.axes.all()], windows)
-    bounds = coords_logic.window_bounds([base_models.WindowInputModel(**entry) for entry in normalized])
+    normalized = coords_logic.normalize_windows(
+        [axis.name for axis in system.axes.all()], windows
+    )
+    bounds = coords_logic.window_bounds(
+        [base_models.WindowInputModel(**entry) for entry in normalized]
+    )
     slices = _box_to_dataset_slices(dataset, system, bounds)
-    return create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
+    return create_lens(
+        dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx
+    )
 
 
-def annotation_cut_slices(dataset: "models.ArrayDataset", annotation: "models.Annotation", *, within: "models.ArrayLens | None" = None) -> list[dict[str, int | str]]:
+def annotation_cut_slices(
+    dataset: "models.ArrayDataset",
+    annotation: "models.Annotation",
+    *,
+    within: "models.ArrayLens | None" = None,
+) -> list[dict[str, int | str]]:
     """The slices of the dataset :func:`create_lens_from_annotation` cuts for a shape, without making the lens.
 
     The whole cut, and nothing else: the shape's stored box read in the frame its collection
@@ -1112,22 +1439,44 @@ def annotation_cut_slices(dataset: "models.ArrayDataset", annotation: "models.An
     stored = annotation.intrinsic_bbox
     system = annotation.collection.effective_bbox_system
     if not stored or system is None:
-        raise ValueError(f"Annotation {annotation.pk} has no geometry to cut a lens from: its collection states no box for it")
+        raise ValueError(
+            f"Annotation {annotation.pk} has no geometry to cut a lens from: its collection states no box for it"
+        )
     names = [axis.name for axis in system.axes.all()]
     pinned = annotation.coordinates or {}
     rank = len(stored["min"])
     unpinned = [axis for axis in names if axis not in pinned]
     spanned = unpinned if len(unpinned) == rank else names[max(len(names) - rank, 0) :]
-    bounds = {axis: [float(low), float(high)] for axis, low, high in zip(spanned, stored["min"], stored["max"])}
-    bounds.update({axis: [float(pinned[axis]), float(pinned[axis])] for axis in names if axis in pinned and axis not in spanned})
-    pins = {axis: int(value) for axis, value in pinned.items() if axis not in names and axis in dataset.axis_names}
+    bounds = {
+        axis: [float(low), float(high)]
+        for axis, low, high in zip(spanned, stored["min"], stored["max"])
+    }
+    bounds.update(
+        {
+            axis: [float(pinned[axis]), float(pinned[axis])]
+            for axis in names
+            if axis in pinned and axis not in spanned
+        }
+    )
+    pins = {
+        axis: int(value)
+        for axis, value in pinned.items()
+        if axis not in names and axis in dataset.axis_names
+    }
     slices = _box_to_dataset_slices(dataset, system, bounds, pins=pins)
     if within is not None:
-        slices = coords_logic.slices_under(dataset.shape_list, dataset.axis_names, within.slices_list, [base_models.SliceInputModel(**entry) for entry in slices])
+        slices = coords_logic.slices_under(
+            dataset.shape_list,
+            dataset.axis_names,
+            within.slices_list,
+            [base_models.SliceInputModel(**entry) for entry in slices],
+        )
     return slices
 
 
-def cut_descriptors(lens: "models.ArrayLens", annotation: "models.Annotation") -> "descriptors_logic.Descriptors | None":
+def cut_descriptors(
+    lens: "models.ArrayLens", annotation: "models.Annotation"
+) -> "descriptors_logic.Descriptors | None":
     """The descriptors ``createLens(lens:, annotation:)`` would give the lens it returns, without making it.
 
     The same cut (:func:`annotation_cut_slices` within ``lens``), described over an unsaved lens:
@@ -1137,13 +1486,21 @@ def cut_descriptors(lens: "models.ArrayLens", annotation: "models.Annotation") -
     """
     try:
         slices = annotation_cut_slices(lens.dataset, annotation, within=lens)
-        normalized = coords_logic.normalize_slices(lens.dataset.shape_list, lens.dataset.axis_names, [base_models.SliceInputModel(**entry) for entry in slices])
+        normalized = coords_logic.normalize_slices(
+            lens.dataset.shape_list,
+            lens.dataset.axis_names,
+            [base_models.SliceInputModel(**entry) for entry in slices],
+        )
     except ValueError:
         return None
-    return descriptors_logic.array_lens_descriptors(models.ArrayLens(dataset=lens.dataset, slices=normalized))
+    return descriptors_logic.array_lens_descriptors(
+        models.ArrayLens(dataset=lens.dataset, slices=normalized)
+    )
 
 
-def sliced_descriptors(dataset: "models.ArrayDataset", slices: "Sequence[coords_logic.SliceLike]") -> "descriptors_logic.Descriptors | None":
+def sliced_descriptors(
+    dataset: "models.ArrayDataset", slices: "Sequence[coords_logic.SliceLike]"
+) -> "descriptors_logic.Descriptors | None":
     """The descriptors ``createLens(dataset:, slices:)`` would give the lens it returns, without making it.
 
     The same normalization the mutation runs (:func:`coords_logic.normalize_slices`), described
@@ -1153,13 +1510,23 @@ def sliced_descriptors(dataset: "models.ArrayDataset", slices: "Sequence[coords_
     plane or box on screen before it makes the lens.
     """
     try:
-        normalized = coords_logic.normalize_slices(dataset.shape_list, dataset.axis_names, slices)
+        normalized = coords_logic.normalize_slices(
+            dataset.shape_list, dataset.axis_names, slices
+        )
     except ValueError:
         return None
-    return descriptors_logic.array_lens_descriptors(models.ArrayLens(dataset=dataset, slices=normalized))
+    return descriptors_logic.array_lens_descriptors(
+        models.ArrayLens(dataset=dataset, slices=normalized)
+    )
 
 
-def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "models.Annotation", ctx: CreationContext, *, within: "models.ArrayLens | None" = None) -> "models.ArrayLens":
+def create_lens_from_annotation(
+    dataset: "models.ArrayDataset",
+    annotation: "models.Annotation",
+    ctx: CreationContext,
+    *,
+    within: "models.ArrayLens | None" = None,
+) -> "models.ArrayLens":
     """The dataset's lens that bounds an annotation: the voxels under the shape's stored box, in the frame the collection states it in.
 
     ``within`` is a lens of the same dataset to cut inside of: the result is then what that
@@ -1179,9 +1546,15 @@ def create_lens_from_annotation(dataset: "models.ArrayDataset", annotation: "mod
     pins is that one plane, and one it says nothing about is kept whole.
     """
     slices = annotation_cut_slices(dataset, annotation, within=within)
-    lens = create_lens(dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx)
+    lens = create_lens(
+        dataset, [base_models.SliceInputModel(**entry) for entry in slices], ctx
+    )
     # The cut is recorded beside the lens, never on it: the lens is the dataset's row for
     # these voxels, whoever asked and however, and this is the one place that knows a shape
     # did. Get-or-create, as the lens is: cutting twice is one cut, and its first asker's.
-    models.LensCut.objects.get_or_create(annotation=annotation, lens=lens, defaults=dict(creator=ctx.user, **ctx.provenance_kwargs()))
+    models.LensCut.objects.get_or_create(
+        annotation=annotation,
+        lens=lens,
+        defaults=dict(creator=ctx.user, **ctx.provenance_kwargs()),
+    )
     return lens

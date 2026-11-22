@@ -12,15 +12,15 @@ callable that returns the user ids allowed to delete the item; passing
 catalog resources like instruments that have no per-user owner).
 """
 
+import strawberry
+from arkitekt_datalayer import storage
 from django.db import transaction
 from kante.types import Info
-import strawberry
 
 from core import scoping
 from core.logic import compositions as compositions_logic
 from core.logic import deletion as deletion_logic
 from mikro_server.contract import ADMIN
-from arkitekt_datalayer import storage
 
 
 def user_is_org_admin(info: Info) -> bool:
@@ -62,7 +62,9 @@ def creator_owner(item):
     return (item.creator_id,)
 
 
-def make_delete(model, input_type, owner=None, delete=None, lineage_kind: str | None = None):
+def make_delete(
+    model, input_type, owner=None, delete=None, lineage_kind: str | None = None
+):
     """Build a delete resolver: fetch org-scoped by id, guard ownership, delete.
 
     ``owner`` is an explicit callable returning the user ids allowed to delete
@@ -88,7 +90,14 @@ def make_delete(model, input_type, owner=None, delete=None, lineage_kind: str | 
             assert_can_delete(info, item, owner)
         compositions_logic.assert_deletable(item)
         if lineage_kind is not None:
-            deletion_logic.delete_with_lineage(info, item, lineage_kind, cascade=parsed.cascade, owner=owner, delete=delete)
+            deletion_logic.delete_with_lineage(
+                info,
+                item,
+                lineage_kind,
+                cascade=parsed.cascade,
+                owner=owner,
+                delete=delete,
+            )
             return parsed.id
         with transaction.atomic():
             # Collected *before* the delete, because the cascade has to still be walkable, and

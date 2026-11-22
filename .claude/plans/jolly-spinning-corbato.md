@@ -60,10 +60,15 @@ time-axis assert; **hoist it to a local `axis_specs`** and reuse it for both the
 materialization:
 
 ```python
-axis_specs = [coords_logic.AxisSpec(name=a.name, type=a.type.value if hasattr(a.type, "value") else a.type) for a in axes]
+axis_specs = [
+    coords_logic.AxisSpec(
+        name=a.name, type=a.type.value if hasattr(a.type, "value") else a.type
+    )
+    for a in axes
+]
 coords_logic.assert_at_most_one_time_axis(axis_specs)
-rows = models.Axis.objects.bulk_create(rows)   # existing bulk_create, now assigned
-dataset = system.intrinsic_of                  # None for array/pyramid systems
+rows = models.Axis.objects.bulk_create(rows)  # existing bulk_create, now assigned
+dataset = system.intrinsic_of  # None for array/pyramid systems
 if dataset is not None:
     dataset.stored_spec = [s.value for s in coords_logic.specs_for_axes(axis_specs)]
     dataset.save(update_fields=["stored_spec"])

@@ -1,17 +1,27 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from django.core.exceptions import PermissionDenied
 from kante.types import Info
-from core import models, types, channels
+
+from core import channels, models, types
 from core.scoping import for_org
 
 
-@strawberry.type(description="One change to an annotation collection. Exactly one field is set per event")
+@strawberry.type(
+    description="One change to an annotation collection. Exactly one field is set per event"
+)
 class AnnotationEvent:
-    create: types.Annotation | None = strawberry.field(default=None, description="An annotation drawn into the collection")
-    update: types.Annotation | None = strawberry.field(default=None, description="An annotation of the collection that was edited, in its new state")
-    delete: strawberry.ID | None = strawberry.field(default=None, description="The ID of an annotation deleted from the collection")
+    create: types.Annotation | None = strawberry.field(
+        default=None, description="An annotation drawn into the collection"
+    )
+    update: types.Annotation | None = strawberry.field(
+        default=None,
+        description="An annotation of the collection that was edited, in its new state",
+    )
+    delete: strawberry.ID | None = strawberry.field(
+        default=None, description="The ID of an annotation deleted from the collection"
+    )
 
 
 async def annotations(
@@ -21,8 +31,14 @@ async def annotations(
 ) -> AsyncGenerator[AnnotationEvent, None]:
     """Follow one annotation collection: every shape drawn into it, edited or deleted."""
 
-    if not await for_org(models.AnnotationCollection, info).filter(id=collection).aexists():
-        raise PermissionDenied("Annotation collection does not exist in this organization")
+    if (
+        not await for_org(models.AnnotationCollection, info)
+        .filter(id=collection)
+        .aexists()
+    ):
+        raise PermissionDenied(
+            "Annotation collection does not exist in this organization"
+        )
     rooms = [channels.collection_annotations_room(collection)]
 
     # Re-fetched through the org scope AND the collection: the room name alone is not
@@ -37,7 +53,9 @@ async def annotations(
                 yield AnnotationEvent(create=annotation)
 
         elif message.create_many:
-            async for annotation in scoped.filter(id__in=message.create_many).order_by("id"):
+            async for annotation in scoped.filter(id__in=message.create_many).order_by(
+                "id"
+            ):
                 yield AnnotationEvent(create=annotation)
 
         elif message.update:

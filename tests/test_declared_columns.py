@@ -36,7 +36,12 @@ mutation Create($input: CreateTableDatasetInput!) {
 
 #: What the *file* says. In an order a person would not have chosen, and with a type per column
 #: that a caller would plausibly get wrong: a float32 is FLOAT, and pandas calls it float32.
-FILE = [("volume", "DOUBLE"), ("object_id", "BIGINT"), ("intensity", "FLOAT"), ("label", "VARCHAR")]
+FILE = [
+    ("volume", "DOUBLE"),
+    ("object_id", "BIGINT"),
+    ("intensity", "FLOAT"),
+    ("label", "VARCHAR"),
+]
 
 #: The same thing, declared. Every column, in the file's order, with the file's types.
 DECLARED = [{"name": name, "dtype": dtype} for name, dtype in FILE]
@@ -44,8 +49,12 @@ DECLARED = [{"name": name, "dtype": dtype} for name, dtype in FILE]
 
 async def _store(ctx: HttpContext, key: str, columns=FILE) -> models.ParquetStore:
     return await sync_to_async(models.ParquetStore.objects.create)(
-        path=f"s3://parquet/{key}", bucket="parquet", key=key, organization=ctx.request.organization,
-        populated=True, columns=[{"name": n, "type": t, "nullable": True} for n, t in columns],
+        path=f"s3://parquet/{key}",
+        bucket="parquet",
+        key=key,
+        organization=ctx.request.organization,
+        populated=True,
+        columns=[{"name": n, "type": t, "nullable": True} for n, t in columns],
     )
 
 
@@ -53,7 +62,9 @@ async def _create(ctx: HttpContext, key: str, *, file=FILE, **payload):
     store = await _store(ctx, key, file)
     payload.setdefault("columns", DECLARED)
     return await schema.execute(
-        CREATE, context_value=ctx, variable_values={"input": {"name": key, "data": str(store.pk), **payload}}
+        CREATE,
+        context_value=ctx,
+        variable_values={"input": {"name": key, "data": str(store.pk), **payload}},
     )
 
 
@@ -62,9 +73,12 @@ async def _create(ctx: HttpContext, key: str, *, file=FILE, **payload):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_declaration_that_matches_the_file_is_stored_as_given(authenticated_context: HttpContext):
+async def test_a_declaration_that_matches_the_file_is_stored_as_given(
+    authenticated_context: HttpContext,
+):
     result = await _create(
-        authenticated_context, "measurements",
+        authenticated_context,
+        "measurements",
         columns=[
             {"name": "volume", "dtype": "DOUBLE", "unit": "micrometer**3"},
             {"name": "object_id", "dtype": "BIGINT", "axisType": "INDEX"},
@@ -85,9 +99,12 @@ async def test_a_declaration_that_matches_the_file_is_stored_as_given(authentica
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_column_the_file_does_not_have_is_refused(authenticated_context: HttpContext):
+async def test_a_column_the_file_does_not_have_is_refused(
+    authenticated_context: HttpContext,
+):
     result = await _create(
-        authenticated_context, "measurements",
+        authenticated_context,
+        "measurements",
         columns=DECLARED + [{"name": "not_in_the_file", "dtype": "DOUBLE"}],
     )
 
@@ -99,7 +116,9 @@ async def test_a_column_the_file_does_not_have_is_refused(authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_column_of_the_file_left_undeclared_is_refused(authenticated_context: HttpContext):
+async def test_a_column_of_the_file_left_undeclared_is_refused(
+    authenticated_context: HttpContext,
+):
     """Every column is declared. A file column with nothing said about it is a gap in the
     statement, not a shorthand -- the declaration is about *these* bytes."""
     result = await _create(authenticated_context, "measurements", columns=DECLARED[:-1])
@@ -113,7 +132,9 @@ async def test_a_column_of_the_file_left_undeclared_is_refused(authenticated_con
 @pytest.mark.asyncio
 async def test_the_declared_order_must_be_the_files(authenticated_context: HttpContext):
     """Because `Column.order` is the file's order, and a reader takes it as such."""
-    result = await _create(authenticated_context, "measurements", columns=list(reversed(DECLARED)))
+    result = await _create(
+        authenticated_context, "measurements", columns=list(reversed(DECLARED))
+    )
 
     assert result.errors
     message = str(result.errors[0])
@@ -122,7 +143,9 @@ async def test_the_declared_order_must_be_the_files(authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dtype_the_file_does_not_have_is_refused(authenticated_context: HttpContext):
+async def test_a_dtype_the_file_does_not_have_is_refused(
+    authenticated_context: HttpContext,
+):
     """The half `validateSchema` promised and dropped.
 
     `intensity` is a float32, which DuckDB reads back as FLOAT. A caller writing the
@@ -140,14 +163,18 @@ async def test_a_dtype_the_file_does_not_have_is_refused(authenticated_context: 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_pandas_dtype_name_is_refused_as_such(authenticated_context: HttpContext):
+async def test_a_pandas_dtype_name_is_refused_as_such(
+    authenticated_context: HttpContext,
+):
     """The trap four `testing/` scripts used to warn about at length, now actually caught."""
     wrong = [dict(column) for column in DECLARED]
     wrong[0]["dtype"] = "float64"
     result = await _create(authenticated_context, "measurements", columns=wrong)
 
     assert result.errors
-    assert "'volume' is declared float64 and the file records DOUBLE" in str(result.errors[0])
+    assert "'volume' is declared float64 and the file records DOUBLE" in str(
+        result.errors[0]
+    )
 
 
 # --- axis-ness is part of the one column declaration -------------------------
@@ -159,17 +186,23 @@ async def test_an_axis_must_be_a_column_of_the_file(authenticated_context: HttpC
     """An axis that is no column of the file is unstateable except as a phantom column --
     and the file check catches that one, so no axis-specific check is needed."""
     result = await _create(
-        authenticated_context, "measurements",
-        columns=DECLARED + [{"name": "not_a_column", "dtype": "BIGINT", "axisType": "INDEX"}],
+        authenticated_context,
+        "measurements",
+        columns=DECLARED
+        + [{"name": "not_a_column", "dtype": "BIGINT", "axisType": "INDEX"}],
     )
 
     assert result.errors
-    assert "the declaration has ['not_a_column'] and the file does not" in str(result.errors[0])
+    assert "the declaration has ['not_a_column'] and the file does not" in str(
+        result.errors[0]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_column_may_not_claim_the_coordinate_role(authenticated_context: HttpContext):
+async def test_a_column_may_not_claim_the_coordinate_role(
+    authenticated_context: HttpContext,
+):
     """COORDINATE follows from `axisType`; as a bare role it names no axis type to build."""
     columns = [dict(column) for column in DECLARED]
     columns[1]["role"] = "COORDINATE"
@@ -184,7 +217,9 @@ async def test_a_column_may_not_claim_the_coordinate_role(authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_matrix_wide_file_is_refused_and_told_where_it_belongs(authenticated_context: HttpContext):
+async def test_a_matrix_wide_file_is_refused_and_told_where_it_belongs(
+    authenticated_context: HttpContext,
+):
     """The refusal is about shape rather than size, so it says so at length.
 
     A caller who hits this has a real object -- an expression matrix, an intensity matrix --
@@ -193,7 +228,8 @@ async def test_a_matrix_wide_file_is_refused_and_told_where_it_belongs(authentic
     """
     wide = [(f"gene_{index}", "FLOAT") for index in range(3001)]
     result = await _create(
-        authenticated_context, "expression",
+        authenticated_context,
+        "expression",
         file=wide,
         columns=[{"name": name, "dtype": dtype} for name, dtype in wide],
     )
@@ -204,16 +240,21 @@ async def test_a_matrix_wide_file_is_refused_and_told_where_it_belongs(authentic
     assert "shape, not size" in message
     assert "createSparseDataset" in message
     assert "one axis with one picker entry" in message
-    assert "requestSparseUpload" in message, "name the upload path, not only the mutation"
+    assert "requestSparseUpload" in message, (
+        "name the upload path, not only the mutation"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_just_inside_the_cap_is_accepted(authenticated_context: HttpContext):
+async def test_a_table_just_inside_the_cap_is_accepted(
+    authenticated_context: HttpContext,
+):
     """So the test above is failing on the width and not on something else about wide files."""
     wide = [(f"gene_{index}", "FLOAT") for index in range(3000)]
     result = await _create(
-        authenticated_context, "expression",
+        authenticated_context,
+        "expression",
         file=wide,
         columns=[{"name": name, "dtype": dtype} for name, dtype in wide],
     )
@@ -226,19 +267,28 @@ async def test_a_table_just_inside_the_cap_is_accepted(authenticated_context: Ht
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_store_that_knows_no_columns_is_refused(authenticated_context: HttpContext):
+async def test_a_store_that_knows_no_columns_is_refused(
+    authenticated_context: HttpContext,
+):
     """There is nothing to check the declaration against, and checking it is the point.
 
     Refused rather than described on demand: `columns_for_store`'s fallback reaches for the
     object store, and this path runs on every create -- a network hang where a sentence belongs.
     """
     store = await sync_to_async(models.ParquetStore.objects.create)(
-        path="s3://parquet/unfinished", bucket="parquet", key="unfinished",
-        organization=authenticated_context.request.organization, populated=True, columns=None,
+        path="s3://parquet/unfinished",
+        bucket="parquet",
+        key="unfinished",
+        organization=authenticated_context.request.organization,
+        populated=True,
+        columns=None,
     )
     result = await schema.execute(
-        CREATE, context_value=authenticated_context,
-        variable_values={"input": {"name": "measurements", "data": str(store.pk), "columns": []}},
+        CREATE,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {"name": "measurements", "data": str(store.pk), "columns": []}
+        },
     )
 
     assert result.errors

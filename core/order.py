@@ -1,7 +1,8 @@
 import strawberry_django
-from core import models
 from koherent.models import Task as KoherentTask
 from strawberry import auto
+
+from core import models
 
 
 @strawberry_django.order_type(models.Folder)

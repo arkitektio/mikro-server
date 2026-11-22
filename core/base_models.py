@@ -2,10 +2,22 @@ from pydantic import BaseModel, Field
 
 
 class SliceModel(BaseModel):
-    axis: str = Field(..., description="The name of the axis the slice acts on, e.g. 'x', 'y', 'z', 'c', or 't'")
-    start: int | None = Field(default=None, description="The starting index of the slice, or None to start from the beginning")
-    stop: int | None = Field(default=None, description="The stopping index of the slice, or None to go to the end")
-    step: int | None = Field(default=None, description="The step size of the slice, or None to use the default step")
+    axis: str = Field(
+        ...,
+        description="The name of the axis the slice acts on, e.g. 'x', 'y', 'z', 'c', or 't'",
+    )
+    start: int | None = Field(
+        default=None,
+        description="The starting index of the slice, or None to start from the beginning",
+    )
+    stop: int | None = Field(
+        default=None,
+        description="The stopping index of the slice, or None to go to the end",
+    )
+    step: int | None = Field(
+        default=None,
+        description="The step size of the slice, or None to use the default step",
+    )
 
 
 class SliceInputModel(BaseModel):
@@ -23,9 +35,18 @@ class WindowModel(BaseModel):
     lives in its container's own coordinate system and owns no edge.
     """
 
-    axis: str = Field(..., description="The name of the axis the window constrains, e.g. 't' for a table's time column")
-    min: float | None = Field(default=None, description="The smallest position kept, inclusive, or None for no lower bound")
-    max: float | None = Field(default=None, description="The largest position kept, inclusive, or None for no upper bound")
+    axis: str = Field(
+        ...,
+        description="The name of the axis the window constrains, e.g. 't' for a table's time column",
+    )
+    min: float | None = Field(
+        default=None,
+        description="The smallest position kept, inclusive, or None for no lower bound",
+    )
+    max: float | None = Field(
+        default=None,
+        description="The largest position kept, inclusive, or None for no upper bound",
+    )
 
 
 class WindowInputModel(BaseModel):
@@ -37,5 +58,9 @@ class WindowInputModel(BaseModel):
 class LensBoxInputModel(BaseModel):
     """A box stated in a coordinate system the dataset reaches: the voxels under it are the crop."""
 
-    coordinate_system: str = Field(description="The coordinate system the windows are stated in. The dataset's pixel grid must reach it affinely, walking the transformation edges either way")
-    windows: list[WindowInputModel] = Field(description="The box, one window per axis it bounds. A side left open runs to the array's edge, an axis of the grid the box says nothing about is kept whole, and a window may be a plane (min equal to max)")
+    coordinate_system: str = Field(
+        description="The coordinate system the windows are stated in. The dataset's pixel grid must reach it affinely, walking the transformation edges either way"
+    )
+    windows: list[WindowInputModel] = Field(
+        description="The box, one window per axis it bounds. A side left open runs to the array's edge, an axis of the grid the box says nothing about is kept whole, and a window may be a plane (min equal to max)"
+    )

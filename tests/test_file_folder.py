@@ -20,18 +20,26 @@ async def test_file_exposes_its_folder(db, authenticated_context: HttpContext) -
     folder = await create_folder(authenticated_context, "Raw data")
     await create_file(authenticated_context, "plate.czi", folder)
 
-    result = await schema.execute(QUERY, context_value=authenticated_context, variable_values={"filters": {}})
+    result = await schema.execute(
+        QUERY, context_value=authenticated_context, variable_values={"filters": {}}
+    )
     assert not result.errors, result.errors
-    assert result.data["files"] == [{"name": "plate.czi", "folder": {"id": str(folder.pk), "name": "Raw data"}}]
+    assert result.data["files"] == [
+        {"name": "plate.czi", "folder": {"id": str(folder.pk), "name": "Raw data"}}
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_folder_unfiles_the_file(db, authenticated_context: HttpContext) -> None:
+async def test_deleting_the_folder_unfiles_the_file(
+    db, authenticated_context: HttpContext
+) -> None:
     folder = await create_folder(authenticated_context, "Raw data")
     await create_file(authenticated_context, "plate.czi", folder)
     await Folder.objects.filter(pk=folder.pk).adelete()
 
-    result = await schema.execute(QUERY, context_value=authenticated_context, variable_values={"filters": {}})
+    result = await schema.execute(
+        QUERY, context_value=authenticated_context, variable_values={"filters": {}}
+    )
     assert not result.errors, result.errors
     assert result.data["files"] == [{"name": "plate.czi", "folder": None}]

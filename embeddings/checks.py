@@ -21,11 +21,17 @@ from embeddings.models import EmbeddedDescriptionMixin
 
 def embedded_models() -> list[type[EmbeddedDescriptionMixin]]:
     """Every concrete installed model that mixes in :class:`EmbeddedDescriptionMixin`."""
-    return [model for model in apps.get_models() if issubclass(model, EmbeddedDescriptionMixin)]
+    return [
+        model
+        for model in apps.get_models()
+        if issubclass(model, EmbeddedDescriptionMixin)
+    ]
 
 
 @register(Tags.database)
-def check_column_dimensions(app_configs: Any, databases: Any = None, **kwargs: Any) -> list[Error]:
+def check_column_dimensions(
+    app_configs: Any, databases: Any = None, **kwargs: Any
+) -> list[Error]:
     """``embeddings.E002``: a ``vector(N)`` column whose N is not :data:`embeddings.engine.DIMENSIONS`.
 
     Skipped for columns that do not exist yet (the migration adding them has not run).
@@ -39,7 +45,9 @@ def check_column_dimensions(app_configs: Any, databases: Any = None, **kwargs: A
         if connection.vendor != "postgresql":
             continue
         for model in embedded_models():
-            have = engine.column_dimensions(connection, model._meta.db_table, "embedding")
+            have = engine.column_dimensions(
+                connection, model._meta.db_table, "embedding"
+            )
             if have is not None and have != want:
                 errors.append(
                     Error(

@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import inspect
 import re
-from typing import Any, Callable, ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 import pint
 import strawberry
@@ -32,7 +33,7 @@ from .registry import get_registry
 SCALAR_MAP: dict[object, ScalarDefinition] = {}
 
 
-def _build_scalar(cls: type["PintQuantity"]) -> ScalarDefinition:
+def _build_scalar(cls: type[PintQuantity]) -> ScalarDefinition:
     reference_unit = cls.reference_unit
     scale = cls.scale
     name = cls.__name__
@@ -330,7 +331,7 @@ def is_arbitrary_unit(text: object) -> bool:
     return isinstance(text, str) and text.strip().lower() in _ARBITRARY_SPELLINGS
 
 
-def arbitrary_magnitude(raw: object) -> "float | None":
+def arbitrary_magnitude(raw: object) -> float | None:
     """The magnitude if ``raw`` is a value in arbitrary units (``"5 a.u."``), else None."""
     if not isinstance(raw, str):
         return None
@@ -340,7 +341,7 @@ def arbitrary_magnitude(raw: object) -> "float | None":
     return None
 
 
-def parse_generic_quantity(raw: object) -> "pint.Quantity":
+def parse_generic_quantity(raw: object) -> pint.Quantity:
     """Parse a unit-bearing quantity string into a pint Quantity.
 
     Rejects bare numbers (a quantity must be given in string form, e.g.
@@ -359,7 +360,9 @@ def parse_generic_quantity(raw: object) -> "pint.Quantity":
     try:
         return ureg.Quantity(normalize_compact_units(raw))
     except Exception as exc:  # pragma: no cover - pint raises various types
-        raise ValueError(f"GenericQuantity: cannot parse quantity {raw!r}: {exc}") from exc
+        raise ValueError(
+            f"GenericQuantity: cannot parse quantity {raw!r}: {exc}"
+        ) from exc
 
 
 def generic_quantity_string(raw: object) -> str:
@@ -375,7 +378,11 @@ def generic_quantity_struct(raw: object) -> dict:
     """The stored dual struct ``{magnitude, unit, dimension}`` for a quantity."""
     magnitude = arbitrary_magnitude(raw)
     if magnitude is not None:
-        return {"magnitude": magnitude, "unit": ARBITRARY_UNIT, "dimension": ARBITRARY_DIMENSION}
+        return {
+            "magnitude": magnitude,
+            "unit": ARBITRARY_UNIT,
+            "dimension": ARBITRARY_DIMENSION,
+        }
     q = parse_generic_quantity(raw)
     return {
         "magnitude": float(q.magnitude),
@@ -463,7 +470,9 @@ def parse_dimension(raw: object) -> str:
     try:
         dims = get_registry().get_dimensionality(normalize_compact_units(text))
     except Exception as exc:  # pragma: no cover - pint raises various types
-        raise ValueError(f"Dimension: {raw!r} is not a valid pint dimension: {exc}") from exc
+        raise ValueError(
+            f"Dimension: {raw!r} is not a valid pint dimension: {exc}"
+        ) from exc
     return _render_dimensionality(dims)
 
 
@@ -485,7 +494,7 @@ class Dimension:
     """
 
 
-def _build_string_scalar(cls: type, parse: "Callable[[object], str]") -> ScalarDefinition:
+def _build_string_scalar(cls: type, parse: Callable[[object], str]) -> ScalarDefinition:
     def parse_value(raw: object) -> str:
         return parse(raw)
 

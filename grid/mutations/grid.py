@@ -33,26 +33,40 @@ class CreateGridInput:
     """Input for creating a grid."""
 
     name: str = strawberry.field(description="The name of the grid")
-    coordinate_system: strawberry.ID = strawberry.field(description="The space to lay out: one or two enumerating axes, rows then columns. Never owned by the grid")
-    description: str | None = strawberry.field(default=None, description="A free-form description of what the grid shows")
+    coordinate_system: strawberry.ID = strawberry.field(
+        description="The space to lay out: one or two enumerating axes, rows then columns. Never owned by the grid"
+    )
+    description: str | None = strawberry.field(
+        default=None, description="A free-form description of what the grid shows"
+    )
 
 
 def create_grid(info: Info, input: CreateGridInput) -> types.Grid:
     """Create a grid over an existing space."""
     model = input.to_pydantic()
     world = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system)
-    return grid_logic.create_grid(name=model.name, description=model.description, world=world, ctx=CreationContext.from_info(info))
+    return grid_logic.create_grid(
+        name=model.name,
+        description=model.description,
+        world=world,
+        ctx=CreationContext.from_info(info),
+    )
 
 
 class GridPolicyInputModel(BaseModel):
     nchildren: int = Field(default=32, ge=0)
 
 
-@kante.pydantic_input(GridPolicyInputModel, description="How a grid is drawn from what is already placed in a space")
+@kante.pydantic_input(
+    GridPolicyInputModel,
+    description="How a grid is drawn from what is already placed in a space",
+)
 class GridPolicyInput:
     """How a grid is bootstrapped from a space."""
 
-    nchildren: int = strawberry.field(default=32, description="Draw at most this many layers")
+    nchildren: int = strawberry.field(
+        default=32, description="Draw at most this many layers"
+    )
 
 
 class CreateGridFromCoordinateSystemInputModel(BaseModel):
@@ -71,16 +85,30 @@ class CreateGridFromCoordinateSystemInputModel(BaseModel):
 class CreateGridFromCoordinateSystemInput:
     """Input for bootstrapping a grid over an existing coordinate system."""
 
-    coordinate_system: strawberry.ID = strawberry.field(description="The space to lay out: one or two enumerating axes")
-    name: str | None = strawberry.field(default=None, description="The name of the grid. Defaults to the coordinate system's name")
-    policy: GridPolicyInput = strawberry.field(default_factory=GridPolicyInput, description="How the grid is materialized")
+    coordinate_system: strawberry.ID = strawberry.field(
+        description="The space to lay out: one or two enumerating axes"
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="The name of the grid. Defaults to the coordinate system's name",
+    )
+    policy: GridPolicyInput = strawberry.field(
+        default_factory=GridPolicyInput, description="How the grid is materialized"
+    )
 
 
-def create_grid_from_coordinate_system(info: Info, input: CreateGridFromCoordinateSystemInput) -> types.Grid:
+def create_grid_from_coordinate_system(
+    info: Info, input: CreateGridFromCoordinateSystemInput
+) -> types.Grid:
     """Bootstrap a grid over an existing coordinate system and what covers its axes."""
     model = input.to_pydantic()
     system = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system)
-    return grid_logic.bootstrap_grid_from_system(system, name=model.name, policy=grid_logic.Policy(nchildren=model.policy.nchildren), ctx=CreationContext.from_info(info))
+    return grid_logic.bootstrap_grid_from_system(
+        system,
+        name=model.name,
+        policy=grid_logic.Policy(nchildren=model.policy.nchildren),
+        ctx=CreationContext.from_info(info),
+    )
 
 
 class UpdateGridInputModel(BaseModel):
@@ -89,13 +117,20 @@ class UpdateGridInputModel(BaseModel):
     description: str | None = None
 
 
-@kante.pydantic_input(UpdateGridInputModel, description="Input for renaming or re-describing a grid. Its world is not editable: a grid over another space is another grid")
+@kante.pydantic_input(
+    UpdateGridInputModel,
+    description="Input for renaming or re-describing a grid. Its world is not editable: a grid over another space is another grid",
+)
 class UpdateGridInput:
     """Input for updating a grid."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the grid to update")
-    name: str | None = strawberry.field(default=None, description="A new name. Omit to leave it as it is")
-    description: str | None = strawberry.field(default=None, description="A new description. Omit to leave it as it is")
+    name: str | None = strawberry.field(
+        default=None, description="A new name. Omit to leave it as it is"
+    )
+    description: str | None = strawberry.field(
+        default=None, description="A new description. Omit to leave it as it is"
+    )
 
 
 def update_grid(info: Info, input: UpdateGridInput) -> types.Grid:
@@ -119,7 +154,10 @@ class DeleteGridInputModel(BaseModel):
     id: str = Field(description="The ID of the grid to delete")
 
 
-@kante.pydantic_input(DeleteGridInputModel, description="Input for deleting a grid by ID. Deletes its layers and nothing they drew: the data, and the grid's world, are untouched")
+@kante.pydantic_input(
+    DeleteGridInputModel,
+    description="Input for deleting a grid by ID. Deletes its layers and nothing they drew: the data, and the grid's world, are untouched",
+)
 class DeleteGridInput:
     """Input for deleting a grid by ID."""
 

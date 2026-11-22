@@ -1,5 +1,9 @@
-from .chart import create_chart, create_chart_from_coordinate_system, delete_chart, update_chart
-from .table_plot import create_table_plot
+from .chart import (
+    create_chart,
+    create_chart_from_coordinate_system,
+    delete_chart,
+    update_chart,
+)
 from .layer import (
     create_annotation_chart_layer,
     create_distribution_chart_layer,
@@ -13,6 +17,7 @@ from .layer import (
     update_series_chart_layer,
     update_trace_chart_layer,
 )
+from .table_plot import create_table_plot
 
 __all__ = [
     "create_annotation_chart_layer",

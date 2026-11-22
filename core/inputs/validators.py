@@ -30,18 +30,26 @@ def assert_rgba(color: list, *, field: str, maximum: float | None = None) -> Non
     "RGBA" says four components whatever scale they are on.
     """
     if len(color) != _RGBA_LENGTH:
-        raise ValueError(f"`{field}` is an RGBA colour, so it takes exactly {_RGBA_LENGTH} components (red, green, blue, alpha), but got {len(color)} ({color}).")
+        raise ValueError(
+            f"`{field}` is an RGBA colour, so it takes exactly {_RGBA_LENGTH} components (red, green, blue, alpha), but got {len(color)} ({color})."
+        )
 
     if maximum is not None:
-        out_of_range = [component for component in color if not 0 <= component <= maximum]
+        out_of_range = [
+            component for component in color if not 0 <= component <= maximum
+        ]
         if out_of_range:
-            raise ValueError(f"`{field}`'s components run from 0 to {maximum}, but got {out_of_range} in {color}.")
+            raise ValueError(
+                f"`{field}`'s components run from 0 to {maximum}, but got {out_of_range} in {color}."
+            )
 
 
 def assert_alpha(value: float, *, field: str) -> None:
     """Reject an opacity outside 0..1, the range the field and its column both document."""
     if not 0.0 <= value <= 1.0:
-        raise ValueError(f"`{field}` is an alpha for alpha-over compositing, so it runs from 0 (transparent) to 1 (opaque), but got {value}.")
+        raise ValueError(
+            f"`{field}` is an alpha for alpha-over compositing, so it runs from 0 (transparent) to 1 (opaque), but got {value}."
+        )
 
 
 def _validated_alpha(value: float) -> float:
@@ -70,7 +78,9 @@ def assert_contrast_limits(clim_min: float | None, clim_max: float | None) -> No
     outside the window. `invert` is how a client asks for the mapping to run backwards.
     """
     if clim_min is not None and clim_max is not None and clim_min > clim_max:
-        raise ValueError(f"`climMin` is the lower contrast limit, so it cannot exceed `climMax`, but got {clim_min} > {clim_max}. Use `invert` to run the mapping backwards.")
+        raise ValueError(
+            f"`climMin` is the lower contrast limit, so it cannot exceed `climMax`, but got {clim_min} > {clim_max}. Use `invert` to run the mapping backwards."
+        )
 
 
 def assert_white_balance(gains: list[float] | None) -> None:
@@ -83,22 +93,30 @@ def assert_white_balance(gains: list[float] | None) -> None:
     if gains is None:
         return
     if len(gains) != 3:
-        raise ValueError(f"`whiteBalance` is one gain per component -- [red, green, blue] -- so it needs exactly 3 values, got {len(gains)}.")
+        raise ValueError(
+            f"`whiteBalance` is one gain per component -- [red, green, blue] -- so it needs exactly 3 values, got {len(gains)}."
+        )
     for component, gain in zip(("red", "green", "blue"), gains):
         if not math.isfinite(gain) or gain <= 0:
-            raise ValueError(f"`whiteBalance` gains must be positive and finite, but the {component} gain is {gain}. Use 1 to leave a component unchanged.")
+            raise ValueError(
+                f"`whiteBalance` gains must be positive and finite, but the {component} gain is {gain}. Use 1 to leave a component unchanged."
+            )
 
 
 def assert_positive(value: float, *, field: str, because: str) -> None:
     """Reject a magnitude of zero or less, where zero is a degenerate rather than a limit."""
     if value <= 0:
-        raise ValueError(f"`{field}` must be greater than zero -- {because} -- but got {value}.")
+        raise ValueError(
+            f"`{field}` must be greater than zero -- {because} -- but got {value}."
+        )
 
 
 def assert_not_negative(value: float, *, field: str, because: str) -> None:
     """Reject a negative magnitude, where zero is still a meaningful value."""
     if value < 0:
-        raise ValueError(f"`{field}` cannot be negative -- {because} -- but got {value}.")
+        raise ValueError(
+            f"`{field}` cannot be negative -- {because} -- but got {value}."
+        )
 
 
 #: The fewest vertices each shape kind can be drawn from, where its encoding says so. A
@@ -162,8 +180,12 @@ def assert_shape_vectors(vectors: list, *, kind: str | None) -> None:
 
     widths = {len(vector) for vector in vectors}
     if len(widths) > 1:
-        raise ValueError(f"Every vertex of one shape has the same number of components, but `vectors` mixes widths {sorted(widths)}. The bounding box is taken at the width of the first vertex, so the others would be truncated or would overrun it.")
+        raise ValueError(
+            f"Every vertex of one shape has the same number of components, but `vectors` mixes widths {sorted(widths)}. The bounding box is taken at the width of the first vertex, so the others would be truncated or would overrun it."
+        )
 
     minimum = _MINIMUM_VERTICES.get(kind or "", 1)
     if len(vectors) < minimum:
-        raise ValueError(f"A {kind} is drawn from at least {minimum} vertices, but `vectors` has {len(vectors)}.")
+        raise ValueError(
+            f"A {kind} is drawn from at least {minimum} vertices, but `vectors` has {len(vectors)}."
+        )

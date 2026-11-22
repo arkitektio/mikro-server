@@ -2,10 +2,9 @@
 
 import pytest
 from asgiref.sync import sync_to_async
-
 from kante.context import HttpContext
-from mikro_server.schema import schema
 
+from mikro_server.schema import schema
 from tests.seed import create_folder, create_other_user
 
 QUERY = """
@@ -16,7 +15,9 @@ QUERY = """
 
 
 async def names(ctx, filters):
-    result = await schema.execute(QUERY, context_value=ctx, variable_values={"filters": filters})
+    result = await schema.execute(
+        QUERY, context_value=ctx, variable_values={"filters": filters}
+    )
     assert not result.errors, result.errors
     return {ds["name"] for ds in result.data["folders"]}
 
@@ -64,7 +65,9 @@ async def test_filter_by_owner(db, authenticated_context: HttpContext):
         user=other, organization=authenticated_context.request.organization
     )
     await create_folder(authenticated_context, "Mine")
-    await create_folder(authenticated_context, "Theirs", creator=other, membership=other_membership)
+    await create_folder(
+        authenticated_context, "Theirs", creator=other, membership=other_membership
+    )
 
     assert await names(authenticated_context, {"owner": "2"}) == {"Theirs"}
 
@@ -72,11 +75,17 @@ async def test_filter_by_owner(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_filter_by_search_and_description(db, authenticated_context: HttpContext):
-    await create_folder(authenticated_context, "Experiment", description="control wells")
+    await create_folder(
+        authenticated_context, "Experiment", description="control wells"
+    )
     await create_folder(authenticated_context, "Other", description="treated wells")
 
-    assert await names(authenticated_context, {"search": "Experiment"}) == {"Experiment"}
-    assert await names(authenticated_context, {"description": {"iContains": "control"}}) == {"Experiment"}
+    assert await names(authenticated_context, {"search": "Experiment"}) == {
+        "Experiment"
+    }
+    assert await names(
+        authenticated_context, {"description": {"iContains": "control"}}
+    ) == {"Experiment"}
 
 
 @pytest.mark.django_db(transaction=True)
@@ -88,4 +97,7 @@ async def test_filter_by_parent(db, authenticated_context: HttpContext):
     await create_folder(authenticated_context, "Child B", parent=root)
     await create_folder(authenticated_context, "Unrelated")
 
-    assert await names(authenticated_context, {"parent": str(root.id)}) == {"Child A", "Child B"}
+    assert await names(authenticated_context, {"parent": str(root.id)}) == {
+        "Child A",
+        "Child B",
+    }

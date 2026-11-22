@@ -1,18 +1,29 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from django.core.exceptions import PermissionDenied
 from kante.types import Info
-from core import models, types, channels
+
+from core import channels, models, types
 from core.scoping import for_org
+
 from ._relay import relay_rows
 
 
-@strawberry.type(description="One change to a scene's layers. Exactly one field is set per event")
+@strawberry.type(
+    description="One change to a scene's layers. Exactly one field is set per event"
+)
 class LayerEvent:
-    create: types.Layer | None = strawberry.field(default=None, description="A layer added to the scene")
-    update: types.Layer | None = strawberry.field(default=None, description="A layer of the scene that was edited, in its new state")
-    delete: strawberry.ID | None = strawberry.field(default=None, description="The ID of a layer removed from the scene")
+    create: types.Layer | None = strawberry.field(
+        default=None, description="A layer added to the scene"
+    )
+    update: types.Layer | None = strawberry.field(
+        default=None,
+        description="A layer of the scene that was edited, in its new state",
+    )
+    delete: strawberry.ID | None = strawberry.field(
+        default=None, description="The ID of a layer removed from the scene"
+    )
 
 
 async def layers(
@@ -26,5 +37,11 @@ async def layers(
         raise PermissionDenied("Scene does not exist in this organization")
 
     scoped = for_org(models.Layer, info).filter(scene_id=scene)
-    async for event in relay_rows(channels.layer_channel, info, [channels.scene_layers_room(scene)], scoped, LayerEvent):
+    async for event in relay_rows(
+        channels.layer_channel,
+        info,
+        [channels.scene_layers_room(scene)],
+        scoped,
+        LayerEvent,
+    ):
         yield event

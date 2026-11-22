@@ -52,9 +52,13 @@ DESCRIPTORS_DESCRIPTION = (
 )
 
 
-@strawberry.type(description="One descriptor of an object: a fact a port can `require` and a runtime formula can read.")
+@strawberry.type(
+    description="One descriptor of an object: a fact a port can `require` and a runtime formula can read."
+)
 class DescriptorValue:
-    key: str = strawberry.field(description="The descriptor's key, e.g. `@mikro/n_channels`.")
+    key: str = strawberry.field(
+        description="The descriptor's key, e.g. `@mikro/n_channels`."
+    )
     value: JSON = strawberry.field(description="Its value.")
 
 

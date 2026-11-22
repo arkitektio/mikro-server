@@ -6,21 +6,25 @@ discriminated at runtime by ``kind``. The mutation lowers this into the strict
 tagged-union storage model (``core.render.layer.models``).
 """
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
 
 import kante
 import strawberry
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from strawberry.experimental import pydantic
-
-from kanne_server import quantities
-from kanne_server import scalars as kanne_scalars
 
 from core import enums
 from core.input_unions import parse_union_member, prose_errors, union_memberships
-from core.inputs.validators import assert_alpha, assert_contrast_limits, assert_positive, assert_rgba
+from core.inputs.validators import (
+    assert_alpha,
+    assert_contrast_limits,
+    assert_positive,
+    assert_rgba,
+)
 from core.render import filter_by as filter_by_models
 from core.render import joins
+from kanne_server import quantities
+from kanne_server import scalars as kanne_scalars
 
 
 class LookupStopInputModel(BaseModel):
@@ -34,7 +38,9 @@ class LookupStopInputModel(BaseModel):
         # so it runs 0..1 whatever the data's own scale is. `position` deliberately carries no
         # such rule -- it is a raw intensity, and 4000 is an ordinary 12-bit reading.
         if not 0.0 <= value <= 1.0:
-            raise ValueError(f"`value` is what a stop's intensity maps *to* -- the normalized value the colormap is indexed with -- so it runs from 0 to 1, but got {value}. `position` is the side carrying the data's own units.")
+            raise ValueError(
+                f"`value` is what a stop's intensity maps *to* -- the normalized value the colormap is indexed with -- so it runs from 0 to 1, but got {value}. `position` is the side carrying the data's own units."
+            )
         return value
 
 
@@ -46,7 +52,9 @@ class ColorStopInputModel(BaseModel):
     @classmethod
     def _position_is_normalized(cls, position: float) -> float:
         if not 0.0 <= position <= 1.0:
-            raise ValueError(f"A colour stop sits on the normalized 0..1 the colormap is indexed with, so its `position` runs from 0 to 1, but got {position}.")
+            raise ValueError(
+                f"A colour stop sits on the normalized 0..1 the colormap is indexed with, so its `position` runs from 0 to 1, but got {position}."
+            )
         return position
 
     @field_validator("color")
@@ -69,20 +77,28 @@ class TransferFunctionInputModel(BaseModel):
 
     @field_validator("color_stops")
     @classmethod
-    def _color_stops_draw_a_gradient(cls, stops: list[ColorStopInputModel] | None) -> list[ColorStopInputModel] | None:
+    def _color_stops_draw_a_gradient(
+        cls, stops: list[ColorStopInputModel] | None
+    ) -> list[ColorStopInputModel] | None:
         # The same two rules as `stops`: a gradient needs an interval, and runs forwards.
         if stops is None:
             return stops
         if len(stops) < 2:
-            raise ValueError(f"`colorStops` is a colour gradient, so it is drawn from at least two stops, but got {len(stops)}. Omit `colorStops` to use `colormap` or `color` instead.")
+            raise ValueError(
+                f"`colorStops` is a colour gradient, so it is drawn from at least two stops, but got {len(stops)}. Omit `colorStops` to use `colormap` or `color` instead."
+            )
         positions = [stop.position for stop in stops]
         if positions != sorted(positions):
-            raise ValueError(f"`colorStops` runs from 0 to 1, so its positions cannot go backwards, but got {positions}.")
+            raise ValueError(
+                f"`colorStops` runs from 0 to 1, so its positions cannot go backwards, but got {positions}."
+            )
         return stops
 
     @field_validator("stops")
     @classmethod
-    def _stops_draw_a_curve(cls, stops: list[LookupStopInputModel] | None) -> list[LookupStopInputModel] | None:
+    def _stops_draw_a_curve(
+        cls, stops: list[LookupStopInputModel] | None
+    ) -> list[LookupStopInputModel] | None:
         # Two rules, both about a list that cannot be read as a curve at all. One stop -- or
         # none -- has no interval to interpolate over, and omitting the field is how a client
         # says it wants no curve, so an empty list is a mistake rather than a way to say that.
@@ -93,11 +109,15 @@ class TransferFunctionInputModel(BaseModel):
             return stops
 
         if len(stops) < 2:
-            raise ValueError(f"`stops` is an intensity transfer curve, so it is drawn from at least two control points, but got {len(stops)}. Omit `stops` to use `climMin`/`climMax` and `gamma` instead.")
+            raise ValueError(
+                f"`stops` is an intensity transfer curve, so it is drawn from at least two control points, but got {len(stops)}. Omit `stops` to use `climMin`/`climMax` and `gamma` instead."
+            )
 
         positions = [stop.position for stop in stops]
         if positions != sorted(positions):
-            raise ValueError(f"`stops` runs along the intensity axis, so its positions cannot go backwards, but got {positions}. Two stops may share a position -- that is a hard break in the curve -- but a later one may not sit below an earlier one.")
+            raise ValueError(
+                f"`stops` runs along the intensity axis, so its positions cannot go backwards, but got {positions}. Two stops may share a position -- that is a hard break in the curve -- but a later one may not sit below an earlier one."
+            )
 
         return stops
 
@@ -115,7 +135,11 @@ class TransferFunctionInputModel(BaseModel):
         # every intensity to 1 and a negative one inverts and diverges at black -- neither
         # is a correction, and neither is what a client passing 0 meant.
         if gamma is not None:
-            assert_positive(gamma, field="gamma", because="it is the exponent of a power law on normalized intensities")
+            assert_positive(
+                gamma,
+                field="gamma",
+                because="it is the exponent of a power law on normalized intensities",
+            )
         return gamma
 
     @field_validator("color")
@@ -205,7 +229,9 @@ class ColorByInputModel(BaseModel):
         # Shape, not role: a qualitative colormap has already answered what every value looks
         # like, so there is no range left to window. Whether the *right sort* of colormap was
         # named needs the column, and is checked at the mutation boundary.
-        if self.colormap in enums.QUALITATIVE_COLORMAPS and (self.min is not None or self.max is not None):
+        if self.colormap in enums.QUALITATIVE_COLORMAPS and (
+            self.min is not None or self.max is not None
+        ):
             raise ValueError(
                 f"`min`/`max` window a colormap -- the values mapped to its bottom and its top -- and '{self.colormap.value}' is qualitative, so it has no bottom or top to window. Drop them, or name a continuous colormap"
             )
@@ -226,7 +252,9 @@ class ColorByInputModel(BaseModel):
         # there is no interval to hold them to, but an inverted pair maps the colormap
         # backwards by accident rather than on purpose.
         if self.min is not None and self.max is not None and self.min > self.max:
-            raise ValueError(f"`min` is the value mapped to the bottom of the colormap, so it cannot exceed `max`, but got {self.min} > {self.max}")
+            raise ValueError(
+                f"`min` is the value mapped to the bottom of the colormap, so it cannot exceed `max`, but got {self.min} > {self.max}"
+            )
         return self
 
 
@@ -302,12 +330,18 @@ class LabelRenderInputModel(BaseModel):
     @classmethod
     def _contour_width_is_positive(cls, contour_width: float | None) -> float | None:
         if contour_width is not None:
-            assert_positive(contour_width, field="contourWidth", because="it is the width of a drawn outline")
+            assert_positive(
+                contour_width,
+                field="contourWidth",
+                because="it is the width of a drawn outline",
+            )
         return contour_width
 
     @field_validator("selection_color")
     @classmethod
-    def _selection_color_is_rgba(cls, selection_color: list[int] | None) -> list[int] | None:
+    def _selection_color_is_rgba(
+        cls, selection_color: list[int] | None
+    ) -> list[int] | None:
         if selection_color is not None:
             assert_rgba(selection_color, field="selectionColor", maximum=255)
         return selection_color
@@ -345,53 +379,142 @@ LayerRenderGraphInputModel.update_forward_refs()
     description="One control point of an intensity transfer curve: a raw intensity, and the normalized value it maps to. The two sides are on different scales -- `position` in the data's units, `value` in the 0..1 the colormap is indexed with",
 )
 class LookupStopInput:
-    position: float = strawberry.field(description="The intensity this stop sits at, in the data's own intensity units -- the same scale as `climMin`/`climMax`, not a normalized fraction. Any finite value: 4000 is an ordinary 12-bit reading")
-    value: float = strawberry.field(description="The normalized value that intensity maps to, from 0 to 1. This is what the colormap is indexed with, so 0 is the bottom of the LUT and 1 the top")
+    position: float = strawberry.field(
+        description="The intensity this stop sits at, in the data's own intensity units -- the same scale as `climMin`/`climMax`, not a normalized fraction. Any finite value: 4000 is an ordinary 12-bit reading"
+    )
+    value: float = strawberry.field(
+        description="The normalized value that intensity maps to, from 0 to 1. This is what the colormap is indexed with, so 0 is the bottom of the LUT and 1 the top"
+    )
 
 
 @prose_errors
-@pydantic.input(ColorStopInputModel, description="One stop of a colour gradient: a position on the normalized 0..1 the colormap is indexed with, and the RGBA colour there")
+@pydantic.input(
+    ColorStopInputModel,
+    description="One stop of a colour gradient: a position on the normalized 0..1 the colormap is indexed with, and the RGBA colour there",
+)
 class ColorStopInput:
-    position: float = strawberry.field(description="Where the stop sits, from 0 (the bottom of the mapping) to 1 (the top)")
-    color: list[int] = strawberry.field(description="The colour at this stop, as RGBA: four components, each 0..255")
+    position: float = strawberry.field(
+        description="Where the stop sits, from 0 (the bottom of the mapping) to 1 (the top)"
+    )
+    color: list[int] = strawberry.field(
+        description="The colour at this stop, as RGBA: four components, each 0..255"
+    )
 
 
 @prose_errors
-@pydantic.input(TransferFunctionInputModel, description="Transfer-function settings for a channel source in a layer render graph")
+@pydantic.input(
+    TransferFunctionInputModel,
+    description="Transfer-function settings for a channel source in a layer render graph",
+)
 class TransferFunctionInput:
-    clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
-    clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap (transfer function LUT) applied to the channel")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255")
-    gamma: float | None = strawberry.field(default=None, description="Gamma correction applied to the normalized intensities. The exponent of a power law, so greater than zero. Ignored when `stops` gives an explicit curve")
-    opacity: float | None = strawberry.field(default=None, description="Per-channel opacity within the layer, from 0 (transparent) to 1 (opaque)")
-    invert: bool | None = strawberry.field(default=None, description="Whether the contrast mapping is inverted")
-    stops: list[LookupStopInput] | None = strawberry.field(default=None, description="An explicit intensity transfer curve, as at least two control points ordered by position. When given, the curve *is* the transfer: it supersedes `gamma` and the `climMin`/`climMax` window, which are the one-parameter and two-point special cases of the same mapping. Null uses those instead")
-    color_stops: list[ColorStopInput] | None = strawberry.field(default=None, description="A custom colour gradient, as at least two stops ordered by position. When given it is the colormap: it supersedes `colormap` and `color`. Null uses those instead")
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap (transfer function LUT) applied to the channel",
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255",
+    )
+    gamma: float | None = strawberry.field(
+        default=None,
+        description="Gamma correction applied to the normalized intensities. The exponent of a power law, so greater than zero. Ignored when `stops` gives an explicit curve",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Per-channel opacity within the layer, from 0 (transparent) to 1 (opaque)",
+    )
+    invert: bool | None = strawberry.field(
+        default=None, description="Whether the contrast mapping is inverted"
+    )
+    stops: list[LookupStopInput] | None = strawberry.field(
+        default=None,
+        description="An explicit intensity transfer curve, as at least two control points ordered by position. When given, the curve *is* the transfer: it supersedes `gamma` and the `climMin`/`climMax` window, which are the one-parameter and two-point special cases of the same mapping. Null uses those instead",
+    )
+    color_stops: list[ColorStopInput] | None = strawberry.field(
+        default=None,
+        description="A custom colour gradient, as at least two stops ordered by position. When given it is the colormap: it supersedes `colormap` and `color`. Null uses those instead",
+    )
 
 
 @prose_errors
-@pydantic.input(PhasorCursorInputModel, description="A region of phasor space, and the color the pixels falling inside it are painted. A color rule on the image, not a plot widget")
+@pydantic.input(
+    PhasorCursorInputModel,
+    description="A region of phasor space, and the color the pixels falling inside it are painted. A color rule on the image, not a plot widget",
+)
 class PhasorCursorInput:
-    kind: enums.PhasorCursorKind | None = strawberry.field(default=None, description="The shape of the region (default 'circle')")
-    g: float | None = strawberry.field(default=None, description="(circle) The g coordinate of the centre. Required for a circle")
-    s: float | None = strawberry.field(default=None, description="(circle) The s coordinate of the centre. Required for a circle")
-    radius: float | None = strawberry.field(default=None, description="(circle) The radius of the disc, in phasor units. Required for a circle")
-    points: list[list[float]] | None = strawberry.field(default=None, description="(polygon) The (g, s) vertices of the region. At least three are required for a polygon")
-    color: list[int] | None = strawberry.field(default=None, description="The RGBA color the pixels inside this region take, overriding the colormap")
-    label: str | None = strawberry.field(default=None, description="An optional human-readable label, e.g. the species this region selects")
-    visible: bool | None = strawberry.field(default=None, description="Whether this cursor colors the image (default true)")
+    kind: enums.PhasorCursorKind | None = strawberry.field(
+        default=None, description="The shape of the region (default 'circle')"
+    )
+    g: float | None = strawberry.field(
+        default=None,
+        description="(circle) The g coordinate of the centre. Required for a circle",
+    )
+    s: float | None = strawberry.field(
+        default=None,
+        description="(circle) The s coordinate of the centre. Required for a circle",
+    )
+    radius: float | None = strawberry.field(
+        default=None,
+        description="(circle) The radius of the disc, in phasor units. Required for a circle",
+    )
+    points: list[list[float]] | None = strawberry.field(
+        default=None,
+        description="(polygon) The (g, s) vertices of the region. At least three are required for a polygon",
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="The RGBA color the pixels inside this region take, overriding the colormap",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="An optional human-readable label, e.g. the species this region selects",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether this cursor colors the image (default true)"
+    )
 
 
-@pydantic.input(PhasorTransferInputModel, description="How a phasor becomes the pixel's color: the transfer function of a phasor source")
+@pydantic.input(
+    PhasorTransferInputModel,
+    description="How a phasor becomes the pixel's color: the transfer function of a phasor source",
+)
 class PhasorTransferInput:
-    mode: enums.PhasorColorMode | None = strawberry.field(default=None, description="What the hue is derived from: the phasor's phase, its modulus, or the mean of both (default 'phase')")
-    min: kanne_scalars.GenericQuantity | None = strawberry.field(default=None, description="The lower bound of the derived value, in its own dimension: a duration ('0.5 ns') over a microtime axis, a wavelength ('480 nm') over a spectrum axis")
-    max: kanne_scalars.GenericQuantity | None = strawberry.field(default=None, description="The upper bound of the derived value, in its own dimension")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the derived value is mapped through (default 'rainbow')")
-    weight_by_intensity: bool | None = strawberry.field(default=None, description="Whether the photon count modulates the brightness, so hue carries the phasor and brightness the signal (default true)")
-    intensity: TransferFunctionInput | None = strawberry.field(default=None, description="The transfer function applied to that photon count: contrast limits, gamma, opacity")
-    cursors: list[PhasorCursorInput] | None = strawberry.field(default=None, description="Regions of phasor space whose pixels take a fixed color, overriding the colormap")
+    mode: enums.PhasorColorMode | None = strawberry.field(
+        default=None,
+        description="What the hue is derived from: the phasor's phase, its modulus, or the mean of both (default 'phase')",
+    )
+    min: kanne_scalars.GenericQuantity | None = strawberry.field(
+        default=None,
+        description="The lower bound of the derived value, in its own dimension: a duration ('0.5 ns') over a microtime axis, a wavelength ('480 nm') over a spectrum axis",
+    )
+    max: kanne_scalars.GenericQuantity | None = strawberry.field(
+        default=None,
+        description="The upper bound of the derived value, in its own dimension",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the derived value is mapped through (default 'rainbow')",
+    )
+    weight_by_intensity: bool | None = strawberry.field(
+        default=None,
+        description="Whether the photon count modulates the brightness, so hue carries the phasor and brightness the signal (default true)",
+    )
+    intensity: TransferFunctionInput | None = strawberry.field(
+        default=None,
+        description="The transfer function applied to that photon count: contrast limits, gamma, opacity",
+    )
+    cursors: list[PhasorCursorInput] | None = strawberry.field(
+        default=None,
+        description="Regions of phasor space whose pixels take a fixed color, overriding the colormap",
+    )
 
 
 @pydantic.input(
@@ -399,22 +522,59 @@ class PhasorTransferInput:
     description="A node in a layer's internal render graph. A 'channel' node samples one single-channel lens through a transfer function; a 'phasor' node reduces an axis to a phasor and colors the pixel by it; a 'blend' node composites its children; a 'projection' node projects theirs over z.",
 )
 class LayerNodeInput:
-    kind: str = strawberry.field(description="The node discriminator: 'channel', 'phasor', 'blend' or 'projection'")
-    label: str | None = strawberry.field(default=None, description="An optional human-readable label for the node")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(channel/phasor) The single-channel lens this node samples: a crop of the layer's lens with its channel axis at one position (createLens(lens:, slices:)). Omit to sample the layer's lens itself, which must then pin one channel")
-    visible: bool | None = strawberry.field(default=None, description="(channel/phasor) Whether the node participates in the composite")
-    transfer: TransferFunctionInput | None = strawberry.field(default=None, description="(channel) The transfer function mapping this channel to color")
-    blending: enums.Blending | None = strawberry.field(default=None, description="(blend) The blend mode used to composite the children")
-    mode: enums.ProjectionMode | None = strawberry.field(default=None, description="(projection) The 3D projection / rendering mode applied over the z-axis")
-    phasor_axis: str | None = strawberry.field(default=None, description="(phasor) The lens axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis. Required for a phasor node; defaults to the lens' only such axis")
-    harmonic: int | None = strawberry.field(default=None, description="(phasor) The harmonic of the transform (default 1)")
-    phasor_transfer: PhasorTransferInput | None = strawberry.field(default=None, description="(phasor) How the resulting phasor becomes the pixel's color. Named apart from `transfer` because it maps a (g, s) pair rather than a sampled scalar")
-    children: Optional[list[Annotated["LayerNodeInput", strawberry.lazy(__name__)]]] = strawberry.field(default=None, description="(blend/projection) The child nodes composited or projected by this node")
+    kind: str = strawberry.field(
+        description="The node discriminator: 'channel', 'phasor', 'blend' or 'projection'"
+    )
+    label: str | None = strawberry.field(
+        default=None, description="An optional human-readable label for the node"
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(channel/phasor) The single-channel lens this node samples: a crop of the layer's lens with its channel axis at one position (createLens(lens:, slices:)). Omit to sample the layer's lens itself, which must then pin one channel",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="(channel/phasor) Whether the node participates in the composite",
+    )
+    transfer: TransferFunctionInput | None = strawberry.field(
+        default=None,
+        description="(channel) The transfer function mapping this channel to color",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="(blend) The blend mode used to composite the children",
+    )
+    mode: enums.ProjectionMode | None = strawberry.field(
+        default=None,
+        description="(projection) The 3D projection / rendering mode applied over the z-axis",
+    )
+    phasor_axis: str | None = strawberry.field(
+        default=None,
+        description="(phasor) The lens axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis. Required for a phasor node; defaults to the lens' only such axis",
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="(phasor) The harmonic of the transform (default 1)"
+    )
+    phasor_transfer: PhasorTransferInput | None = strawberry.field(
+        default=None,
+        description="(phasor) How the resulting phasor becomes the pixel's color. Named apart from `transfer` because it maps a (g, s) pair rather than a sampled scalar",
+    )
+    children: list[Annotated["LayerNodeInput", strawberry.lazy(__name__)]] | None = (
+        strawberry.field(
+            default=None,
+            description="(blend/projection) The child nodes composited or projected by this node",
+        )
+    )
 
 
-@pydantic.input(LayerRenderGraphInputModel, description="The composable render recipe inside a single layer, rooted at a blend node")
+@pydantic.input(
+    LayerRenderGraphInputModel,
+    description="The composable render recipe inside a single layer, rooted at a blend node",
+)
 class LayerRenderGraphInput:
-    root: LayerNodeInput = strawberry.field(description="The root blend node of the layer's render graph")
+    root: LayerNodeInput = strawberry.field(
+        description="The root blend node of the layer's render graph"
+    )
 
 
 @prose_errors
@@ -423,8 +583,12 @@ class LayerRenderGraphInput:
     description="One hop of a join path: the column whose values identify rows of the next table. The target is not named here -- the next step names it, and which of its columns holds row identity is already declared on it",
 )
 class JoinStepInput:
-    table: strawberry.ID = strawberry.field(description="The table this hop stands in. The first step's table is the one the FIELD edge lands on; every later one is the table the previous hop pointed at")
-    column: str = strawberry.field(description="A column of that table whose `references` names the next table. A column that references nothing is a value, not a hop")
+    table: strawberry.ID = strawberry.field(
+        description="The table this hop stands in. The first step's table is the one the FIELD edge lands on; every later one is the table the previous hop pointed at"
+    )
+    column: str = strawberry.field(
+        description="A column of that table whose `references` names the next table. A column that references nothing is a value, not a hop"
+    )
 
 
 @prose_errors
@@ -433,16 +597,45 @@ class JoinStepInput:
     description="One entry of a label layer's colour picker: colour objects by a column of the table this mask's FIELD edge keys into, instead of by hashing their id",
 )
 class LabelColorByInput:
-    kind: enums.ColorSourceKind = strawberry.field(default=enums.ColorSourceKind.COLUMN, description="Which sort of source the value is read from. Defaults to COLUMN, which is every colouring written before sparse datasets existed -- the fields the other member reads are refused rather than ignored")
-    table: strawberry.ID | None = strawberry.field(default=None, description="The table dataset holding one row per object. Must be reachable from the layer's lens by a FIELD edge -- the edge `createTableDataset(keyedBy:)` authors and `attributePlans` discovers")
-    column: str | None = strawberry.field(default=None, description="(COLUMN) The column of that table whose value colors each object")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(SPARSE) The sparse lens whose one slice colors the objects: a lens of a matrix this source's ids index (reachable by a FIELD edge), its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the column's value is mapped through. Which *sort* follows from the column's role, never from a choice here: a measure column (COORDINATE, ATTRIBUTE) takes a continuous one over its range with an optional `min`/`max` window, a categorical one (ID, TRACK_ID, LABEL, COLOR) takes a qualitative one -- a colour per distinct value, no order implied and no window to set")
-    min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map from the smallest value it reads")
-    max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map to the largest value it reads")
-    hide_below_min: bool = strawberry.field(default=False, description="Whether objects whose value sits at or below the bottom of the colormap's window (`min`, or the smallest value read when it is omitted) are not drawn at all, instead of taking the colormap's first colour. For a measure read over an image: a gene's zero bins stop covering the tissue. Refused with a qualitative colormap, which has no bottom (default false)")
-    label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker, e.g. 'Area' or 'Cell type'. A caption only -- two entries that render identically are refused however they are labelled")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
+    kind: enums.ColorSourceKind = strawberry.field(
+        default=enums.ColorSourceKind.COLUMN,
+        description="Which sort of source the value is read from. Defaults to COLUMN, which is every colouring written before sparse datasets existed -- the fields the other member reads are refused rather than ignored",
+    )
+    table: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The table dataset holding one row per object. Must be reachable from the layer's lens by a FIELD edge -- the edge `createTableDataset(keyedBy:)` authors and `attributePlans` discovers",
+    )
+    column: str | None = strawberry.field(
+        default=None,
+        description="(COLUMN) The column of that table whose value colors each object",
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(SPARSE) The sparse lens whose one slice colors the objects: a lens of a matrix this source's ids index (reachable by a FIELD edge), its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the column's value is mapped through. Which *sort* follows from the column's role, never from a choice here: a measure column (COORDINATE, ATTRIBUTE) takes a continuous one over its range with an optional `min`/`max` window, a categorical one (ID, TRACK_ID, LABEL, COLOR) takes a qualitative one -- a colour per distinct value, no order implied and no window to set",
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="The value mapped to the bottom of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map from the smallest value it reads",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="The value mapped to the top of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map to the largest value it reads",
+    )
+    hide_below_min: bool = strawberry.field(
+        default=False,
+        description="Whether objects whose value sits at or below the bottom of the colormap's window (`min`, or the smallest value read when it is omitted) are not drawn at all, instead of taking the colormap's first colour. For a measure read over an image: a gene's zero bins stop covering the tissue. Refused with a qualitative colormap, which has no bottom (default false)",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call this colouring in a picker, e.g. 'Area' or 'Cell type'. A caption only -- two entries that render identically are refused however they are labelled",
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
 
     def to_pydantic(self) -> "ColorByInputModel":
         """Validate through the union, then hand back the flat model everything downstream reads.
@@ -465,7 +658,11 @@ class LabelColorByInput:
             "hide_below_min": self.hide_below_min or None,
             "label": self.label,
         }
-        data = {name: value for name, value in supplied.items() if value is not None and value != []}
+        data = {
+            name: value
+            for name, value in supplied.items()
+            if value is not None and value != []
+        }
         for name in ("join_path",):
             if name in data:
                 data[name] = [entry.to_pydantic() for entry in data[name]]
@@ -479,15 +676,41 @@ class LabelColorByInput:
     description="Color a mesh collection's objects by a column of the table its FIELD edge keys into, instead of by the layer's flat material color",
 )
 class MeshColorByInput:
-    kind: enums.ColorSourceKind = strawberry.field(default=enums.ColorSourceKind.COLUMN, description="Which sort of source the value is read from. Defaults to COLUMN, which is every colouring written before sparse datasets existed -- the fields the other member reads are refused rather than ignored")
-    table: strawberry.ID | None = strawberry.field(default=None, description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: MESH_COLLECTION})` authors and `attributePlans` discovers")
-    column: str | None = strawberry.field(default=None, description="(COLUMN) The column of that table whose value colors each object")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(SPARSE) The sparse lens whose one slice colors the objects: a lens of a matrix this source's ids index (reachable by a FIELD edge), its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the column's value is mapped through. Which *sort* follows from the column's role, never from a choice here: a measure column (COORDINATE, ATTRIBUTE) takes a continuous one over its range with an optional `min`/`max` window, a categorical one (ID, TRACK_ID, LABEL, COLOR) takes a qualitative one -- a colour per distinct value, no order implied and no window to set")
-    min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map from the smallest value it reads")
-    max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map to the largest value it reads")
-    label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker, e.g. 'Volume' or 'Cell type'. A caption only -- two entries that render identically are refused however they are labelled")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
+    kind: enums.ColorSourceKind = strawberry.field(
+        default=enums.ColorSourceKind.COLUMN,
+        description="Which sort of source the value is read from. Defaults to COLUMN, which is every colouring written before sparse datasets existed -- the fields the other member reads are refused rather than ignored",
+    )
+    table: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: MESH_COLLECTION})` authors and `attributePlans` discovers",
+    )
+    column: str | None = strawberry.field(
+        default=None,
+        description="(COLUMN) The column of that table whose value colors each object",
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(SPARSE) The sparse lens whose one slice colors the objects: a lens of a matrix this source's ids index (reachable by a FIELD edge), its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the column's value is mapped through. Which *sort* follows from the column's role, never from a choice here: a measure column (COORDINATE, ATTRIBUTE) takes a continuous one over its range with an optional `min`/`max` window, a categorical one (ID, TRACK_ID, LABEL, COLOR) takes a qualitative one -- a colour per distinct value, no order implied and no window to set",
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="The value mapped to the bottom of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map from the smallest value it reads",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="The value mapped to the top of the colormap, in the column's own declared `unit`. For a measure column. Omit to let the viewer stretch the map to the largest value it reads",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call this colouring in a picker, e.g. 'Volume' or 'Cell type'. A caption only -- two entries that render identically are refused however they are labelled",
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
 
     def to_pydantic(self) -> "ColorByInputModel":
         """Validate through the union, then hand back the flat model everything downstream reads.
@@ -508,7 +731,11 @@ class MeshColorByInput:
             "max": self.max,
             "label": self.label,
         }
-        data = {name: value for name, value in supplied.items() if value is not None and value != []}
+        data = {
+            name: value
+            for name, value in supplied.items()
+            if value is not None and value != []
+        }
         for name in ("join_path",):
             if name in data:
                 data[name] = [entry.to_pydantic() for entry in data[name]]
@@ -522,16 +749,45 @@ class MeshColorByInput:
     description="Draw only the objects whose row in a table this collection's FIELD edge keys into satisfies this rule. Which half applies follows from the column's declared role -- bounds for a measure column, an explicit value set for a categorical one",
 )
 class MeshFilterByInput:
-    kind: enums.ColorSourceKind = strawberry.field(default=enums.ColorSourceKind.COLUMN, description="Which sort of source this rule tests: a column of a table the ids key into, or one slice of a sparse matrix they index. Defaulted, so every rule written before sparse rules existed is a COLUMN one")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(SPARSE) The sparse lens whose one slice is tested, instead of a table column: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by")
-    table: strawberry.ID | None = strawberry.field(default=None, description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: MESH_COLLECTION})` authors and `attributePlans` discovers")
-    column: str | None = strawberry.field(default=None, description="(COLUMN) The column of that table whose value decides whether an object is drawn")
-    min: float | None = strawberry.field(default=None, description="Lower bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open lower end")
-    max: float | None = strawberry.field(default=None, description="Upper bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open upper end")
-    values: list[str] | None = strawberry.field(default=None, description="The values that match, as strings -- ids included, the same vocabulary a qualitative colouring ranks its distinct values by. For a categorical column (role ID, LABEL, TRACK_ID or COLOR), where a bound would impose an order the values do not have")
-    exclude: bool = strawberry.field(default=False, description="Whether the rule *removes* what it matches rather than keeping it. Inverts the whole rule, bounds and values alike")
-    label: str | None = strawberry.field(default=None, description="What to call this filter in a picker, e.g. 'Large cells'. Two entries may share a column -- 'small' and 'large' over one measure are two different rules -- and this is what tells them apart")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
+    kind: enums.ColorSourceKind = strawberry.field(
+        default=enums.ColorSourceKind.COLUMN,
+        description="Which sort of source this rule tests: a column of a table the ids key into, or one slice of a sparse matrix they index. Defaulted, so every rule written before sparse rules existed is a COLUMN one",
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(SPARSE) The sparse lens whose one slice is tested, instead of a table column: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by",
+    )
+    table: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: MESH_COLLECTION})` authors and `attributePlans` discovers",
+    )
+    column: str | None = strawberry.field(
+        default=None,
+        description="(COLUMN) The column of that table whose value decides whether an object is drawn",
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="Lower bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open lower end",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="Upper bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open upper end",
+    )
+    values: list[str] | None = strawberry.field(
+        default=None,
+        description="The values that match, as strings -- ids included, the same vocabulary a qualitative colouring ranks its distinct values by. For a categorical column (role ID, LABEL, TRACK_ID or COLOR), where a bound would impose an order the values do not have",
+    )
+    exclude: bool = strawberry.field(
+        default=False,
+        description="Whether the rule *removes* what it matches rather than keeping it. Inverts the whole rule, bounds and values alike",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call this filter in a picker, e.g. 'Large cells'. Two entries may share a column -- 'small' and 'large' over one measure are two different rules -- and this is what tells them apart",
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
 
 
 @prose_errors
@@ -540,16 +796,45 @@ class MeshFilterByInput:
     description="One entry of a label layer's filter picker: draw only the objects whose row in a table this mask's FIELD edge keys into satisfies this rule. Which half applies follows from the column's declared role -- bounds for a measure column, an explicit value set for a categorical one",
 )
 class LabelFilterByInput:
-    kind: enums.ColorSourceKind = strawberry.field(default=enums.ColorSourceKind.COLUMN, description="Which sort of source this rule tests: a column of a table the ids key into, or one slice of a sparse matrix they index. Defaulted, so every rule written before sparse rules existed is a COLUMN one")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(SPARSE) The sparse lens whose one slice is tested, instead of a table column: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by")
-    table: strawberry.ID | None = strawberry.field(default=None, description="The table dataset holding one row per object. Must be reachable from the layer's lens by a FIELD edge -- the edge `createTableDataset(keyedBy:)` authors and `attributePlans` discovers")
-    column: str | None = strawberry.field(default=None, description="(COLUMN) The column of that table whose value decides whether an object is drawn")
-    min: float | None = strawberry.field(default=None, description="Lower bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open lower end")
-    max: float | None = strawberry.field(default=None, description="Upper bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open upper end")
-    values: list[str] | None = strawberry.field(default=None, description="The values that match, as strings -- ids included, the same vocabulary a qualitative colouring ranks its distinct values by. For a categorical column (role ID, LABEL, TRACK_ID or COLOR), where a bound would impose an order the values do not have")
-    exclude: bool = strawberry.field(default=False, description="Whether the rule *removes* what it matches rather than keeping it. Inverts the whole rule, bounds and values alike")
-    label: str | None = strawberry.field(default=None, description="What to call this filter in a picker, e.g. 'Large cells'. Two entries may share a column -- 'small' and 'large' over one measure are two different rules -- and this is what tells them apart")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
+    kind: enums.ColorSourceKind = strawberry.field(
+        default=enums.ColorSourceKind.COLUMN,
+        description="Which sort of source this rule tests: a column of a table the ids key into, or one slice of a sparse matrix they index. Defaulted, so every rule written before sparse rules existed is a COLUMN one",
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(SPARSE) The sparse lens whose one slice is tested, instead of a table column: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by",
+    )
+    table: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The table dataset holding one row per object. Must be reachable from the layer's lens by a FIELD edge -- the edge `createTableDataset(keyedBy:)` authors and `attributePlans` discovers",
+    )
+    column: str | None = strawberry.field(
+        default=None,
+        description="(COLUMN) The column of that table whose value decides whether an object is drawn",
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="Lower bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open lower end",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="Upper bound, inclusive, in the column's own declared `unit`. For a measure column (role COORDINATE or ATTRIBUTE). Omit for an open upper end",
+    )
+    values: list[str] | None = strawberry.field(
+        default=None,
+        description="The values that match, as strings -- ids included, the same vocabulary a qualitative colouring ranks its distinct values by. For a categorical column (role ID, LABEL, TRACK_ID or COLOR), where a bound would impose an order the values do not have",
+    )
+    exclude: bool = strawberry.field(
+        default=False,
+        description="Whether the rule *removes* what it matches rather than keeping it. Inverts the whole rule, bounds and values alike",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call this filter in a picker, e.g. 'Large cells'. Two entries may share a column -- 'small' and 'large' over one measure are two different rules -- and this is what tells them apart",
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -584,7 +869,9 @@ class ColorByInputBase(BaseModel):
     @model_validator(mode="after")
     def _window_is_a_range(self):
         if self.min is not None and self.max is not None and self.min > self.max:
-            raise ValueError(f"`min` is the value mapped to the bottom of the colormap, so it cannot exceed `max`, but got {self.min} > {self.max}")
+            raise ValueError(
+                f"`min` is the value mapped to the bottom of the colormap, so it cannot exceed `max`, but got {self.min} > {self.max}"
+            )
         return self
 
 
@@ -660,36 +947,69 @@ NETWORK_COLOR_BY_MEMBERS: dict[str, type[BaseModel]] = {
 
 @kante.pydantic_input(
     ColumnColorByInputModel,
-    directives=union_memberships("LabelColorByInput", "MeshColorByInput", "NetworkColorByInput", key="COLUMN"),
+    directives=union_memberships(
+        "LabelColorByInput", "MeshColorByInput", "NetworkColorByInput", key="COLUMN"
+    ),
     description="The fields a COLUMN member of a colour picker entry reads. Published for codegen; the wire type is the flat LabelColorByInput / MeshColorByInput / NetworkColorByInput",
 )
 class ColumnColorByInput:
     """The COLUMN member of the colour-source union."""
 
-    kind: enums.ColorSourceKind = strawberry.field(description="The discriminator: which member this is")
-    table: strawberry.ID = strawberry.field(description="The table dataset the value is read from")
-    column: str = strawberry.field(description="The column of that table holding the value")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the value is mapped through")
-    min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap")
-    max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap")
-    label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker")
+    kind: enums.ColorSourceKind = strawberry.field(
+        description="The discriminator: which member this is"
+    )
+    table: strawberry.ID = strawberry.field(
+        description="The table dataset the value is read from"
+    )
+    column: str = strawberry.field(
+        description="The column of that table holding the value"
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None, description="The colormap the value is mapped through"
+    )
+    min: float | None = strawberry.field(
+        default=None, description="The value mapped to the bottom of the colormap"
+    )
+    max: float | None = strawberry.field(
+        default=None, description="The value mapped to the top of the colormap"
+    )
+    label: str | None = strawberry.field(
+        default=None, description="What to call this colouring in a picker"
+    )
 
 
 @kante.pydantic_input(
     SparseColorByInputModel,
-    directives=union_memberships("LabelColorByInput", "MeshColorByInput", "NetworkColorByInput", key="SPARSE"),
+    directives=union_memberships(
+        "LabelColorByInput", "MeshColorByInput", "NetworkColorByInput", key="SPARSE"
+    ),
     description="The fields a SPARSE member of a colour picker entry reads. Published for codegen; the wire type is the flat LabelColorByInput / MeshColorByInput / NetworkColorByInput",
 )
 class SparseColorByInput:
     """The SPARSE member of the colour-source union."""
 
-    kind: enums.ColorSourceKind = strawberry.field(description="The discriminator: which member this is")
-    lens: strawberry.ID = strawberry.field(description="The sparse lens whose one slice is read: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the slice's values are mapped through. Always measured, so never a qualitative palette")
-    min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap")
-    max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap")
-    label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker")
+    kind: enums.ColorSourceKind = strawberry.field(
+        description="The discriminator: which member this is"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The sparse lens whose one slice is read: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])"
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the slice's values are mapped through. Always measured, so never a qualitative palette",
+    )
+    min: float | None = strawberry.field(
+        default=None, description="The value mapped to the bottom of the colormap"
+    )
+    max: float | None = strawberry.field(
+        default=None, description="The value mapped to the top of the colormap"
+    )
+    label: str | None = strawberry.field(
+        default=None, description="What to call this colouring in a picker"
+    )
 
 
 @kante.pydantic_input(
@@ -700,13 +1020,29 @@ class SparseColorByInput:
 class GraphColorByInput:
     """The GRAPH member of the colour-source union, network layers only."""
 
-    kind: enums.ColorSourceKind = strawberry.field(description="The discriminator: which member this is")
-    attribute: str = strawberry.field(description="The per-node value read: a name the collection's manifest declares (strahler, degree, depth, component, a writer's own column), or `radius` when the encoding carries one. Validated against the collection, exactly as a COLUMN entry's column is against its table")
-    target: enums.GraphTarget = strawberry.field(default=enums.GraphTarget.NODE, description="Which of the network's two row sets the colouring paints. An edge takes its start node's value either way; EDGE leaves the node glyphs at the layer's base colour")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the values are mapped through. Always measured -- a per-node metric is an ordered value -- so never a qualitative palette")
-    min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap")
-    max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap")
-    label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker")
+    kind: enums.ColorSourceKind = strawberry.field(
+        description="The discriminator: which member this is"
+    )
+    attribute: str = strawberry.field(
+        description="The per-node value read: a name the collection's manifest declares (strahler, degree, depth, component, a writer's own column), or `radius` when the encoding carries one. Validated against the collection, exactly as a COLUMN entry's column is against its table"
+    )
+    target: enums.GraphTarget = strawberry.field(
+        default=enums.GraphTarget.NODE,
+        description="Which of the network's two row sets the colouring paints. An edge takes its start node's value either way; EDGE leaves the node glyphs at the layer's base colour",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the values are mapped through. Always measured -- a per-node metric is an ordered value -- so never a qualitative palette",
+    )
+    min: float | None = strawberry.field(
+        default=None, description="The value mapped to the bottom of the colormap"
+    )
+    max: float | None = strawberry.field(
+        default=None, description="The value mapped to the top of the colormap"
+    )
+    label: str | None = strawberry.field(
+        default=None, description="What to call this colouring in a picker"
+    )
 
 
 #: The directive is REPEATABLE, and every flat type is named: a colour picker entry has three
@@ -719,7 +1055,11 @@ class GraphColorByInput:
 #: Registered on the schema's `types=[...]`. Nothing references these, so an omission drops
 #: them from the SDL silently and a generated client quietly loses an arm -- the warning
 #: `core.inputs.coords` gives about the same list.
-color_by_union_types: list[type] = [ColumnColorByInput, SparseColorByInput, GraphColorByInput]
+color_by_union_types: list[type] = [
+    ColumnColorByInput,
+    SparseColorByInput,
+    GraphColorByInput,
+]
 
 
 @prose_errors
@@ -728,17 +1068,49 @@ color_by_union_types: list[type] = [ColumnColorByInput, SparseColorByInput, Grap
     description="Color a network collection's objects or nodes: by a column of the table its FIELD edge keys into, by a slice of a sparse matrix, or (GRAPH) by a per-node value the collection itself carries -- Strahler order, degree, depth, component, a stored radius, or a writer's own column",
 )
 class NetworkColorByInput:
-    kind: enums.ColorSourceKind = strawberry.field(default=enums.ColorSourceKind.COLUMN, description="Which sort of source the value is read from. Defaults to COLUMN; the fields the other members read are refused rather than ignored. GRAPH is this layer kind's own member: the only source whose values are per node rather than per object")
-    table: strawberry.ID | None = strawberry.field(default=None, description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: NETWORK_COLLECTION})` authors. Object-level: every node and segment of an object takes its row's value")
-    column: str | None = strawberry.field(default=None, description="(COLUMN) The column of that table whose value colors each object")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(SPARSE) The sparse lens whose one slice colors the objects: a lens of a matrix this source's ids index (reachable by a FIELD edge), its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])")
-    attribute: str | None = strawberry.field(default=None, description="(GRAPH) The per-node value read: a name the collection's manifest declares (strahler, degree, depth, component, a writer's own column), or `radius` when the encoding carries one")
-    target: enums.GraphTarget | None = strawberry.field(default=None, description="(GRAPH) Which of the network's two row sets the colouring paints (default NODE). An edge takes its start node's value either way; EDGE leaves the node glyphs at the layer's base colour")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the value is mapped through. For a COLUMN entry which *sort* follows from the column's role; a SPARSE or GRAPH entry is always measured and takes a continuous one over its range")
-    min: float | None = strawberry.field(default=None, description="The value mapped to the bottom of the colormap. For a measured value. Omit to let the viewer stretch the map from the smallest value it reads")
-    max: float | None = strawberry.field(default=None, description="The value mapped to the top of the colormap. For a measured value. Omit to let the viewer stretch the map to the largest value it reads")
-    label: str | None = strawberry.field(default=None, description="What to call this colouring in a picker, e.g. 'Strahler order' or 'Total length'. A caption only -- two entries that render identically are refused however they are labelled")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
+    kind: enums.ColorSourceKind = strawberry.field(
+        default=enums.ColorSourceKind.COLUMN,
+        description="Which sort of source the value is read from. Defaults to COLUMN; the fields the other members read are refused rather than ignored. GRAPH is this layer kind's own member: the only source whose values are per node rather than per object",
+    )
+    table: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: NETWORK_COLLECTION})` authors. Object-level: every node and segment of an object takes its row's value",
+    )
+    column: str | None = strawberry.field(
+        default=None,
+        description="(COLUMN) The column of that table whose value colors each object",
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(SPARSE) The sparse lens whose one slice colors the objects: a lens of a matrix this source's ids index (reachable by a FIELD edge), its windows pinning one position on every axis the matrix identifies itself by -- createSparseLens(windows: [{axis, min: v, max: v}])",
+    )
+    attribute: str | None = strawberry.field(
+        default=None,
+        description="(GRAPH) The per-node value read: a name the collection's manifest declares (strahler, degree, depth, component, a writer's own column), or `radius` when the encoding carries one",
+    )
+    target: enums.GraphTarget | None = strawberry.field(
+        default=None,
+        description="(GRAPH) Which of the network's two row sets the colouring paints (default NODE). An edge takes its start node's value either way; EDGE leaves the node glyphs at the layer's base colour",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the value is mapped through. For a COLUMN entry which *sort* follows from the column's role; a SPARSE or GRAPH entry is always measured and takes a continuous one over its range",
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="The value mapped to the bottom of the colormap. For a measured value. Omit to let the viewer stretch the map from the smallest value it reads",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="The value mapped to the top of the colormap. For a measured value. Omit to let the viewer stretch the map to the largest value it reads",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call this colouring in a picker, e.g. 'Strahler order' or 'Total length'. A caption only -- two entries that render identically are refused however they are labelled",
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
 
     def to_pydantic(self) -> "NetworkColorByInputModel":
         """Validate through the union, then hand back the flat model everything downstream reads.
@@ -759,7 +1131,11 @@ class NetworkColorByInput:
             "max": self.max,
             "label": self.label,
         }
-        data = {name: value for name, value in supplied.items() if value is not None and value != []}
+        data = {
+            name: value
+            for name, value in supplied.items()
+            if value is not None and value != []
+        }
         for name in ("join_path",):
             if name in data:
                 data[name] = [entry.to_pydantic() for entry in data[name]]
@@ -773,18 +1149,53 @@ class NetworkColorByInput:
     description="Draw only the objects -- or, for a GRAPH rule, the nodes and segments -- whose value satisfies this rule. Which half applies follows from the source: bounds for a measure column, a sparse slice or a graph attribute; an explicit value set for a categorical column",
 )
 class NetworkFilterByInput:
-    kind: enums.ColorSourceKind = strawberry.field(default=enums.ColorSourceKind.COLUMN, description="Which sort of source this rule tests. Defaulted to COLUMN; GRAPH tests a per-node value the collection itself carries, and is the only member whose rule hides individual nodes and segments rather than whole objects")
-    lens: strawberry.ID | None = strawberry.field(default=None, description="(SPARSE) The sparse lens whose one slice is tested, instead of a table column: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by")
-    table: strawberry.ID | None = strawberry.field(default=None, description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: NETWORK_COLLECTION})` authors")
-    column: str | None = strawberry.field(default=None, description="(COLUMN) The column of that table whose value decides whether an object is drawn")
-    attribute: str | None = strawberry.field(default=None, description="(GRAPH) The per-node value tested: a name the collection's manifest declares, or `radius` when the encoding carries one. Always measured, so the rule is `min`/`max` bounds")
-    target: enums.GraphTarget | None = strawberry.field(default=None, description="(GRAPH) Which row set the rule hides (default NODE). A hidden node takes its glyphs and its outgoing segments with it; an EDGE rule hides segments only, each tested by its start node's value")
-    min: float | None = strawberry.field(default=None, description="Lower bound, inclusive. For a measured value. Omit for an open lower end")
-    max: float | None = strawberry.field(default=None, description="Upper bound, inclusive. For a measured value. Omit for an open upper end")
-    values: list[str] | None = strawberry.field(default=None, description="The values that match, as strings. For a categorical COLUMN only -- a sparse slice and a graph attribute are measured, where a value set would impose categories an ordered value does not have")
-    exclude: bool = strawberry.field(default=False, description="Whether the rule *removes* what it matches rather than keeping it. Inverts the whole rule, bounds and values alike")
-    label: str | None = strawberry.field(default=None, description="What to call this filter in a picker, e.g. 'Trunk only'. Two entries may share an attribute -- 'twigs' and 'trunk' over one Strahler order are two different rules -- and this is what tells them apart")
-    join_path: list[JoinStepInput] = strawberry.field(default_factory=list, description=_JOIN_PATH_DESCRIPTION)
+    kind: enums.ColorSourceKind = strawberry.field(
+        default=enums.ColorSourceKind.COLUMN,
+        description="Which sort of source this rule tests. Defaulted to COLUMN; GRAPH tests a per-node value the collection itself carries, and is the only member whose rule hides individual nodes and segments rather than whole objects",
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(SPARSE) The sparse lens whose one slice is tested, instead of a table column: a lens of a matrix this source's ids index, its windows pinning one position on every axis the matrix identifies itself by",
+    )
+    table: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The table dataset holding one row per object. Must be reachable from this layer's collection by a FIELD edge -- the edge `createTableDataset(keyedBy: {kind: NETWORK_COLLECTION})` authors",
+    )
+    column: str | None = strawberry.field(
+        default=None,
+        description="(COLUMN) The column of that table whose value decides whether an object is drawn",
+    )
+    attribute: str | None = strawberry.field(
+        default=None,
+        description="(GRAPH) The per-node value tested: a name the collection's manifest declares, or `radius` when the encoding carries one. Always measured, so the rule is `min`/`max` bounds",
+    )
+    target: enums.GraphTarget | None = strawberry.field(
+        default=None,
+        description="(GRAPH) Which row set the rule hides (default NODE). A hidden node takes its glyphs and its outgoing segments with it; an EDGE rule hides segments only, each tested by its start node's value",
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="Lower bound, inclusive. For a measured value. Omit for an open lower end",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="Upper bound, inclusive. For a measured value. Omit for an open upper end",
+    )
+    values: list[str] | None = strawberry.field(
+        default=None,
+        description="The values that match, as strings. For a categorical COLUMN only -- a sparse slice and a graph attribute are measured, where a value set would impose categories an ordered value does not have",
+    )
+    exclude: bool = strawberry.field(
+        default=False,
+        description="Whether the rule *removes* what it matches rather than keeping it. Inverts the whole rule, bounds and values alike",
+    )
+    label: str | None = strawberry.field(
+        default=None,
+        description="What to call this filter in a picker, e.g. 'Trunk only'. Two entries may share an attribute -- 'twigs' and 'trunk' over one Strahler order are two different rules -- and this is what tells them apart",
+    )
+    join_path: list[JoinStepInput] = strawberry.field(
+        default_factory=list, description=_JOIN_PATH_DESCRIPTION
+    )
 
 
 _LABEL_COLOR_BYS_DESCRIPTION = (
@@ -834,18 +1245,50 @@ class LabelRenderInput:
     `core.mutations.mesh_layer` asked for exactly this convention rather than inventing one for
     a single field; this is that convention, applied everywhere a null carries meaning."""
 
-    seed: int | None = strawberry.field(default=None, description="The seed of the hash mapping an id to its color. Changing it repaints every object, which is how two touching objects that happened to hash alike are separated (default 0)")
-    background: int | None = strawberry.field(default=None, description="The id drawn fully transparent -- the 'not an object' value (default 0)")
-    opacity: float | None = strawberry.field(default=None, description="Opacity applied to the colored ids within the layer, from 0 to 1 (default 1.0)")
-    contour: bool | None = strawberry.field(default=None, description="Whether objects are drawn as outlines rather than filled, so the data underneath stays visible (default false)")
-    contour_width: float | None = strawberry.field(default=None, description="The width of that outline, in pixels of the mask (default 1.0)")
-    selected: list[int] | None = strawberry.field(default=None, description="The ids singled out for emphasis. An empty list means nothing is selected, which is not the same as everything")
-    selection_color: list[int] | None = strawberry.field(default=strawberry.UNSET, description="The RGBA the selected ids take, overriding their hashed color: four components, each 0..255. Pass `null` to go back to the hashed colour; omit to leave it alone")
-    show_unselected: bool | None = strawberry.field(default=None, description="Whether ids outside the selection still render. False isolates the selection (default true)")
-    color_bys: list[LabelColorByInput] | None = strawberry.field(default=None, description=_LABEL_COLOR_BYS_DESCRIPTION)
-    active_color_by: int | None = strawberry.field(default=strawberry.UNSET, description=_LABEL_ACTIVE_COLOR_BY_DESCRIPTION)
-    filter_bys: list[LabelFilterByInput] | None = strawberry.field(default=None, description=_LABEL_FILTER_BYS_DESCRIPTION)
-    active_filter_bys: list[int] | None = strawberry.field(default=None, description=_LABEL_ACTIVE_FILTER_BYS_DESCRIPTION)
+    seed: int | None = strawberry.field(
+        default=None,
+        description="The seed of the hash mapping an id to its color. Changing it repaints every object, which is how two touching objects that happened to hash alike are separated (default 0)",
+    )
+    background: int | None = strawberry.field(
+        default=None,
+        description="The id drawn fully transparent -- the 'not an object' value (default 0)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Opacity applied to the colored ids within the layer, from 0 to 1 (default 1.0)",
+    )
+    contour: bool | None = strawberry.field(
+        default=None,
+        description="Whether objects are drawn as outlines rather than filled, so the data underneath stays visible (default false)",
+    )
+    contour_width: float | None = strawberry.field(
+        default=None,
+        description="The width of that outline, in pixels of the mask (default 1.0)",
+    )
+    selected: list[int] | None = strawberry.field(
+        default=None,
+        description="The ids singled out for emphasis. An empty list means nothing is selected, which is not the same as everything",
+    )
+    selection_color: list[int] | None = strawberry.field(
+        default=strawberry.UNSET,
+        description="The RGBA the selected ids take, overriding their hashed color: four components, each 0..255. Pass `null` to go back to the hashed colour; omit to leave it alone",
+    )
+    show_unselected: bool | None = strawberry.field(
+        default=None,
+        description="Whether ids outside the selection still render. False isolates the selection (default true)",
+    )
+    color_bys: list[LabelColorByInput] | None = strawberry.field(
+        default=None, description=_LABEL_COLOR_BYS_DESCRIPTION
+    )
+    active_color_by: int | None = strawberry.field(
+        default=strawberry.UNSET, description=_LABEL_ACTIVE_COLOR_BY_DESCRIPTION
+    )
+    filter_bys: list[LabelFilterByInput] | None = strawberry.field(
+        default=None, description=_LABEL_FILTER_BYS_DESCRIPTION
+    )
+    active_filter_bys: list[int] | None = strawberry.field(
+        default=None, description=_LABEL_ACTIVE_FILTER_BYS_DESCRIPTION
+    )
 
     def to_pydantic(self) -> LabelRenderInputModel:
         """Drop what the caller did not name, so `model_fields_set` records what it did."""
@@ -863,7 +1306,11 @@ class LabelRenderInput:
             "filter_bys": self.filter_bys,
             "active_filter_bys": self.active_filter_bys,
         }
-        data = {name: value for name, value in supplied.items() if value is not strawberry.UNSET}
+        data = {
+            name: value
+            for name, value in supplied.items()
+            if value is not strawberry.UNSET
+        }
         for name in ("color_bys", "filter_bys"):
             entries = data.get(name)
             if entries:

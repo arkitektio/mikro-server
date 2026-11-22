@@ -24,7 +24,6 @@ from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
 
-
 CREATE_SCENE = """
 mutation CreateScene($input: CreateSceneInput!) {
   createScene(input: $input) {
@@ -66,56 +65,109 @@ query LayerPaths($id: ID!) {
 """
 
 
-async def _adopt(ctx: HttpContext, system: "models.CoordinateSystem", name: str) -> dict:
-    result = await schema.execute(CREATE_SCENE, context_value=ctx, variable_values={"input": {"name": name, "coordinateSystem": str(system.pk)}})
+async def _adopt(
+    ctx: HttpContext, system: "models.CoordinateSystem", name: str
+) -> dict:
+    result = await schema.execute(
+        CREATE_SCENE,
+        context_value=ctx,
+        variable_values={"input": {"name": name, "coordinateSystem": str(system.pk)}},
+    )
     assert not result.errors, result.errors
     return result.data["createScene"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scene_over_a_datasets_intrinsic_grid_places_by_construction(authenticated_context: HttpContext):
+async def test_a_scene_over_a_datasets_intrinsic_grid_places_by_construction(
+    authenticated_context: HttpContext,
+):
     """Adopt the pixel grid itself: the dataset's layer is placed with no edge anywhere.
 
     An unsliced lens' space IS the world, so its path is empty and exact; a sliced
     lens is one fact hop away. Zero transformations exist in the graph throughout.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Bare")  # (c, y, x)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Bare"
+    )  # (c, y, x)
     full = await seed.create_lens(authenticated_context, dataset, slices=[])
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
 
     scene = await _adopt(authenticated_context, intrinsic, "PixelSpace")
     assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk)
-    assert [r["__typename"] for r in scene["worldCoordinateSystem"]["residents"]] == ["ArrayDataset", "DataArray"], "the scene roots in the space the dataset and its level 0 live in; the whole lens is the dataset's handle, not a second resident"
+    assert [r["__typename"] for r in scene["worldCoordinateSystem"]["residents"]] == [
+        "ArrayDataset",
+        "DataArray",
+    ], (
+        "the scene roots in the space the dataset and its level 0 live in; the whole lens is the dataset's handle, not a second resident"
+    )
 
     channel = await seed.channel_lens(authenticated_context, full)
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene["id"], "lens": str(channel.pk)}})
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": scene["id"], "lens": str(channel.pk)}},
+    )
     assert not made.errors, made.errors
 
-    sliced = await seed.channel_lens(authenticated_context, await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]))
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene["id"], "lens": str(sliced.pk)}})
+    sliced = await seed.channel_lens(
+        authenticated_context,
+        await seed.create_lens(
+            authenticated_context,
+            dataset,
+            slices=[{"axis": "y", "start": 8, "stop": 40}],
+        ),
+    )
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": scene["id"], "lens": str(sliced.pk)}},
+    )
     assert not made.errors, made.errors
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": scene["id"]})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": scene["id"]},
+    )
     assert not result.errors, result.errors
     full_layer, sliced_layer = result.data["scene"]["layers"]
 
     assert full_layer["placement"] == "PLACED"
     channel_system = await sync_to_async(lambda: str(channel.coordinate_system.pk))()
-    full_hops = [(step["transformation"]["input"]["id"], step["transformation"]["output"]["id"]) for step in full_layer["pathToWorld"]]
-    assert full_hops == [(channel_system, str(intrinsic.pk))], "one hop: the channel crop into the grid, which IS the world"
+    full_hops = [
+        (step["transformation"]["input"]["id"], step["transformation"]["output"]["id"])
+        for step in full_layer["pathToWorld"]
+    ]
+    assert full_hops == [(channel_system, str(intrinsic.pk))], (
+        "one hop: the channel crop into the grid, which IS the world"
+    )
 
     assert sliced_layer["placement"] == "PLACED"
     sliced_system = await sync_to_async(lambda: str(sliced.coordinate_system.pk))()
-    hops = [(step["transformation"]["input"]["id"], step["transformation"]["output"]["id"]) for step in sliced_layer["pathToWorld"]]
-    assert hops == [(sliced_system, str(intrinsic.pk))], "one hop: the lens' crop -- one channel of a strip -- into the grid it slices"
+    hops = [
+        (step["transformation"]["input"]["id"], step["transformation"]["output"]["id"])
+        for step in sliced_layer["pathToWorld"]
+    ]
+    assert hops == [(sliced_system, str(intrinsic.pk))], (
+        "one hop: the lens' crop -- one channel of a strip -- into the grid it slices"
+    )
 
-    assert await sync_to_async(models.Transformation.objects.filter(output=intrinsic, input__lenses__isnull=True).count)() == 0, "no registration was authored anywhere"
+    assert (
+        await sync_to_async(
+            models.Transformation.objects.filter(
+                output=intrinsic, input__lenses__isnull=True
+            ).count
+        )()
+        == 0
+    ), "no registration was authored anywhere"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_bootstrap_from_an_intrinsic_system_materializes_the_container(authenticated_context: HttpContext):
+async def test_bootstrap_from_an_intrinsic_system_materializes_the_container(
+    authenticated_context: HttpContext,
+):
     """createSceneFromCoordinateSystem over an owned root: the container becomes the layer, nothing is authored.
 
     This is the exact call that used to be refused with 'owned by a container, not an
@@ -125,24 +177,63 @@ async def test_bootstrap_from_an_intrinsic_system_materializes_the_container(aut
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     before = await sync_to_async(_authored_edges)()
 
-    result = await schema.execute(FROM_SYSTEM, context_value=authenticated_context, variable_values={"input": {"coordinateSystem": str(intrinsic.pk), "policy": {}}})
+    result = await schema.execute(
+        FROM_SYSTEM,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {"coordinateSystem": str(intrinsic.pk), "policy": {}}
+        },
+    )
     assert not result.errors, result.errors
     scene = result.data["createSceneFromCoordinateSystem"]
 
     assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk)
-    assert len(scene["layers"]) == 3, "the container's own data is the one candidate, and its three channels are three layers"
-    sourced = await sync_to_async(lambda: {layer.lens.dataset_id for layer in models.Layer.objects.filter(scene__pk=scene["id"]).prefetch_related("lens")})()
+    assert len(scene["layers"]) == 3, (
+        "the container's own data is the one candidate, and its three channels are three layers"
+    )
+    sourced = await sync_to_async(
+        lambda: {
+            layer.lens.dataset_id
+            for layer in models.Layer.objects.filter(
+                scene__pk=scene["id"]
+            ).prefetch_related("lens")
+        }
+    )()
     assert sourced == {dataset.pk}, "one source, however many layers it is drawn as"
-    landing = await sync_to_async(lambda: sorted(str(edge.pk) for edge in models.Transformation.objects.filter(output=intrinsic, input__lenses__isnull=False)))()
-    assert sorted(entry["id"] for entry in scene["worldCoordinateSystem"]["registrations"]) == landing and len(landing) == 3, "nothing was registered into the grid but the three channel crops' own edges: the data is in it by definition"
-    assert await sync_to_async(_authored_edges)() == before, "and the bootstrap authored no edge but the three channel lenses' own"
-    channels = await sync_to_async(lambda: sorted(_channel_of(layer) for layer in models.Layer.objects.filter(scene__pk=scene["id"])))()
-    assert channels == [0, 1, 2], "three single-channel lenses cut from the whole one, one per layer"
+    landing = await sync_to_async(
+        lambda: sorted(
+            str(edge.pk)
+            for edge in models.Transformation.objects.filter(
+                output=intrinsic, input__lenses__isnull=False
+            )
+        )
+    )()
+    assert (
+        sorted(entry["id"] for entry in scene["worldCoordinateSystem"]["registrations"])
+        == landing
+        and len(landing) == 3
+    ), (
+        "nothing was registered into the grid but the three channel crops' own edges: the data is in it by definition"
+    )
+    assert await sync_to_async(_authored_edges)() == before, (
+        "and the bootstrap authored no edge but the three channel lenses' own"
+    )
+    channels = await sync_to_async(
+        lambda: sorted(
+            _channel_of(layer)
+            for layer in models.Layer.objects.filter(scene__pk=scene["id"])
+        )
+    )()
+    assert channels == [0, 1, 2], (
+        "three single-channel lenses cut from the whole one, one per layer"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scene_over_a_calibration_renders_at_physical_scale(authenticated_context: HttpContext):
+async def test_a_scene_over_a_calibration_renders_at_physical_scale(
+    authenticated_context: HttpContext,
+):
     """Adopt the PHYSICAL space: the path is the calibration edge, forward, and nothing else.
 
     Nothing is minted and nothing is authored: pixel -> physical is the
@@ -163,27 +254,44 @@ async def test_a_scene_over_a_calibration_renders_at_physical_scale(authenticate
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
     scene = await _adopt(authenticated_context, physical, "PhysicalSpace")
-    assert scene["worldCoordinateSystem"]["residents"] == [], "a calibrated space holds nothing; the scene roots in a frame"
+    assert scene["worldCoordinateSystem"]["residents"] == [], (
+        "a calibrated space holds nothing; the scene roots in a frame"
+    )
 
     channel = await seed.channel_lens(authenticated_context, lens)
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene["id"], "lens": str(channel.pk)}})
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": scene["id"], "lens": str(channel.pk)}},
+    )
     assert not made.errors, made.errors
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": scene["id"]})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": scene["id"]},
+    )
     assert not result.errors, result.errors
     (layer,) = result.data["scene"]["layers"]
 
     assert layer["placement"] == "PLACED"
     intrinsic_id = await sync_to_async(lambda: str(dataset.coordinate_system.pk))()
-    hops = [(step["transformation"]["input"]["id"], step["transformation"]["output"]["id"]) for step in layer["pathToWorld"]]
+    hops = [
+        (step["transformation"]["input"]["id"], step["transformation"]["output"]["id"])
+        for step in layer["pathToWorld"]
+    ]
     channel_system = await sync_to_async(lambda: str(channel.coordinate_system.pk))()
-    assert hops == [(channel_system, intrinsic_id), (intrinsic_id, str(physical.pk))], "the channel crop into the grid, then the calibration edge"
+    assert hops == [(channel_system, intrinsic_id), (intrinsic_id, str(physical.pk))], (
+        "the channel crop into the grid, then the calibration edge"
+    )
     assert all(step["inverted"] is False for step in layer["pathToWorld"])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_only_the_containers_tree_composes_in_an_owned_space(authenticated_context: HttpContext):
+async def test_only_the_containers_tree_composes_in_an_owned_space(
+    authenticated_context: HttpContext,
+):
     """A derived child places through its fact chain; an unrelated dataset has no way in.
 
     Registrations land exclusively on SHARED spaces, so an owned root composes exactly
@@ -208,26 +316,52 @@ async def test_only_the_containers_tree_composes_in_an_owned_space(authenticated
     parent_intrinsic = await sync_to_async(derive)()
     scene_data = await _adopt(authenticated_context, parent_intrinsic, "ParentSpace")
 
-    child_lens = await seed.channel_lens(authenticated_context, await seed.create_lens(authenticated_context, child, slices=[]))
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_data["id"], "lens": str(child_lens.pk)}})
+    child_lens = await seed.channel_lens(
+        authenticated_context,
+        await seed.create_lens(authenticated_context, child, slices=[]),
+    )
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {"scene": scene_data["id"], "lens": str(child_lens.pk)}
+        },
+    )
     assert not made.errors, made.errors
 
-    stranger_lens = await seed.channel_lens(authenticated_context, await seed.create_lens(authenticated_context, stranger, slices=[]))
-    refused = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_data["id"], "lens": str(stranger_lens.pk)}})
-    assert refused.errors, "nothing relates the stranger to this space, so its layer is refused"
+    stranger_lens = await seed.channel_lens(
+        authenticated_context,
+        await seed.create_lens(authenticated_context, stranger, slices=[]),
+    )
+    refused = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {"scene": scene_data["id"], "lens": str(stranger_lens.pk)}
+        },
+    )
+    assert refused.errors, (
+        "nothing relates the stranger to this space, so its layer is refused"
+    )
 
     def placeable() -> set[int]:
-        return graph_logic.placeable_lens_dataset_ids(models.Scene.objects.get(pk=scene_data["id"]).world)
+        return graph_logic.placeable_lens_dataset_ids(
+            models.Scene.objects.get(pk=scene_data["id"]).world
+        )
 
     dataset_ids = await sync_to_async(placeable)()
     assert parent.pk in dataset_ids, "the container itself seeds the placeable set"
-    assert child.pk in dataset_ids, "its derivation child arrives through the fact chain"
+    assert child.pk in dataset_ids, (
+        "its derivation child arrives through the fact chain"
+    )
     assert stranger.pk not in dataset_ids
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_container_is_undeletable_while_a_scene_is_rooted_in_its_space(authenticated_context: HttpContext):
+async def test_the_container_is_undeletable_while_a_scene_is_rooted_in_its_space(
+    authenticated_context: HttpContext,
+):
     """The space a scene roots in is undeletable; the data that lives there is not.
 
     RFC-9 splits a guarantee that used to be one thing. `Scene.world` is still RESTRICT, so a
@@ -251,7 +385,9 @@ async def test_the_container_is_undeletable_while_a_scene_is_rooted_in_its_space
 
     # The dataset is not: it moves out, and the space stays for the scene that roots in it.
     await sync_to_async(dataset.delete)()
-    assert await sync_to_async(models.CoordinateSystem.objects.filter(pk=intrinsic.pk).exists)(), "the space outlives the data that lived in it"
+    assert await sync_to_async(
+        models.CoordinateSystem.objects.filter(pk=intrinsic.pk).exists
+    )(), "the space outlives the data that lived in it"
 
 
 # --- What a scene over a dataset's own space renders -------------------------------
@@ -279,7 +415,9 @@ query DatasetScenes($id: ID!) {
 
 def _authored_edges() -> int:
     """The edges somebody wrote: every one but a lens' own edge out of the space it owns, which is construction."""
-    crop_spaces = models.CoordinateSystem.objects.filter(lenses__isnull=False, datasets__isnull=True)
+    crop_spaces = models.CoordinateSystem.objects.filter(
+        lenses__isnull=False, datasets__isnull=True
+    )
     return models.Transformation.objects.exclude(input__in=crop_spaces).count()
 
 
@@ -296,7 +434,11 @@ def _channel_of(layer: models.Layer) -> int:
 
 def _components_of(layer: models.Layer) -> list[int]:
     """The dataset channels an RGB layer's three component lenses pin, red, green, blue."""
-    return [_channel_pinned(layer.red_lens_id), _channel_pinned(layer.green_lens_id), _channel_pinned(layer.blue_lens_id)]
+    return [
+        _channel_pinned(layer.red_lens_id),
+        _channel_pinned(layer.green_lens_id),
+        _channel_pinned(layer.blue_lens_id),
+    ]
 
 
 def _layer_of(dataset: models.ArrayDataset) -> models.Layer:
@@ -310,16 +452,22 @@ def _layers_of(dataset: models.ArrayDataset) -> list[models.Layer]:
     the plural is the normal case; `_layer_of` stays for the recipes that keep their
     channels together (RGB) or have none (LABEL).
     """
-    return list(models.Layer.objects.filter(lens__arraylens__dataset=dataset).order_by("order"))
+    return list(
+        models.Layer.objects.filter(lens__arraylens__dataset=dataset).order_by("order")
+    )
 
 
-async def _stage_in_own_grid(ctx: HttpContext, dataset: models.ArrayDataset, **policy) -> dict:
+async def _stage_in_own_grid(
+    ctx: HttpContext, dataset: models.ArrayDataset, **policy
+) -> dict:
     """A scene over the dataset's own pixel grid -- the replacement for the deleted bootstrap."""
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     result = await schema.execute(
         FROM_SYSTEM_GRAPH,
         context_value=ctx,
-        variable_values={"input": {"coordinateSystem": str(intrinsic.pk), "policy": policy}},
+        variable_values={
+            "input": {"coordinateSystem": str(intrinsic.pk), "policy": policy}
+        },
     )
     assert not result.errors, result.errors
     return result.data["createSceneFromCoordinateSystem"]
@@ -327,7 +475,9 @@ async def _stage_in_own_grid(ctx: HttpContext, dataset: models.ArrayDataset, **p
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_data_in_its_own_space_is_placed_exactly(authenticated_context: HttpContext):
+async def test_data_in_its_own_space_is_placed_exactly(
+    authenticated_context: HttpContext,
+):
     """The inversion the mirror world used to hide: an empty path is VALIDATED, not UNKNOWN.
 
     Staging an uncalibrated dataset used to mint a world under assumed micrometre units and
@@ -345,13 +495,19 @@ async def test_data_in_its_own_space_is_placed_exactly(authenticated_context: Ht
     assert len(scene["layers"]) == 3
     for layer in scene["layers"]:
         assert layer["placement"] == "PLACED"
-        assert len(layer["pathToWorld"]) == 1, "one hop: the channel crop into the grid, which IS the world"
-    assert await sync_to_async(_authored_edges)() == before, "and no edge was invented to say so -- the component lenses' own edges are construction, not claims"
+        assert len(layer["pathToWorld"]) == 1, (
+            "one hop: the channel crop into the grid, which IS the world"
+        )
+    assert await sync_to_async(_authored_edges)() == before, (
+        "and no edge was invented to say so -- the component lenses' own edges are construction, not claims"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_three_flat_channels_are_three_layers_not_a_photograph(authenticated_context: HttpContext):
+async def test_three_flat_channels_are_three_layers_not_a_photograph(
+    authenticated_context: HttpContext,
+):
     """The guess that had to go: three flat channels are three markers, not red/green/blue.
 
     Nothing about a 2D three-channel array says whether it is a photograph or a three-marker
@@ -360,21 +516,33 @@ async def test_three_flat_channels_are_three_layers_not_a_photograph(authenticat
     layer, where none of them could be hidden or dimmed on its own. So the inference is gone
     and the fluorescence default applies: a layer per channel.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Slide", shapes=[[3, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Slide", shapes=[[3, 64, 64]]
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset)
 
     layers = await sync_to_async(_layers_of)(dataset)
     assert len(layers) == 3
-    assert {layer.kind for layer in layers} == {enums.LayerKind.INTENSITY.value}, "three signals, three intensity layers -- not one RGB layer"
-    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [0, 1, 2]
-    assert [layer.colormap for layer in layers] == ["green", "magenta", "cyan"], "distinguishable hues, not red/green/blue"
+    assert {layer.kind for layer in layers} == {enums.LayerKind.INTENSITY.value}, (
+        "three signals, three intensity layers -- not one RGB layer"
+    )
+    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [
+        0,
+        1,
+        2,
+    ]
+    assert [layer.colormap for layer in layers] == ["green", "magenta", "cyan"], (
+        "distinguishable hues, not red/green/blue"
+    )
     assert {layer.blending for layer in layers} == {enums.Blending.ADDITIVE.value}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_rgb_photograph_is_stated_and_stays_one_layer(authenticated_context: HttpContext):
+async def test_an_rgb_photograph_is_stated_and_stays_one_layer(
+    authenticated_context: HttpContext,
+):
     """The recipe survives its inference: a caller who actually has a photograph says so.
 
     Red, green and blue are the colour components of one image, so this is the one recipe
@@ -382,7 +550,9 @@ async def test_an_rgb_photograph_is_stated_and_stays_one_layer(authenticated_con
     only mean something all on. `policy.kind` is where that is now stated, which is the
     trade: the guess is gone, the capability is not.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Photo", shapes=[[3, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Photo", shapes=[[3, 64, 64]]
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset, kind="RGB")
 
@@ -393,12 +563,16 @@ async def test_an_rgb_photograph_is_stated_and_stays_one_layer(authenticated_con
     assert layer.kind == enums.LayerKind.RGB.value
     assert layer.render_graph is None
     assert await sync_to_async(_components_of)(layer) == [0, 1, 2]
-    assert layer.blending == enums.Blending.NORMAL.value, "a photograph composites over the scene, it does not sum into it"
+    assert layer.blending == enums.Blending.NORMAL.value, (
+        "a photograph composites over the scene, it does not sum into it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_z_stack_infers_a_volume_and_each_channel_is_its_own_layer(authenticated_context: HttpContext):
+async def test_a_z_stack_infers_a_volume_and_each_channel_is_its_own_layer(
+    authenticated_context: HttpContext,
+):
     """Depth wins over channel count: a 3-channel confocal stack is a volume, not a photograph.
 
     And it is three volumes, one per channel: each channel gets its own layer, its own hue and
@@ -422,30 +596,42 @@ async def test_a_z_stack_infers_a_volume_and_each_channel_is_its_own_layer(authe
     # viewer turns on and off separately, not one thing with three parts.
     layers = await sync_to_async(_layers_of)(dataset)
     assert len(layers) == 3
-    assert [layer.order for layer in layers] == [0, 1, 2], "a deterministic stack, not three layers at index 0"
+    assert [layer.order for layer in layers] == [0, 1, 2], (
+        "a deterministic stack, not three layers at index 0"
+    )
 
     # A volume is an intensity layer with a projection, not a kind of its own: a projection
     # collapses z, it does not composite anything.
     assert {layer.kind for layer in layers} == {enums.LayerKind.INTENSITY.value}
-    assert {layer.projection_mode for layer in layers} == {enums.ProjectionMode.MIP.value}
+    assert {layer.projection_mode for layer in layers} == {
+        enums.ProjectionMode.MIP.value
+    }
 
     # Each layer draws exactly one channel, and no two draw the same one -- not red/green/blue:
     # these are fluorescence channels, in distinguishable hues.
-    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [0, 1, 2]
+    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [
+        0,
+        1,
+        2,
+    ]
     assert [layer.colormap for layer in layers] == ["green", "magenta", "cyan"]
     assert [layer.name for layer in layers] == ["channel 0", "channel 1", "channel 2"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_policy_names_the_recipe_inference_cannot_reach(authenticated_context: HttpContext):
+async def test_the_policy_names_the_recipe_inference_cannot_reach(
+    authenticated_context: HttpContext,
+):
     """LABEL is chosen, never inferred from structure -- and `policy.kind` is where it is chosen.
 
     Nothing about an array distinguishes a label map from an image, so inference reaches
     LABEL only through a derivation declared CATEGORIZED. An imported mask has no such
     derivation, and this is its one-call path.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Mask", axes=seed.YX_AXES, shapes=[[64, 64]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Mask", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset, kind="LABEL")
 
@@ -457,7 +643,9 @@ async def test_the_policy_names_the_recipe_inference_cannot_reach(authenticated_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_finds_its_scenes_by_walking_the_graph(authenticated_context: HttpContext):
+async def test_a_dataset_finds_its_scenes_by_walking_the_graph(
+    authenticated_context: HttpContext,
+):
     """`ArrayDataset.scenes` is a layers->lens->dataset walk, never a column.
 
     There is deliberately no `Scene.dataset` FK: which scenes show a dataset is already
@@ -466,23 +654,33 @@ async def test_a_dataset_finds_its_scenes_by_walking_the_graph(authenticated_con
     dataset = await seed.create_array_dataset(authenticated_context, "Shown")
     scene = await _stage_in_own_grid(authenticated_context, dataset)
 
-    result = await schema.execute(DATASET_SCENES, context_value=authenticated_context, variable_values={"id": str(dataset.pk)})
+    result = await schema.execute(
+        DATASET_SCENES,
+        context_value=authenticated_context,
+        variable_values={"id": str(dataset.pk)},
+    )
     assert not result.errors, result.errors
     assert [s["id"] for s in result.data["arrayDataset"]["scenes"]] == [scene["id"]]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unmappable_derivation_still_composes_over_its_own_space(authenticated_context: HttpContext):
+async def test_an_unmappable_derivation_still_composes_over_its_own_space(
+    authenticated_context: HttpContext,
+):
     """An UNMAPPABLE derivation denies correspondence with its *source*, not with its own space.
 
     A phasor-like reduction has no point correspondence with the image it came from, so no
     walk may cross that edge. It is still perfectly placeable in the space its own pixels
     live in -- by construction, with nothing authored either way.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Source", shapes=[[2, 64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Source", shapes=[[2, 64, 64]]
+    )
     source_lens = await seed.create_lens(authenticated_context, source)
-    derived = await seed.create_array_dataset(authenticated_context, "Phasorish", axes=seed.YX_AXES, shapes=[[64, 64]])
+    derived = await seed.create_array_dataset(
+        authenticated_context, "Phasorish", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
 
     def derivation() -> None:
         # `space`, not `coordinate_system`: an unsliced lens owns no system, its space
@@ -501,15 +699,23 @@ async def test_an_unmappable_derivation_still_composes_over_its_own_space(authen
     scene = await _stage_in_own_grid(authenticated_context, derived)
 
     (layer,) = scene["layers"]
-    assert layer["pathToWorld"] == [], "its own space places it; the refused edge is not on the way"
+    assert layer["pathToWorld"] == [], (
+        "its own space places it; the refused edge is not on the way"
+    )
     intrinsic = await sync_to_async(lambda: derived.intrinsic_coordinate_system)()
-    assert await models.Transformation.objects.filter(output=intrinsic).acount() == 0, "nothing was registered into the grid"
-    assert await models.Transformation.objects.filter(input=intrinsic, kind=enums.TransformKindChoices.UNMAPPABLE.value).aexists(), "and the derivation edge is untouched"
+    assert await models.Transformation.objects.filter(output=intrinsic).acount() == 0, (
+        "nothing was registered into the grid"
+    )
+    assert await models.Transformation.objects.filter(
+        input=intrinsic, kind=enums.TransformKindChoices.UNMAPPABLE.value
+    ).aexists(), "and the derivation edge is untouched"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_staging_a_physical_space_reaches_the_data_through_the_calibration(authenticated_context: HttpContext):
+async def test_staging_a_physical_space_reaches_the_data_through_the_calibration(
+    authenticated_context: HttpContext,
+):
     """The other half of the documented staging path: point the builder at a *physical* space.
 
     Over the intrinsic grid the builder takes its `residents_exist` branch -- the data is
@@ -531,21 +737,35 @@ async def test_staging_a_physical_space_reaches_the_data_through_the_calibration
     )
     before = await sync_to_async(_authored_edges)()
 
-    result = await schema.execute(FROM_SYSTEM_GRAPH, context_value=authenticated_context, variable_values={"input": {"coordinateSystem": str(physical.pk), "policy": {}}})
+    result = await schema.execute(
+        FROM_SYSTEM_GRAPH,
+        context_value=authenticated_context,
+        variable_values={"input": {"coordinateSystem": str(physical.pk), "policy": {}}},
+    )
     assert not result.errors, result.errors
     scene = result.data["createSceneFromCoordinateSystem"]
 
-    assert len(scene["layers"]) == 3, "one source reached through the calibration, drawn as one layer per channel"
+    assert len(scene["layers"]) == 3, (
+        "one source reached through the calibration, drawn as one layer per channel"
+    )
     for layer in scene["layers"]:
         assert layer["placement"] == "PLACED"
-        assert len(layer["pathToWorld"]) == 2, "the channel crop into the grid, then the calibration edge -- the data renders at physical scale"
-    assert await sync_to_async(_authored_edges)() == before, "and nothing was authored to make that true, beyond the channel crops' own edges"
+        assert len(layer["pathToWorld"]) == 2, (
+            "the channel crop into the grid, then the calibration edge -- the data renders at physical scale"
+        )
+    assert await sync_to_async(_authored_edges)() == before, (
+        "and nothing was authored to make that true, beyond the channel crops' own edges"
+    )
 
 
-def _label_channels(dataset: models.ArrayDataset, axis: str, labels: dict[int, str]) -> None:
+def _label_channels(
+    dataset: models.ArrayDataset, axis: str, labels: dict[int, str]
+) -> None:
     """Record what ingest would have recorded: one ChannelLabel spoke per named channel."""
     for index, label in labels.items():
-        anchor = models.CoordinateAnchor.objects.create(dataset=dataset, coordinates={axis: index})
+        anchor = models.CoordinateAnchor.objects.create(
+            dataset=dataset, coordinates={axis: index}
+        )
         models.ChannelLabel.objects.create(anchor=anchor, label=label)
 
 
@@ -579,11 +799,20 @@ async def test_every_channel_becomes_its_own_layer(authenticated_context: HttpCo
     assert len(scene["layers"]) == 4, "one layer per channel"
 
     layers = await sync_to_async(_layers_of)(dataset)
-    assert [layer.order for layer in layers] == [0, 1, 2, 3], "a deterministic stack, not four layers at index 0"
-    assert len({layer.lens_id for layer in layers}) == 4, "four single-channel lenses cut from the one whole lens: a channel is a selection, and a selection is a lens"
+    assert [layer.order for layer in layers] == [0, 1, 2, 3], (
+        "a deterministic stack, not four layers at index 0"
+    )
+    assert len({layer.lens_id for layer in layers}) == 4, (
+        "four single-channel lenses cut from the one whole lens: a channel is a selection, and a selection is a lens"
+    )
 
     assert {layer.kind for layer in layers} == {enums.LayerKind.INTENSITY.value}
-    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [0, 1, 2, 3], "each layer draws its own channel"
+    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [
+        0,
+        1,
+        2,
+        3,
+    ], "each layer draws its own channel"
 
     # The named channels are drawn as what they are -- DAPI blue, GFP green -- and only the
     # unnamed two fall through to the index cycle. The hue used to come from the index for
@@ -604,13 +833,17 @@ async def test_every_channel_becomes_its_own_layer(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_single_channel_dataset_is_still_one_layer(authenticated_context: HttpContext):
+async def test_a_single_channel_dataset_is_still_one_layer(
+    authenticated_context: HttpContext,
+):
     """Splitting per channel is not "one layer per anything": one channel is one layer, in grey.
 
     The degenerate case an `enumerate(range(channels))` loop gets wrong twice -- a dataset with
     no channel axis at all has zero channels and must still draw.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Brightfield", axes=seed.YX_AXES, shapes=[[64, 64]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Brightfield", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
 
     scene = await _stage_in_own_grid(authenticated_context, dataset)
 
@@ -629,14 +862,27 @@ async def test_a_single_channel_dataset_is_still_one_layer(authenticated_context
 # ---------------------------------------------------------------------------
 
 
-def _record_histograms(dataset: models.ArrayDataset, axis: str, windows: dict[int, tuple[float, float]]) -> None:
+def _record_histograms(
+    dataset: models.ArrayDataset, axis: str, windows: dict[int, tuple[float, float]]
+) -> None:
     """Record what ingest would have recorded: a value histogram per channel."""
     for index, (low, high) in windows.items():
-        anchor = models.CoordinateAnchor.objects.create(dataset=dataset, coordinates={axis: index})
-        models.ValueHistogram.objects.create(anchor=anchor, histogram=[], bins=[], min=0.0, max=65535.0, p1=low, p99=high)
+        anchor = models.CoordinateAnchor.objects.create(
+            dataset=dataset, coordinates={axis: index}
+        )
+        models.ValueHistogram.objects.create(
+            anchor=anchor, histogram=[], bins=[], min=0.0, max=65535.0, p1=low, p99=high
+        )
 
 
-def _link_source_file(dataset: models.ArrayDataset, ctx: HttpContext, *, name: str, content_type: str | None, direction=enums.FileLinkDirectionChoices.SOURCE) -> models.File:
+def _link_source_file(
+    dataset: models.ArrayDataset,
+    ctx: HttpContext,
+    *,
+    name: str,
+    content_type: str | None,
+    direction=enums.FileLinkDirectionChoices.SOURCE,
+) -> models.File:
     """The file a converter read to write these arrays -- or, for RENDITION, the one it wrote out of them."""
     file = models.File.objects.create(
         name=name,
@@ -644,13 +890,21 @@ def _link_source_file(dataset: models.ArrayDataset, ctx: HttpContext, *, name: s
         organization=ctx.request.organization,
         membership=ctx.request.membership,
     )
-    models.FileLink.objects.create(file=file, dataset=dataset, direction=direction.value, organization=ctx.request.organization, creator=ctx.request.user)
+    models.FileLink.objects.create(
+        file=file,
+        dataset=dataset,
+        direction=direction.value,
+        organization=ctx.request.organization,
+        creator=ctx.request.user,
+    )
     return file
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_channels_named_red_green_blue_are_inferred_as_one_photograph(authenticated_context: HttpContext):
+async def test_channels_named_red_green_blue_are_inferred_as_one_photograph(
+    authenticated_context: HttpContext,
+):
     """The evidence that shape could never be: a converter that named the components.
 
     Three channels *called* red, green and blue are the three components of one picture --
@@ -658,8 +912,12 @@ async def test_channels_named_red_green_blue_are_inferred_as_one_photograph(auth
     is inferred here, without reintroducing the guess: the same array with no labels is still
     three intensity layers (see the test above).
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Snapshot", shapes=[[3, 64, 64]])
-    await sync_to_async(_label_channels)(dataset, "c", {0: "Red", 1: "Green", 2: "Blue"})
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Snapshot", shapes=[[3, 64, 64]]
+    )
+    await sync_to_async(_label_channels)(
+        dataset, "c", {0: "Red", 1: "Green", 2: "Blue"}
+    )
 
     scene = await _stage_in_own_grid(authenticated_context, dataset)
     assert len(scene["layers"]) == 1, "the components of one picture, not three signals"
@@ -672,15 +930,21 @@ async def test_channels_named_red_green_blue_are_inferred_as_one_photograph(auth
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_components_follow_the_labels_not_the_positions(authenticated_context: HttpContext):
+async def test_the_components_follow_the_labels_not_the_positions(
+    authenticated_context: HttpContext,
+):
     """A converter that wrote (blue, green, red) gets its picture back in the right colours.
 
     Hardcoding 0, 1, 2 renders such a file with the channels swapped -- a picture that looks
     plausible and is wrong, which is the worst kind. The labels say which is which and are the
     only reason this dataset was read as a photograph at all, so they decide the mapping too.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "BGR", shapes=[[3, 64, 64]])
-    await sync_to_async(_label_channels)(dataset, "c", {0: "Blue", 1: "Green", 2: "Red"})
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "BGR", shapes=[[3, 64, 64]]
+    )
+    await sync_to_async(_label_channels)(
+        dataset, "c", {0: "Blue", 1: "Green", 2: "Red"}
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset)
 
@@ -691,34 +955,52 @@ async def test_the_components_follow_the_labels_not_the_positions(authenticated_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_arrays_read_out_of_a_png_are_inferred_as_a_photograph(authenticated_context: HttpContext):
+async def test_arrays_read_out_of_a_png_are_inferred_as_a_photograph(
+    authenticated_context: HttpContext,
+):
     """A source link to a picture format is the converter saying it read a picture.
 
     Recorded at ingest, by the thing that actually knows -- which is exactly what the shape
     of a three-channel array is not.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Scan", shapes=[[3, 64, 64]])
-    await sync_to_async(_link_source_file)(dataset, authenticated_context, name="field.png", content_type="image/png")
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Scan", shapes=[[3, 64, 64]]
+    )
+    await sync_to_async(_link_source_file)(
+        dataset, authenticated_context, name="field.png", content_type="image/png"
+    )
 
     scene = await _stage_in_own_grid(authenticated_context, dataset)
     assert len(scene["layers"]) == 1
 
     layer = await sync_to_async(_layer_of)(dataset)
     assert layer.kind == enums.LayerKind.RGB.value
-    assert await sync_to_async(_components_of)(layer) == [0, 1, 2], "unlabelled components fall back to position"
+    assert await sync_to_async(_components_of)(layer) == [0, 1, 2], (
+        "unlabelled components fall back to position"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_png_exported_from_an_acquisition_proves_nothing(authenticated_context: HttpContext):
+async def test_a_png_exported_from_an_acquisition_proves_nothing(
+    authenticated_context: HttpContext,
+):
     """Direction is the whole meaning of the link, and a preview must not rewrite its source.
 
     A PNG *written from* a three-marker acquisition says someone exported a picture of it.
     Read as evidence, every dataset anyone ever snapshotted would turn into a photograph and
     lose its per-channel layers.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Acquired", shapes=[[3, 64, 64]])
-    await sync_to_async(_link_source_file)(dataset, authenticated_context, name="preview.png", content_type="image/png", direction=enums.FileLinkDirectionChoices.RENDITION)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Acquired", shapes=[[3, 64, 64]]
+    )
+    await sync_to_async(_link_source_file)(
+        dataset,
+        authenticated_context,
+        name="preview.png",
+        content_type="image/png",
+        direction=enums.FileLinkDirectionChoices.RENDITION,
+    )
 
     scene = await _stage_in_own_grid(authenticated_context, dataset)
     assert len(scene["layers"]) == 3, "three signals, exported once"
@@ -731,8 +1013,15 @@ async def test_a_png_exported_from_an_acquisition_proves_nothing(authenticated_c
 @pytest.mark.asyncio
 async def test_a_czi_is_not_a_photograph(authenticated_context: HttpContext):
     """The negative that keeps the media-type list honest: an acquisition format decides nothing."""
-    dataset = await seed.create_array_dataset(authenticated_context, "Confocal", shapes=[[3, 64, 64]])
-    await sync_to_async(_link_source_file)(dataset, authenticated_context, name="stack.czi", content_type="application/octet-stream")
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Confocal", shapes=[[3, 64, 64]]
+    )
+    await sync_to_async(_link_source_file)(
+        dataset,
+        authenticated_context,
+        name="stack.czi",
+        content_type="application/octet-stream",
+    )
 
     scene = await _stage_in_own_grid(authenticated_context, dataset)
     assert len(scene["layers"]) == 3
@@ -740,7 +1029,9 @@ async def test_a_czi_is_not_a_photograph(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_brightfield_channel_sits_under_the_fluorescence_and_does_not_sum_into_it(authenticated_context: HttpContext):
+async def test_a_brightfield_channel_sits_under_the_fluorescence_and_does_not_sum_into_it(
+    authenticated_context: HttpContext,
+):
     """Transmitted light is not a marker, and additively blending it washes the scene out.
 
     Brightfield is the sample lit from behind -- an opaque picture of the field. Summed with
@@ -752,10 +1043,16 @@ async def test_a_brightfield_channel_sits_under_the_fluorescence_and_does_not_su
     dataset = await seed.create_array_dataset(
         authenticated_context,
         "Widefield",
-        axes=[seed.axis("c", enums.AxisType.CHANNEL), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("c", enums.AxisType.CHANNEL),
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         shapes=[[3, 64, 64]],
     )
-    await sync_to_async(_label_channels)(dataset, "c", {0: "GFP", 1: "Brightfield", 2: "mCherry"})
+    await sync_to_async(_label_channels)(
+        dataset, "c", {0: "GFP", 1: "Brightfield", 2: "mCherry"}
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset)
 
@@ -763,14 +1060,26 @@ async def test_a_brightfield_channel_sits_under_the_fluorescence_and_does_not_su
     # Back to front: the picture of the field first, the two markers over it. The channel
     # indices are untouched -- only the stack order is.
     assert [layer.name for layer in layers] == ["Brightfield", "GFP", "mCherry"]
-    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [1, 0, 2], "the stack was reordered, not the data"
-    assert [layer.blending for layer in layers] == [enums.Blending.NORMAL.value, enums.Blending.ADDITIVE.value, enums.Blending.ADDITIVE.value]
-    assert [layer.colormap for layer in layers] == ["grey", "green", "red"], "a hue per fluorophore, and grey for the one that is not one"
+    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [
+        1,
+        0,
+        2,
+    ], "the stack was reordered, not the data"
+    assert [layer.blending for layer in layers] == [
+        enums.Blending.NORMAL.value,
+        enums.Blending.ADDITIVE.value,
+        enums.Blending.ADDITIVE.value,
+    ]
+    assert [layer.colormap for layer in layers] == ["grey", "green", "red"], (
+        "a hue per fluorophore, and grey for the one that is not one"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_contrast_limits_come_from_the_histogram_ingest_recorded(authenticated_context: HttpContext):
+async def test_contrast_limits_come_from_the_histogram_ingest_recorded(
+    authenticated_context: HttpContext,
+):
     """The numbers were already on the server; every viewer was working them out again.
 
     A ValueHistogram is recorded per channel precisely so a client can open the contrast
@@ -781,20 +1090,31 @@ async def test_contrast_limits_come_from_the_histogram_ingest_recorded(authentic
     dataset = await seed.create_array_dataset(
         authenticated_context,
         "Measured",
-        axes=[seed.axis("c", enums.AxisType.CHANNEL), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("c", enums.AxisType.CHANNEL),
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         shapes=[[2, 64, 64]],
     )
-    await sync_to_async(_record_histograms)(dataset, "c", {0: (12.0, 900.0), 1: (5.0, 4000.0)})
+    await sync_to_async(_record_histograms)(
+        dataset, "c", {0: (12.0, 900.0), 1: (5.0, 4000.0)}
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset)
 
     layers = await sync_to_async(_layers_of)(dataset)
-    assert [(layer.clim_min, layer.clim_max) for layer in layers] == [(12.0, 900.0), (5.0, 4000.0)]
+    assert [(layer.clim_min, layer.clim_max) for layer in layers] == [
+        (12.0, 900.0),
+        (5.0, 4000.0),
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_channel_with_no_histogram_keeps_its_null_limits(authenticated_context: HttpContext):
+async def test_a_channel_with_no_histogram_keeps_its_null_limits(
+    authenticated_context: HttpContext,
+):
     """Null is "nobody measured", and it is the answer a viewer's own auto-contrast needs.
 
     Filling it with a number derived from nothing would be a limit that looks recorded.
@@ -802,7 +1122,11 @@ async def test_a_channel_with_no_histogram_keeps_its_null_limits(authenticated_c
     dataset = await seed.create_array_dataset(
         authenticated_context,
         "Unmeasured",
-        axes=[seed.axis("c", enums.AxisType.CHANNEL), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("c", enums.AxisType.CHANNEL),
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         shapes=[[2, 64, 64]],
     )
     await sync_to_async(_record_histograms)(dataset, "c", {1: (5.0, 4000.0)})
@@ -810,20 +1134,31 @@ async def test_a_channel_with_no_histogram_keeps_its_null_limits(authenticated_c
     await _stage_in_own_grid(authenticated_context, dataset)
 
     layers = await sync_to_async(_layers_of)(dataset)
-    assert [(layer.clim_min, layer.clim_max) for layer in layers] == [(None, None), (5.0, 4000.0)]
+    assert [(layer.clim_min, layer.clim_max) for layer in layers] == [
+        (None, None),
+        (5.0, 4000.0),
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_rgb_layer_gets_one_window_wide_enough_for_all_three(authenticated_context: HttpContext):
+async def test_an_rgb_layer_gets_one_window_wide_enough_for_all_three(
+    authenticated_context: HttpContext,
+):
     """The components of one picture share one pair of limits, so the three windows become one.
 
     The widest of them: clipping a component shows up as a colour cast over the whole image,
     which is worse than a slightly flat one.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "Wide", shapes=[[3, 64, 64]])
-    await sync_to_async(_label_channels)(dataset, "c", {0: "Red", 1: "Green", 2: "Blue"})
-    await sync_to_async(_record_histograms)(dataset, "c", {0: (10.0, 200.0), 1: (4.0, 180.0), 2: (7.0, 250.0)})
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Wide", shapes=[[3, 64, 64]]
+    )
+    await sync_to_async(_label_channels)(
+        dataset, "c", {0: "Red", 1: "Green", 2: "Blue"}
+    )
+    await sync_to_async(_record_histograms)(
+        dataset, "c", {0: (10.0, 200.0), 1: (4.0, 180.0), 2: (7.0, 250.0)}
+    )
 
     await _stage_in_own_grid(authenticated_context, dataset)
 

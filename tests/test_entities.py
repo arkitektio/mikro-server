@@ -6,7 +6,6 @@ read `obj.kind` there, and did so unguarded: any `_entities` request for a folde
 (or a dataset, a file, ...) crashed with "'Folder' object has no attribute 'kind'".
 """
 
-
 import pytest
 from kante.context import HttpContext
 
@@ -26,7 +25,9 @@ query Entities($representations: [_Any!]!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_entities_resolves_types_beside_the_discriminated_ones(db, authenticated_context: HttpContext):
+async def test_entities_resolves_types_beside_the_discriminated_ones(
+    db, authenticated_context: HttpContext
+):
     folder = await seed.create_folder(authenticated_context, "federated")
     dataset = await seed.create_array_dataset(authenticated_context, "federated")
 
@@ -58,7 +59,9 @@ async def test_entities_does_not_answer_for_another_organizations_row(
     result = await schema.execute(
         ENTITIES,
         context_value=authenticated_context,
-        variable_values={"representations": [{"__typename": "Folder", "id": str(theirs.pk)}]},
+        variable_values={
+            "representations": [{"__typename": "Folder", "id": str(theirs.pk)}]
+        },
     )
 
     assert result.errors is None, result.errors

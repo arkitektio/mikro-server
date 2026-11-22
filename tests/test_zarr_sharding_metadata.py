@@ -16,13 +16,12 @@ import copy
 import json
 
 import pytest
-from authentikate.models import Organization
 from arkitekt_datalayer import base_models
 from arkitekt_datalayer.models import ZarrStore
+from authentikate.models import Organization
 
 # See test_upload_accounting for why the fixture is shared rather than copied.
 from tests.test_store_purging import buckets  # noqa: F401
-
 
 #: A sharded zarr v3 manifest as zarr-python writes it: the chunk grid carries the shard
 #: shape, the sole top-level codec is `sharding_indexed`, and the inner chunk shape sits in
@@ -32,7 +31,10 @@ SHARDED_MANIFEST = {
     "node_type": "array",
     "shape": [1, 1, 16, 4096, 4096],
     "data_type": "uint16",
-    "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [1, 1, 16, 2048, 2048]}},
+    "chunk_grid": {
+        "name": "regular",
+        "configuration": {"chunk_shape": [1, 1, 16, 2048, 2048]},
+    },
     "chunk_key_encoding": {"name": "default"},
     "fill_value": 0,
     "codecs": [
@@ -73,12 +75,18 @@ def organization(db) -> Organization:
     return org
 
 
-def granted_store_with_manifest(layer, organization: Organization, manifest: dict) -> ZarrStore:
+def granted_store_with_manifest(
+    layer, organization: Organization, manifest: dict
+) -> ZarrStore:
     """Mint an upload grant and put the given manifest at the store's prefix."""
-    grant = layer.generate_zarr_upload_grant(organization.id, base_models.RequestZarrUploadInput())
+    grant = layer.generate_zarr_upload_grant(
+        organization.id, base_models.RequestZarrUploadInput()
+    )
     store = ZarrStore.objects.get(id=grant.store)
     bucket = layer.get_bucket_config("zarr").bucket
-    layer._s3.put_object(Bucket=bucket, Key=f"{store.key}/zarr.json", Body=json.dumps(manifest).encode())
+    layer._s3.put_object(
+        Bucket=bucket, Key=f"{store.key}/zarr.json", Body=json.dumps(manifest).encode()
+    )
     return store
 
 
@@ -108,7 +116,9 @@ def test_a_finished_sharded_upload_splits_chunks_from_shards(buckets, organizati
     consumer of the row plans reads against 128 MiB objects it cannot decode."""
     store = granted_store_with_manifest(buckets, organization, SHARDED_MANIFEST)
 
-    buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+    buckets.finish_zarr_upload(
+        organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk))
+    )
 
     store.refresh_from_db()
     assert store.populated is True
@@ -123,7 +133,9 @@ def test_an_unsharded_upload_keeps_todays_shape(buckets, organization):  # noqa:
     """Regression: the split must not disturb the unsharded path."""
     store = granted_store_with_manifest(buckets, organization, UNSHARDED_MANIFEST)
 
-    buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+    buckets.finish_zarr_upload(
+        organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk))
+    )
 
     store.refresh_from_db()
     assert store.populated is True
@@ -137,13 +149,23 @@ def test_an_unsharded_upload_keeps_todays_shape(buckets, organization):  # noqa:
         # An extra top-level codec after sharding: the reader unwraps codecs[0] and
         # refuses a pipeline with anything beside it.
         (
-            {**copy.deepcopy(SHARDED_MANIFEST), "codecs": copy.deepcopy(SHARDED_MANIFEST["codecs"]) + [{"name": "crc32c"}]},
+            {
+                **copy.deepcopy(SHARDED_MANIFEST),
+                "codecs": copy.deepcopy(SHARDED_MANIFEST["codecs"])
+                + [{"name": "crc32c"}],
+            },
             "sole top-level codec",
         ),
         # Sharding at position 1 (behind a transpose) is permitted by the spec but not
         # by the reader — and it would also flip the chunks/shards split undetected.
         (
-            {**copy.deepcopy(SHARDED_MANIFEST), "codecs": [{"name": "transpose", "configuration": {"order": [0, 1, 2, 3, 4]}}] + copy.deepcopy(SHARDED_MANIFEST["codecs"])},
+            {
+                **copy.deepcopy(SHARDED_MANIFEST),
+                "codecs": [
+                    {"name": "transpose", "configuration": {"order": [0, 1, 2, 3, 4]}}
+                ]
+                + copy.deepcopy(SHARDED_MANIFEST["codecs"]),
+            },
             "sole top-level codec",
         ),
         # A shard that is not an exact multiple of the inner chunk has no well-defined index grid.
@@ -152,21 +174,42 @@ def test_an_unsharded_upload_keeps_todays_shape(buckets, organization):  # noqa:
         (sharded_variant(chunk_shape=[4, 512, 512]), "rank"),
         # Nested sharding.
         (
-            sharded_variant(codecs=[{"name": "sharding_indexed", "configuration": {"chunk_shape": [1, 1, 2, 256, 256], "codecs": []}}]),
+            sharded_variant(
+                codecs=[
+                    {
+                        "name": "sharding_indexed",
+                        "configuration": {
+                            "chunk_shape": [1, 1, 2, 256, 256],
+                            "codecs": [],
+                        },
+                    }
+                ]
+            ),
             "Nested",
         ),
         # An index location the reader does not know.
         (sharded_variant(index_location="middle"), "index_location"),
     ],
-    ids=["extra-top-level-codec", "sharding-not-first", "non-multiple-shard", "rank-mismatch", "nested-sharding", "bad-index-location"],
+    ids=[
+        "extra-top-level-codec",
+        "sharding-not-first",
+        "non-multiple-shard",
+        "rank-mismatch",
+        "nested-sharding",
+        "bad-index-location",
+    ],
 )
-def test_an_unreadable_sharding_layout_fails_the_finish(buckets, organization, manifest, complaint):  # noqa: F811
+def test_an_unreadable_sharding_layout_fails_the_finish(
+    buckets, organization, manifest, complaint
+):  # noqa: F811
     """The finish is the last moment the platform can refuse a store the frontend
     cannot read; after it, the store row looks exactly like a working one."""
     store = granted_store_with_manifest(buckets, organization, manifest)
 
     with pytest.raises(ValueError, match=complaint):
-        buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+        buckets.finish_zarr_upload(
+            organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk))
+        )
 
     store.refresh_from_db()
     assert store.populated is False

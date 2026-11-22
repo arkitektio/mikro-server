@@ -12,14 +12,17 @@ import strawberry
 from kante.types import Info
 from strawberry_django.pagination import OffsetPaginationInput
 
-from core import filters as core_filters
 from core import enums, models, types
+from core import filters as core_filters
 from core.logic import column_options as column_options_logic
 from core.scoping import get_for_org
 from core.utils import paginate_list
 
 
-def _matches(spec: column_options_logic.ColumnOptionSpec, filters: "core_filters.ColumnOptionFilter") -> bool:
+def _matches(
+    spec: column_options_logic.ColumnOptionSpec,
+    filters: "core_filters.ColumnOptionFilter",
+) -> bool:
     """Whether one option survives the narrowings the caller asked for."""
     if filters.direct_only and spec.join_path:
         return False
@@ -27,15 +30,24 @@ def _matches(spec: column_options_logic.ColumnOptionSpec, filters: "core_filters
     # path merely passes through is not where anything is read from. Documented on the field,
     # because "involves this table" is the other plausible reading and the two disagree exactly
     # on the hopped options.
-    if filters.table is not None and (spec.table is None or str(spec.table.pk) != str(filters.table)):
+    if filters.table is not None and (
+        spec.table is None or str(spec.table.pk) != str(filters.table)
+    ):
         return False
     # A role is a property of a column, and a slice of a matrix has none -- so narrowing by role
     # excludes the sparse half rather than matching all of it. Filtering for what an option does
     # not have should return fewer options, never more.
-    if filters.roles is not None and (spec.column is None or spec.column.role not in {role.value for role in filters.roles}):
+    if filters.roles is not None and (
+        spec.column is None
+        or spec.column.role not in {role.value for role in filters.roles}
+    ):
         return False
     if filters.controls is not None:
-        control = enums.ColumnControl.MEASURE if spec.is_measure else enums.ColumnControl.CATEGORICAL
+        control = (
+            enums.ColumnControl.MEASURE
+            if spec.is_measure
+            else enums.ColumnControl.CATEGORICAL
+        )
         if control.value not in {choice.value for choice in filters.controls}:
             return False
     if filters.search:
@@ -85,7 +97,9 @@ def _narrow(
         specs = [spec for spec in specs if _matches(spec, filters)]
 
     if pagination is not None:
-        specs = paginate_list(specs, offset=pagination.offset or 0, limit=pagination.limit)
+        specs = paginate_list(
+            specs, offset=pagination.offset or 0, limit=pagination.limit
+        )
 
     return specs
 
@@ -114,17 +128,30 @@ def _network_options(
 
 def _control(spec: column_options_logic.ColumnOptionSpec) -> "enums.ColumnControl":
     """Which control a column admits, from the one frozenset the write path enforces."""
-    return enums.ColumnControl.MEASURE if spec.is_measure else enums.ColumnControl.CATEGORICAL
+    return (
+        enums.ColumnControl.MEASURE
+        if spec.is_measure
+        else enums.ColumnControl.CATEGORICAL
+    )
 
 
-def _join_path(spec: column_options_logic.ColumnOptionSpec) -> "list[types.ColumnOptionJoinStep]":
+def _join_path(
+    spec: column_options_logic.ColumnOptionSpec,
+) -> "list[types.ColumnOptionJoinStep]":
     """The hops that reach this column, as the client will pass them back."""
-    return [types.ColumnOptionJoinStep(table=table, column=column) for table, column in spec.join_path]
+    return [
+        types.ColumnOptionJoinStep(table=table, column=column)
+        for table, column in spec.join_path
+    ]
 
 
-def _mesh_system(info: Info, mesh_collection: strawberry.ID) -> "models.CoordinateSystem":
+def _mesh_system(
+    info: Info, mesh_collection: strawberry.ID
+) -> "models.CoordinateSystem":
     """The space a collection's FIELD edges leave from, scoped to the caller's org."""
-    return column_options_logic.mesh_collection_system(get_for_org(models.MeshCollection, info, id=mesh_collection))
+    return column_options_logic.mesh_collection_system(
+        get_for_org(models.MeshCollection, info, id=mesh_collection)
+    )
 
 
 def _lens_system(info: Info, lens: strawberry.ID) -> "models.CoordinateSystem":
@@ -132,7 +159,9 @@ def _lens_system(info: Info, lens: strawberry.ID) -> "models.CoordinateSystem":
     return get_for_org(models.ArrayLens, info, id=lens).coordinate_system
 
 
-def _color_by_options(specs: "list[column_options_logic.ColumnOptionSpec]") -> "list[types.ColorByOption]":
+def _color_by_options(
+    specs: "list[column_options_logic.ColumnOptionSpec]",
+) -> "list[types.ColorByOption]":
     """Project the candidates into the colour picker's type."""
     return [
         types.ColorByOption(
@@ -149,7 +178,9 @@ def _color_by_options(specs: "list[column_options_logic.ColumnOptionSpec]") -> "
     ]
 
 
-def _filter_by_options(specs: "list[column_options_logic.ColumnOptionSpec]") -> "list[types.FilterByOption]":
+def _filter_by_options(
+    specs: "list[column_options_logic.ColumnOptionSpec]",
+) -> "list[types.FilterByOption]":
     """Project the same candidates into the filter picker's type."""
     return [
         types.FilterByOption(
@@ -185,7 +216,15 @@ def color_by_options(
     holds an `accessGrant` for that store and is reading the table anyway, so a scan here would
     duplicate a query the client can make locally at a cost this server cannot bound.
     """
-    return _color_by_options(_options(info, _mesh_system(info, mesh_collection), filters, pagination, max_join_depth))
+    return _color_by_options(
+        _options(
+            info,
+            _mesh_system(info, mesh_collection),
+            filters,
+            pagination,
+            max_join_depth,
+        )
+    )
 
 
 def filter_by_options(
@@ -203,7 +242,15 @@ def filter_by_options(
     a `min`/`max` bound here and a colormap there -- which is why it is a second name rather
     than a second walk.
     """
-    return _filter_by_options(_options(info, _mesh_system(info, mesh_collection), filters, pagination, max_join_depth))
+    return _filter_by_options(
+        _options(
+            info,
+            _mesh_system(info, mesh_collection),
+            filters,
+            pagination,
+            max_join_depth,
+        )
+    )
 
 
 def network_color_by_options(
@@ -224,7 +271,9 @@ def network_color_by_options(
     are keyed by mask-instance ids -- joins an object id cannot execute, so offering them
     would teach the picker refusals.
     """
-    return _color_by_options(_network_options(info, network_collection, filters, pagination, max_join_depth))
+    return _color_by_options(
+        _network_options(info, network_collection, filters, pagination, max_join_depth)
+    )
 
 
 def network_filter_by_options(
@@ -241,7 +290,9 @@ def network_filter_by_options(
     per-node rule: bounds over Strahler order, degree or a radius hide individual nodes and
     segments, where a COLUMN or SPARSE rule keeps or drops whole objects.
     """
-    return _filter_by_options(_network_options(info, network_collection, filters, pagination, max_join_depth))
+    return _filter_by_options(
+        _network_options(info, network_collection, filters, pagination, max_join_depth)
+    )
 
 
 def label_color_by_options(
@@ -262,7 +313,9 @@ def label_color_by_options(
     from and what the boundary resolves the system through -- asking with the dataset would mean
     the picker and the mutation could disagree about which space is in play.
     """
-    return _color_by_options(_options(info, _lens_system(info, lens), filters, pagination, max_join_depth))
+    return _color_by_options(
+        _options(info, _lens_system(info, lens), filters, pagination, max_join_depth)
+    )
 
 
 def label_filter_by_options(
@@ -278,4 +331,6 @@ def label_filter_by_options(
     rule is being authored -- the same second-name-not-second-walk that pairs `filterByOptions`
     with `colorByOptions` over a collection.
     """
-    return _filter_by_options(_options(info, _lens_system(info, lens), filters, pagination, max_join_depth))
+    return _filter_by_options(
+        _options(info, _lens_system(info, lens), filters, pagination, max_join_depth)
+    )

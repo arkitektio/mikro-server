@@ -8,23 +8,22 @@ axis is read as geometry, and none of the intensity vocabulary (a channel,
 a gamma, a projection) survives that change -- exactly LABEL's argument.
 """
 
-from kante.types import Info
-import strawberry
-
-from core import types, models, enums
 import kante
+import strawberry
+from kante.types import Info
 from pydantic import BaseModel, field_validator, model_validator
 
-from core.logic import coords as coords_logic
+from core import enums, models, types
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha, assert_contrast_limits, assert_rgba
-from core.scoping import get_for_org
+from core.logic import coords as coords_logic
 from core.mutations.layer import (
     _create_flat_layer,
     _patch_layer_compositing,
     assert_kind,
     assert_renderable,
 )
+from core.scoping import get_for_org
 
 
 def assert_vector_axis(lens) -> str:
@@ -52,8 +51,14 @@ def assert_vector_axis(lens) -> str:
 
     components = lens.get_size_of_axis(render.vector)
     if components < 2 or components > 3:
-        what = "a scalar wearing a value axis -- use createIntensityLayer" if components < 2 else "a per-point matrix or feature vector, not an offset a glyph can draw"
-        raise ValueError(f"DISPLACEMENT axis '{render.vector}' has {components} positions, but a drawable vector has 2 or 3 components. {components} components is {what}.")
+        what = (
+            "a scalar wearing a value axis -- use createIntensityLayer"
+            if components < 2
+            else "a per-point matrix or feature vector, not an offset a glyph can draw"
+        )
+        raise ValueError(
+            f"DISPLACEMENT axis '{render.vector}' has {components} positions, but a drawable vector has 2 or 3 components. {components} components is {what}."
+        )
 
     spatial = 2 if render.z is None else 3
     if components > spatial:
@@ -68,13 +73,17 @@ def assert_vector_axis(lens) -> str:
 def _assert_glyph_stride(stride: int | None) -> None:
     """A stride of 0 samples nothing and a negative one is not a stride. Null stays the renderer's budget."""
     if stride is not None and stride < 1:
-        raise ValueError(f"glyphStride must be at least 1 (sample every voxel), got {stride}. Omit it to let the renderer pick a stride from its glyph budget.")
+        raise ValueError(
+            f"glyphStride must be at least 1 (sample every voxel), got {stride}. Omit it to let the renderer pick a stride from its glyph budget."
+        )
 
 
 def _assert_glyph_scale(scale: float | None) -> None:
     """A zero or negative scale draws nothing or draws every vector reversed -- neither is a scale."""
     if scale is not None and scale <= 0:
-        raise ValueError(f"glyphScale must be positive scene-units-per-magnitude-unit, got {scale}. Omit it to auto-normalize against the sampled maximum.")
+        raise ValueError(
+            f"glyphScale must be positive scene-units-per-magnitude-unit, got {scale}. Omit it to auto-normalize against the sampled maximum."
+        )
 
 
 class CreateVectorLayerInputModel(BaseModel):
@@ -106,21 +115,60 @@ class CreateVectorLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateVectorLayerInputModel, description="Create a vector layer drawing a vector-valued lens as glyphs")
+@kante.pydantic_input(
+    CreateVectorLayerInputModel,
+    description="Create a vector layer drawing a vector-valued lens as glyphs",
+)
 class CreateVectorLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the data. It must carry a DISPLACEMENT value axis of 2 or 3 positions -- which axis that is is derived from the axes, never chosen here")
-    glyph: enums.VectorGlyph | None = strawberry.field(default=None, description="How one sampled vector is drawn (default 'arrow')")
-    glyph_stride: int | None = strawberry.field(default=None, description="Sample every Nth voxel per spatial axis. Omit to let the renderer pick a stride from its own glyph budget")
-    glyph_scale: float | None = strawberry.field(default=None, description="Scene units drawn per unit of magnitude, in the component axis's unit. Omit to auto-normalize against the sampled maximum")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap applied over glyph magnitude (default 'viridis')")
-    color: list[int] | None = strawberry.field(default=None, description="A flat RGBA glyph colour instead of a magnitude colormap: four components, each 0..255. Overrides `colormap` where both are given")
-    clim_min: float | None = strawberry.field(default=None, description="Lower magnitude limit for the colormap window, as a vector LENGTH in the component axis's unit -- not a per-component value and not a normalized fraction")
-    clim_max: float | None = strawberry.field(default=None, description="Upper magnitude limit for the colormap window, as a vector length in the component axis's unit")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal': glyphs are geometry sitting over what is beneath them, not light to sum)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The ID of the lens providing the data. It must carry a DISPLACEMENT value axis of 2 or 3 positions -- which axis that is is derived from the axes, never chosen here"
+    )
+    glyph: enums.VectorGlyph | None = strawberry.field(
+        default=None, description="How one sampled vector is drawn (default 'arrow')"
+    )
+    glyph_stride: int | None = strawberry.field(
+        default=None,
+        description="Sample every Nth voxel per spatial axis. Omit to let the renderer pick a stride from its own glyph budget",
+    )
+    glyph_scale: float | None = strawberry.field(
+        default=None,
+        description="Scene units drawn per unit of magnitude, in the component axis's unit. Omit to auto-normalize against the sampled maximum",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap applied over glyph magnitude (default 'viridis')",
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="A flat RGBA glyph colour instead of a magnitude colormap: four components, each 0..255. Overrides `colormap` where both are given",
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower magnitude limit for the colormap window, as a vector LENGTH in the component axis's unit -- not a per-component value and not a normalized fraction",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper magnitude limit for the colormap window, as a vector length in the component axis's unit",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal': glyphs are geometry sitting over what is beneath them, not light to sum)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
 def create_vector_layer(info: Info, input: CreateVectorLayerInput) -> types.VectorLayer:
@@ -177,21 +225,56 @@ class UpdateVectorLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateVectorLayerInputModel, description="Update a vector layer's render settings. Every field is a patch: what is not sent keeps its current value")
+@kante.pydantic_input(
+    UpdateVectorLayerInputModel,
+    description="Update a vector layer's render settings. Every field is a patch: what is not sent keeps its current value",
+)
 class UpdateVectorLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the vector layer to update")
-    name: str | None = strawberry.field(default=None, description="A human-readable name for the layer")
-    glyph: enums.VectorGlyph | None = strawberry.field(default=None, description="How one sampled vector is drawn")
-    glyph_stride: int | None = strawberry.field(default=None, description="Sample every Nth voxel per spatial axis. Omitting this keeps the current stride -- there is no spelling here for 'back to the renderer's budget', because null already means 'unchanged'")
-    glyph_scale: float | None = strawberry.field(default=None, description="Scene units drawn per unit of magnitude. Omitting this keeps the current scale -- there is no spelling here for 'back to auto-normalize', because null already means 'unchanged'")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap applied over glyph magnitude")
-    color: list[int] | None = strawberry.field(default=None, description="A flat RGBA glyph colour, overriding the colormap: four components, each 0..255")
-    clim_min: float | None = strawberry.field(default=None, description="Lower magnitude limit for the colormap window, as a vector length in the component axis's unit")
-    clim_max: float | None = strawberry.field(default=None, description="Upper magnitude limit for the colormap window, as a vector length in the component axis's unit")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the vector layer to update"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="A human-readable name for the layer"
+    )
+    glyph: enums.VectorGlyph | None = strawberry.field(
+        default=None, description="How one sampled vector is drawn"
+    )
+    glyph_stride: int | None = strawberry.field(
+        default=None,
+        description="Sample every Nth voxel per spatial axis. Omitting this keeps the current stride -- there is no spelling here for 'back to the renderer's budget', because null already means 'unchanged'",
+    )
+    glyph_scale: float | None = strawberry.field(
+        default=None,
+        description="Scene units drawn per unit of magnitude. Omitting this keeps the current scale -- there is no spelling here for 'back to auto-normalize', because null already means 'unchanged'",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None, description="The colormap applied over glyph magnitude"
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="A flat RGBA glyph colour, overriding the colormap: four components, each 0..255",
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower magnitude limit for the colormap window, as a vector length in the component axis's unit",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper magnitude limit for the colormap window, as a vector length in the component axis's unit",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
 def update_vector_layer(info: Info, input: UpdateVectorLayerInput) -> types.VectorLayer:

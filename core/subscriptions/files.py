@@ -1,9 +1,10 @@
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from django.core.exceptions import PermissionDenied
 from kante.types import Info
-from core import models, types, channels
+
+from core import channels, models, types
 from core.scoping import aget_for_org, for_org
 
 

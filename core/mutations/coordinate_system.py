@@ -19,12 +19,12 @@ spatial graph with it.
 
 import datetime
 
+import kante
+import strawberry
 from django.db.models import Exists, OuterRef, Q
 from kante.types import Info
-import strawberry
 from pydantic import BaseModel, Field
 
-import kante
 from core import models, types
 from core.creation import CreationContext
 from core.inputs.coords import (
@@ -56,13 +56,26 @@ class CreateCoordinateSystemInput:
     """Input for creating a shared coordinate system and registering sources into it."""
 
     name: str = strawberry.field(description="The name of the shared coordinate system")
-    axes: list[PhysicalAxisInput] = strawberry.field(description="The space's axes, with their physical units. Sources registered into it are mapped onto these axes")
-    epoch: datetime.datetime | None = strawberry.field(default=None, description="Optional wall-clock instant the space's time axis has its origin at, so `wall_clock = epoch + t * unit`")
-    reference: str | None = strawberry.field(default=None, description="What frame this space *is*, so asking again finds it instead of minting a second one: get-or-create. A URI (`nifti:mni152`, `templateflow:MNI152NLin2009cAsym`) names a frame that means the same to everyone, so every caller in the organization gets the one space holding it; a plain key (`stage`) is the calling app's own. An existing space is returned and registered into as it is (its name kept), and refused if these axes or this epoch disagree with it")
-    registrations: list[RegistrationPathInput] = strawberry.field(default_factory=list, description="The sources to register into the space, each with the edge that places it. Each edge points from the source's own coordinate system to the shared space")
+    axes: list[PhysicalAxisInput] = strawberry.field(
+        description="The space's axes, with their physical units. Sources registered into it are mapped onto these axes"
+    )
+    epoch: datetime.datetime | None = strawberry.field(
+        default=None,
+        description="Optional wall-clock instant the space's time axis has its origin at, so `wall_clock = epoch + t * unit`",
+    )
+    reference: str | None = strawberry.field(
+        default=None,
+        description="What frame this space *is*, so asking again finds it instead of minting a second one: get-or-create. A URI (`nifti:mni152`, `templateflow:MNI152NLin2009cAsym`) names a frame that means the same to everyone, so every caller in the organization gets the one space holding it; a plain key (`stage`) is the calling app's own. An existing space is returned and registered into as it is (its name kept), and refused if these axes or this epoch disagree with it",
+    )
+    registrations: list[RegistrationPathInput] = strawberry.field(
+        default_factory=list,
+        description="The sources to register into the space, each with the edge that places it. Each edge points from the source's own coordinate system to the shared space",
+    )
 
 
-def create_coordinate_system(info: Info, input: CreateCoordinateSystemInput) -> types.CoordinateSystem:
+def create_coordinate_system(
+    info: Info, input: CreateCoordinateSystemInput
+) -> types.CoordinateSystem:
     """Create a shared coordinate system and author one edge per registered source into it."""
     model = input.to_pydantic()
 
@@ -71,15 +84,34 @@ def create_coordinate_system(info: Info, input: CreateCoordinateSystemInput) -> 
     resolved: list[tuple[models.CoordinateSystem, list[dict] | None, object]] = []
     for spec in model.registrations:
         source_system = coordinate_system_logic.resolve_source_system(
-            dataset=get_for_org(models.ArrayDataset, info, id=spec.dataset) if spec.dataset else None,
-            table_dataset=get_for_org(models.TableDataset, info, id=spec.table_dataset) if spec.table_dataset else None,
-            mesh_collection=get_for_org(models.MeshCollection, info, id=spec.mesh_collection) if spec.mesh_collection else None,
-            annotation_collection=get_for_org(models.AnnotationCollection, info, id=spec.annotation_collection) if spec.annotation_collection else None,
-            coordinate_system=get_for_org(models.CoordinateSystem, info, id=spec.coordinate_system) if spec.coordinate_system else None,
+            dataset=get_for_org(models.ArrayDataset, info, id=spec.dataset)
+            if spec.dataset
+            else None,
+            table_dataset=get_for_org(models.TableDataset, info, id=spec.table_dataset)
+            if spec.table_dataset
+            else None,
+            mesh_collection=get_for_org(
+                models.MeshCollection, info, id=spec.mesh_collection
+            )
+            if spec.mesh_collection
+            else None,
+            annotation_collection=get_for_org(
+                models.AnnotationCollection, info, id=spec.annotation_collection
+            )
+            if spec.annotation_collection
+            else None,
+            coordinate_system=get_for_org(
+                models.CoordinateSystem, info, id=spec.coordinate_system
+            )
+            if spec.coordinate_system
+            else None,
         )
         # Only a FIELD part names an array's system; every other member has no `parts` at
         # all, which is the union making the old "field on a SCALE" stray unrepresentable.
-        parts = graph_logic.resolve_part_fields(spec.transform.lower().parts if spec.transform else None, lambda id: get_for_org(models.CoordinateSystem, info, id=id))
+        parts = graph_logic.resolve_part_fields(
+            spec.transform.lower().parts if spec.transform else None,
+            lambda id: get_for_org(models.CoordinateSystem, info, id=id),
+        )
         resolved.append((source_system, parts, spec))
 
     return coordinate_system_logic.create_coordinate_system(
@@ -100,7 +132,11 @@ def _assert_shared(system: "models.CoordinateSystem", verb: str) -> None:
     edit of the data. A space nothing lives in is a pure reference frame and is nobody's but
     its author's.
     """
-    residents = [resident for relation in graph_logic.RESIDENT_RELATIONS for resident in getattr(system, relation).all()[:1]]
+    residents = [
+        resident
+        for relation in graph_logic.RESIDENT_RELATIONS
+        for resident in getattr(system, relation).all()[:1]
+    ]
     if residents:
         raise ValueError(
             f"Coordinate system {system.pk} cannot be {verb} directly: data lives in it "
@@ -122,13 +158,25 @@ class UpdateCoordinateSystemInputModel(BaseModel):
 class UpdateCoordinateSystemInput:
     """Input for updating a shared coordinate system."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the shared coordinate system to update")
-    name: str | None = strawberry.field(default=None, description="A new name for the space")
-    epoch: datetime.datetime | None = strawberry.field(default=None, description="A new wall-clock instant for the space's time axis to have its origin at, so `wall_clock = epoch + t * unit`")
-    reference: str | None = strawberry.field(default=None, description="A reference for a space that has none, so later get-or-creates find it (same URI-or-app-key rule as on create). Set once: a space that already has one, or a reference another space holds, is refused")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the shared coordinate system to update"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="A new name for the space"
+    )
+    epoch: datetime.datetime | None = strawberry.field(
+        default=None,
+        description="A new wall-clock instant for the space's time axis to have its origin at, so `wall_clock = epoch + t * unit`",
+    )
+    reference: str | None = strawberry.field(
+        default=None,
+        description="A reference for a space that has none, so later get-or-creates find it (same URI-or-app-key rule as on create). Set once: a space that already has one, or a reference another space holds, is refused",
+    )
 
 
-def update_coordinate_system(info: Info, input: UpdateCoordinateSystemInput) -> types.CoordinateSystem:
+def update_coordinate_system(
+    info: Info, input: UpdateCoordinateSystemInput
+) -> types.CoordinateSystem:
     """Rename a shared space, anchor its clock, or give it the reference it is found by.
 
     Only the fields that are the *space's* own description. Its axes are not here:
@@ -144,7 +192,9 @@ def update_coordinate_system(info: Info, input: UpdateCoordinateSystemInput) -> 
 
     # First, so a refused reference leaves the name and the epoch as they were.
     if model.reference is not None:
-        coordinate_system_logic.assign_reference(system, model.reference, CreationContext.from_info(info))
+        coordinate_system_logic.assign_reference(
+            system, model.reference, CreationContext.from_info(info)
+        )
 
     if model.name is not None:
         system.name = model.name
@@ -163,14 +213,21 @@ class DeleteCoordinateSystemInputModel(BaseModel):
     id: str = Field(description="The ID of the shared coordinate system to delete")
 
 
-@kante.pydantic_input(DeleteCoordinateSystemInputModel, description="Input for deleting a shared coordinate system by ID")
+@kante.pydantic_input(
+    DeleteCoordinateSystemInputModel,
+    description="Input for deleting a shared coordinate system by ID",
+)
 class DeleteCoordinateSystemInput:
     """Input for deleting a shared coordinate system by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the shared coordinate system to delete")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the shared coordinate system to delete"
+    )
 
 
-def delete_coordinate_system(info: Info, input: DeleteCoordinateSystemInput) -> strawberry.ID:
+def delete_coordinate_system(
+    info: Info, input: DeleteCoordinateSystemInput
+) -> strawberry.ID:
     """Delete an unused shared space. Only shared spaces can be deleted this way, and only empty ones.
 
     A guarded, explicit delete rather than a generic one: a generic delete on
@@ -195,9 +252,13 @@ def delete_coordinate_system(info: Info, input: DeleteCoordinateSystemInput) -> 
     # Both directions: an edge *into* the space is a registration of some data-tree, and one
     # *out of* it registers the space itself into a wider one. Transformation.input and
     # .output are both CASCADE, so either would vanish silently.
-    edges = models.Transformation.objects.filter(Q(input=system) | Q(output=system)).count()
+    edges = models.Transformation.objects.filter(
+        Q(input=system) | Q(output=system)
+    ).count()
     if edges:
-        raise ValueError(f"Coordinate system {system.pk} has {edges} transformation edge(s) and cannot be deleted: deleting it would delete them, and each is a registration someone authored. Delete them with deleteTransformation first.")
+        raise ValueError(
+            f"Coordinate system {system.pk} has {edges} transformation edge(s) and cannot be deleted: deleting it would delete them, and each is a registration someone authored. Delete them with deleteTransformation first."
+        )
 
     assert_can_delete(info, system, creator_owner)
     system.delete()
@@ -215,10 +276,14 @@ class ClearCoordinateSystemInputModel(BaseModel):
 class ClearCoordinateSystemInput:
     """Input for clearing a shared coordinate system of its registrations."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the shared coordinate system to clear")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the shared coordinate system to clear"
+    )
 
 
-def clear_coordinate_system(info: Info, input: ClearCoordinateSystemInput) -> list[strawberry.ID]:
+def clear_coordinate_system(
+    info: Info, input: ClearCoordinateSystemInput
+) -> list[strawberry.ID]:
     """Delete every registration into a shared space, returning the deleted edge ids.
 
     The bulk counterpart of one `deleteTransformation` per edge: it empties the space so
@@ -257,7 +322,9 @@ def delete_orphaned_coordinate_systems(info: Info) -> list[strawberry.ID]:
     nothing to fail on. Returns a list (possibly empty), unlike the single-ID deletes:
     the caller did not know the ids going in.
     """
-    touched = models.Transformation.objects.filter(Q(input=OuterRef("pk")) | Q(output=OuterRef("pk")))
+    touched = models.Transformation.objects.filter(
+        Q(input=OuterRef("pk")) | Q(output=OuterRef("pk"))
+    )
     orphans = (
         for_org(models.CoordinateSystem, info)
         # Derived from `CONTAINERS` rather than listed, for the reason `graph._UNINHABITED`

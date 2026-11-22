@@ -24,16 +24,31 @@ def this_image(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ARKITEKT_SERVICE", "mikro_server.contract")
 
 
-def test_it_says_what_it_needs_before_it_has_any_config(capsys: pytest.CaptureFixture[str]) -> None:
+def test_it_says_what_it_needs_before_it_has_any_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """``describe`` needs no config, and names the service."""
     assert cli.main(["describe"]) == 0
     said = json.loads(capsys.readouterr().out)
     assert said["contract"] == 2 and said["name"] == "mikro"
 
 
-def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_its_config_is_written_from_what_the_hub_says(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """The hub's facts in, this release's config out — one it starts on."""
-    assert cli.main(["render", "--facts", str(FACTS), "--overrides", str(tmp_path / "none.yaml")]) == 0, capsys.readouterr().err
+    assert (
+        cli.main(
+            [
+                "render",
+                "--facts",
+                str(FACTS),
+                "--overrides",
+                str(tmp_path / "none.yaml"),
+            ]
+        )
+        == 0
+    ), capsys.readouterr().err
 
     config = yaml.safe_load(capsys.readouterr().out)
     assert config["django"]["force_script_name"] == "mikro"
@@ -41,14 +56,21 @@ def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: py
     assert config["rekuest_hook"] == {"rekuest_url": "http://rekuest-takt:8080/rekuest"}
 
 
-def test_a_setting_this_release_does_not_read_is_refused_by_name(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_setting_this_release_does_not_read_is_refused_by_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """What the operator set is laid over; a key no setting claims stops the render."""
     overrides = tmp_path / "overrides.yaml"
     overrides.write_text(yaml.safe_dump({"django": {"debug": True}}), encoding="utf-8")
-    assert cli.main(["render", "--facts", str(FACTS), "--overrides", str(overrides)]) == 0
+    assert (
+        cli.main(["render", "--facts", str(FACTS), "--overrides", str(overrides)]) == 0
+    )
     assert yaml.safe_load(capsys.readouterr().out)["django"]["debug"] is True
 
     overrides.write_text(yaml.safe_dump({"django": {"debgu": True}}), encoding="utf-8")
-    assert cli.main(["render", "--facts", str(FACTS), "--overrides", str(overrides)]) == cli.REFUSED
+    assert (
+        cli.main(["render", "--facts", str(FACTS), "--overrides", str(overrides)])
+        == cli.REFUSED
+    )
     said = capsys.readouterr()
     assert said.out == "" and "django.debgu" in said.err

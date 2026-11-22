@@ -64,26 +64,49 @@ def labelled_anchors(container: object) -> list[models.CoordinateAnchor]:
     field = _ANCHOR_FIELD_BY_CONTAINER.get(type(container))
     if field is None:
         return []
-    query = models.CoordinateAnchor.objects.filter(**{field: container}).exclude(coordinates={}).select_related("position_label", "channel_label").order_by("pk")
+    query = (
+        models.CoordinateAnchor.objects.filter(**{field: container})
+        .exclude(coordinates={})
+        .select_related("position_label", "channel_label")
+        .order_by("pk")
+    )
     return [anchor for anchor in query if anchor_label(anchor) is not None]
 
 
-def holding_anchors(pinned: dict[str, int | float], anchors: Iterable[models.CoordinateAnchor]) -> list[models.CoordinateAnchor]:
+def holding_anchors(
+    pinned: dict[str, int | float], anchors: Iterable[models.CoordinateAnchor]
+) -> list[models.CoordinateAnchor]:
     """The labelled anchors that name a selection with these pins, most specific only, in the order of the pins' axes."""
     if not pinned:
         return []
     holding = [
         anchor
         for anchor in anchors
-        if isinstance(anchor.coordinates, dict) and anchor.coordinates and all(axis in pinned and pinned[axis] == value for axis, value in anchor.coordinates.items())
+        if isinstance(anchor.coordinates, dict)
+        and anchor.coordinates
+        and all(
+            axis in pinned and pinned[axis] == value
+            for axis, value in anchor.coordinates.items()
+        )
     ]
     keys = [frozenset(anchor.coordinates) for anchor in holding]
-    specific = [anchor for anchor, axes in zip(holding, keys) if not any(axes < other for other in keys)]
+    specific = [
+        anchor
+        for anchor, axes in zip(holding, keys)
+        if not any(axes < other for other in keys)
+    ]
     order = list(pinned)
-    return sorted(specific, key=lambda anchor: sorted(order.index(axis) for axis in anchor.coordinates))
+    return sorted(
+        specific,
+        key=lambda anchor: sorted(order.index(axis) for axis in anchor.coordinates),
+    )
 
 
-def compose(pinned: dict[str, int | float], anchors: Iterable[models.CoordinateAnchor], cut: str | None) -> str | None:
+def compose(
+    pinned: dict[str, int | float],
+    anchors: Iterable[models.CoordinateAnchor],
+    cut: str | None,
+) -> str | None:
     """The name: the holding labels in axis order, then the shape's, or None when nothing names the selection."""
     parts = [anchor_label(anchor) for anchor in holding_anchors(pinned, anchors)]
     if cut and cut.strip():
@@ -104,13 +127,21 @@ def named_axes(lens: models.Lens) -> set[str]:
     pinned = coords_logic.pins(real.selection)
     if not pinned:
         return set()
-    return {axis for anchor in holding_anchors(pinned, labelled_anchors(real.container)) for axis in anchor.coordinates}
+    return {
+        axis
+        for anchor in holding_anchors(pinned, labelled_anchors(real.container))
+        for axis in anchor.coordinates
+    }
 
 
 def _cut_names(lens_ids: Sequence[int]) -> dict[int, str]:
     """The name of the first shape each array lens was cut to, by lens id."""
     names: dict[int, str] = {}
-    for lens_id, name in models.LensCut.objects.filter(lens_id__in=lens_ids).order_by("created_at", "id").values_list("lens_id", "annotation__name"):
+    for lens_id, name in (
+        models.LensCut.objects.filter(lens_id__in=lens_ids)
+        .order_by("created_at", "id")
+        .values_list("lens_id", "annotation__name")
+    ):
         if lens_id not in names and name and name.strip():
             names[lens_id] = name
     return names
@@ -120,8 +151,16 @@ def resolve_name(lens: models.Lens) -> str | None:
     """What one lens is called now. Works on an unsaved row, which has no cut yet."""
     real = lens._real()
     pinned = coords_logic.pins(real.selection)
-    anchors = labelled_anchors(real.container) if pinned and type(real) in ANCHOR_FIELD else []
-    cut = _cut_names([real.pk]).get(real.pk) if real.pk is not None and isinstance(real, models.ArrayLens) else None
+    anchors = (
+        labelled_anchors(real.container)
+        if pinned and type(real) in ANCHOR_FIELD
+        else []
+    )
+    cut = (
+        _cut_names([real.pk]).get(real.pk)
+        if real.pk is not None and isinstance(real, models.ArrayLens)
+        else None
+    )
     return compose(pinned, anchors, cut)
 
 
@@ -146,14 +185,31 @@ def refresh_container(container: object, *, announce: bool = True) -> int:
     pinned = {lens.pk: coords_logic.pins(lens.selection) for lens in lenses}
     # An ingest writes its labels before any lens but the whole one exists: nothing pins, and
     # the anchors -- one per plane, perhaps, and this runs once per label -- are not read.
-    anchors = labelled_anchors(container) if kind in ANCHOR_FIELD and any(pinned.values()) else []
-    cuts = _cut_names([lens.pk for lens in lenses]) if kind is models.ArrayLens and lenses else {}
-    return sum(_store(lens, compose(pinned[lens.pk], anchors, cuts.get(lens.pk)), announce=announce) for lens in lenses)
+    anchors = (
+        labelled_anchors(container)
+        if kind in ANCHOR_FIELD and any(pinned.values())
+        else []
+    )
+    cuts = (
+        _cut_names([lens.pk for lens in lenses])
+        if kind is models.ArrayLens and lenses
+        else {}
+    )
+    return sum(
+        _store(
+            lens,
+            compose(pinned[lens.pk], anchors, cuts.get(lens.pk)),
+            announce=announce,
+        )
+        for lens in lenses
+    )
 
 
 def refresh_lenses(lens_ids: Iterable[int], *, announce: bool = True) -> int:
     """Name these array lenses again: a shape they were cut to was renamed, or a cut came or went."""
     changed = 0
-    for lens in models.ArrayLens.objects.filter(pk__in=list(lens_ids)).select_related("dataset"):
+    for lens in models.ArrayLens.objects.filter(pk__in=list(lens_ids)).select_related(
+        "dataset"
+    ):
         changed += _store(lens, resolve_name(lens), announce=announce)
     return changed

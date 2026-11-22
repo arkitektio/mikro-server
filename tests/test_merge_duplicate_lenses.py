@@ -18,30 +18,56 @@ from core.logic import graph as graph_logic
 from tests import seed
 
 
-def _legacy_sliced_lens(ctx: HttpContext, dataset: models.ArrayDataset, slices: list[dict]) -> models.ArrayLens:
+def _legacy_sliced_lens(
+    ctx: HttpContext, dataset: models.ArrayDataset, slices: list[dict]
+) -> models.ArrayLens:
     """A sliced lens exactly as `create_lens` wrote it before normalization: its system, its axes, its edge from the spelled starts."""
     creation = seed._creation(ctx)
-    system = models.CoordinateSystem.objects.create(name=f"{dataset.name}/lens", creator=creation.user, organization=creation.organization)
-    lens = models.ArrayLens.objects.create(dataset=dataset, coordinate_system=system, organization=dataset.organization, slices=slices)
+    system = models.CoordinateSystem.objects.create(
+        name=f"{dataset.name}/lens",
+        creator=creation.user,
+        organization=creation.organization,
+    )
+    lens = models.ArrayLens.objects.create(
+        dataset=dataset,
+        coordinate_system=system,
+        organization=dataset.organization,
+        slices=slices,
+    )
     graph_logic.create_pixel_axes(system, dataset.axes)
-    graph_logic.create_lens_edge(lens_system=system, parent_system=dataset.coordinate_system, dataset_axis_names=dataset.axis_names, slices=lens.slices_list, ctx=creation)
+    graph_logic.create_lens_edge(
+        lens_system=system,
+        parent_system=dataset.coordinate_system,
+        dataset_axis_names=dataset.axis_names,
+        slices=lens.slices_list,
+        ctx=creation,
+    )
     return lens
 
 
 async def _run(dry_run: bool = False) -> str:
     out = StringIO()
     args = ["--dry-run"] if dry_run else []
-    await sync_to_async(call_command)("merge_duplicate_lenses", *args, stdout=out, stderr=out)
+    await sync_to_async(call_command)(
+        "merge_duplicate_lenses", *args, stdout=out, stderr=out
+    )
     return out.getvalue()
 
 
 async def _lens_ids(dataset: models.ArrayDataset) -> list[int]:
-    return [pk async for pk in models.ArrayLens.objects.filter(dataset=dataset).order_by("pk").values_list("pk", flat=True)]
+    return [
+        pk
+        async for pk in models.ArrayLens.objects.filter(dataset=dataset)
+        .order_by("pk")
+        .values_list("pk", flat=True)
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(authenticated_context: HttpContext):
+async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image", shapes=[[3, 64, 64]])
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -51,15 +77,37 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
     # One crop, spelled three ways, as three `createLens` calls once wrote it. The second
     # spelling's edge was written from its negative start. The third's system has a
     # registration of its own, so it cannot be folded.
-    first = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": -56, "stop": 40, "step": None}])
-    second = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": 8, "stop": 40, "step": None}])
-    third = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": 8, "stop": -24, "step": None}])
-    layer_second = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=second)
-    layer_third = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=third)
-    elsewhere = await models.CoordinateSystem.objects.acreate(name="elsewhere", organization=ctx.request.organization)
-    await models.Transformation.objects.acreate(kind=enums.TransformKindChoices.TRANSLATION.value, input_id=third.coordinate_system_id, output=elsewhere, params={"translation": [0.0, 0.0, 0.0]}, organization=ctx.request.organization)
-    first_edge = await models.Transformation.objects.aget(input_id=first.coordinate_system_id, output=intrinsic)
-    assert first_edge.params["translation"] == [0.0, -56.0, 0.0], "the old edge recorded the spelling, not the crop"
+    first = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "y", "start": -56, "stop": 40, "step": None}]
+    )
+    second = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "y", "start": 8, "stop": 40, "step": None}]
+    )
+    third = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "y", "start": 8, "stop": -24, "step": None}]
+    )
+    layer_second = await models.Layer.objects.acreate(
+        scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=second
+    )
+    layer_third = await models.Layer.objects.acreate(
+        scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens=third
+    )
+    elsewhere = await models.CoordinateSystem.objects.acreate(
+        name="elsewhere", organization=ctx.request.organization
+    )
+    await models.Transformation.objects.acreate(
+        kind=enums.TransformKindChoices.TRANSLATION.value,
+        input_id=third.coordinate_system_id,
+        output=elsewhere,
+        params={"translation": [0.0, 0.0, 0.0]},
+        organization=ctx.request.organization,
+    )
+    first_edge = await models.Transformation.objects.aget(
+        input_id=first.coordinate_system_id, output=intrinsic
+    )
+    assert first_edge.params["translation"] == [0.0, -56.0, 0.0], (
+        "the old edge recorded the spelling, not the crop"
+    )
 
     # A dataset that never got a whole lens.
     bare = await seed.create_array_dataset(ctx, "Bare")
@@ -67,7 +115,12 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
 
     # A dry run names everything and writes nothing.
     preview = await _run(dry_run=True)
-    assert "would backfill" in preview and "would repair" in preview and f"would normalize lens {first.pk}" in preview and f"would merge lens {second.pk} into lens {first.pk}" in preview
+    assert (
+        "would backfill" in preview
+        and "would repair" in preview
+        and f"would normalize lens {first.pk}" in preview
+        and f"would merge lens {second.pk} into lens {first.pk}" in preview
+    )
     assert await _lens_ids(dataset) == [whole_id, first.pk, second.pk, third.pk]
     assert await _lens_ids(bare) == []
 
@@ -81,13 +134,23 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
     assert (await models.Layer.objects.aget(pk=layer_third.pk)).lens_id == third.pk
 
     kept = await models.ArrayLens.objects.aget(pk=first.pk)
-    assert kept.slices == [{"axis": "y", "start": 8, "stop": 40, "step": 1}], "normalized in place"
-    assert not await models.CoordinateSystem.objects.filter(pk=second.coordinate_system_id).aexists(), "the folded crop's system went with it"
-    assert await models.CoordinateSystem.objects.filter(pk=third.coordinate_system_id).aexists(), "the crop something else is registered from stays"
+    assert kept.slices == [{"axis": "y", "start": 8, "stop": 40, "step": 1}], (
+        "normalized in place"
+    )
+    assert not await models.CoordinateSystem.objects.filter(
+        pk=second.coordinate_system_id
+    ).aexists(), "the folded crop's system went with it"
+    assert await models.CoordinateSystem.objects.filter(
+        pk=third.coordinate_system_id
+    ).aexists(), "the crop something else is registered from stays"
     assert f"lens {third.pk} duplicates lens {first.pk} but is left in place" in report
     assert "repaired edge" in report and f"of lens {first.pk}" in report
-    first_edge = await models.Transformation.objects.aget(input_id=first.coordinate_system_id, output=intrinsic)
-    assert first_edge.params["translation"] == [0.0, 8.0, 0.0], "the edge now says where the crop is"
+    first_edge = await models.Transformation.objects.aget(
+        input_id=first.coordinate_system_id, output=intrinsic
+    )
+    assert first_edge.params["translation"] == [0.0, 8.0, 0.0], (
+        "the edge now says where the crop is"
+    )
 
     backfilled = await _lens_ids(bare)
     assert len(backfilled) == 1
@@ -95,14 +158,21 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(a
 
     # Run again: nothing is owed.
     again = await _run()
-    assert "normalized 0 lens(es), repaired 0 edge(s), backfilled 0 whole lens(es), merged 0 unsliced and 0 sliced duplicate(s)" in again
+    assert (
+        "normalized 0 lens(es), repaired 0 edge(s), backfilled 0 whole lens(es), merged 0 unsliced and 0 sliced duplicate(s)"
+        in again
+    )
     assert await _lens_ids(dataset) == [whole_id, first.pk, third.pk]
-    assert "1 duplicate lens(es) left in place" in again, "what it cannot fold it keeps reporting"
+    assert "1 duplicate lens(es) left in place" in again, (
+        "what it cannot fold it keeps reporting"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named_it(authenticated_context: HttpContext):
+async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named_it(
+    authenticated_context: HttpContext,
+):
     """An RGB component, a render-graph node and a nomination all move to the keeper."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image", shapes=[[3, 64, 64]])
@@ -110,12 +180,36 @@ async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named
     scene = await seed.create_scene(ctx, "A")
 
     # One channel, spelled two ways.
-    keeper = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "c", "start": -3, "stop": 1, "step": None}])
-    duplicate = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "c", "start": 0, "stop": 1, "step": None}])
+    keeper = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "c", "start": -3, "stop": 1, "step": None}]
+    )
+    duplicate = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "c", "start": 0, "stop": 1, "step": None}]
+    )
     await models.Lens.objects.filter(pk=duplicate.pk).aupdate(default_scene=scene)
-    rgb = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.RGB.value, lens_id=whole_id, red_lens=duplicate, green_lens=duplicate, blue_lens=duplicate)
-    graph = {"root": {"kind": "add", "children": [{"kind": "channel", "lens": str(duplicate.pk)}, {"kind": "channel", "lens": None}]}}
-    image = await models.Layer.objects.acreate(scene=scene, kind=enums.LayerKindChoices.IMAGE.value, lens_id=whole_id, render_graph=graph)
+    rgb = await models.Layer.objects.acreate(
+        scene=scene,
+        kind=enums.LayerKindChoices.RGB.value,
+        lens_id=whole_id,
+        red_lens=duplicate,
+        green_lens=duplicate,
+        blue_lens=duplicate,
+    )
+    graph = {
+        "root": {
+            "kind": "add",
+            "children": [
+                {"kind": "channel", "lens": str(duplicate.pk)},
+                {"kind": "channel", "lens": None},
+            ],
+        }
+    }
+    image = await models.Layer.objects.acreate(
+        scene=scene,
+        kind=enums.LayerKindChoices.IMAGE.value,
+        lens_id=whole_id,
+        render_graph=graph,
+    )
     await image.channel_lenses.aadd(duplicate)
 
     report = await _run()
@@ -123,16 +217,31 @@ async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named
     assert f"merged lens {duplicate.pk} into lens {keeper.pk}" in report
     assert await _lens_ids(dataset) == [whole_id, keeper.pk]
     rgb = await models.Layer.objects.aget(pk=rgb.pk)
-    assert (rgb.red_lens_id, rgb.green_lens_id, rgb.blue_lens_id) == (keeper.pk, keeper.pk, keeper.pk), "the layer is still there, drawn through the keeper"
+    assert (rgb.red_lens_id, rgb.green_lens_id, rgb.blue_lens_id) == (
+        keeper.pk,
+        keeper.pk,
+        keeper.pk,
+    ), "the layer is still there, drawn through the keeper"
     image = await models.Layer.objects.aget(pk=image.pk)
-    assert image.render_graph["root"]["children"] == [{"kind": "channel", "lens": str(keeper.pk)}, {"kind": "channel", "lens": None}]
-    assert [pk async for pk in image.channel_lenses.values_list("pk", flat=True)] == [keeper.pk], "and the delete guard sees what the graph names"
-    assert (await models.Lens.objects.aget(pk=keeper.pk)).default_scene_id == scene.pk, "the scene the duplicate opened on is the one the keeper opens on"
+    assert image.render_graph["root"]["children"] == [
+        {"kind": "channel", "lens": str(keeper.pk)},
+        {"kind": "channel", "lens": None},
+    ]
+    assert [pk async for pk in image.channel_lenses.values_list("pk", flat=True)] == [
+        keeper.pk
+    ], "and the delete guard sees what the graph names"
+    assert (
+        await models.Lens.objects.aget(pk=keeper.pk)
+    ).default_scene_id == scene.pk, (
+        "the scene the duplicate opened on is the one the keeper opens on"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(authenticated_context: HttpContext):
+async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(
+    authenticated_context: HttpContext,
+):
     """A hand-written window that bounds nothing is the whole lens spelled twice: the job reports it and goes on."""
     from tests.test_charts import _MEASUREMENTS, _table
 
@@ -141,19 +250,29 @@ async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(authe
     table = await models.TableDataset.objects.aget(pk=made["id"])
     whole = await models.TableLens.objects.aget(table_dataset=table, windows=[])
     open_window = await models.TableLens.objects.acreate(
-        table_dataset=table, coordinate_system_id=table.coordinate_system_id, organization_id=table.organization_id, windows=[{"axis": "x", "min": None, "max": None}]
+        table_dataset=table,
+        coordinate_system_id=table.coordinate_system_id,
+        organization_id=table.organization_id,
+        windows=[{"axis": "x", "min": None, "max": None}],
     )
 
     for _ in range(2):
         report = await _run()
-        assert f"lens {open_window.pk} of table dataset {table.pk} duplicates lens {whole.pk} but is left in place" in report
+        assert (
+            f"lens {open_window.pk} of table dataset {table.pk} duplicates lens {whole.pk} but is left in place"
+            in report
+        )
         assert "1 duplicate lens(es) left in place" in report
-    assert (await models.TableLens.objects.aget(pk=open_window.pk)).windows == [{"axis": "x", "min": None, "max": None}]
+    assert (await models.TableLens.objects.aget(pk=open_window.pk)).windows == [
+        {"axis": "x", "min": None, "max": None}
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_single_voxel_stride_is_dropped_and_its_edge_becomes_a_translation(authenticated_context: HttpContext):
+async def test_a_single_voxel_stride_is_dropped_and_its_edge_becomes_a_translation(
+    authenticated_context: HttpContext,
+):
     """`x 3:10:7` keeps one voxel; it was stored with its step and written a SEQUENCE edge scaling by 7.
 
     The job folds the stepped spelling onto the plain crop when both exist, and otherwise
@@ -164,19 +283,37 @@ async def test_a_single_voxel_stride_is_dropped_and_its_edge_becomes_a_translati
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
     (whole_id,) = await _lens_ids(dataset)
 
-    lone = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "x", "start": 3, "stop": 10, "step": 7}])
-    plain = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": 5, "stop": 6, "step": None}])
-    stepped_twin = await sync_to_async(_legacy_sliced_lens)(ctx, dataset, [{"axis": "y", "start": 5, "stop": 6, "step": 4}])
-    edge = await models.Transformation.objects.aget(input_id=lone.coordinate_system_id, output=intrinsic)
-    assert edge.kind == enums.TransformKindChoices.SEQUENCE.value, "the old code scaled a single voxel by its step"
+    lone = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "x", "start": 3, "stop": 10, "step": 7}]
+    )
+    plain = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "y", "start": 5, "stop": 6, "step": None}]
+    )
+    stepped_twin = await sync_to_async(_legacy_sliced_lens)(
+        ctx, dataset, [{"axis": "y", "start": 5, "stop": 6, "step": 4}]
+    )
+    edge = await models.Transformation.objects.aget(
+        input_id=lone.coordinate_system_id, output=intrinsic
+    )
+    assert edge.kind == enums.TransformKindChoices.SEQUENCE.value, (
+        "the old code scaled a single voxel by its step"
+    )
 
     report = await _run()
 
     assert f"merged lens {stepped_twin.pk} into lens {plain.pk}" in report
     assert await _lens_ids(dataset) == [whole_id, lone.pk, plain.pk]
-    assert (await models.ArrayLens.objects.aget(pk=lone.pk)).slices == [{"axis": "x", "start": 3, "stop": 4, "step": 1}]
-    edge = await models.Transformation.objects.aget(input_id=lone.coordinate_system_id, output=intrinsic)
-    assert (edge.kind, edge.params, edge.steps) == (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.0, 0.0, 3.0]}, [])
+    assert (await models.ArrayLens.objects.aget(pk=lone.pk)).slices == [
+        {"axis": "x", "start": 3, "stop": 4, "step": 1}
+    ]
+    edge = await models.Transformation.objects.aget(
+        input_id=lone.coordinate_system_id, output=intrinsic
+    )
+    assert (edge.kind, edge.params, edge.steps) == (
+        enums.TransformKindChoices.TRANSLATION.value,
+        {"translation": [0.0, 0.0, 3.0]},
+        [],
+    )
 
     again = await _run()
     assert "normalized 0 lens(es), repaired 0 edge(s)" in again

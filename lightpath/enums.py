@@ -1,4 +1,5 @@
 from enum import Enum
+
 import strawberry
 
 
@@ -9,6 +10,7 @@ class ChannelKind(str, Enum):
     FIBER_SM = "FIBER_SM"
     FIBER_MM = "FIBER_MM"
     WAVEGUIDE = "WAVEGUIDE"
+
 
 @strawberry.enum
 class PortRole(str, Enum):
@@ -35,9 +37,8 @@ class ElementKind(str, Enum):
     SHUTTER = "SHUTTER"
     SAMPLE = "SAMPLE"
     OTHER = "OTHER"
-    
-    
-    
+
+
 @strawberry.enum
 class PulseKind(str, Enum):
     CW = "CW"
@@ -46,8 +47,9 @@ class PulseKind(str, Enum):
     REPETITIVE = "Repetitive"
     MODE_LOCKED = "ModeLocked"
     OTHER = "Other"
-    
-@strawberry.enum 
+
+
+@strawberry.enum
 class ObjectiveCorrectionKind(str, Enum):
     UV = "UV"
     PLAN_APO = "PlanApo"
@@ -65,7 +67,8 @@ class ObjectiveCorrectionKind(str, Enum):
     PLAN_NEOFLUAR = "PlanNeofluar"
     OTHER = "Other"
 
-@strawberry.enum 
+
+@strawberry.enum
 class ObjectiveImmersion(str, Enum):
     OIL = "Oil"
     WATER = "Water"
@@ -75,7 +78,8 @@ class ObjectiveImmersion(str, Enum):
     GLYCEROL = "Glycerol"
     OTHER = "Other"
 
-@strawberry.enum 
+
+@strawberry.enum
 class FilterKind(str, Enum):
     DICHROIC = "Dichroic"
     LONG_PASS = "LongPass"

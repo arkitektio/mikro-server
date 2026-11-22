@@ -1,19 +1,19 @@
-from kante.types import Info
-import strawberry
-
-from core import types, models, enums
 import kante
+import strawberry
+from kante.types import Info
 from pydantic import BaseModel, Field
+
+from core import enums, models, types
+from core.input_unions import prose_errors
+from core.inputs.validators import Alpha
 from core.logic import attribute_plans as attribute_plans_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
 from core.mutations import layer as layer_mutations
+from core.mutations._sources import lens_of_kind
 from core.render import color_by as color_by_models
 from core.render import filter_by as filter_by_models
 from core.render.layer import inputs as layer_inputs
-from core.input_unions import prose_errors
-from core.inputs.validators import Alpha
-from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 
@@ -49,9 +49,13 @@ def point_reachable_tables(info: Info, table_dataset) -> dict:
     Everything further away is an ordinary FIELD walk from the table's own
     system, so a point layer can also be coloured by whatever its space reaches.
     """
-    reachable = attribute_plans_logic.field_reachable_tables(
-        table_dataset.coordinate_system_or_none, info.context.request.organization
-    ) if table_dataset.coordinate_system_or_none else {}
+    reachable = (
+        attribute_plans_logic.field_reachable_tables(
+            table_dataset.coordinate_system_or_none, info.context.request.organization
+        )
+        if table_dataset.coordinate_system_or_none
+        else {}
+    )
     return {str(table_dataset.pk): table_dataset, **reachable}
 
 
@@ -98,21 +102,61 @@ class CreatePointLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreatePointLayerInputModel, description="Create a layer that renders a point cloud (e.g. SMLM localisations, centroids) from a table dataset")
+@kante.pydantic_input(
+    CreatePointLayerInputModel,
+    description="Create a layer that renders a point cloud (e.g. SMLM localisations, centroids) from a table dataset",
+)
 class CreatePointLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    color_bys: list[layer_inputs.LabelColorByInput] | None = strawberry.field(default=None, description="The colourings this layer offers, in the order a picker should show them. Each names a column of a table this layer's ids key into -- its own table needs no edge, since a point IS a row of it -- or one slice of a sparse matrix they index")
-    active_color_by: int | None = strawberry.field(default=None, description="Which entry of `colorBys` is drawn, as an index into it. Null means every point takes the flat colour")
-    filter_bys: list[layer_inputs.LabelFilterByInput] | None = strawberry.field(default=None, description="The filters this layer offers. Each keeps or drops points by a column of a table this layer's ids key into")
-    active_filter_bys: list[int] | None = strawberry.field(default=None, description="Which entries of `filterBys` are applied, as indices into it. Combined with AND")
-    lens: strawberry.ID = strawberry.field(description="The table lens to draw through: which rows, in the table's own space. A table's whole lens is its `fullLens`")
-    size_column: str | None = strawberry.field(default=None, description="The measure column mapped to per-point size -- a per-layer display choice among the dataset's columns")
-    point_size: float | None = strawberry.field(default=None, description="The default point size in scene units (default 3.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap the active entry of the colour picker maps through (default 'viridis')")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    color_bys: list[layer_inputs.LabelColorByInput] | None = strawberry.field(
+        default=None,
+        description="The colourings this layer offers, in the order a picker should show them. Each names a column of a table this layer's ids key into -- its own table needs no edge, since a point IS a row of it -- or one slice of a sparse matrix they index",
+    )
+    active_color_by: int | None = strawberry.field(
+        default=None,
+        description="Which entry of `colorBys` is drawn, as an index into it. Null means every point takes the flat colour",
+    )
+    filter_bys: list[layer_inputs.LabelFilterByInput] | None = strawberry.field(
+        default=None,
+        description="The filters this layer offers. Each keeps or drops points by a column of a table this layer's ids key into",
+    )
+    active_filter_bys: list[int] | None = strawberry.field(
+        default=None,
+        description="Which entries of `filterBys` are applied, as indices into it. Combined with AND",
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The table lens to draw through: which rows, in the table's own space. A table's whole lens is its `fullLens`"
+    )
+    size_column: str | None = strawberry.field(
+        default=None,
+        description="The measure column mapped to per-point size -- a per-layer display choice among the dataset's columns",
+    )
+    point_size: float | None = strawberry.field(
+        default=None,
+        description="The default point size in scene units (default 3.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap the active entry of the colour picker maps through (default 'viridis')",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal', i.e. alpha-over)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
 def create_point_layer(info: Info, input: CreatePointLayerInput) -> types.PointLayer:
@@ -123,10 +167,18 @@ def create_point_layer(info: Info, input: CreatePointLayerInput) -> types.PointL
     lens = _resolve_table_lens(info, lens=model.lens)
     table_dataset = lens.table_dataset
 
-    graph_logic.assert_placeable_in(scene.world, table_dataset.coordinate_system_or_none, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        table_dataset.coordinate_system_or_none,
+        destination=f"the world of scene '{scene.name}'",
+    )
 
-    color_bys, filter_bys = build_point_pickers(info, table_dataset, model.color_bys, model.filter_bys)
-    layer_mutations.assert_active_color_by(color_bys or [], model.active_color_by, fallback="draw the flat point colour")
+    color_bys, filter_bys = build_point_pickers(
+        info, table_dataset, model.color_bys, model.filter_bys
+    )
+    layer_mutations.assert_active_color_by(
+        color_bys or [], model.active_color_by, fallback="draw the flat point colour"
+    )
     layer_mutations.assert_active_filter_bys(filter_bys or [], model.active_filter_bys)
 
     return models.Layer.objects.create(
@@ -162,19 +214,48 @@ class UpdatePointLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdatePointLayerInputModel, description="Retune a point layer after creation -- above all, switch or republish its colour picker")
+@kante.pydantic_input(
+    UpdatePointLayerInputModel,
+    description="Retune a point layer after creation -- above all, switch or republish its colour picker",
+)
 class UpdatePointLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the point layer to update")
-    color_bys: list[layer_inputs.LabelColorByInput] | None = strawberry.field(default=None, description="Replaces the published picker wholesale -- its order is the display order, so there is nothing to merge on. Pass `[]` to remove every colouring; omit to leave it alone")
-    active_color_by: int | None = strawberry.field(default=None, description="Which entry of `colorBys` is drawn. Re-checked against the picker being written, never the stored one")
-    filter_bys: list[layer_inputs.LabelFilterByInput] | None = strawberry.field(default=None, description="Replaces the published filter picker wholesale. Pass `[]` to remove every rule")
-    active_filter_bys: list[int] | None = strawberry.field(default=None, description="Which entries of `filterBys` are applied, as indices into it")
-    size_column: str | None = strawberry.field(default=None, description="The measure column mapped to per-point size")
-    point_size: float | None = strawberry.field(default=None, description="The default point size in scene units")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap used when a colouring names none")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha, from 0 to 1")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the point layer to update"
+    )
+    color_bys: list[layer_inputs.LabelColorByInput] | None = strawberry.field(
+        default=None,
+        description="Replaces the published picker wholesale -- its order is the display order, so there is nothing to merge on. Pass `[]` to remove every colouring; omit to leave it alone",
+    )
+    active_color_by: int | None = strawberry.field(
+        default=None,
+        description="Which entry of `colorBys` is drawn. Re-checked against the picker being written, never the stored one",
+    )
+    filter_bys: list[layer_inputs.LabelFilterByInput] | None = strawberry.field(
+        default=None,
+        description="Replaces the published filter picker wholesale. Pass `[]` to remove every rule",
+    )
+    active_filter_bys: list[int] | None = strawberry.field(
+        default=None,
+        description="Which entries of `filterBys` are applied, as indices into it",
+    )
+    size_column: str | None = strawberry.field(
+        default=None, description="The measure column mapped to per-point size"
+    )
+    point_size: float | None = strawberry.field(
+        default=None, description="The default point size in scene units"
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None, description="The colormap used when a colouring names none"
+    )
+    opacity: float | None = strawberry.field(
+        default=None, description="Layer alpha, from 0 to 1"
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
 def update_point_layer(info: Info, input: UpdatePointLayerInput) -> types.PointLayer:
@@ -188,9 +269,13 @@ def update_point_layer(info: Info, input: UpdatePointLayerInput) -> types.PointL
     model = input.to_pydantic()
     layer = get_for_org(models.Layer, info, id=model.id)
     if layer.kind != enums.LayerKind.POINT.value:
-        raise ValueError(f"Layer {layer.pk} is a {layer.kind} layer, not a point layer, so it has no point size or point colouring to set.")
+        raise ValueError(
+            f"Layer {layer.pk} is a {layer.kind} layer, not a point layer, so it has no point size or point colouring to set."
+        )
 
-    color_bys, filter_bys = build_point_pickers(info, layer.lens.table_dataset, model.color_bys, model.filter_bys)
+    color_bys, filter_bys = build_point_pickers(
+        info, layer.lens.table_dataset, model.color_bys, model.filter_bys
+    )
 
     if color_bys is not None:
         layer.point_color_bys = color_bys
@@ -200,17 +285,38 @@ def update_point_layer(info: Info, input: UpdatePointLayerInput) -> types.PointL
     # `colorBys` that no longer holds the active entry falls back rather than
     # pointing past the end.
     if model.active_color_by is not None:
-        layer_mutations.assert_active_color_by(layer.point_color_bys or [], model.active_color_by, fallback="draw the flat point colour")
+        layer_mutations.assert_active_color_by(
+            layer.point_color_bys or [],
+            model.active_color_by,
+            fallback="draw the flat point colour",
+        )
         layer.active_color_by = model.active_color_by
-    elif color_bys is not None and layer.active_color_by is not None and layer.active_color_by >= len(layer.point_color_bys or []):
+    elif (
+        color_bys is not None
+        and layer.active_color_by is not None
+        and layer.active_color_by >= len(layer.point_color_bys or [])
+    ):
         layer.active_color_by = None
     if model.active_filter_bys is not None:
-        layer_mutations.assert_active_filter_bys(layer.point_filter_bys or [], model.active_filter_bys)
+        layer_mutations.assert_active_filter_bys(
+            layer.point_filter_bys or [], model.active_filter_bys
+        )
         layer.active_filter_bys = model.active_filter_bys
     elif filter_bys is not None:
-        layer.active_filter_bys = [index for index in (layer.active_filter_bys or []) if index < len(layer.point_filter_bys or [])]
+        layer.active_filter_bys = [
+            index
+            for index in (layer.active_filter_bys or [])
+            if index < len(layer.point_filter_bys or [])
+        ]
 
-    for field in ("size_column", "point_size", "colormap", "opacity", "visible", "order"):
+    for field in (
+        "size_column",
+        "point_size",
+        "colormap",
+        "opacity",
+        "visible",
+        "order",
+    ):
         value = getattr(model, field)
         if value is not None:
             setattr(layer, field, value)
@@ -232,17 +338,45 @@ class CreateTrackLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateTrackLayerInputModel, description="Create a layer that renders trajectories (e.g. particle/cell tracks) from a table dataset, grouped by its TRACK_ID column")
+@kante.pydantic_input(
+    CreateTrackLayerInputModel,
+    description="Create a layer that renders trajectories (e.g. particle/cell tracks) from a table dataset, grouped by its TRACK_ID column",
+)
 class CreateTrackLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The table lens to draw through: which rows, in the table's own space. A table's whole lens is its `fullLens`")
-    color_by_column: str | None = strawberry.field(default=None, description="The measure column used to color tracks (used with colormap) -- a per-layer display choice among the dataset's columns")
-    line_width: float | None = strawberry.field(default=None, description="The width of the track lines in scene units (default 1.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap used to color tracks by their color_by_column (default 'viridis')")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The table lens to draw through: which rows, in the table's own space. A table's whole lens is its `fullLens`"
+    )
+    color_by_column: str | None = strawberry.field(
+        default=None,
+        description="The measure column used to color tracks (used with colormap) -- a per-layer display choice among the dataset's columns",
+    )
+    line_width: float | None = strawberry.field(
+        default=None,
+        description="The width of the track lines in scene units (default 1.0). A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap used to color tracks by their color_by_column (default 'viridis')",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal', i.e. alpha-over)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
 def create_track_layer(info: Info, input: CreateTrackLayerInput) -> types.TrackLayer:
@@ -254,9 +388,15 @@ def create_track_layer(info: Info, input: CreateTrackLayerInput) -> types.TrackL
     table_dataset = lens.table_dataset
 
     if enums.TableDatasetSpec.TRACKED not in table_dataset.spec:
-        raise ValueError(f"Table dataset '{table_dataset.name}' has no TRACK_ID column, so it cannot be rendered as tracks.")
+        raise ValueError(
+            f"Table dataset '{table_dataset.name}' has no TRACK_ID column, so it cannot be rendered as tracks."
+        )
 
-    graph_logic.assert_placeable_in(scene.world, table_dataset.coordinate_system_or_none, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        table_dataset.coordinate_system_or_none,
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     return models.Layer.objects.create(
         kind=enums.LayerKind.TRACK,
@@ -285,17 +425,42 @@ class UpdateTrackLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateTrackLayerInputModel, description="Retune a track layer after creation -- its line width, its colouring column and the compositing it takes part in")
+@kante.pydantic_input(
+    UpdateTrackLayerInputModel,
+    description="Retune a track layer after creation -- its line width, its colouring column and the compositing it takes part in",
+)
 class UpdateTrackLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the track layer to update")
-    color_by_column: str | None = strawberry.field(default=None, description="The measure column used to color tracks (used with colormap). A per-layer display choice among the dataset's columns -- never one of the coordinate or TRACK_ID columns, which the dataset declares by role")
-    line_width: float | None = strawberry.field(default=None, description="The width of the track lines in scene units. A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better")
-    tail_window: int | None = strawberry.field(default=None, description="How many timepoints of each track's past to draw behind the current one; 0 draws the whole track")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap used to color tracks by their color_by_column")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha, from 0 to 1")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the track layer to update"
+    )
+    color_by_column: str | None = strawberry.field(
+        default=None,
+        description="The measure column used to color tracks (used with colormap). A per-layer display choice among the dataset's columns -- never one of the coordinate or TRACK_ID columns, which the dataset declares by role",
+    )
+    line_width: float | None = strawberry.field(
+        default=None,
+        description="The width of the track lines in scene units. A scene unit is the world's spatial-axis unit, and is a well-defined length only where the layer's `placementInvariance` is SIMILARITY or better",
+    )
+    tail_window: int | None = strawberry.field(
+        default=None,
+        description="How many timepoints of each track's past to draw behind the current one; 0 draws the whole track",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap used to color tracks by their color_by_column",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None, description="Layer alpha, from 0 to 1"
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
 def update_track_layer(info: Info, input: UpdateTrackLayerInput) -> types.TrackLayer:
@@ -313,9 +478,20 @@ def update_track_layer(info: Info, input: UpdateTrackLayerInput) -> types.TrackL
     model = input.to_pydantic()
     layer = get_for_org(models.Layer, info, id=model.id)
     if layer.kind != enums.LayerKind.TRACK.value:
-        raise ValueError(f"Layer {layer.pk} is a {layer.kind} layer, not a track layer, so it has no line width or track colouring to set.")
+        raise ValueError(
+            f"Layer {layer.pk} is a {layer.kind} layer, not a track layer, so it has no line width or track colouring to set."
+        )
 
-    for field in ("color_by_column", "line_width", "tail_window", "colormap", "blending", "opacity", "visible", "order"):
+    for field in (
+        "color_by_column",
+        "line_width",
+        "tail_window",
+        "colormap",
+        "blending",
+        "opacity",
+        "visible",
+        "order",
+    ):
         value = getattr(model, field)
         if value is not None:
             setattr(layer, field, value)

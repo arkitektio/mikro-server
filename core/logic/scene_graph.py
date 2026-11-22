@@ -18,19 +18,17 @@ answers. A question that reads no layer does not belong in this file; a question
 answer is the same for two scenes over one world does not belong on a scene at all.
 """
 
-from typing import Iterable
-
-from kante.types import Info
+from collections.abc import Iterable
 
 from django.db.models import Prefetch
+from kante.types import Info
 
 from core import enums, models
-from core.logic import placement
 from core.logic import graph as graph_logic
+from core.logic import placement
 
 #: Where a `SceneGraph` memo lives on the request context, keyed by scene pk.
 _LOADER_KEY = "scene_graphs"
-
 
 
 class SceneGraph(placement.PlacementGraph):
@@ -41,7 +39,13 @@ class SceneGraph(placement.PlacementGraph):
     its layers draws from, and the pyramid levels behind them.
     """
 
-    def __init__(self, scene: "models.Scene", *, loaders: dict | None = None, previews: "Iterable[models.Layer]" = ()) -> None:
+    def __init__(
+        self,
+        scene: "models.Scene",
+        *,
+        loaders: dict | None = None,
+        previews: "Iterable[models.Layer]" = (),
+    ) -> None:
         """Fetch the scene's layers, then the edge universe rooted at its world.
 
         ``previews`` are unsaved layers (``previewLayer``) whose source spaces seed the
@@ -53,7 +57,11 @@ class SceneGraph(placement.PlacementGraph):
         # The layers, with every relation the placement logic walks in Python. The
         # optimizer cannot infer these: it prefetches what the *selection set* names, and
         # a client asking only for `pathToWorld` never names `lens`.
-        self.layers = list(scene.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(*LAYER_SOURCE_AXIS_PREFETCH))
+        self.layers = list(
+            scene.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(
+                *LAYER_SOURCE_AXIS_PREFETCH
+            )
+        )
 
         # The scene's whole contribution to the universe: the spaces its layers draw from.
         # Seeding by *system* is right here and would be wrong for a space graph -- each
@@ -73,7 +81,13 @@ class SceneGraph(placement.PlacementGraph):
         if self._levels is None:
             self._levels = {dataset_id: [] for dataset_id in self.universe.dataset_ids}
             if self.universe.dataset_ids:
-                arrays = models.DataArray.objects.filter(dataset__in=self.universe.dataset_ids).order_by("level").select_related("coordinate_system")
+                arrays = (
+                    models.DataArray.objects.filter(
+                        dataset__in=self.universe.dataset_ids
+                    )
+                    .order_by("level")
+                    .select_related("coordinate_system")
+                )
                 for array in arrays:
                     self._levels.setdefault(array.dataset_id, []).append(array)
         return self._levels.get(dataset_id, [])
@@ -83,11 +97,15 @@ class SceneGraph(placement.PlacementGraph):
     # Each is the same question `PlacementGraph` answers for a space, asked of the space this
     # layer draws from. The reasoning is documented there, once.
 
-    def placement_path(self, layer: "models.Layer", *, at: dict[str, int] | None = None) -> list[tuple["models.Transformation", bool]] | None:
+    def placement_path(
+        self, layer: "models.Layer", *, at: dict[str, int] | None = None
+    ) -> list[tuple["models.Transformation", bool]] | None:
         """The path of edges from a layer's source system to this scene's world system. See :meth:`core.logic.placement.PlacementGraph.path`."""
         return self.path(graph_logic.layer_source_system(layer), at=at)
 
-    def condensed_placement(self, layer: "models.Layer", *, at: dict[str, int] | None = None) -> "graph_logic.CondensedPlacement | None":
+    def condensed_placement(
+        self, layer: "models.Layer", *, at: dict[str, int] | None = None
+    ) -> "graph_logic.CondensedPlacement | None":
         """This layer's whole path to world as one affine map, or None when there is no path.
 
         The source's axes are prefetched with the layers (`LAYER_SOURCE_AXIS_PREFETCH`), so
@@ -95,19 +113,29 @@ class SceneGraph(placement.PlacementGraph):
         """
         return self.condensed(graph_logic.layer_source_system(layer), at=at)
 
-    def placement_validity(self, layer: "models.Layer", *, at: dict[str, int] | None = None) -> str:
+    def placement_validity(
+        self, layer: "models.Layer", *, at: dict[str, int] | None = None
+    ) -> str:
         """How much this layer's placement is actually known: the weakest edge on its path."""
         return self.validity(graph_logic.layer_source_system(layer), at=at)
 
-    def placement_invariance(self, layer: "models.Layer", *, at: dict[str, int] | None = None) -> str:
+    def placement_invariance(
+        self, layer: "models.Layer", *, at: dict[str, int] | None = None
+    ) -> str:
         """Which geometric properties survive the whole walk from this layer's data to world."""
         return self.invariance(graph_logic.layer_source_system(layer), at=at)
 
-    def placement_state(self, layer: "models.Layer", *, at: dict[str, int] | None = None) -> str:
+    def placement_state(
+        self, layer: "models.Layer", *, at: dict[str, int] | None = None
+    ) -> str:
         """Whether this layer has a place in the world, and if not, why not."""
         return self.state(graph_logic.layer_source_system(layer), at=at)
 
-    def level_placements(self, layer: "models.Layer") -> list[tuple["models.DataArray", list[tuple["models.Transformation", bool]] | None]]:
+    def level_placements(
+        self, layer: "models.Layer"
+    ) -> list[
+        tuple["models.DataArray", list[tuple["models.Transformation", bool]] | None]
+    ]:
         """Per pyramid level, the path from that level's voxel grid to this scene's world system.
 
         Every lens-backed kind, and the set is read rather than spelled: a pyramid is a fact
@@ -133,7 +161,9 @@ class SceneGraph(placement.PlacementGraph):
         intrinsic = layer.lens.dataset.intrinsic_coordinate_system
         placements = []
         for array in arrays:
-            system = getattr(array, "coordinate_system", None) or (intrinsic if array.level == 0 else None)
+            system = getattr(array, "coordinate_system", None) or (
+                intrinsic if array.level == 0 else None
+            )
             if system is None:
                 placements.append((array, None))
                 continue
@@ -176,7 +206,9 @@ LAYER_SOURCE_AXIS_PREFETCH = (
 LAYER_PLACEMENT_RELATIONS = ("scene__world",)
 
 
-def admit_previews(info: "Info", scene: "models.Scene", previews: "Iterable[models.Layer]") -> None:
+def admit_previews(
+    info: "Info", scene: "models.Scene", previews: "Iterable[models.Layer]"
+) -> None:
     """Make this request's graph of ``scene`` one that also places ``previews``.
 
     The graph is memoized per scene and seeded from the scene's saved layers, so a preview's
@@ -188,7 +220,9 @@ def admit_previews(info: "Info", scene: "models.Scene", previews: "Iterable[mode
     loaders = getattr(context, "_loaders", None)
     if loaders is None:
         return
-    loaders.setdefault(_LOADER_KEY, {})[scene.pk] = SceneGraph(scene, loaders=loaders, previews=list(previews))
+    loaders.setdefault(_LOADER_KEY, {})[scene.pk] = SceneGraph(
+        scene, loaders=loaders, previews=list(previews)
+    )
 
 
 def for_request(info: "Info", scene: "models.Scene") -> SceneGraph:

@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch, Q
 
-from core import enums, models
+from core import models
 from core.logic import attribute_plans as attribute_plans_logic
 from core.logic import graph as graph_logic
 
@@ -83,7 +83,11 @@ def layers_naming_table(table) -> "QuerySet[models.Layer]":
     something it could not see -- and the failure mode of looking too widely is refusing a
     delete, which is recoverable.
     """
-    return models.Layer.objects.filter(_names_table(str(table.pk))).select_related("scene").order_by("pk")
+    return (
+        models.Layer.objects.filter(_names_table(str(table.pk)))
+        .select_related("scene")
+        .order_by("pk")
+    )
 
 
 def assert_table_not_in_a_picker(table) -> None:
@@ -97,7 +101,9 @@ def assert_table_not_in_a_picker(table) -> None:
         return
 
     total = layers_naming_table(table).count()
-    described = ", ".join(f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers)
+    described = ", ".join(
+        f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers
+    )
     more = f" (and {total - len(layers)} more)" if total > len(layers) else ""
     raise ValueError(
         f"Table dataset '{table.name}' ({table.pk}) cannot be deleted: {total} layer(s) colour or filter by a column of it -- {described}{more}. "
@@ -127,7 +133,9 @@ def names_sparse_lens(lens_id: str) -> Q:
 def layers_naming_sparse_dataset(dataset) -> "QuerySet[models.Layer]":
     """Every layer whose pickers name a slice of this sparse dataset: a lens of it."""
     query = Q(pk__in=[])
-    for lens_id in models.SparseLens.objects.filter(sparse_dataset=dataset).values_list("pk", flat=True):
+    for lens_id in models.SparseLens.objects.filter(sparse_dataset=dataset).values_list(
+        "pk", flat=True
+    ):
         query |= names_sparse_lens(str(lens_id))
     return models.Layer.objects.filter(query).select_related("scene").order_by("pk")
 
@@ -145,7 +153,9 @@ def assert_sparse_dataset_not_in_a_picker(dataset) -> None:
         return
 
     total = layers_naming_sparse_dataset(dataset).count()
-    described = ", ".join(f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers)
+    described = ", ".join(
+        f"layer {layer.pk} in scene '{layer.scene.name}'" for layer in layers
+    )
     more = f" (and {total - len(layers)} more)" if total > len(layers) else ""
     raise ValueError(
         f"Sparse dataset '{dataset.name}' ({dataset.pk}) cannot be deleted: {total} layer(s) colour by a slice of it -- {described}{more}. "
@@ -175,6 +185,8 @@ def _picker_tables(layer) -> "set[str]":
 def _layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem":
     """The space this layer's ids dereference from: its lens' system, whatever the kind."""
     return layer.lens.coordinate_system
+
+
 def assert_edge_not_stranding_a_picker(edge) -> None:
     """Refuse to delete a key (a dereferencing FIELD edge) that some layer's picker is reaching a table through.
 
@@ -199,12 +211,21 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
         return
 
     stranded: list[tuple] = []
-    for layer in models.Layer.objects.filter(_names_table_any(tables)).select_related("scene").prefetch_related(Prefetch("lens", models.Lens.objects.with_sources())).order_by("pk"):
+    for layer in (
+        models.Layer.objects.filter(_names_table_any(tables))
+        .select_related("scene")
+        .prefetch_related(Prefetch("lens", models.Lens.objects.with_sources()))
+        .order_by("pk")
+    ):
         named = _picker_tables(layer) & tables
         if not named:
             continue
         system = _layer_source_system(layer)
-        still = set(attribute_plans_logic.field_reachable_tables(system, layer.scene.organization, excluding=[edge.pk]))
+        still = set(
+            attribute_plans_logic.field_reachable_tables(
+                system, layer.scene.organization, excluding=[edge.pk]
+            )
+        )
         lost = named - still
         if lost:
             stranded.append((layer, sorted(lost)))
@@ -212,7 +233,10 @@ def assert_edge_not_stranding_a_picker(edge) -> None:
     if not stranded:
         return
 
-    described = ", ".join(f"layer {layer.pk} in scene '{layer.scene.name}' (table {', '.join(lost)})" for layer, lost in stranded[:5])
+    described = ", ".join(
+        f"layer {layer.pk} in scene '{layer.scene.name}' (table {', '.join(lost)})"
+        for layer, lost in stranded[:5]
+    )
     raise ValueError(
         f"Transformation {edge.pk} cannot be deleted: it is the FIELD edge {len(stranded)} layer(s) reach a picker's table through -- {described}. "
         "Removing it would leave those entries naming a table nothing dereferences into, which is a join no renderer can execute. "

@@ -4,8 +4,6 @@ These persist a quantity as ``{canonical, given, unit}`` in JSON while keeping a
 plain canonical ``int`` in memory. See ``kanne/DESIGN.md``.
 """
 
-from typing import Optional
-
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -13,10 +11,10 @@ from kanne_server import quantities as pq
 
 
 class Sample(BaseModel):
-    dur: pq.Duration = 100_000_000_000          # 100 ms (canonical picoseconds)
+    dur: pq.Duration = 100_000_000_000  # 100 ms (canonical picoseconds)
     v: pq.ElectricPotential = -67_000_000_000_000
     temp: pq.Temperature = 309_150_000_000
-    length: Optional[pq.Length] = None
+    length: pq.Length | None = None
 
 
 def test_in_memory_value_is_canonical_int():
@@ -31,23 +29,39 @@ def test_in_memory_value_is_canonical_int():
 def test_json_dump_expands_to_struct():
     m = Sample()
     blob = m.model_dump(mode="json")
-    assert blob["dur"] == {"canonical": 100_000_000_000, "given": "100 ms", "unit": "picosecond"}
+    assert blob["dur"] == {
+        "canonical": 100_000_000_000,
+        "given": "100 ms",
+        "unit": "picosecond",
+    }
     assert blob["v"]["given"] == "-67 mV"
-    assert blob["temp"] == {"canonical": 309_150_000_000, "given": "309.15 K", "unit": "nanokelvin"}
+    assert blob["temp"] == {
+        "canonical": 309_150_000_000,
+        "given": "309.15 K",
+        "unit": "nanokelvin",
+    }
     assert blob["length"] is None
 
 
 def test_parses_pint_strings():
-    m = Sample.model_validate({"dur": "5 ms", "v": "-65 mV", "temp": "37 degC", "length": "100 µm"})
+    m = Sample.model_validate(
+        {"dur": "5 ms", "v": "-65 mV", "temp": "37 degC", "length": "100 µm"}
+    )
     blob = m.model_dump(mode="json")
     assert blob["dur"]["canonical"] == 5_000_000_000
     assert blob["v"]["canonical"] == -65_000_000_000_000
     assert blob["temp"]["canonical"] == 310_150_000_000
-    assert blob["length"] == {"canonical": 100_000_000, "given": "100 µm", "unit": "picometer"}
+    assert blob["length"] == {
+        "canonical": 100_000_000,
+        "given": "100 µm",
+        "unit": "picometer",
+    }
 
 
 def test_reload_from_struct_round_trips():
-    blob = Sample.model_validate({"dur": "5 ms", "length": "100 µm"}).model_dump(mode="json")
+    blob = Sample.model_validate({"dur": "5 ms", "length": "100 µm"}).model_dump(
+        mode="json"
+    )
     again = Sample(**blob)
     assert again.dur == 5_000_000_000
     assert again.length == 100_000_000

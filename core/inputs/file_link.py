@@ -13,14 +13,12 @@ exactly as ``DerivedFromInput`` does.
 
 from typing import Annotated, ClassVar, Literal
 
+import kante
 import strawberry
 from pydantic import BaseModel, ConfigDict, Field
 
-import kante
-
 from core import enums
 from core.input_unions import parse_union_member, prose_errors, union_memberships
-
 
 _SERIES_DESCRIPTION = (
     "Which part of the file this concerns -- the series of a multi-series LIF or CZI, the sheet of a workbook. Omit when the file holds one thing. It is part of the link's "
@@ -53,9 +51,15 @@ class SourceFileInputModel(BaseModel):
 class SourceFileInput:
     """One file this container was produced from."""
 
-    file: strawberry.ID = strawberry.field(description="The file this container's data was read out of")
-    series_identifier: str | None = strawberry.field(default=None, description=_SERIES_DESCRIPTION)
-    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+    file: strawberry.ID = strawberry.field(
+        description="The file this container's data was read out of"
+    )
+    series_identifier: str | None = strawberry.field(
+        default=None, description=_SERIES_DESCRIPTION
+    )
+    value_relation: enums.ValueRelation | None = strawberry.field(
+        default=None, description=_VALUE_RELATION_DESCRIPTION
+    )
 
 
 class ExportOfInputBase(BaseModel):
@@ -80,7 +84,9 @@ class ExportOfInputBase(BaseModel):
 class DatasetExportOfInputModel(ExportOfInputBase):
     """Written from an array dataset."""
 
-    kind: Literal[enums.FileLinkContainerKind.DATASET] = enums.FileLinkContainerKind.DATASET
+    kind: Literal[enums.FileLinkContainerKind.DATASET] = (
+        enums.FileLinkContainerKind.DATASET
+    )
     dataset: str
     CONTAINER_FIELD: ClassVar[str] = "dataset"
 
@@ -88,7 +94,9 @@ class DatasetExportOfInputModel(ExportOfInputBase):
 class TableDatasetExportOfInputModel(ExportOfInputBase):
     """Written from a table dataset."""
 
-    kind: Literal[enums.FileLinkContainerKind.TABLE_DATASET] = enums.FileLinkContainerKind.TABLE_DATASET
+    kind: Literal[enums.FileLinkContainerKind.TABLE_DATASET] = (
+        enums.FileLinkContainerKind.TABLE_DATASET
+    )
     table_dataset: str
     CONTAINER_FIELD: ClassVar[str] = "table_dataset"
 
@@ -96,7 +104,9 @@ class TableDatasetExportOfInputModel(ExportOfInputBase):
 class MeshCollectionExportOfInputModel(ExportOfInputBase):
     """Written from a mesh collection."""
 
-    kind: Literal[enums.FileLinkContainerKind.MESH_COLLECTION] = enums.FileLinkContainerKind.MESH_COLLECTION
+    kind: Literal[enums.FileLinkContainerKind.MESH_COLLECTION] = (
+        enums.FileLinkContainerKind.MESH_COLLECTION
+    )
     mesh_collection: str
     CONTAINER_FIELD: ClassVar[str] = "mesh_collection"
 
@@ -104,7 +114,9 @@ class MeshCollectionExportOfInputModel(ExportOfInputBase):
 class AnnotationCollectionExportOfInputModel(ExportOfInputBase):
     """Written from an annotation collection."""
 
-    kind: Literal[enums.FileLinkContainerKind.ANNOTATION_COLLECTION] = enums.FileLinkContainerKind.ANNOTATION_COLLECTION
+    kind: Literal[enums.FileLinkContainerKind.ANNOTATION_COLLECTION] = (
+        enums.FileLinkContainerKind.ANNOTATION_COLLECTION
+    )
     annotation_collection: str
     CONTAINER_FIELD: ClassVar[str] = "annotation_collection"
 
@@ -119,12 +131,20 @@ EXPORT_OF_MEMBERS: dict[str, type[BaseModel]] = {
 
 #: The union the pydantic side carries, so a resolver never sees the flat wire shape.
 ExportOfSpec = Annotated[
-    DatasetExportOfInputModel | TableDatasetExportOfInputModel | MeshCollectionExportOfInputModel | AnnotationCollectionExportOfInputModel,
+    DatasetExportOfInputModel
+    | TableDatasetExportOfInputModel
+    | MeshCollectionExportOfInputModel
+    | AnnotationCollectionExportOfInputModel,
     Field(discriminator="kind"),
 ]
 
 #: The wire fields carrying a container id, one per member.
-_EXPORT_OF_CONTAINER_FIELDS = ("dataset", "table_dataset", "mesh_collection", "annotation_collection")
+_EXPORT_OF_CONTAINER_FIELDS = (
+    "dataset",
+    "table_dataset",
+    "mesh_collection",
+    "annotation_collection",
+)
 
 
 @prose_errors
@@ -141,22 +161,50 @@ class ExportOfInput:
     unions, and ``to_pydantic`` is where that flatness is corrected into the strict member.
     """
 
-    kind: enums.FileLinkContainerKind = strawberry.field(description="Which sort of thing the container is. It fixes which id field below is read; any other is rejected")
-    dataset: strawberry.ID | None = strawberry.field(default=None, description="(DATASET) The array dataset this file was written from")
-    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="(TABLE_DATASET) The table dataset this file was written from")
-    mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="(MESH_COLLECTION) The mesh collection this file was written from")
-    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="(ANNOTATION_COLLECTION) The annotation collection this file was written from")
-    series_identifier: str | None = strawberry.field(default=None, description=_SERIES_DESCRIPTION)
-    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+    kind: enums.FileLinkContainerKind = strawberry.field(
+        description="Which sort of thing the container is. It fixes which id field below is read; any other is rejected"
+    )
+    dataset: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(DATASET) The array dataset this file was written from",
+    )
+    table_dataset: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(TABLE_DATASET) The table dataset this file was written from",
+    )
+    mesh_collection: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(MESH_COLLECTION) The mesh collection this file was written from",
+    )
+    annotation_collection: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="(ANNOTATION_COLLECTION) The annotation collection this file was written from",
+    )
+    series_identifier: str | None = strawberry.field(
+        default=None, description=_SERIES_DESCRIPTION
+    )
+    value_relation: enums.ValueRelation | None = strawberry.field(
+        default=None, description=_VALUE_RELATION_DESCRIPTION
+    )
 
     def to_pydantic(self) -> BaseModel:
         """Match the flat wire fields to the member model `kind` selects, strictly."""
-        supplied = {name: getattr(self, name) for name in ("kind", "series_identifier", "value_relation", *_EXPORT_OF_CONTAINER_FIELDS)}
+        supplied = {
+            name: getattr(self, name)
+            for name in (
+                "kind",
+                "series_identifier",
+                "value_relation",
+                *_EXPORT_OF_CONTAINER_FIELDS,
+            )
+        }
         data = {name: value for name, value in supplied.items() if value is not None}
         return parse_union_member(EXPORT_OF_MEMBERS, data, noun="export link")
 
 
-def _export_of_member(model: type, key: "enums.FileLinkContainerKind", description: str):  # noqa: ANN202 - a decorator factory
+def _export_of_member(
+    model: type, key: "enums.FileLinkContainerKind", description: str
+):  # noqa: ANN202 - a decorator factory
     """Publish one member input of the ExportOfInput union."""
     return kante.pydantic_input(
         model,
@@ -165,44 +213,92 @@ def _export_of_member(model: type, key: "enums.FileLinkContainerKind", descripti
     )
 
 
-@_export_of_member(DatasetExportOfInputModel, enums.FileLinkContainerKind.DATASET, "The fields a DATASET export link reads")
+@_export_of_member(
+    DatasetExportOfInputModel,
+    enums.FileLinkContainerKind.DATASET,
+    "The fields a DATASET export link reads",
+)
 class DatasetExportOfInput:
     """The DATASET member of the export container union."""
 
-    kind: enums.FileLinkContainerKind = strawberry.field(description="The discriminator: which member of ExportOfInput this is")
-    dataset: strawberry.ID = strawberry.field(description="The array dataset this file was written from")
-    series_identifier: str | None = strawberry.field(default=None, description=_SERIES_DESCRIPTION)
-    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+    kind: enums.FileLinkContainerKind = strawberry.field(
+        description="The discriminator: which member of ExportOfInput this is"
+    )
+    dataset: strawberry.ID = strawberry.field(
+        description="The array dataset this file was written from"
+    )
+    series_identifier: str | None = strawberry.field(
+        default=None, description=_SERIES_DESCRIPTION
+    )
+    value_relation: enums.ValueRelation | None = strawberry.field(
+        default=None, description=_VALUE_RELATION_DESCRIPTION
+    )
 
 
-@_export_of_member(TableDatasetExportOfInputModel, enums.FileLinkContainerKind.TABLE_DATASET, "The fields a TABLE_DATASET export link reads")
+@_export_of_member(
+    TableDatasetExportOfInputModel,
+    enums.FileLinkContainerKind.TABLE_DATASET,
+    "The fields a TABLE_DATASET export link reads",
+)
 class TableDatasetExportOfInput:
     """The TABLE_DATASET member of the export container union."""
 
-    kind: enums.FileLinkContainerKind = strawberry.field(description="The discriminator: which member of ExportOfInput this is")
-    table_dataset: strawberry.ID = strawberry.field(description="The table dataset this file was written from")
-    series_identifier: str | None = strawberry.field(default=None, description=_SERIES_DESCRIPTION)
-    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+    kind: enums.FileLinkContainerKind = strawberry.field(
+        description="The discriminator: which member of ExportOfInput this is"
+    )
+    table_dataset: strawberry.ID = strawberry.field(
+        description="The table dataset this file was written from"
+    )
+    series_identifier: str | None = strawberry.field(
+        default=None, description=_SERIES_DESCRIPTION
+    )
+    value_relation: enums.ValueRelation | None = strawberry.field(
+        default=None, description=_VALUE_RELATION_DESCRIPTION
+    )
 
 
-@_export_of_member(MeshCollectionExportOfInputModel, enums.FileLinkContainerKind.MESH_COLLECTION, "The fields a MESH_COLLECTION export link reads")
+@_export_of_member(
+    MeshCollectionExportOfInputModel,
+    enums.FileLinkContainerKind.MESH_COLLECTION,
+    "The fields a MESH_COLLECTION export link reads",
+)
 class MeshCollectionExportOfInput:
     """The MESH_COLLECTION member of the export container union."""
 
-    kind: enums.FileLinkContainerKind = strawberry.field(description="The discriminator: which member of ExportOfInput this is")
-    mesh_collection: strawberry.ID = strawberry.field(description="The mesh collection this file was written from")
-    series_identifier: str | None = strawberry.field(default=None, description=_SERIES_DESCRIPTION)
-    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+    kind: enums.FileLinkContainerKind = strawberry.field(
+        description="The discriminator: which member of ExportOfInput this is"
+    )
+    mesh_collection: strawberry.ID = strawberry.field(
+        description="The mesh collection this file was written from"
+    )
+    series_identifier: str | None = strawberry.field(
+        default=None, description=_SERIES_DESCRIPTION
+    )
+    value_relation: enums.ValueRelation | None = strawberry.field(
+        default=None, description=_VALUE_RELATION_DESCRIPTION
+    )
 
 
-@_export_of_member(AnnotationCollectionExportOfInputModel, enums.FileLinkContainerKind.ANNOTATION_COLLECTION, "The fields an ANNOTATION_COLLECTION export link reads")
+@_export_of_member(
+    AnnotationCollectionExportOfInputModel,
+    enums.FileLinkContainerKind.ANNOTATION_COLLECTION,
+    "The fields an ANNOTATION_COLLECTION export link reads",
+)
 class AnnotationCollectionExportOfInput:
     """The ANNOTATION_COLLECTION member of the export container union."""
 
-    kind: enums.FileLinkContainerKind = strawberry.field(description="The discriminator: which member of ExportOfInput this is")
-    annotation_collection: strawberry.ID = strawberry.field(description="The annotation collection this file was written from")
-    series_identifier: str | None = strawberry.field(default=None, description=_SERIES_DESCRIPTION)
-    value_relation: enums.ValueRelation | None = strawberry.field(default=None, description=_VALUE_RELATION_DESCRIPTION)
+    kind: enums.FileLinkContainerKind = strawberry.field(
+        description="The discriminator: which member of ExportOfInput this is"
+    )
+    annotation_collection: strawberry.ID = strawberry.field(
+        description="The annotation collection this file was written from"
+    )
+    series_identifier: str | None = strawberry.field(
+        default=None, description=_SERIES_DESCRIPTION
+    )
+    value_relation: enums.ValueRelation | None = strawberry.field(
+        default=None, description=_VALUE_RELATION_DESCRIPTION
+    )
 
 
 #: The member inputs published to the SDL, for the schema's ``types=[...]``. Dropping one

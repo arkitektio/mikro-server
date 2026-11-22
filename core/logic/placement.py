@@ -23,7 +23,13 @@ from core.logic import graph as graph_logic
 class PlacementGraph:
     """The placement questions of one world, over a universe seeded with the sources asked about."""
 
-    def __init__(self, world: "models.CoordinateSystem | None", *, seed_systems: Iterable[int] = (), loaders: dict | None = None) -> None:
+    def __init__(
+        self,
+        world: "models.CoordinateSystem | None",
+        *,
+        seed_systems: Iterable[int] = (),
+        loaders: dict | None = None,
+    ) -> None:
         """Fetch the edge universe rooted at the world and seeded with the given source spaces."""
         self.world = world
 
@@ -32,7 +38,9 @@ class PlacementGraph:
         # unscoped. Scoping here would make `pathToWorld` search a narrower set than the
         # field that documents itself as its universe. `SpaceGraph` scopes because it hands
         # back whole containers; this one returns edges and systems. See `root_edges_of`.
-        self.universe = edge_universe.EdgeUniverse(world, seed_systems=seed_systems, loaders=loaders)
+        self.universe = edge_universe.EdgeUniverse(
+            world, seed_systems=seed_systems, loaders=loaders
+        )
 
         self._world_axes: list[str] | None = None
 
@@ -47,9 +55,21 @@ class PlacementGraph:
         """The container whose data lives in a space -- a dataset, or a collection itself."""
         return self.universe.container_of(system.pk) if system is not None else None
 
-    def adjacency(self, container_key: tuple | None, *, at: dict[str, int] | None = None, admit_scoped: bool = False, require_affine: bool = False) -> dict[int, list[tuple["models.Transformation", bool, int]]]:
+    def adjacency(
+        self,
+        container_key: tuple | None,
+        *,
+        at: dict[str, int] | None = None,
+        admit_scoped: bool = False,
+        require_affine: bool = False,
+    ) -> dict[int, list[tuple["models.Transformation", bool, int]]]:
         """The searchable edge universe for one container: its lineage's facts plus the world's claims."""
-        return self.universe.adjacency(container_key, at=at, admit_scoped=admit_scoped, require_affine=require_affine)
+        return self.universe.adjacency(
+            container_key,
+            at=at,
+            admit_scoped=admit_scoped,
+            require_affine=require_affine,
+        )
 
     @property
     def world_axes(self) -> list[str]:
@@ -61,12 +81,19 @@ class PlacementGraph:
         exists to catch.
         """
         if self._world_axes is None:
-            self._world_axes = [axis.name for axis in self.world.axes.all()] if self.world else []
+            self._world_axes = (
+                [axis.name for axis in self.world.axes.all()] if self.world else []
+            )
         return self._world_axes
 
     # --- the questions -------------------------------------------------------
 
-    def path(self, source: "models.CoordinateSystem | None", *, at: dict[str, int] | None = None) -> list[tuple["models.Transformation", bool]] | None:
+    def path(
+        self,
+        source: "models.CoordinateSystem | None",
+        *,
+        at: dict[str, int] | None = None,
+    ) -> list[tuple["models.Transformation", bool]] | None:
         """The path of edges from a source space to this world.
 
         ``None`` when there is no source or no path; ``[]`` when the source already is the
@@ -93,12 +120,23 @@ class PlacementGraph:
         if source is None or self.world is None:
             return None
         container = self.container_of(source)
-        affine = graph_logic._bfs_path(self.adjacency(container, at=at, require_affine=True), source.pk, self.world.pk)
+        affine = graph_logic._bfs_path(
+            self.adjacency(container, at=at, require_affine=True),
+            source.pk,
+            self.world.pk,
+        )
         if affine is not None:
             return affine
-        return graph_logic._bfs_path(self.adjacency(container, at=at), source.pk, self.world.pk)
+        return graph_logic._bfs_path(
+            self.adjacency(container, at=at), source.pk, self.world.pk
+        )
 
-    def condensed(self, source: "models.CoordinateSystem | None", *, at: dict[str, int] | None = None) -> "graph_logic.CondensedPlacement | None":
+    def condensed(
+        self,
+        source: "models.CoordinateSystem | None",
+        *,
+        at: dict[str, int] | None = None,
+    ) -> "graph_logic.CondensedPlacement | None":
         """A source's whole path to world as one affine map, or None when there is no path.
 
         Built on :meth:`path`, not beside it, so `asAffine` condenses *exactly* the path
@@ -124,7 +162,12 @@ class PlacementGraph:
             destination_axes=self.world_axes,
         )
 
-    def representative_path(self, source: "models.CoordinateSystem | None", *, at: dict[str, int] | None = None) -> list[tuple["models.Transformation", bool]] | None:
+    def representative_path(
+        self,
+        source: "models.CoordinateSystem | None",
+        *,
+        at: dict[str, int] | None = None,
+    ) -> list[tuple["models.Transformation", bool]] | None:
         """The source's path, falling back to a route through its scoped edges when there is one.
 
         What the two aggregate questions below walk. They are asked *about the placement* --
@@ -167,7 +210,12 @@ class PlacementGraph:
             self.world.pk,
         )
 
-    def validity(self, source: "models.CoordinateSystem | None", *, at: dict[str, int] | None = None) -> str:
+    def validity(
+        self,
+        source: "models.CoordinateSystem | None",
+        *,
+        at: dict[str, int] | None = None,
+    ) -> str:
         """How much a source's placement is actually known: the weakest edge on its path.
 
         Derived, never stored -- validity is a fact about a *registration*, and the
@@ -187,7 +235,12 @@ class PlacementGraph:
         # construction, which is a property of the order, not of layers.
         return graph_logic.weakest_validity(edge.validity for edge, _ in steps)
 
-    def invariance(self, source: "models.CoordinateSystem | None", *, at: dict[str, int] | None = None) -> str:
+    def invariance(
+        self,
+        source: "models.CoordinateSystem | None",
+        *,
+        at: dict[str, int] | None = None,
+    ) -> str:
         """Which geometric properties survive the whole walk from a source's data to world.
 
         The min-over-path twin of :meth:`validity`, and a minimum for a stronger reason than
@@ -207,9 +260,16 @@ class PlacementGraph:
         steps = self.representative_path(source, at=at)
         if steps is None:
             return enums.TransformInvariance.NONE.value
-        return graph_logic.weakest_invariance(graph_logic.invariance_of(edge) for edge, _ in steps)
+        return graph_logic.weakest_invariance(
+            graph_logic.invariance_of(edge) for edge, _ in steps
+        )
 
-    def state(self, source: "models.CoordinateSystem | None", *, at: dict[str, int] | None = None) -> str:
+    def state(
+        self,
+        source: "models.CoordinateSystem | None",
+        *,
+        at: dict[str, int] | None = None,
+    ) -> str:
         """Whether a source has a place in the world, and if not, why not.
 
         ``pathToWorld`` being null means three very different things, and a client cannot
@@ -246,24 +306,36 @@ class PlacementGraph:
             # Reaching the data's own grid through a lens' own edge is construction, not a
             # registration: a single-channel lens is judged as its grid would be
             # (:func:`core.logic.graph._blocked_by_unmappable` draws the same line).
-            reached = graph_logic.reachable_in(self.adjacency(container, admit_scoped=True), source.pk)
+            reached = graph_logic.reachable_in(
+                self.adjacency(container, admit_scoped=True), source.pk
+            )
             homes = graph_logic.residence_map(reached)
             own = homes.get(source.pk)
-            if any(system_id != source.pk and (own is None or homes.get(system_id) != own) for system_id in reached):
+            if any(
+                system_id != source.pk and (own is None or homes.get(system_id) != own)
+                for system_id in reached
+            ):
                 return enums.PlacementState.UNREGISTERED.value
 
             # **Is there a stated non-correspondence to blame?** A collection's data (a feature
             # table) is unmappable when its derivation edge says so; a dataset's is when the
             # derivation it came out of does. One bucket answers for both -- a collection's
             # edges are its own bucket rather than a separate map keyed by system.
-            if any(not graph_logic.is_traversable(edge) for edge in self.universe.container_edges.get(container, [])):
+            if any(
+                not graph_logic.is_traversable(edge)
+                for edge in self.universe.container_edges.get(container, [])
+            ):
                 return enums.PlacementState.UNMAPPABLE.value
             # An UNMAPPABLE registration -- a declared non-correspondence with the world
             # itself -- never enters a container bucket (no claim does), so it is read off
             # the world's own edges, scoped to this source's lineage: another container's
             # impossibility says nothing about this one.
             lineage = set(self.universe.lineage(container))
-            if any(not graph_logic.is_traversable(edge) and edge_universe._edge_container(edge, self.keys) in lineage for edge in self.universe.root_edges):
+            if any(
+                not graph_logic.is_traversable(edge)
+                and edge_universe._edge_container(edge, self.keys) in lineage
+                for edge in self.universe.root_edges
+            ):
                 return enums.PlacementState.UNMAPPABLE.value
 
         return enums.PlacementState.UNREGISTERED.value

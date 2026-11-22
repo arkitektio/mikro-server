@@ -8,7 +8,10 @@ from django.db.models import TextChoices
 
 class GridLayerKindChoices(TextChoices):
     HEATMAP = "heatmap", "Heatmap (an array or a sparse matrix, one cell per position)"
-    CELLS = "cells", "Cells (a table's rows, one cell per row at its position, coloured by a column)"
+    CELLS = (
+        "cells",
+        "Cells (a table's rows, one cell per row at its position, coloured by a column)",
+    )
 
 
 @strawberry.enum(

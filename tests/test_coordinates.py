@@ -20,29 +20,48 @@ calibrations -- a PHYSICAL system plus one edge, tested in section 7.
 
 import pytest
 from django.db.models import Q
+from kante.context import HttpContext
 from pytest import approx
 
 from core import enums
 from core.logic import coords, graph
-from core.models import Annotation, AnnotationCollection, Axis, CoordinateSystem, Transformation
-from kante.context import HttpContext
+from core.models import (
+    Annotation,
+    AnnotationCollection,
+    Axis,
+    CoordinateSystem,
+    Transformation,
+)
 from mikro_server.schema import schema
 from tests import seed
 
 
-def _draw_annotation(ctx: HttpContext, over: CoordinateSystem, *, name: str = "Nucleus", vectors=None, with_bbox: bool = False) -> Annotation:
+def _draw_annotation(
+    ctx: HttpContext,
+    over: CoordinateSystem,
+    *,
+    name: str = "Nucleus",
+    vectors=None,
+    with_bbox: bool = False,
+) -> Annotation:
     """An annotation "drawn against" ``over``: its collection's system anchors there by identity.
 
     Sync -- call through sync_to_async. The collection's own system copies the target's
     axes, so an identity edge between the two passes the rank check and the annotation's
     coordinates read as coordinates of ``over``.
     """
-    collection = AnnotationCollection.objects.create(name=f"{name}/collection", organization=over.organization)
-    system = CoordinateSystem.objects.create(name=f"{name}/drawing", organization=over.organization)
+    collection = AnnotationCollection.objects.create(
+        name=f"{name}/collection", organization=over.organization
+    )
+    system = CoordinateSystem.objects.create(
+        name=f"{name}/drawing", organization=over.organization
+    )
     collection.coordinate_system = system
     collection.save(update_fields=["coordinate_system"])
     for index, axis in enumerate(over.axes.all().order_by("order")):
-        Axis.objects.create(coordinate_system=system, order=index, name=axis.name, type=axis.type)
+        Axis.objects.create(
+            coordinate_system=system, order=index, name=axis.name, type=axis.type
+        )
     Transformation.objects.create(
         kind=enums.TransformKindChoices.IDENTITY.value,
         input=system,
@@ -55,7 +74,9 @@ def _draw_annotation(ctx: HttpContext, over: CoordinateSystem, *, name: str = "N
         name=name,
         kind=enums.AnnotationKindChoices.POINT.value,
         vectors=vectors,
-        intrinsic_bbox=graph.compute_intrinsic_bbox(system, vectors) if with_bbox else None,
+        intrinsic_bbox=graph.compute_intrinsic_bbox(system, vectors)
+        if with_bbox
+        else None,
         creator=ctx.request.user,
     )
 
@@ -83,7 +104,9 @@ _AXIS_SPECS = [coords.AxisSpec(name=a.name, type=a.type.value) for a in PYRAMID_
 
 
 def _level_transform(level: int) -> tuple[list[float], list[float]]:
-    return coords.pyramid_transform(PYRAMID_SHAPES[0], PYRAMID_SHAPES[level], _AXIS_SPECS)
+    return coords.pyramid_transform(
+        PYRAMID_SHAPES[0], PYRAMID_SHAPES[level], _AXIS_SPECS
+    )
 
 
 # --- 1. the assertion that matters ----------------------------------------
@@ -101,7 +124,11 @@ def test_extent_preserved():
     for level in range(len(PYRAMID_SHAPES)):
         scale, _ = _level_transform(level)
         for i in range(len(_AXIS_SPECS)):
-            assert scale[i] * PYRAMID_SHAPES[level][i] == approx(PYRAMID_SHAPES[0][i]), f"level {level} axis '{_AXIS_SPECS[i].name}' does not cover the same extent as level 0"
+            assert scale[i] * PYRAMID_SHAPES[level][i] == approx(
+                PYRAMID_SHAPES[0][i]
+            ), (
+                f"level {level} axis '{_AXIS_SPECS[i].name}' does not cover the same extent as level 0"
+            )
 
 
 def test_z_factor_is_not_a_power_of_two():
@@ -120,7 +147,9 @@ def test_z_factor_is_not_a_power_of_two():
         assert scale[z] == approx(want), f"level {level} z scale"
 
     nominal = [float(2**level) for level in range(6)]
-    assert expected[3:] != nominal[3:], "the fixture must actually exercise a non-power-of-two axis, or this proves nothing"
+    assert expected[3:] != nominal[3:], (
+        "the fixture must actually exercise a non-power-of-two axis, or this proves nothing"
+    )
 
 
 def test_half_voxel_offset_is_recorded():
@@ -131,13 +160,17 @@ def test_half_voxel_offset_is_recorded():
     faint shimmer when the renderer crossed a level boundary.
     """
     _, translation = _level_transform(0)
-    assert translation == [0.0] * len(_AXIS_SPECS), "level 0 is not downsampled and must not be offset"
+    assert translation == [0.0] * len(_AXIS_SPECS), (
+        "level 0 is not downsampled and must not be offset"
+    )
 
     for level in range(1, len(PYRAMID_SHAPES)):
         _, translation = _level_transform(level)
         for i, spec in enumerate(_AXIS_SPECS):
             factor = PYRAMID_SHAPES[0][i] / PYRAMID_SHAPES[level][i]
-            assert translation[i] == approx((factor - 1) / 2), f"level {level} axis '{spec.name}' half-voxel offset"
+            assert translation[i] == approx((factor - 1) / 2), (
+                f"level {level} axis '{spec.name}' half-voxel offset"
+            )
 
 
 def test_categorical_axes_are_never_downsampled():
@@ -155,7 +188,9 @@ def test_continuous_axes_may_be_downsampled():
     axes (channel and friends) are protected.
     """
     strided_time = [5, 2, 18, 512, 512]  # t 10 -> 5, spatial halved too
-    scale, translation = coords.pyramid_transform(PYRAMID_SHAPES[0], strided_time, _AXIS_SPECS)
+    scale, translation = coords.pyramid_transform(
+        PYRAMID_SHAPES[0], strided_time, _AXIS_SPECS
+    )
     assert scale[0] == approx(2.0)
     assert translation[0] == approx(0.5)
 
@@ -165,7 +200,9 @@ def test_continuous_axes_may_be_downsampled():
         coords.AxisSpec(name="x", type=enums.AxisTypeChoices.SPACE.value),
     ]
     scale, _ = coords.pyramid_transform([256, 64, 64], [64, 64, 64], flim_axes)
-    assert scale[0] == approx(4.0), "re-binning a FLIM arrival-time axis must be allowed"
+    assert scale[0] == approx(4.0), (
+        "re-binning a FLIM arrival-time axis must be allowed"
+    )
 
 
 def test_a_spectrum_axis_is_continuous():
@@ -180,7 +217,9 @@ def test_a_spectrum_axis_is_continuous():
         coords.AxisSpec(name="y", type=enums.AxisTypeChoices.SPACE.value),
         coords.AxisSpec(name="x", type=enums.AxisTypeChoices.SPACE.value),
     ]
-    scale, translation = coords.pyramid_transform([32, 64, 64], [16, 64, 64], spectral_axes)
+    scale, translation = coords.pyramid_transform(
+        [32, 64, 64], [16, 64, 64], spectral_axes
+    )
     assert scale[0] == approx(2.0), "re-binning a spectral axis must be allowed"
     assert translation[0] == approx(0.5)
 
@@ -188,10 +227,14 @@ def test_a_spectrum_axis_is_continuous():
 def test_a_spectrum_axis_carries_a_length_unit():
     """A wavelength is a length. A spectral axis calibrated in seconds is not a slightly-off
     calibration, it is a lie the arithmetic would happily propagate."""
-    coords.assert_unit_matches_type("lambda", enums.AxisTypeChoices.SPECTRUM.value, "nanometer")
+    coords.assert_unit_matches_type(
+        "lambda", enums.AxisTypeChoices.SPECTRUM.value, "nanometer"
+    )
 
     with pytest.raises(coords.AxisUnitError):
-        coords.assert_unit_matches_type("lambda", enums.AxisTypeChoices.SPECTRUM.value, "nanosecond")
+        coords.assert_unit_matches_type(
+            "lambda", enums.AxisTypeChoices.SPECTRUM.value, "nanosecond"
+        )
 
 
 def test_phasor_axes_are_the_continuous_non_spatial_ones():
@@ -199,8 +242,14 @@ def test_phasor_axes_are_the_continuous_non_spatial_ones():
     assert coords.is_phasor_axis(enums.AxisTypeChoices.MICROTIME.value)
     assert coords.is_phasor_axis(enums.AxisTypeChoices.SPECTRUM.value)
 
-    for axis_type in (enums.AxisTypeChoices.CHANNEL, enums.AxisTypeChoices.SPACE, enums.AxisTypeChoices.TIME):
-        assert not coords.is_phasor_axis(axis_type.value), f"a phasor over a {axis_type.value} axis means nothing"
+    for axis_type in (
+        enums.AxisTypeChoices.CHANNEL,
+        enums.AxisTypeChoices.SPACE,
+        enums.AxisTypeChoices.TIME,
+    ):
+        assert not coords.is_phasor_axis(axis_type.value), (
+            f"a phasor over a {axis_type.value} axis means nothing"
+        )
 
 
 def test_render_axes_expose_the_phasor_axis():
@@ -241,7 +290,9 @@ def test_the_render_axes_do_not_depend_on_where_the_non_spatial_axes_sit():
     scrambled = [ordered[2], ordered[0], ordered[3], ordered[1]]  # row, t, col, c
 
     assert coords.resolve_render_axes(ordered) == coords.resolve_render_axes(scrambled)
-    assert coords.resolve_render_axes(scrambled).x == "col", "the last spatial axis is x wherever the others sit"
+    assert coords.resolve_render_axes(scrambled).x == "col", (
+        "the last spatial axis is x wherever the others sit"
+    )
     assert coords.resolve_render_axes(scrambled).t == "t"
     assert coords.resolve_render_axes(scrambled).intensity == "c"
 
@@ -380,7 +431,9 @@ def test_stepped_lens_rescales_as_well_as_offsets():
         def __init__(self, axis, start=None, stop=None, step=None):
             self.axis, self.start, self.stop, self.step = axis, start, stop, step
 
-    kind, params = coords.lens_to_parent(["z", "y", "x"], [_Slice("x", start=10, step=2)])
+    kind, params = coords.lens_to_parent(
+        ["z", "y", "x"], [_Slice("x", start=10, step=2)]
+    )
 
     assert kind == enums.TransformKindChoices.SEQUENCE.value
     assert params["scale"] == [1.0, 1.0, 2.0]
@@ -395,7 +448,9 @@ def test_lens_roundtrip():
             self.axis, self.start, self.stop, self.step = axis, start, stop, step
 
     dims = ["z", "y", "x"]
-    kind, params = coords.lens_to_parent(dims, [_Slice("z", start=4), _Slice("x", start=7)])
+    kind, params = coords.lens_to_parent(
+        dims, [_Slice("z", start=4), _Slice("x", start=7)]
+    )
 
     forward = coords.compose([(kind, params)], 3)
     point = [3.0, 5.0, 2.0]
@@ -419,7 +474,11 @@ def test_lens_shape_follows_python_slice_semantics():
         def __init__(self, axis, start=None, stop=None, step=None):
             self.axis, self.start, self.stop, self.step = axis, start, stop, step
 
-    shape = coords.lens_shape([36, 1024, 1024], ["z", "y", "x"], [_Slice("z", start=4, stop=32), _Slice("x", step=2)])
+    shape = coords.lens_shape(
+        [36, 1024, 1024],
+        ["z", "y", "x"],
+        [_Slice("z", start=4, stop=32), _Slice("x", step=2)],
+    )
     assert shape == [28, 1024, 512]
 
 
@@ -428,7 +487,9 @@ def test_lens_shape_follows_python_slice_semantics():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_stored_edges_are_forward_and_absolute(authenticated_context: HttpContext):
+async def test_stored_edges_are_forward_and_absolute(
+    authenticated_context: HttpContext,
+):
     """The stored graph must say what the arithmetic says.
 
     Reads the rows back rather than the functions: a derivation that is right but
@@ -436,7 +497,9 @@ async def test_stored_edges_are_forward_and_absolute(authenticated_context: Http
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES
+    )
 
     def check():
         arrays = list(dataset.data_arrays.order_by("level"))
@@ -492,27 +555,47 @@ async def test_dataset_graph_is_connected(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES)
-    await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "z", "start": 4, "stop": 32}])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES
+    )
+    await seed.create_lens(
+        authenticated_context, dataset, slices=[{"axis": "z", "start": 4, "stop": 32}]
+    )
 
     def check():
-        systems = set(CoordinateSystem.objects.filter(datasets=dataset).values_list("pk", flat=True))
-        systems |= set(CoordinateSystem.objects.filter(data_arrays__dataset=dataset).values_list("pk", flat=True))
-        systems |= set(CoordinateSystem.objects.filter(lenses__arraylens__dataset=dataset).values_list("pk", flat=True))
+        systems = set(
+            CoordinateSystem.objects.filter(datasets=dataset).values_list(
+                "pk", flat=True
+            )
+        )
+        systems |= set(
+            CoordinateSystem.objects.filter(data_arrays__dataset=dataset).values_list(
+                "pk", flat=True
+            )
+        )
+        systems |= set(
+            CoordinateSystem.objects.filter(
+                lenses__arraylens__dataset=dataset
+            ).values_list("pk", flat=True)
+        )
 
         intrinsic = dataset.intrinsic_coordinate_system.pk
 
         # Every non-intrinsic system must reach the intrinsic one.
         for pk in systems - {intrinsic}:
             chain = graph.path_to_intrinsic(CoordinateSystem.objects.get(pk=pk))
-            assert chain, f"coordinate system {pk} cannot reach the dataset's intrinsic space"
+            assert chain, (
+                f"coordinate system {pk} cannot reach the dataset's intrinsic space"
+            )
 
     await sync_to_async(check)()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_simple_dataset_owns_exactly_one_pixel_system(authenticated_context: HttpContext):
+async def test_a_simple_dataset_owns_exactly_one_pixel_system(
+    authenticated_context: HttpContext,
+):
     """A single-level dataset with a full lens materializes nothing but its intrinsic system.
 
     Level 0's voxel grid and an unsliced lens' selection are the intrinsic space *by
@@ -522,11 +605,17 @@ async def test_a_simple_dataset_owns_exactly_one_pixel_system(authenticated_cont
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Simple", shapes=[[3, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Simple", shapes=[[3, 64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
     def check():
-        systems = CoordinateSystem.objects.filter(Q(datasets=dataset) | Q(data_arrays__dataset=dataset) | Q(lenses__arraylens__dataset=dataset)).distinct()
+        systems = CoordinateSystem.objects.filter(
+            Q(datasets=dataset)
+            | Q(data_arrays__dataset=dataset)
+            | Q(lenses__arraylens__dataset=dataset)
+        ).distinct()
         assert systems.count() == 1
         intrinsic = dataset.intrinsic_coordinate_system
         assert systems.get().pk == intrinsic.pk
@@ -556,9 +645,15 @@ async def test_a_simple_dataset_owns_exactly_one_pixel_system(authenticated_cont
     (level,) = result.data["arrayDataset"]["dataArrays"]
     # Level 0 and an unsliced lens both live in the dataset's own grid rather than owning a
     # duplicate of it -- the same node, which is the null-means-self convention retired.
-    assert level["coordinateSystem"]["id"] == result.data["arrayDataset"]["intrinsicSystem"]["id"]
+    assert (
+        level["coordinateSystem"]["id"]
+        == result.data["arrayDataset"]["intrinsicSystem"]["id"]
+    )
     assert level["toParent"] is None
-    assert result.data["lens"]["coordinateSystem"]["id"] == result.data["arrayDataset"]["intrinsicSystem"]["id"]
+    assert (
+        result.data["lens"]["coordinateSystem"]["id"]
+        == result.data["arrayDataset"]["intrinsicSystem"]["id"]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -578,8 +673,12 @@ async def test_roi_bbox_accounts_for_the_lens_crop(authenticated_context: HttpCo
         seed.axis("y", enums.AxisType.SPACE),
         seed.axis("x", enums.AxisType.SPACE),
     ]
-    dataset = await seed.create_array_dataset(authenticated_context, "Crop", axes=axes, shapes=[[36, 128, 128]])
-    lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "z", "start": 4, "stop": 32}])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Crop", axes=axes, shapes=[[36, 128, 128]]
+    )
+    lens = await seed.create_lens(
+        authenticated_context, dataset, slices=[{"axis": "z", "start": 4, "stop": 32}]
+    )
 
     def check():
         system = lens.coordinate_system
@@ -611,7 +710,9 @@ async def test_annotation_survives_its_scene(authenticated_context: HttpContext)
 
     def draw():
         org = authenticated_context.request.organization
-        collection = AnnotationCollection.objects.create(name="Kept", scene=scene, organization=org)
+        collection = AnnotationCollection.objects.create(
+            name="Kept", scene=scene, organization=org
+        )
         CoordinateSystem.objects.create(name="Kept/drawing", organization=org)
         return Annotation.objects.create(
             collection=collection,
@@ -624,9 +725,13 @@ async def test_annotation_survives_its_scene(authenticated_context: HttpContext)
     annotation = await sync_to_async(draw)()
     await scene.adelete()
 
-    assert await Annotation.objects.filter(pk=annotation.pk).aexists(), "deleting a scene must not delete an annotation"
+    assert await Annotation.objects.filter(pk=annotation.pk).aexists(), (
+        "deleting a scene must not delete an annotation"
+    )
     collection = await AnnotationCollection.objects.aget(pk=annotation.collection_id)
-    assert collection.scene_id is None, "the collection survives freestanding, un-marked from the deleted scene"
+    assert collection.scene_id is None, (
+        "the collection survives freestanding, un-marked from the deleted scene"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -635,15 +740,21 @@ async def test_every_stored_edge_is_forward(authenticated_context: HttpContext):
     """No row may encode an inverse map. Direction is always input -> output."""
     from asgiref.sync import sync_to_async
 
-    await seed.create_array_dataset(authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES)
+    await seed.create_array_dataset(
+        authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES
+    )
 
     def check():
         for edge in Transformation.objects.all():
-            assert edge.input_id is not None and edge.output_id is not None, "a top-level edge must join two systems"
+            assert edge.input_id is not None and edge.output_id is not None, (
+                "a top-level edge must join two systems"
+            )
             # A level's own space is the input, never the output: the pyramid maps up into
             # the dataset's grid, not down out of it. "Is a level's space" is now a question
             # about residence -- and the dataset's grid is where the dataset itself lives.
-            assert edge.input.data_arrays.exists() and not edge.input.datasets.exists(), "a level's own space is the input"
+            assert (
+                edge.input.data_arrays.exists() and not edge.input.datasets.exists()
+            ), "a level's own space is the input"
             assert edge.output.datasets.exists(), "and the dataset's grid is the output"
 
     await sync_to_async(check)()
@@ -705,7 +816,9 @@ query SpaceAnnotations($id: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_space_reaches_annotations_drawn_on_a_derived_dataset(authenticated_context: HttpContext):
+async def test_a_space_reaches_annotations_drawn_on_a_derived_dataset(
+    authenticated_context: HttpContext,
+):
     """Register the parent; an annotation drawn on the child is still in the space's reach.
 
     The point of moving this field onto the space, beyond where it belongs: the answer
@@ -742,12 +855,20 @@ async def test_a_space_reaches_annotations_drawn_on_a_derived_dataset(authentica
 
     world, child_intrinsic = await sync_to_async(wire)()
 
-    result = await schema.execute(SPACE_ANNOTATIONS, context_value=authenticated_context, variable_values={"id": str(world.pk)})
+    result = await schema.execute(
+        SPACE_ANNOTATIONS,
+        context_value=authenticated_context,
+        variable_values={"id": str(world.pk)},
+    )
     assert not result.errors, result.errors
     data = result.data["coordinateSystem"]
 
-    assert str(child_intrinsic.pk) in {system["id"] for system in data["placedSystems"]}, "the child rides its parent's registration into the space"
-    assert [a["name"] for a in data["annotations"]] == ["OnTheChild"], "and the drawing on it is in the space's reach, one derivation edge out"
+    assert str(child_intrinsic.pk) in {
+        system["id"] for system in data["placedSystems"]
+    }, "the child rides its parent's registration into the space"
+    assert [a["name"] for a in data["annotations"]] == ["OnTheChild"], (
+        "and the drawing on it is in the space's reach, one derivation edge out"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -763,7 +884,9 @@ async def test_registration_is_a_space_level_edge(authenticated_context: HttpCon
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Specimen", axes=seed.ZYX_AXES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Specimen", axes=seed.ZYX_AXES
+    )
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def systems():
@@ -791,29 +914,43 @@ async def test_registration_is_a_space_level_edge(authenticated_context: HttpCon
     # bare interface.
     assert edge["__typename"] == "AffineTransformation"
     assert edge["affine"] == _AFFINE
-    assert edge["input"]["id"] == str(intrinsic.pk), "the edge sets out from the dataset's own space"
-    assert edge["output"]["residents"] == [], "and lands in a space nothing lives in: a world"
+    assert edge["input"]["id"] == str(intrinsic.pk), (
+        "the edge sets out from the dataset's own space"
+    )
+    assert edge["output"]["residents"] == [], (
+        "and lands in a space nothing lives in: a world"
+    )
 
     # 2. An annotation drawn against the DATASET, which knows nothing about the scene.
     await sync_to_async(_draw_annotation)(authenticated_context, intrinsic)
 
     # 3. The scene reaches both, through the edge.
-    result = await schema.execute(SCENE_GRAPH, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        SCENE_GRAPH,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     data = result.data["scene"]
 
     world_data = data["worldCoordinateSystem"]
     reachable = {system["id"] for system in world_data["placedSystems"]}
-    assert str(intrinsic.pk) in reachable, "the registered dataset's system must be placeable in the world"
+    assert str(intrinsic.pk) in reachable, (
+        "the registered dataset's system must be placeable in the world"
+    )
     assert str(world.pk) in reachable
 
-    assert [r["name"] for r in world_data["annotations"]] == ["Nucleus"], "the annotation must reach the world through the transformation edge"
+    assert [r["name"] for r in world_data["annotations"]] == ["Nucleus"], (
+        "the annotation must reach the world through the transformation edge"
+    )
     assert world_data["registrations"][0]["affine"] == _AFFINE
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_a_registration_unplaces_but_keeps_the_annotation(authenticated_context: HttpContext):
+async def test_deleting_a_registration_unplaces_but_keeps_the_annotation(
+    authenticated_context: HttpContext,
+):
     """Un-registering is deleting the claim -- and only the claim.
 
     One truth per space: there is no membership to withdraw, so taking a dataset
@@ -825,7 +962,9 @@ async def test_deleting_a_registration_unplaces_but_keeps_the_annotation(authent
 
     from core.models import Transformation as TransformationModel
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Specimen", axes=seed.ZYX_AXES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Specimen", axes=seed.ZYX_AXES
+    )
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def systems():
@@ -863,12 +1002,18 @@ async def test_deleting_a_registration_unplaces_but_keeps_the_annotation(authent
 
     # The dataset is no longer registered into this world, so neither it nor its
     # annotation is reachable from the scene any more.
-    result = await schema.execute(SCENE_GRAPH, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        SCENE_GRAPH,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     data = result.data["scene"]
 
     world_data = data["worldCoordinateSystem"]
-    assert str(intrinsic.pk) not in {system["id"] for system in world_data["placedSystems"]}
+    assert str(intrinsic.pk) not in {
+        system["id"] for system in world_data["placedSystems"]
+    }
     assert world_data["annotations"] == []
     assert world_data["registrations"] == []
 
@@ -879,7 +1024,9 @@ async def test_deleting_a_registration_unplaces_but_keeps_the_annotation(authent
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_wrapper_kinds_cannot_be_authored_directly(authenticated_context: HttpContext):
+async def test_wrapper_kinds_cannot_be_authored_directly(
+    authenticated_context: HttpContext,
+):
     """A SEQUENCE is built by the ingest from its children, never authored empty.
 
     Wrapper kinds are now unrepresentable in the input: `CreatableTransformKind` has no
@@ -889,7 +1036,9 @@ async def test_wrapper_kinds_cannot_be_authored_directly(authenticated_context: 
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Specimen", axes=seed.ZYX_AXES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Specimen", axes=seed.ZYX_AXES
+    )
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def systems():
@@ -900,7 +1049,13 @@ async def test_wrapper_kinds_cannot_be_authored_directly(authenticated_context: 
     result = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(intrinsic.pk), "output": str(world.pk), "transform": {"kind": "SEQUENCE"}}},
+        variable_values={
+            "input": {
+                "input": str(intrinsic.pk),
+                "output": str(world.pk),
+                "transform": {"kind": "SEQUENCE"},
+            }
+        },
     )
     assert result.errors, "a SEQUENCE wrapper must be unrepresentable in the input enum"
 
@@ -908,7 +1063,13 @@ async def test_wrapper_kinds_cannot_be_authored_directly(authenticated_context: 
     result = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(intrinsic.pk), "output": str(world.pk), "transform": {"kind": "SCALE"}}},
+        variable_values={
+            "input": {
+                "input": str(intrinsic.pk),
+                "output": str(world.pk),
+                "transform": {"kind": "SCALE"},
+            }
+        },
     )
     assert result.errors, "a SCALE transformation with no `scale` must be rejected"
 
@@ -924,9 +1085,8 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     nothing would sign it, nothing would scope it to an organization, and nothing
     would clean it up.
     """
-    from asgiref.sync import sync_to_async
-
     from arkitekt_datalayer.models import FabriksStore
+    from asgiref.sync import sync_to_async
 
     dataset = await seed.create_array_dataset(authenticated_context, "Labels")
 
@@ -956,8 +1116,18 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
             "input": {
                 # Axes are the collection's own now, and the IDENTITY says they are the
                 # source's grid as-is -- which the rank check then holds this to.
-                "axes": [{"name": "c", "type": "CHANNEL"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                "derivedFrom": [{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "IDENTITY"}}],
+                "axes": [
+                    {"name": "c", "type": "CHANNEL"},
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "x", "type": "SPACE"},
+                ],
+                "derivedFrom": [
+                    {
+                        "kind": "COORDINATE_SYSTEM",
+                        "coordinateSystem": str(system.pk),
+                        "transform": {"kind": "IDENTITY"},
+                    }
+                ],
                 "name": "v20260713-a3f9",
                 # The store, and nothing about the geometry: its manifest already stated the
                 # grid, the encoding and the format version, and the server read them.
@@ -980,9 +1150,17 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     # which asserted the vertices were in exactly that grid and left nowhere to say they
     # were not -- meshes off a half-resolution grid could only be recorded by rewriting
     # every vertex. The IDENTITY stated above is what says the geometry is that grid's.
-    assert [r["__typename"] for r in collection["coordinateSystem"]["residents"]] == ["MeshCollection"], "the vertices live in the collection's own space; its whole lens is the collection's handle, not a second resident"
+    assert [r["__typename"] for r in collection["coordinateSystem"]["residents"]] == [
+        "MeshCollection"
+    ], (
+        "the vertices live in the collection's own space; its whole lens is the collection's handle, not a second resident"
+    )
     assert collection["coordinateSystem"]["id"] != str(system.pk)
-    assert [axis["name"] for axis in collection["coordinateSystem"]["axes"]] == ["c", "y", "x"], "the axes it stated, which the IDENTITY then holds to the source's"
+    assert [axis["name"] for axis in collection["coordinateSystem"]["axes"]] == [
+        "c",
+        "y",
+        "x",
+    ], "the axes it stated, which the IDENTITY then holds to the source's"
 
     assert collection["derivedFrom"][0]["kind"] == "IDENTITY"
     assert collection["derivedFrom"][0]["output"]["id"] == str(system.pk)
@@ -991,17 +1169,25 @@ async def test_mesh_collection_round_trip(authenticated_context: HttpContext):
     # one grant for the manifest, both catalogs and every level, where the shape this replaced
     # needed one per object.
     assert collection["store"]["id"] == str(store.pk)
-    assert collection["store"]["grid"] == collection["grid"], "the collection reports what its store's manifest said"
+    assert collection["store"]["grid"] == collection["grid"], (
+        "the collection reports what its store's manifest said"
+    )
     assert await FabriksStore.objects.filter(pk=store.pk, populated=True).aexists()
 
     # The collection deliberately exposes no `meshes` field: a paginated one would
     # end up walking millions of Parquet rows through GraphQL to feed a render loop.
     sdl = schema.as_str()
-    mesh_def = sdl[sdl.find("type MeshCollection ") : sdl.find("\n}", sdl.find("type MeshCollection "))]
+    mesh_def = sdl[
+        sdl.find("type MeshCollection ") : sdl.find(
+            "\n}", sdl.find("type MeshCollection ")
+        )
+    ]
     assert "\n  meshes" not in mesh_def
     # And it is addressed by store, not by URL.
     assert "catalogUrl" not in sdl
-    assert "\n  catalog" not in mesh_def, "the per-role fields are gone: a collection is its fabriks store"
+    assert "\n  catalog" not in mesh_def, (
+        "the per-role fields are gone: a collection is its fabriks store"
+    )
 
 
 # --- 6b. placement paths: the one sanctioned "to world" query ----------------
@@ -1034,7 +1220,9 @@ query LayerPaths($id: ID!) {
 def _image_layer(scene, lens):
     from core import models as core_models
 
-    return core_models.Layer.objects.create(kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens)
+    return core_models.Layer.objects.create(
+        kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens
+    )
 
 
 async def _register(context, input_system, world, scene, affine=None, axes=None):
@@ -1049,14 +1237,26 @@ async def _register(context, input_system, world, scene, affine=None, axes=None)
     """
     transform = {"kind": "AFFINE", "affine": affine or _AFFINE}
     if axes:
-        transform = {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": list(axes), "outputAxes": list(axes), "affine": affine or _AFFINE}]}
+        transform = {
+            "kind": "BY_DIMENSION",
+            "parts": [
+                {
+                    "kind": "AFFINE",
+                    "inputAxes": list(axes),
+                    "outputAxes": list(axes),
+                    "affine": affine or _AFFINE,
+                }
+            ],
+        }
     edge = {
         "input": str(input_system.pk),
         "output": str(world.pk),
         "transform": transform,
     }
 
-    result = await schema.execute(REGISTER, context_value=context, variable_values={"input": edge})
+    result = await schema.execute(
+        REGISTER, context_value=context, variable_values={"input": edge}
+    )
     assert not result.errors, result.errors
     return result.data["createTransformation"]
 
@@ -1071,8 +1271,12 @@ async def test_layer_path_to_world(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Placed", axes=seed.ZYX_AXES)
-    lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Placed", axes=seed.ZYX_AXES
+    )
+    lens = await seed.create_lens(
+        authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]
+    )
     scene = await seed.create_scene(authenticated_context, "Composition")
 
     def setup():
@@ -1082,15 +1286,28 @@ async def test_layer_path_to_world(authenticated_context: HttpContext):
     intrinsic, world = await sync_to_async(setup)()
     await _register(authenticated_context, intrinsic, world, scene)
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     path = result.data["scene"]["layers"][0]["pathToWorld"]
 
     assert path is not None
-    lens_system, world_id = await sync_to_async(lambda: (str(lens.coordinate_system.pk), str(scene.world.pk)))()
-    hops = [(step["transformation"]["input"]["id"], step["transformation"]["output"]["id"]) for step in path]
-    assert hops == [(lens_system, str(intrinsic.pk)), (str(intrinsic.pk), world_id)], "lens -> dataset grid -> world"
-    assert all(step["inverted"] is False for step in path), "the natural path is all-forward"
+    lens_system, world_id = await sync_to_async(
+        lambda: (str(lens.coordinate_system.pk), str(scene.world.pk))
+    )()
+    hops = [
+        (step["transformation"]["input"]["id"], step["transformation"]["output"]["id"])
+        for step in path
+    ]
+    assert hops == [(lens_system, str(intrinsic.pk)), (str(intrinsic.pk), world_id)], (
+        "lens -> dataset grid -> world"
+    )
+    assert all(step["inverted"] is False for step in path), (
+        "the natural path is all-forward"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1104,7 +1321,9 @@ async def test_level_paths_star_into_world(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Pyramid", axes=PYRAMID_AXES, shapes=PYRAMID_SHAPES
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
     scene = await seed.create_scene(authenticated_context, "Composition")
 
@@ -1116,20 +1335,43 @@ async def test_level_paths_star_into_world(authenticated_context: HttpContext):
     intrinsic_id, world_id = str(intrinsic.pk), str(world.pk)
     # A (t,c,z,y,x) dataset into a (z,y,x) world: the registration speaks only about the
     # spatial axes, so it names them.
-    await _register(authenticated_context, intrinsic, world, scene, axes=["z", "y", "x"])
+    await _register(
+        authenticated_context, intrinsic, world, scene, axes=["z", "y", "x"]
+    )
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     placements = result.data["scene"]["layers"][0]["levelPaths"]
 
-    assert [placement["dataArray"]["level"] for placement in placements] == [0, 1, 2, 3, 4, 5]
+    assert [placement["dataArray"]["level"] for placement in placements] == [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+    ]
     for placement in placements:
-        hops = [(step["transformation"]["input"]["id"], step["transformation"]["output"]["id"]) for step in placement["path"]]
+        hops = [
+            (
+                step["transformation"]["input"]["id"],
+                step["transformation"]["output"]["id"],
+            )
+            for step in placement["path"]
+        ]
         if placement["dataArray"]["level"] == 0:
             # Level 0 lives in the dataset's own grid, so its path is just the registration.
-            assert hops == [(intrinsic_id, world_id)], "level 0 sets out from the dataset's own space"
+            assert hops == [(intrinsic_id, world_id)], (
+                "level 0 sets out from the dataset's own space"
+            )
         else:
-            assert len(hops) == 2, f"level {placement['dataArray']['level']} must star straight into the dataset's grid, then world"
+            assert len(hops) == 2, (
+                f"level {placement['dataArray']['level']} must star straight into the dataset's grid, then world"
+            )
             assert hops[0][1] == intrinsic_id and hops[1] == (intrinsic_id, world_id)
 
 
@@ -1145,7 +1387,11 @@ async def test_unregistered_layer_has_no_path(authenticated_context: HttpContext
 
     await sync_to_async(_image_layer)(scene, lens)
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     layer = result.data["scene"]["layers"][0]
 
@@ -1165,7 +1411,9 @@ async def test_path_routes_through_a_calibration(authenticated_context: HttpCont
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Staged", axes=seed.ZYX_AXES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Staged", axes=seed.ZYX_AXES
+    )
     physical = await seed.create_physical_space(
         authenticated_context,
         dataset,
@@ -1186,12 +1434,25 @@ async def test_path_routes_through_a_calibration(authenticated_context: HttpCont
     world = await sync_to_async(setup)()
     await _register(authenticated_context, physical, world, scene)
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     path = result.data["scene"]["layers"][0]["pathToWorld"]
 
-    intrinsic_id, physical_id, world_id = await sync_to_async(lambda: (str(dataset.coordinate_system.pk), str(physical.pk), str(scene.world.pk)))()
-    hops = [(step["transformation"]["input"]["id"], step["transformation"]["output"]["id"]) for step in path]
+    intrinsic_id, physical_id, world_id = await sync_to_async(
+        lambda: (
+            str(dataset.coordinate_system.pk),
+            str(physical.pk),
+            str(scene.world.pk),
+        )
+    )()
+    hops = [
+        (step["transformation"]["input"]["id"], step["transformation"]["output"]["id"])
+        for step in path
+    ]
     # An unsliced lens starts in the dataset's own grid: no lens hop, no level-0 hop.
     assert hops == [(intrinsic_id, physical_id), (physical_id, world_id)]
     assert all(step["inverted"] is False for step in path)
@@ -1209,7 +1470,9 @@ async def test_two_scenes_two_registrations(authenticated_context: HttpContext):
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Shared", axes=seed.ZYX_AXES)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Shared", axes=seed.ZYX_AXES
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
     scene_a = await seed.create_scene(authenticated_context, "A")
     scene_b = await seed.create_scene(authenticated_context, "B")
@@ -1223,13 +1486,21 @@ async def test_two_scenes_two_registrations(authenticated_context: HttpContext):
 
     affine_b = [[1.0, 0.0, 0.0, 500.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]
     edge_a = await _register(authenticated_context, intrinsic, world_a, scene_a)
-    edge_b = await _register(authenticated_context, intrinsic, world_b, scene_b, affine=affine_b)
+    edge_b = await _register(
+        authenticated_context, intrinsic, world_b, scene_b, affine=affine_b
+    )
 
     for scene, expected_edge in ((scene_a, edge_a), (scene_b, edge_b)):
-        result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+        result = await schema.execute(
+            LAYER_PATHS,
+            context_value=authenticated_context,
+            variable_values={"id": str(scene.pk)},
+        )
         assert not result.errors, result.errors
         path = result.data["scene"]["layers"][0]["pathToWorld"]
-        assert path[-1]["transformation"]["id"] == expected_edge["id"], "each scene's layer must end in its own registration, never the other scene's"
+        assert path[-1]["transformation"]["id"] == expected_edge["id"], (
+            "each scene's layer must end in its own registration, never the other scene's"
+        )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1258,7 +1529,11 @@ async def test_inverted_step_is_flagged(authenticated_context: HttpContext):
 
     edge = await sync_to_async(setup)()
 
-    result = await schema.execute(LAYER_PATHS, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        LAYER_PATHS,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
     path = result.data["scene"]["layers"][0]["pathToWorld"]
 
@@ -1302,7 +1577,14 @@ query Spaces($id: ID!) {
 
 def _calibration_input(dataset, name, scale, axes):
     """A calibrated space and the edge into it, in one `createCoordinateSystem` call."""
-    return {"name": name, "axes": axes, "registrations": [{"dataset": str(dataset.pk), "transform": {"kind": "SCALE", "scale": scale}}]}
+    return {
+        "name": name,
+        "axes": axes,
+        "registrations": [
+            {"dataset": str(dataset.pk), "transform": {"kind": "SCALE", "scale": scale}}
+        ],
+    }
+
 
 _CAL_AXES = [
     {"name": "c", "type": "CHANNEL", "unit": "a.u."},
@@ -1327,14 +1609,24 @@ async def test_calibration_round_trip(authenticated_context: HttpContext):
     result = await schema.execute(
         CALIBRATE,
         context_value=authenticated_context,
-        variable_values={"input": _calibration_input(dataset, "Calibrated/physical", [1.0, 0.325, 0.325], _CAL_AXES)},
+        variable_values={
+            "input": _calibration_input(
+                dataset, "Calibrated/physical", [1.0, 0.325, 0.325], _CAL_AXES
+            )
+        },
     )
     assert not result.errors, result.errors
     physical = result.data["createCoordinateSystem"]
-    assert physical["residents"] == [], "nothing lives in a calibrated space -- an edge is what relates it to the data"
+    assert physical["residents"] == [], (
+        "nothing lives in a calibrated space -- an edge is what relates it to the data"
+    )
     assert [a["unit"] for a in physical["axes"]] == ["a.u.", "micrometer", "micrometer"]
 
-    result = await schema.execute(DATASET_SPACES, context_value=authenticated_context, variable_values={"id": str(dataset.pk)})
+    result = await schema.execute(
+        DATASET_SPACES,
+        context_value=authenticated_context,
+        variable_values={"id": str(dataset.pk)},
+    )
     assert not result.errors, result.errors
     spaces = result.data["arrayDataset"]
 
@@ -1362,7 +1654,9 @@ query SystemRegistrations($id: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_registrations_are_the_edges_landing_in_a_space(authenticated_context: HttpContext):
+async def test_registrations_are_the_edges_landing_in_a_space(
+    authenticated_context: HttpContext,
+):
     """`CoordinateSystem.registrations` is every top-level edge into the space, and nothing else.
 
     The field says what landed *here*, so a calibrated space reports the one SCALE
@@ -1377,26 +1671,44 @@ async def test_registrations_are_the_edges_landing_in_a_space(authenticated_cont
     result = await schema.execute(
         CALIBRATE,
         context_value=authenticated_context,
-        variable_values={"input": _calibration_input(dataset, "Registered/physical", [1.0, 0.325, 0.325], _CAL_AXES)},
+        variable_values={
+            "input": _calibration_input(
+                dataset, "Registered/physical", [1.0, 0.325, 0.325], _CAL_AXES
+            )
+        },
     )
     assert not result.errors, result.errors
     space_id = result.data["createCoordinateSystem"]["id"]
 
-    result = await schema.execute(SYSTEM_REGISTRATIONS, context_value=authenticated_context, variable_values={"id": space_id})
+    result = await schema.execute(
+        SYSTEM_REGISTRATIONS,
+        context_value=authenticated_context,
+        variable_values={"id": space_id},
+    )
     assert not result.errors, result.errors
     claims = result.data["coordinateSystem"]["registrations"]
 
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
-    assert [(claim["kind"], claim["input"]["id"]) for claim in claims] == [("SCALE", str(intrinsic.pk))], "the one edge that placed the dataset here"
+    assert [(claim["kind"], claim["input"]["id"]) for claim in claims] == [
+        ("SCALE", str(intrinsic.pk))
+    ], "the one edge that placed the dataset here"
 
-    result = await schema.execute(SYSTEM_REGISTRATIONS, context_value=authenticated_context, variable_values={"id": str(intrinsic.pk)})
+    result = await schema.execute(
+        SYSTEM_REGISTRATIONS,
+        context_value=authenticated_context,
+        variable_values={"id": str(intrinsic.pk)},
+    )
     assert not result.errors, result.errors
-    assert result.data["coordinateSystem"]["registrations"] == [], "the same edge sets out from the grid: outbound is not a claim on it"
+    assert result.data["coordinateSystem"]["registrations"] == [], (
+        "the same edge sets out from the grid: outbound is not a claim on it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_recalibration_moves_nothing_drawn_in_pixels(authenticated_context: HttpContext):
+async def test_recalibration_moves_nothing_drawn_in_pixels(
+    authenticated_context: HttpContext,
+):
     """THE property this design buys: refining a calibration touches one edge and nothing else.
 
     Under the old model the physical spacing was baked into every pyramid edge and
@@ -1406,7 +1718,9 @@ async def test_recalibration_moves_nothing_drawn_in_pixels(authenticated_context
     """
     from asgiref.sync import sync_to_async
 
-    dataset = await seed.create_array_dataset(authenticated_context, "Recal", shapes=[[3, 64, 64], [3, 32, 32]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Recal", shapes=[[3, 64, 64], [3, 32, 32]]
+    )
     physical = await seed.create_physical_space(
         authenticated_context,
         dataset,
@@ -1426,7 +1740,11 @@ async def test_recalibration_moves_nothing_drawn_in_pixels(authenticated_context
         # dataset's own grid, so "edges out of a space one of this dataset's arrays lives in"
         # now also catches the calibration edge. The pyramid is the edges landing *in* the
         # dataset's grid.
-        level_edges = list(Transformation.objects.filter(output__datasets=dataset).values_list("pk", "params"))
+        level_edges = list(
+            Transformation.objects.filter(output__datasets=dataset).values_list(
+                "pk", "params"
+            )
+        )
         return annotation, edge, level_edges
 
     annotation, edge, level_edges_before = await sync_to_async(snapshot)()
@@ -1453,35 +1771,53 @@ async def test_recalibration_moves_nothing_drawn_in_pixels(authenticated_context
         # dataset's own grid, so "edges out of a space one of this dataset's arrays lives in"
         # now also catches the calibration edge. The pyramid is the edges landing *in* the
         # dataset's grid.
-        level_edges = list(Transformation.objects.filter(output__datasets=dataset).values_list("pk", "params"))
+        level_edges = list(
+            Transformation.objects.filter(output__datasets=dataset).values_list(
+                "pk", "params"
+            )
+        )
         return refreshed.intrinsic_bbox, level_edges
 
     bbox_after, level_edges_after = await sync_to_async(after)()
 
-    assert bbox_after == bbox_before, "an annotation is drawn in pixels; recalibration must not move it"
-    assert level_edges_after == level_edges_before, "the pyramid is pixel-to-pixel; recalibration must not touch it"
+    assert bbox_after == bbox_before, (
+        "an annotation is drawn in pixels; recalibration must not move it"
+    )
+    assert level_edges_after == level_edges_before, (
+        "the pyramid is pixel-to-pixel; recalibration must not touch it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_can_carry_many_calibrations(authenticated_context: HttpContext):
+async def test_a_dataset_can_carry_many_calibrations(
+    authenticated_context: HttpContext,
+):
     """Stage space and specimen space coexist: each is just another node off the same pixel grid."""
     from asgiref.sync import sync_to_async
 
     dataset = await seed.create_array_dataset(authenticated_context, "Multi")
 
-    for name, scale in (("Multi/stage", [1.0, 0.325, 0.325]), ("Multi/specimen", [1.0, 0.65, 0.65])):
+    for name, scale in (
+        ("Multi/stage", [1.0, 0.325, 0.325]),
+        ("Multi/specimen", [1.0, 0.65, 0.65]),
+    ):
         result = await schema.execute(
             CALIBRATE,
             context_value=authenticated_context,
-            variable_values={"input": _calibration_input(dataset, name, scale, _CAL_AXES)},
+            variable_values={
+                "input": _calibration_input(dataset, name, scale, _CAL_AXES)
+            },
         )
         assert not result.errors, result.errors
 
     def names():
         # There is no `calibrations` reverse any more: a calibrated space is one edge out of
         # the dataset's own, which is exactly the question `physical_neighbours` asks.
-        return sorted(system.name for system in graph.physical_neighbours(dataset.coordinate_system))
+        return sorted(
+            system.name
+            for system in graph.physical_neighbours(dataset.coordinate_system)
+        )
 
     assert await sync_to_async(names)() == ["Multi/specimen", "Multi/stage"]
 
@@ -1490,22 +1826,34 @@ async def test_a_dataset_can_carry_many_calibrations(authenticated_context: Http
 @pytest.mark.asyncio
 async def test_uncalibrated_data_is_first_class(authenticated_context: HttpContext):
     """A FLIM cube or a simulation has no physical interpretation, and no fake units appear anywhere."""
-    result_dataset = await seed.create_array_dataset(authenticated_context, "Simulation")
+    result_dataset = await seed.create_array_dataset(
+        authenticated_context, "Simulation"
+    )
 
-    result = await schema.execute(DATASET_SPACES, context_value=authenticated_context, variable_values={"id": str(result_dataset.pk)})
+    result = await schema.execute(
+        DATASET_SPACES,
+        context_value=authenticated_context,
+        variable_values={"id": str(result_dataset.pk)},
+    )
     assert not result.errors, result.errors
     spaces = result.data["arrayDataset"]
 
     assert all(axis["unit"] is None for axis in spaces["intrinsicSystem"]["axes"])
     from asgiref.sync import sync_to_async as _sync
 
-    neighbours = await _sync(lambda: graph.physical_neighbours(result_dataset.coordinate_system))()
-    assert neighbours == [], "no edge out to a unit-carrying space: the data is still only pixels"
+    neighbours = await _sync(
+        lambda: graph.physical_neighbours(result_dataset.coordinate_system)
+    )()
+    assert neighbours == [], (
+        "no edge out to a unit-carrying space: the data is still only pixels"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_stage_offset_rides_one_affine_registration(authenticated_context: HttpContext):
+async def test_a_stage_offset_rides_one_affine_registration(
+    authenticated_context: HttpContext,
+):
     """A pixel size plus a stage position is one AFFINE edge, exactly as createTransformation states it.
 
     There is no scale+translation sugar: `kind` decides which parameter is read, and the
@@ -1527,7 +1875,12 @@ async def test_a_stage_offset_rides_one_affine_registration(authenticated_contex
             "input": {
                 "name": "Staged/stage",
                 "axes": _CAL_AXES,
-                "registrations": [{"dataset": str(dataset.pk), "transform": {"kind": "AFFINE", "affine": affine}}],
+                "registrations": [
+                    {
+                        "dataset": str(dataset.pk),
+                        "transform": {"kind": "AFFINE", "affine": affine},
+                    }
+                ],
             }
         },
     )
@@ -1535,7 +1888,9 @@ async def test_a_stage_offset_rides_one_affine_registration(authenticated_contex
     physical_id = result.data["createCoordinateSystem"]["id"]
 
     def check():
-        edge = Transformation.objects.get(input=dataset.intrinsic_coordinate_system, output_id=physical_id)
+        edge = Transformation.objects.get(
+            input=dataset.intrinsic_coordinate_system, output_id=physical_id
+        )
         assert edge.kind == enums.TransformKindChoices.AFFINE.value
         assert edge.params["affine"] == affine
 
@@ -1544,7 +1899,9 @@ async def test_a_stage_offset_rides_one_affine_registration(authenticated_contex
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_registration_edge_must_match_the_ranks(authenticated_context: HttpContext):
+async def test_a_registration_edge_must_match_the_ranks(
+    authenticated_context: HttpContext,
+):
     """The endpoints say what rank an edge must have, and a registration that disagrees is refused.
 
     This is `assert_edge_rank`, the same check `createTransformation` runs -- a physical
@@ -1562,11 +1919,18 @@ async def test_a_registration_edge_must_match_the_ranks(authenticated_context: H
             "input": {
                 "name": "Strict/short",
                 "axes": _CAL_AXES[1:],
-                "registrations": [{"dataset": str(dataset.pk), "transform": {"kind": "SCALE", "scale": [0.325, 0.325]}}],
+                "registrations": [
+                    {
+                        "dataset": str(dataset.pk),
+                        "transform": {"kind": "SCALE", "scale": [0.325, 0.325]},
+                    }
+                ],
             }
         },
     )
-    assert result.errors, "a scale whose rank disagrees with the dataset's must be rejected"
+    assert result.errors, (
+        "a scale whose rank disagrees with the dataset's must be rejected"
+    )
 
     # A kind without its parameter: SCALE reads `scale`, and nothing else stands in for it.
     result = await schema.execute(
@@ -1576,7 +1940,9 @@ async def test_a_registration_edge_must_match_the_ranks(authenticated_context: H
             "input": {
                 "name": "Strict/empty",
                 "axes": _CAL_AXES,
-                "registrations": [{"dataset": str(dataset.pk), "transform": {"kind": "SCALE"}}],
+                "registrations": [
+                    {"dataset": str(dataset.pk), "transform": {"kind": "SCALE"}}
+                ],
             }
         },
     )
@@ -1603,7 +1969,9 @@ query SystemScenes($id: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_calibrated_axis_unit_must_be_a_parseable_unit(authenticated_context: HttpContext):
+async def test_calibrated_axis_unit_must_be_a_parseable_unit(
+    authenticated_context: HttpContext,
+):
     """A calibrated axis' unit is the kanne `Unit` scalar, so a unit pint cannot parse is rejected.
 
     A free-form unit string is worthless: it fails at the moment someone tries to
@@ -1625,7 +1993,14 @@ async def test_calibrated_axis_unit_must_be_a_parseable_unit(authenticated_conte
     system = await sync_to_async(make_system)()
 
     with pytest.raises(ValueError, match="not a valid unit"):
-        await sync_to_async(graph_logic.create_physical_axes)(system, [seed.physical_axis("y", enums.AxisType.SPACE, unit="furlongs_per_fortnight")])
+        await sync_to_async(graph_logic.create_physical_axes)(
+            system,
+            [
+                seed.physical_axis(
+                    "y", enums.AxisType.SPACE, unit="furlongs_per_fortnight"
+                )
+            ],
+        )
 
     # A real unit is kept with its given spelling, and 'a.u.' is the escape hatch
     # for an axis whose values are arbitrary (a channel's intensity, say).
@@ -1643,9 +2018,12 @@ async def test_calibrated_axis_unit_must_be_a_parseable_unit(authenticated_conte
 # 12. The derived kind and its filter
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_coordinate_system_exposes_the_scenes_over_it(authenticated_context: HttpContext):
+async def test_coordinate_system_exposes_the_scenes_over_it(
+    authenticated_context: HttpContext,
+):
     """A SHARED space lists the scenes composed over it as their world; nothing else does.
 
     The inverse of `Scene.worldCoordinateSystem`: a space shared by two scenes lists both,
@@ -1656,22 +2034,39 @@ async def test_coordinate_system_exposes_the_scenes_over_it(authenticated_contex
     from core.models import Scene
 
     scene = await seed.create_scene(authenticated_context, "Composed")
-    dataset = await seed.create_array_dataset(authenticated_context, "Data", axes=seed.YX_AXES, shapes=[[64, 64]])
-    world, intrinsic = await sync_to_async(lambda: (scene.world, dataset.intrinsic_coordinate_system))()
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Data", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
+    world, intrinsic = await sync_to_async(
+        lambda: (scene.world, dataset.intrinsic_coordinate_system)
+    )()
 
     # A second scene over the *same* world: a shared space carries every composition over it.
-    await sync_to_async(Scene.objects.create)(name="AlsoComposed", world=world, organization=authenticated_context.request.organization)
+    await sync_to_async(Scene.objects.create)(
+        name="AlsoComposed",
+        world=world,
+        organization=authenticated_context.request.organization,
+    )
 
     async def scenes_of(system_id: int) -> list[dict]:
-        result = await schema.execute(SCENES_OF_SYSTEM, context_value=authenticated_context, variable_values={"id": str(system_id)})
+        result = await schema.execute(
+            SCENES_OF_SYSTEM,
+            context_value=authenticated_context,
+            variable_values={"id": str(system_id)},
+        )
         assert not result.errors, result.errors
         return result.data["coordinateSystems"][0]["scenes"]
 
     world_scenes = await scenes_of(world.pk)
-    assert sorted(scene["name"] for scene in world_scenes) == ["AlsoComposed", "Composed"], "a world lists every scene composed over it"
+    assert sorted(scene["name"] for scene in world_scenes) == [
+        "AlsoComposed",
+        "Composed",
+    ], "a world lists every scene composed over it"
 
     intrinsic_scenes = await scenes_of(intrinsic.pk)
-    assert intrinsic_scenes == [], "a dataset's intrinsic system is no scene's world, so it lists no scenes"
+    assert intrinsic_scenes == [], (
+        "a dataset's intrinsic system is no scene's world, so it lists no scenes"
+    )
 
 
 # --- 8. inverting a step, and condensing a path -------------------------------
@@ -1690,7 +2085,11 @@ def _flat(matrix) -> list[float]:
 
 def _apply_forms(forms: dict[str, coords.AxedForm], axes, point) -> dict[str, float]:
     """Push a point through composed functionals, one output axis at a time."""
-    return {axis: sum(factor * value for factor, value in zip(form.coefficients, point)) + form.constant for axis, form in forms.items()}
+    return {
+        axis: sum(factor * value for factor, value in zip(form.coefficients, point))
+        + form.constant
+        for axis, form in forms.items()
+    }
 
 
 def test_invert_matrix_is_the_inverse():
@@ -1739,31 +2138,63 @@ def test_singularity_is_judged_relative_to_the_matrix_own_scale():
     of the first matrix here is 1e-14, which no fixed threshold can tell from a collapse.
     """
     tiny = [[1e-7, 0.0], [0.0, 1e-7]]
-    assert not coords.is_singular(tiny), "a genuinely invertible map with small entries is not singular"
+    assert not coords.is_singular(tiny), (
+        "a genuinely invertible map with small entries is not singular"
+    )
 
     huge_and_collapsed = [[1e7, 1e7], [1e7, 1e7]]
-    assert coords.is_singular(huge_and_collapsed), "a collapsed map is singular however large its entries"
+    assert coords.is_singular(huge_and_collapsed), (
+        "a collapsed map is singular however large its entries"
+    )
 
     # And the case a determinant gets exactly backwards: determinant 1.0, and still not a map
     # anything can invert -- fourteen orders of magnitude between the axes leaves float64 no
     # digits to answer with. Refusing it is the honest answer, not a conservative one.
     unusable = [[1e7, 0.0], [0.0, 1e-7]]
-    assert coords.is_singular(unusable), "a determinant of 1.0 does not make a matrix usable"
+    assert coords.is_singular(unusable), (
+        "a determinant of 1.0 does not make a matrix usable"
+    )
 
 
 @pytest.mark.parametrize(
     "step",
     [
-        coords.AxedStep(kind=enums.TransformKindChoices.IDENTITY.value, params={}, input_axes=("y", "x"), output_axes=("y", "x")),
-        coords.AxedStep(kind=enums.TransformKindChoices.TRANSLATION.value, params={"translation": [10.0, -4.0]}, input_axes=("y", "x"), output_axes=("y", "x")),
-        coords.AxedStep(kind=enums.TransformKindChoices.SCALE.value, params={"scale": [0.5, 4.0]}, input_axes=("y", "x"), output_axes=("y", "x")),
-        coords.AxedStep(kind=enums.TransformKindChoices.AFFINE.value, params={"affine": [[0.0, 1.0, 5.0], [1.0, 0.0, -2.0]]}, input_axes=("y", "x"), output_axes=("y", "x")),
+        coords.AxedStep(
+            kind=enums.TransformKindChoices.IDENTITY.value,
+            params={},
+            input_axes=("y", "x"),
+            output_axes=("y", "x"),
+        ),
+        coords.AxedStep(
+            kind=enums.TransformKindChoices.TRANSLATION.value,
+            params={"translation": [10.0, -4.0]},
+            input_axes=("y", "x"),
+            output_axes=("y", "x"),
+        ),
+        coords.AxedStep(
+            kind=enums.TransformKindChoices.SCALE.value,
+            params={"scale": [0.5, 4.0]},
+            input_axes=("y", "x"),
+            output_axes=("y", "x"),
+        ),
+        coords.AxedStep(
+            kind=enums.TransformKindChoices.AFFINE.value,
+            params={"affine": [[0.0, 1.0, 5.0], [1.0, 0.0, -2.0]]},
+            input_axes=("y", "x"),
+            output_axes=("y", "x"),
+        ),
         coords.AxedStep(
             kind=enums.TransformKindChoices.SEQUENCE.value,
             params={},
             input_axes=("y", "x"),
             output_axes=("y", "x"),
-            steps=((enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}), (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]})),
+            steps=(
+                (enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}),
+                (
+                    enums.TransformKindChoices.TRANSLATION.value,
+                    {"translation": [0.5, 0.5]},
+                ),
+            ),
         ),
         coords.AxedStep(
             kind=enums.TransformKindChoices.MAP_AXIS.value,
@@ -1780,8 +2211,18 @@ def test_singularity_is_judged_relative_to_the_matrix_own_scale():
             input_axes=("y", "x"),
             output_axes=("y", "x"),
             parts=(
-                coords.StepPart(kind="SCALE", input_axes=("y",), output_axes=("y",), params={"scale": [2.0]}),
-                coords.StepPart(kind="TRANSLATION", input_axes=("x",), output_axes=("x",), params={"translation": [-1.0]}),
+                coords.StepPart(
+                    kind="SCALE",
+                    input_axes=("y",),
+                    output_axes=("y",),
+                    params={"scale": [2.0]},
+                ),
+                coords.StepPart(
+                    kind="TRANSLATION",
+                    input_axes=("x",),
+                    output_axes=("x",),
+                    params={"translation": [-1.0]},
+                ),
             ),
         ),
         # An AFFINE part over both. Rotated, so a transposed inverse is visible.
@@ -1790,10 +2231,26 @@ def test_singularity_is_judged_relative_to_the_matrix_own_scale():
             params={},
             input_axes=("y", "x"),
             output_axes=("y", "x"),
-            parts=(coords.StepPart(kind="AFFINE", input_axes=("y", "x"), output_axes=("y", "x"), params={"affine": [[0.0, -2.0, 3.0], [0.5, 0.0, -1.0]]}),),
+            parts=(
+                coords.StepPart(
+                    kind="AFFINE",
+                    input_axes=("y", "x"),
+                    output_axes=("y", "x"),
+                    params={"affine": [[0.0, -2.0, 3.0], [0.5, 0.0, -1.0]]},
+                ),
+            ),
         ),
     ],
-    ids=["identity", "translation", "scale", "affine", "sequence", "map_axis", "by_dimension", "by_dimension_affine"],
+    ids=[
+        "identity",
+        "translation",
+        "scale",
+        "affine",
+        "sequence",
+        "map_axis",
+        "by_dimension",
+        "by_dimension_affine",
+    ],
 )
 def test_inverting_a_step_undoes_it(step: coords.AxedStep):
     """Every invertible kind: forward then back is the identity on a point, not merely on paper.
@@ -1808,14 +2265,21 @@ def test_inverting_a_step_undoes_it(step: coords.AxedStep):
 
     inverse = coords.invert_step(step)
     back = coords.compose_forms([inverse], list(inverse.input_axes))
-    returned = _apply_forms(back, inverse.input_axes, [moved[axis] for axis in inverse.input_axes])
+    returned = _apply_forms(
+        back, inverse.input_axes, [moved[axis] for axis in inverse.input_axes]
+    )
 
     assert [returned[axis] for axis in step.input_axes] == approx(point, abs=1e-9)
 
 
 def test_the_maps_with_no_inverse_refuse_to_be_inverted():
     """Unreachable through the walk -- `is_reverse_traversable` excludes both -- and guarded anyway."""
-    unmappable = coords.AxedStep(kind=enums.TransformKindChoices.UNMAPPABLE.value, params={}, input_axes=("y", "x"), output_axes=("y", "x"))
+    unmappable = coords.AxedStep(
+        kind=enums.TransformKindChoices.UNMAPPABLE.value,
+        params={},
+        input_axes=("y", "x"),
+        output_axes=("y", "x"),
+    )
     with pytest.raises(coords.NonAffineTransformError):
         coords.invert_step(unmappable)
     field = coords.StepField(input_axes=("t",), output_axes=("t",), field=1)
@@ -1824,7 +2288,15 @@ def test_the_maps_with_no_inverse_refuse_to_be_inverted():
         params={},
         input_axes=("t",),
         output_axes=("t",),
-        parts=(coords.StepPart(kind=enums.PartKind.FIELD.value, input_axes=("t",), output_axes=("t",), params={}, field=field),),
+        parts=(
+            coords.StepPart(
+                kind=enums.PartKind.FIELD.value,
+                input_axes=("t",),
+                output_axes=("t",),
+                params={},
+                field=field,
+            ),
+        ),
     )
     with pytest.raises(coords.NonAffineTransformError):
         coords.invert_step(timed)
@@ -1844,10 +2316,15 @@ def test_a_sequence_composes_its_children_rather_than_its_own_empty_params():
         params={},
         input_axes=("y", "x"),
         output_axes=("y", "x"),
-        steps=((enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}), (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]})),
+        steps=(
+            (enums.TransformKindChoices.SCALE.value, {"scale": [2.0, 2.0]}),
+            (enums.TransformKindChoices.TRANSLATION.value, {"translation": [0.5, 0.5]}),
+        ),
     )
     forms = coords.compose_forms([step], ["y", "x"])
-    assert _apply_forms(forms, ("y", "x"), [10.0, 20.0]) == approx({"y": 20.5, "x": 40.5})
+    assert _apply_forms(forms, ("y", "x"), [10.0, 20.0]) == approx(
+        {"y": 20.5, "x": 40.5}
+    )
 
 
 def test_a_rank_changing_affine_composes_from_its_own_rows():
@@ -1867,8 +2344,12 @@ def test_a_rank_changing_affine_composes_from_its_own_rows():
         output_axes=("z", "y", "x"),
     )
     forms = coords.compose_forms([step], ["y", "x"])
-    assert sorted(forms) == ["x", "y", "z"], "every output axis the matrix has a row for is constrained"
-    assert _apply_forms(forms, ("y", "x"), [8.0, 5.0]) == approx({"z": 5.0, "y": 8.0, "x": 5.0})
+    assert sorted(forms) == ["x", "y", "z"], (
+        "every output axis the matrix has a row for is constrained"
+    )
+    assert _apply_forms(forms, ("y", "x"), [8.0, 5.0]) == approx(
+        {"z": 5.0, "y": 8.0, "x": 5.0}
+    )
 
 
 def test_forms_to_matrix_gives_no_row_to_an_axis_the_path_says_nothing_about():
@@ -1883,18 +2364,29 @@ def test_forms_to_matrix_gives_no_row_to_an_axis_the_path_says_nothing_about():
         params={},
         input_axes=("c", "y", "x"),
         output_axes=("t", "z", "y", "x"),
-        parts=(coords.StepPart(kind="SCALE", input_axes=("y", "x"), output_axes=("y", "x"), params={"scale": [2.0, 2.0]}),),
+        parts=(
+            coords.StepPart(
+                kind="SCALE",
+                input_axes=("y", "x"),
+                output_axes=("y", "x"),
+                params={"scale": [2.0, 2.0]},
+            ),
+        ),
     )
     forms = coords.compose_forms([step], ["c", "y", "x"])
     matrix, rows = coords.forms_to_matrix(forms, ["t", "z", "y", "x"])
 
-    assert rows == ["y", "x"], "the world's t and z are untouched by this registration, so they get no row"
+    assert rows == ["y", "x"], (
+        "the world's t and z are untouched by this registration, so they get no row"
+    )
     # Columns are the source axes (c, y, x), plus the translation column.
     assert _flat(matrix) == approx(_flat([[0.0, 2.0, 0.0, 0.0], [0.0, 0.0, 2.0, 0.0]]))
 
 
 @pytest.mark.django_db
-def test_axes_come_back_in_axis_order_however_they_were_inserted(authenticated_context: HttpContext):
+def test_axes_come_back_in_axis_order_however_they_were_inserted(
+    authenticated_context: HttpContext,
+):
     """`Axis.Meta.ordering = ["order"]` is load-bearing, and nothing pinned it until now.
 
     Twenty-eight call sites read `system.axes.all()` and take the result as *the axis order* --
@@ -1909,24 +2401,50 @@ def test_axes_come_back_in_axis_order_however_they_were_inserted(authenticated_c
     pins nothing -- which is exactly how the property went unguarded.
     """
     system = CoordinateSystem.objects.create(
-        name="scrambled", creator=authenticated_context.request.user, organization=authenticated_context.request.organization
+        name="scrambled",
+        creator=authenticated_context.request.user,
+        organization=authenticated_context.request.organization,
     )
     Axis.objects.bulk_create(
         [
-            Axis(coordinate_system=system, order=2, name="x", type=enums.AxisTypeChoices.SPACE.value),
-            Axis(coordinate_system=system, order=0, name="z", type=enums.AxisTypeChoices.SPACE.value),
-            Axis(coordinate_system=system, order=1, name="y", type=enums.AxisTypeChoices.SPACE.value),
+            Axis(
+                coordinate_system=system,
+                order=2,
+                name="x",
+                type=enums.AxisTypeChoices.SPACE.value,
+            ),
+            Axis(
+                coordinate_system=system,
+                order=0,
+                name="z",
+                type=enums.AxisTypeChoices.SPACE.value,
+            ),
+            Axis(
+                coordinate_system=system,
+                order=1,
+                name="y",
+                type=enums.AxisTypeChoices.SPACE.value,
+            ),
         ]
     )
-    inserted = [axis.name for axis in Axis.objects.filter(coordinate_system=system).order_by("pk")]
-    assert inserted == ["x", "z", "y"], "the fixture must disagree with axis order, or this pins nothing"
+    inserted = [
+        axis.name
+        for axis in Axis.objects.filter(coordinate_system=system).order_by("pk")
+    ]
+    assert inserted == ["x", "z", "y"], (
+        "the fixture must disagree with axis order, or this pins nothing"
+    )
 
     assert [axis.name for axis in system.axes.all()] == ["z", "y", "x"]
-    assert Axis._meta.ordering == ["order"], "the default the 28 unordered `axes.all()` readers rely on"
+    assert Axis._meta.ordering == ["order"], (
+        "the default the 28 unordered `axes.all()` readers rely on"
+    )
 
 
 def _render(*named: tuple[str, str]) -> coords.RenderAxes:
-    return coords.resolve_render_axes([coords.AxisSpec(name=n, type=t) for n, t in named])
+    return coords.resolve_render_axes(
+        [coords.AxisSpec(name=n, type=t) for n, t in named]
+    )
 
 
 def _xyz(*named: tuple[str, str]) -> tuple:
@@ -1974,11 +2492,14 @@ def test_a_partial_screen_name_match_falls_back_wholly_to_position():
 
 def test_the_type_scan_for_time_and_channel_is_untouched():
     """Where a TIME or CHANNEL axis sits among the others never mattered and still does not."""
-    rendered = _render(("x", _SPACE), ("y", _SPACE), ("t", enums.AxisTypeChoices.TIME.value), ("c", _CHANNEL))
+    rendered = _render(
+        ("x", _SPACE),
+        ("y", _SPACE),
+        ("t", enums.AxisTypeChoices.TIME.value),
+        ("c", _CHANNEL),
+    )
     assert (rendered.x, rendered.y) == ("x", "y")
     assert (rendered.t, rendered.intensity) == ("t", "c")
-
-
 
 
 def test_an_identity_between_two_units_is_not_a_claim_that_they_are_equal():
@@ -2007,7 +2528,12 @@ def test_the_same_unit_on_both_sides_changes_nothing():
     """The whole safety argument for shipping the conversion: where the units agree -- or
     where either side has none, which is every stored edge in the deployment today -- the
     factor is exactly 1.0 and the answer is the one composed before there were units here."""
-    for units in (("micrometer", "micrometer"), (None, "micrometer"), ("micrometer", None), (None, None)):
+    for units in (
+        ("micrometer", "micrometer"),
+        (None, "micrometer"),
+        ("micrometer", None),
+        (None, None),
+    ):
         step = coords.AxedStep(
             kind=enums.TransformKindChoices.IDENTITY.value,
             params={},
@@ -2036,13 +2562,24 @@ def test_an_identity_part_converts_and_a_scale_part_keeps_the_authors_number():
         input_units=("second", "nanometer", "nanometer", "nanometer"),
         output_units=("second", "micrometer", "micrometer", "micrometer"),
         parts=(
-            coords.StepPart(kind="IDENTITY", input_axes=("z",), output_axes=("z",), params={}),
-            coords.StepPart(kind="SCALE", input_axes=("y", "x"), output_axes=("y", "x"), params={"scale": [2.0, 2.0]}),
+            coords.StepPart(
+                kind="IDENTITY", input_axes=("z",), output_axes=("z",), params={}
+            ),
+            coords.StepPart(
+                kind="SCALE",
+                input_axes=("y", "x"),
+                output_axes=("y", "x"),
+                params={"scale": [2.0, 2.0]},
+            ),
         ),
     )
     forms = coords.step_forms(step)
-    assert forms["z"].coefficients == approx((0.0, 0.001, 0.0, 0.0)), "the IDENTITY part converts"
-    assert forms["y"].coefficients == approx((0.0, 0.0, 2.0, 0.0)), "the SCALE part keeps the author's number"
+    assert forms["z"].coefficients == approx((0.0, 0.001, 0.0, 0.0)), (
+        "the IDENTITY part converts"
+    )
+    assert forms["y"].coefficients == approx((0.0, 0.0, 2.0, 0.0)), (
+        "the SCALE part keeps the author's number"
+    )
     assert "t" not in forms, "no part names t, so the edge says nothing about it"
 
 
@@ -2075,17 +2612,20 @@ def test_an_inverted_step_converts_the_other_way():
         input_units=("nanometer",),
         output_units=("micrometer",),
     )
-    assert coords.step_forms(coords.invert_step(step))["x"].coefficients == approx((1000.0,))
+    assert coords.step_forms(coords.invert_step(step))["x"].coefficients == approx(
+        (1000.0,)
+    )
 
 
 def test_an_arbitrary_unit_declines_the_claim_rather_than_conflicting_with_it():
-    """"a.u." means *no* calibration claim, and `assert_unit_matches_type` already reads it that
+    """ "a.u." means *no* calibration claim, and `assert_unit_matches_type` already reads it that
     way -- it short-circuits and checks nothing. Reading it as an incompatible dimension here
     would make one function treat the same string as "no claim" and the next as "these axes
     cannot be related", and would leave merely-uncalibrated data unplaced.
 
     `dimensionless` is deliberately on the other side of that line: a real pint unit and a real
     claim, with genuinely no conversion to a micrometre."""
+
     def factor(source, target):
         step = coords.AxedStep(
             kind=enums.TransformKindChoices.IDENTITY.value,
@@ -2099,7 +2639,9 @@ def test_an_arbitrary_unit_declines_the_claim_rather_than_conflicting_with_it():
 
     assert factor("a.u.", "micrometer").coefficients == approx((1.0,))
     assert factor("micrometer", "a.u.").coefficients == approx((1.0,))
-    assert factor("dimensionless", "micrometer") is None, "a real unit with no conversion stays absent"
+    assert factor("dimensionless", "micrometer") is None, (
+        "a real unit with no conversion stays absent"
+    )
 
 
 # --- 5. the one spelling of a selection ----------------------------------------
@@ -2126,7 +2668,9 @@ def test_every_spelling_of_a_crop_resolves_to_explicit_ints():
     assert _normalized(_Slice("y", start=8, stop=400)) == expected
     assert _normalized(_Slice("y", start=-56)) == expected
     assert _normalized(_Slice("y", start=-56, stop=-0 or None)) == expected
-    assert _normalized(_Slice("y", start=0, stop=-8)) == [{"axis": "y", "start": 0, "stop": 56, "step": 1}]
+    assert _normalized(_Slice("y", start=0, stop=-8)) == [
+        {"axis": "y", "start": 0, "stop": 56, "step": 1}
+    ]
 
 
 def test_a_slice_that_keeps_the_whole_axis_is_dropped():
@@ -2138,8 +2682,14 @@ def test_a_slice_that_keeps_the_whole_axis_is_dropped():
 
 def test_a_stepped_slice_keeps_its_step_and_is_spelled_by_what_it_selects():
     """The stop is the first index past the last selected position, so a ragged stop is canonical."""
-    assert _normalized(_Slice("x", step=2)) == [{"axis": "x", "start": 0, "stop": 63, "step": 2}], "a whole axis at step 2 is a selection"
-    assert _normalized(_Slice("x", start=0, stop=12, step=3)) == _normalized(_Slice("x", start=0, stop=10, step=3)) == [{"axis": "x", "start": 0, "stop": 10, "step": 3}]
+    assert _normalized(_Slice("x", step=2)) == [
+        {"axis": "x", "start": 0, "stop": 63, "step": 2}
+    ], "a whole axis at step 2 is a selection"
+    assert (
+        _normalized(_Slice("x", start=0, stop=12, step=3))
+        == _normalized(_Slice("x", start=0, stop=10, step=3))
+        == [{"axis": "x", "start": 0, "stop": 10, "step": 3}]
+    )
 
 
 def test_slices_come_out_in_dataset_axis_order():
@@ -2171,7 +2721,11 @@ def test_the_normalized_slices_resolve_to_the_same_shape_and_edge_as_the_spellin
     """What is stored is what was meant: the shape and the edge agree with Python's own slicing."""
     spelled = [_Slice("y", start=-56, stop=400, step=2), _Slice("x", start=4)]
     stored = [_Slice(**entry) for entry in _normalized(*spelled)]
-    assert coords.lens_shape(_SHAPE, _DIMS, stored) == coords.lens_shape(_SHAPE, _DIMS, spelled) == [3, 28, 60]
+    assert (
+        coords.lens_shape(_SHAPE, _DIMS, stored)
+        == coords.lens_shape(_SHAPE, _DIMS, spelled)
+        == [3, 28, 60]
+    )
     # The spelling's negative start wrote a negative translation; the stored one is where the crop is.
     assert coords.lens_to_parent(_DIMS, stored)[1]["translation"] == [0.0, 8.0, 4.0]
 
@@ -2189,5 +2743,9 @@ def test_closed_boxes_meet_at_a_shared_face_and_half_open_ones_do_not():
     assert coords.boxes_overlap(crop, shape_ending_before)
     assert not coords.boxes_overlap(crop, shape_ending_before, closed=False)
     assert coords.boxes_overlap(crop, shape_inside, closed=False)
-    assert coords.boxes_overlap(crop, probe_on_a_voxel) and coords.boxes_overlap(crop, probe_on_a_voxel, closed=False), "a probe at an integer never sits on a voxel face"
-    assert coords.boxes_overlap(crop, {"x": [0.0, 1.0]}, closed=False), "an axis only one side constrains excludes nothing"
+    assert coords.boxes_overlap(crop, probe_on_a_voxel) and coords.boxes_overlap(
+        crop, probe_on_a_voxel, closed=False
+    ), "a probe at an integer never sits on a voxel face"
+    assert coords.boxes_overlap(crop, {"x": [0.0, 1.0]}, closed=False), (
+        "an axis only one side constrains excludes nothing"
+    )

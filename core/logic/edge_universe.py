@@ -29,7 +29,7 @@ Those edges live in the parent's bucket, so the search closes over the chain abo
 dataset. A parent is not an unrelated dataset; it is where the pixels came from.
 """
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from django.db.models import Q
 
@@ -46,7 +46,9 @@ _ROOT_EDGE_KEY = "space_root_edges"
 EDGE_AXIS_PREFETCH = ("input__axes", "output__axes")
 
 
-def _container_of(system: "models.CoordinateSystem | None", keys: dict[int, tuple]) -> tuple | None:
+def _container_of(
+    system: "models.CoordinateSystem | None", keys: dict[int, tuple]
+) -> tuple | None:
     """The container a space belongs to, read from a prebuilt map.
 
     The map is the point. Ownership put the answer in a column on the space; residence puts
@@ -60,7 +62,9 @@ def _container_of(system: "models.CoordinateSystem | None", keys: dict[int, tupl
     return keys.get(system.pk) if system is not None else None
 
 
-def _edge_container(edge: "models.Transformation", keys: dict[int, tuple]) -> tuple | None:
+def _edge_container(
+    edge: "models.Transformation", keys: dict[int, tuple]
+) -> tuple | None:
     """The container whose data lives in an edge's input space.
 
     The in-memory mirror of :func:`core.logic.graph.container_q` over the input side. A
@@ -70,7 +74,9 @@ def _edge_container(edge: "models.Transformation", keys: dict[int, tuple]) -> tu
     return _container_of(edge.input, keys)
 
 
-def _derivation_target(edge: "models.Transformation", keys: dict[int, tuple]) -> tuple | None:
+def _derivation_target(
+    edge: "models.Transformation", keys: dict[int, tuple]
+) -> tuple | None:
     """The container this edge derives *from*, if it is a derivation edge; else None.
 
     A derivation edge leaves its container and lands in another one: a deconvolution, a
@@ -87,18 +93,28 @@ def _derivation_target(edge: "models.Transformation", keys: dict[int, tuple]) ->
     """
     if not graph_logic.is_traversable(edge):
         return None
-    if not graph_logic.is_derivation_edge(edge, of_container=_edge_container(edge, keys), keys=keys):
+    if not graph_logic.is_derivation_edge(
+        edge, of_container=_edge_container(edge, keys), keys=keys
+    ):
         return None
     return _container_of(edge.output, keys)
 
 
 def fetch_container_edges(container_keys: set[tuple]) -> list["models.Transformation"]:
     """Every top-level edge whose input system belongs to one of these containers."""
-    edges = models.Transformation.objects.filter(graph_logic.container_q(container_keys, field="input"))
-    return list(edges.select_related("input", "output").prefetch_related(*EDGE_AXIS_PREFETCH))
+    edges = models.Transformation.objects.filter(
+        graph_logic.container_q(container_keys, field="input")
+    )
+    return list(
+        edges.select_related("input", "output").prefetch_related(*EDGE_AXIS_PREFETCH)
+    )
 
 
-def container_buckets(seed_keys: set[tuple]) -> tuple[dict[tuple, list["models.Transformation"]], dict[tuple, set[tuple]], set[tuple]]:
+def container_buckets(
+    seed_keys: set[tuple],
+) -> tuple[
+    dict[tuple, list["models.Transformation"]], dict[tuple, set[tuple]], set[tuple]
+]:
     """Every seeded container's own fact edges, closed over its derivation lineage.
 
     Returns ``(edges by container, parents by container, every container reached)``.
@@ -139,7 +155,10 @@ def container_buckets(seed_keys: set[tuple]) -> tuple[dict[tuple, list["models.T
         # several routes a placement takes is settled later, by `_bfs_tree`'s widest-path
         # search: the route whose weakest edge is best known wins, hops breaking its ties.
         batch_edges = fetch_container_edges(pending)
-        keys = graph_logic.container_map({edge.input_id for edge in batch_edges if edge.input_id} | {edge.output_id for edge in batch_edges if edge.output_id})
+        keys = graph_logic.container_map(
+            {edge.input_id for edge in batch_edges if edge.input_id}
+            | {edge.output_id for edge in batch_edges if edge.output_id}
+        )
 
         for edge in batch_edges:
             key = _edge_container(edge, keys)
@@ -151,13 +170,23 @@ def container_buckets(seed_keys: set[tuple]) -> tuple[dict[tuple, list["models.T
 
         # The ancestors just discovered and not yet fetched. A cycle would be nonsense, but
         # it must not hang the request, so already-seen keys never re-enter.
-        pending = {source for sources in derived_from.values() for source in sources if source not in container_edges}
+        pending = {
+            source
+            for sources in derived_from.values()
+            for source in sources
+            if source not in container_edges
+        }
         container_keys |= pending
 
     return container_edges, derived_from, container_keys
 
 
-def root_edges_of(space: "models.CoordinateSystem | None", *, organization=None, loaders: dict | None = None) -> list["models.Transformation"]:
+def root_edges_of(
+    space: "models.CoordinateSystem | None",
+    *,
+    organization=None,
+    loaders: dict | None = None,
+) -> list["models.Transformation"]:
     """Every top-level edge touching this space, in both directions.
 
     Both directions because a registration authored backwards (space -> source) must degrade
@@ -186,7 +215,9 @@ def root_edges_of(space: "models.CoordinateSystem | None", *, organization=None,
     query = models.Transformation.objects.filter(Q(output=space) | Q(input=space))
     if organization is not None:
         query = query.filter(organization=organization)
-    edges = list(query.select_related("input", "output").prefetch_related(*EDGE_AXIS_PREFETCH))
+    edges = list(
+        query.select_related("input", "output").prefetch_related(*EDGE_AXIS_PREFETCH)
+    )
 
     if memo is not None:
         memo[key] = edges
@@ -225,7 +256,9 @@ class EdgeUniverse:
         # container keys it is an ordinary seed and the distinction is gone.
         seed_systems = set(seed_systems)
 
-        self.root_edges = root_edges_of(space, organization=organization, loaders=loaders)
+        self.root_edges = root_edges_of(
+            space, organization=organization, loaders=loaders
+        )
 
         # Empty until the seeds resolve, and that order is load-bearing rather than tidy:
         # `keys` widens over the buckets, and the seeds are read *through* it.
@@ -234,7 +267,9 @@ class EdgeUniverse:
         self.container_keys: set[tuple] = set()
 
         seeded = seed_systems
-        self._keys: dict[int, tuple] = graph_logic.container_map(seeded) if seeded else {}
+        self._keys: dict[int, tuple] = (
+            graph_logic.container_map(seeded) if seeded else {}
+        )
         # A *copy*, not the same object: `container_of` reads the `keys` property, which
         # widens `_keys_cover` in place -- and `seeded` is iterated below to build the seeds.
         # Aliasing them mutates the set mid-comprehension.
@@ -246,8 +281,14 @@ class EdgeUniverse:
         # landed in. Under container keys a collection *is* a bucket, so `container_buckets`
         # fetches its edges like anything else and all of that machinery is gone.
         seeds = {("dataset", dataset_id) for dataset_id in seed_datasets}
-        seeds |= {key for system_id in seeded if (key := self.container_of(system_id)) is not None and key[0] != "system"}
-        self.container_edges, self.derived_from, self.container_keys = container_buckets(seeds)
+        seeds |= {
+            key
+            for system_id in seeded
+            if (key := self.container_of(system_id)) is not None and key[0] != "system"
+        }
+        self.container_edges, self.derived_from, self.container_keys = (
+            container_buckets(seeds)
+        )
 
         self._adjacency_cache: dict[tuple, dict] = {}
 
@@ -272,8 +313,18 @@ class EdgeUniverse:
         Over the root edges and the buckets. A collection's own system needs no fall-through
         any more: it is a container, so the map has it.
         """
-        touched = {edge.input_id for edges in self.container_edges.values() for edge in edges if edge.input_id}
-        touched |= {edge.output_id for edges in self.container_edges.values() for edge in edges if edge.output_id}
+        touched = {
+            edge.input_id
+            for edges in self.container_edges.values()
+            for edge in edges
+            if edge.input_id
+        }
+        touched |= {
+            edge.output_id
+            for edges in self.container_edges.values()
+            for edge in edges
+            if edge.output_id
+        }
         touched |= {edge.input_id for edge in self.root_edges if edge.input_id}
         touched |= {edge.output_id for edge in self.root_edges if edge.output_id}
 
@@ -312,7 +363,14 @@ class EdgeUniverse:
             frontier = next_frontier
         return chain
 
-    def adjacency(self, container_key: tuple | None, *, at: dict[str, int] | None = None, admit_scoped: bool = False, require_affine: bool = False) -> dict[int, list[tuple["models.Transformation", bool, int]]]:
+    def adjacency(
+        self,
+        container_key: tuple | None,
+        *,
+        at: dict[str, int] | None = None,
+        admit_scoped: bool = False,
+        require_affine: bool = False,
+    ) -> dict[int, list[tuple["models.Transformation", bool, int]]]:
         """The searchable universe for one container: its lineage's facts plus this space's claims.
 
         The partition holds where it matters. An *unrelated* container's edges still never
@@ -329,7 +387,12 @@ class EdgeUniverse:
         # the same edges -- the one that answers existence rather than position -- and the two
         # must not share a slot. `require_affine` joins it on the same grounds -- it is a
         # third adjacency over one fetch, the one whose routes are guaranteed to condense.
-        cache_key = (container_key, tuple(sorted(at.items())) if at else None, admit_scoped, require_affine)
+        cache_key = (
+            container_key,
+            tuple(sorted(at.items())) if at else None,
+            admit_scoped,
+            require_affine,
+        )
         if cache_key in self._adjacency_cache:
             return self._adjacency_cache[cache_key]
 
@@ -338,6 +401,8 @@ class EdgeUniverse:
             for ancestor in self.lineage(container_key):
                 edges += self.container_edges.get(ancestor, [])
 
-        adjacency = graph_logic.adjacency_of(edges, at=at, admit_scoped=admit_scoped, require_affine=require_affine)
+        adjacency = graph_logic.adjacency_of(
+            edges, at=at, admit_scoped=admit_scoped, require_affine=require_affine
+        )
         self._adjacency_cache[cache_key] = adjacency
         return adjacency

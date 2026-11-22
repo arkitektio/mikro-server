@@ -17,8 +17,8 @@ one hop from world against the lineage's several, would outrank the truth foreve
 from unittest.mock import patch
 
 import pytest
-from asgiref.sync import sync_to_async
 from arkitekt_datalayer.models import ZarrStore
+from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
@@ -84,10 +84,30 @@ query Children($id: ID!) {
 
 #: A (c, y, x) source into a (z, y, x) world: the space axes onto their counterparts, the channel
 #: onto nothing (a calibration never relates a CHANNEL axis to a SPACE one). y is shifted by 5.
-_REGISTRATION = {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, 0.0]}]}
+_REGISTRATION = {
+    "kind": "BY_DIMENSION",
+    "parts": [
+        {
+            "kind": "TRANSLATION",
+            "inputAxes": ["y", "x"],
+            "outputAxes": ["y", "x"],
+            "translation": [5.0, 0.0],
+        }
+    ],
+}
 
 
-async def _derive(ctx: HttpContext, name: str, *, axes, shape, lens=None, entries=None, transform=None, valueRelation=None):
+async def _derive(
+    ctx: HttpContext,
+    name: str,
+    *,
+    axes,
+    shape,
+    lens=None,
+    entries=None,
+    transform=None,
+    valueRelation=None,
+):
     """Create a dataset through the real mutation, stating the lens(es) it was computed from.
 
     Either one `lens` plus its nested `transform` dict (and optional `valueRelation`),
@@ -107,7 +127,11 @@ async def _derive(ctx: HttpContext, name: str, *, axes, shape, lens=None, entrie
     if entries is None:
         # IDENTITY stated, not assumed: an omitted `transform` means UNMAPPABLE now, and
         # most of these tests are about a derived dataset that *does* place through its source.
-        entry = {"kind": "LENS", "lens": str(lens.pk), "transform": {"kind": "IDENTITY"}}
+        entry = {
+            "kind": "LENS",
+            "lens": str(lens.pk),
+            "transform": {"kind": "IDENTITY"},
+        }
         if transform is not None:
             entry["transform"] = transform
         if valueRelation is not None:
@@ -128,7 +152,9 @@ async def _derive(ctx: HttpContext, name: str, *, axes, shape, lens=None, entrie
                     "name": name,
                     "data": str(store.id),
                     "scales": [],
-                    "axes": [{"name": axis.name, "type": axis.type.value} for axis in axes],
+                    "axes": [
+                        {"name": axis.name, "type": axis.type.value} for axis in axes
+                    ],
                     "derivedFrom": entries,
                 }
             },
@@ -137,7 +163,9 @@ async def _derive(ctx: HttpContext, name: str, *, axes, shape, lens=None, entrie
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_derived_dataset_walks_to_world_through_its_source(authenticated_context: HttpContext):
+async def test_a_derived_dataset_walks_to_world_through_its_source(
+    authenticated_context: HttpContext,
+):
     """The path runs through the source's systems, not around them.
 
     This is the assertion the whole change exists for. The placement search partitions its
@@ -146,10 +174,25 @@ async def test_a_derived_dataset_walks_to_world_through_its_source(authenticated
     own lens->array->intrinsic edges live in the source's bucket, which was never merged.
     `pathToWorld` came back null for data that is perfectly well placed.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Source")  # (c, y, x)
+    source = await seed.create_array_dataset(
+        authenticated_context, "Source"
+    )  # (c, y, x)
     source_lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    scene_result = await schema.execute(CREATE_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "Sc", "axes": [{"name": "z", "type": "SPACE", "unit": "micrometer"}, {"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}]}})
+    scene_result = await schema.execute(
+        CREATE_SCENE,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "name": "Sc",
+                "axes": [
+                    {"name": "z", "type": "SPACE", "unit": "micrometer"},
+                    {"name": "y", "type": "SPACE", "unit": "micrometer"},
+                    {"name": "x", "type": "SPACE", "unit": "micrometer"},
+                ],
+            }
+        },
+    )
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
     world_id = scene_result.data["createScene"]["worldCoordinateSystem"]["id"]
@@ -159,45 +202,88 @@ async def test_a_derived_dataset_walks_to_world_through_its_source(authenticated
     registered = await schema.execute(
         REGISTER,
         context_value=authenticated_context,
-        variable_values={"input": {"input": str(source_intrinsic.pk), "output": world_id, "transform": _REGISTRATION}},
+        variable_values={
+            "input": {
+                "input": str(source_intrinsic.pk),
+                "output": world_id,
+                "transform": _REGISTRATION,
+            }
+        },
     )
     assert not registered.errors, registered.errors
 
     # A deconvolution: same grid, so the derivation is an identity.
-    derived = await _derive(authenticated_context, "Deconvolved", lens=source_lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    derived = await _derive(
+        authenticated_context,
+        "Deconvolved",
+        lens=source_lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "IDENTITY"},
+    )
     assert not derived.errors, derived.errors
     derived_id = derived.data["createArrayDataset"]["id"]
 
-    derived_dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived_id)
-    derived_lens = await seed.create_lens(authenticated_context, derived_dataset, slices=[])
+    derived_dataset = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived_id
+    )
+    derived_lens = await seed.create_lens(
+        authenticated_context, derived_dataset, slices=[]
+    )
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, derived_lens)).pk)}})
+    made = await schema.execute(
+        MAKE_LAYER,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {
+                "scene": scene_id,
+                "lens": str(
+                    (await seed.channel_lens(authenticated_context, derived_lens)).pk
+                ),
+            }
+        },
+    )
     assert not made.errors, made.errors
 
-    placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
+    placement = await schema.execute(
+        PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id}
+    )
     assert not placement.errors, placement.errors
 
     layer = placement.data["scene"]["layers"][0]
     path = layer["pathToWorld"]
-    assert path is not None, "a derived dataset is placed by its source; the walk must cross the derivation edge"
+    assert path is not None, (
+        "a derived dataset is placed by its source; the walk must cross the derivation edge"
+    )
 
     # It ends in the source's registration -- the derived data inherits it.
-    assert path[-1]["transformation"]["output"]["residents"] == [], "the walk ends in a space nothing lives in: a world"
+    assert path[-1]["transformation"]["output"]["residents"] == [], (
+        "the walk ends in a space nothing lives in: a world"
+    )
     inputs = [step["transformation"]["input"]["id"] for step in path]
-    assert str(source_intrinsic.pk) in inputs, "the walk passes through the source dataset's own space"
+    assert str(source_intrinsic.pk) in inputs, (
+        "the walk passes through the source dataset's own space"
+    )
 
     # And no assumed registration was fabricated for the derived dataset.
     def claim_names() -> list[str]:
         world_id = models.Scene.objects.get(pk=scene_id).world_id
-        return [edge.name or "" for edge in models.Transformation.objects.filter(output_id=world_id)]
+        return [
+            edge.name or ""
+            for edge in models.Transformation.objects.filter(output_id=world_id)
+        ]
 
     names = await sync_to_async(claim_names)()
-    assert not any("assumed" in name for name in names), f"the derived dataset must inherit, not be pinned: {names}"
+    assert not any("assumed" in name for name in names), (
+        f"the derived dataset must inherit, not be pinned: {names}"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_its_source(authenticated_context: HttpContext):
+async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_its_source(
+    authenticated_context: HttpContext,
+):
     """When nothing is registered yet, the layer is refused -- and registering the SOURCE fixes it.
 
     Nothing fabricates a placement any more. The honest fix is the one a client authors
@@ -207,62 +293,117 @@ async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_it
     lineage under the shortest-path BFS -- which is exactly why the server never writes
     one on its own.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Source")  # (c, y, x)
+    source = await seed.create_array_dataset(
+        authenticated_context, "Source"
+    )  # (c, y, x)
     source_lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    derived = await _derive(authenticated_context, "Deconvolved", lens=source_lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    derived = await _derive(
+        authenticated_context,
+        "Deconvolved",
+        lens=source_lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "IDENTITY"},
+    )
     assert not derived.errors, derived.errors
-    derived_dataset = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
-    derived_lens = await seed.create_lens(authenticated_context, derived_dataset, slices=[])
+    derived_dataset = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
+    derived_lens = await seed.create_lens(
+        authenticated_context, derived_dataset, slices=[]
+    )
 
-    scene_result = await schema.execute(CREATE_SCENE, context_value=authenticated_context, variable_values={"input": {"name": "Sc"}})
+    scene_result = await schema.execute(
+        CREATE_SCENE,
+        context_value=authenticated_context,
+        variable_values={"input": {"name": "Sc"}},
+    )
     assert not scene_result.errors, scene_result.errors
     scene_id = scene_result.data["createScene"]["id"]
 
-    variables = {"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, derived_lens)).pk)}}
-    refused = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values=variables)
-    assert refused.errors, "nothing places the derived dataset yet, so the layer is refused"
+    variables = {
+        "input": {
+            "scene": scene_id,
+            "lens": str(
+                (await seed.channel_lens(authenticated_context, derived_lens)).pk
+            ),
+        }
+    }
+    refused = await schema.execute(
+        MAKE_LAYER, context_value=authenticated_context, variable_values=variables
+    )
+    assert refused.errors, (
+        "nothing places the derived dataset yet, so the layer is refused"
+    )
     assert "createTransformation" in str(refused.errors[0])
 
     # Register the SOURCE -- the claim that is actually true -- and retry.
     scene = await sync_to_async(models.Scene.objects.get)(pk=scene_id)
     await seed.register_into_scene(authenticated_context, scene, source)
 
-    made = await schema.execute(MAKE_LAYER, context_value=authenticated_context, variable_values=variables)
+    made = await schema.execute(
+        MAKE_LAYER, context_value=authenticated_context, variable_values=variables
+    )
     assert not made.errors, made.errors
 
     def registrations() -> list[models.Transformation]:
         world_id = models.Scene.objects.get(pk=scene_id).world_id
-        return list(models.Transformation.objects.filter(output_id=world_id).select_related("input"))
+        return list(
+            models.Transformation.objects.filter(output_id=world_id).select_related(
+                "input"
+            )
+        )
 
     edges = await sync_to_async(registrations)()
     assert len(edges) == 1, f"the layer mutation wrote no edge of its own: {edges}"
 
     source_intrinsic = await sync_to_async(lambda: source.intrinsic_coordinate_system)()
-    derived_intrinsic = await sync_to_async(lambda: derived_dataset.intrinsic_coordinate_system)()
+    derived_intrinsic = await sync_to_async(
+        lambda: derived_dataset.intrinsic_coordinate_system
+    )()
     assert edges[0].input_id == source_intrinsic.pk
     assert edges[0].input_id != derived_intrinsic.pk
 
     # The derived layer reaches world -- through its source, not around it.
-    placement = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
+    placement = await schema.execute(
+        PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id}
+    )
     assert not placement.errors, placement.errors
     path = placement.data["scene"]["layers"][0]["pathToWorld"]
     assert path is not None
-    assert path[-1]["transformation"]["output"]["residents"] == [], "the walk ends in a space nothing lives in: a world"
-    assert str(source_intrinsic.pk) in [step["transformation"]["input"]["id"] for step in path], "the walk goes through the source dataset's own space"
+    assert path[-1]["transformation"]["output"]["residents"] == [], (
+        "the walk ends in a space nothing lives in: a world"
+    )
+    assert str(source_intrinsic.pk) in [
+        step["transformation"]["input"]["id"] for step in path
+    ], "the walk goes through the source dataset's own space"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_derivation_edge_is_readable_on_the_dataset(authenticated_context: HttpContext):
+async def test_the_derivation_edge_is_readable_on_the_dataset(
+    authenticated_context: HttpContext,
+):
     """`derivedFrom` is the edge itself, so a client can compose it -- not a label about it."""
     source = await seed.create_array_dataset(authenticated_context, "Source")
     source_lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    derived = await _derive(authenticated_context, "Segmented", lens=source_lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    derived = await _derive(
+        authenticated_context,
+        "Segmented",
+        lens=source_lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "IDENTITY"},
+    )
     assert not derived.errors, derived.errors
 
-    result = await schema.execute(DERIVED, context_value=authenticated_context, variable_values={"id": derived.data["createArrayDataset"]["id"]})
+    result = await schema.execute(
+        DERIVED,
+        context_value=authenticated_context,
+        variable_values={"id": derived.data["createArrayDataset"]["id"]},
+    )
     assert not result.errors, result.errors
 
     edges = result.data["arrayDataset"]["derivedFrom"]
@@ -272,14 +413,20 @@ async def test_the_derivation_edge_is_readable_on_the_dataset(authenticated_cont
     assert edges[0]["outputAxes"] == ["c", "y", "x"]
 
     # An acquired dataset was derived from nothing, and says so.
-    plain = await schema.execute(DERIVED, context_value=authenticated_context, variable_values={"id": str(source.pk)})
+    plain = await schema.execute(
+        DERIVED,
+        context_value=authenticated_context,
+        variable_values={"id": str(source.pk)},
+    )
     assert not plain.errors, plain.errors
     assert plain.data["arrayDataset"]["derivedFrom"] == []
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_derivation_is_readable_from_the_source_as_well(authenticated_context: HttpContext):
+async def test_the_derivation_is_readable_from_the_source_as_well(
+    authenticated_context: HttpContext,
+):
     """`derivedDatasets` answers "what came out of this" -- the same edges, read backwards.
 
     A source cannot otherwise be asked what was made from it: `derivedFrom` only points
@@ -294,13 +441,26 @@ async def test_the_derivation_is_readable_from_the_source_as_well(authenticated_
     source = await seed.create_array_dataset(authenticated_context, "Source")
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    derived = await _derive(authenticated_context, "Segmented", lens=lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    derived = await _derive(
+        authenticated_context,
+        "Segmented",
+        lens=lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "IDENTITY"},
+    )
     assert not derived.errors, derived.errors
     child_id = derived.data["createArrayDataset"]["id"]
 
-    result = await schema.execute(DERIVED_DATASETS, context_value=authenticated_context, variable_values={"id": str(source.pk)})
+    result = await schema.execute(
+        DERIVED_DATASETS,
+        context_value=authenticated_context,
+        variable_values={"id": str(source.pk)},
+    )
     assert not result.errors, result.errors
-    assert [child["id"] for child in result.data["arrayDataset"]["derivedDatasets"]] == [child_id]
+    assert [
+        child["id"] for child in result.data["arrayDataset"]["derivedDatasets"]
+    ] == [child_id]
 
     # The same fact through the lens the derivation actually named.
     from_lens = await schema.execute(
@@ -309,17 +469,25 @@ async def test_the_derivation_is_readable_from_the_source_as_well(authenticated_
         variable_values={"id": str(lens.pk)},
     )
     assert not from_lens.errors, from_lens.errors
-    assert [child["name"] for child in from_lens.data["lens"]["derivedDatasets"]] == ["Segmented"]
+    assert [child["name"] for child in from_lens.data["lens"]["derivedDatasets"]] == [
+        "Segmented"
+    ]
 
     # A leaf produced nothing, and says so rather than echoing its own parent back.
-    leaf = await schema.execute(DERIVED_DATASETS, context_value=authenticated_context, variable_values={"id": child_id})
+    leaf = await schema.execute(
+        DERIVED_DATASETS,
+        context_value=authenticated_context,
+        variable_values={"id": child_id},
+    )
     assert not leaf.errors, leaf.errors
     assert leaf.data["arrayDataset"]["derivedDatasets"] == []
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_fusion_is_a_child_of_every_source_it_named_exactly_once(authenticated_context: HttpContext):
+async def test_a_fusion_is_a_child_of_every_source_it_named_exactly_once(
+    authenticated_context: HttpContext,
+):
     """Report every child, not just the ones this source places -- and each child once.
 
     Two traps the naive query falls into. A fusion has several parents but only the first
@@ -338,32 +506,70 @@ async def test_a_fusion_is_a_child_of_every_source_it_named_exactly_once(authent
         "Fused",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(primary_lens.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(secondary_lens.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "LENS",
+                "lens": str(primary_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(secondary_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+        ],
     )
     assert not fusion.errors, fusion.errors
     fused_id = fusion.data["createArrayDataset"]["id"]
 
     for source in (primary, secondary):
-        result = await schema.execute(DERIVED_DATASETS, context_value=authenticated_context, variable_values={"id": str(source.pk)})
+        result = await schema.execute(
+            DERIVED_DATASETS,
+            context_value=authenticated_context,
+            variable_values={"id": str(source.pk)},
+        )
         assert not result.errors, result.errors
-        assert [child["id"] for child in result.data["arrayDataset"]["derivedDatasets"]] == [fused_id], f"{source.name} is a real parent of the fusion, primary or not"
+        assert [
+            child["id"] for child in result.data["arrayDataset"]["derivedDatasets"]
+        ] == [fused_id], f"{source.name} is a real parent of the fusion, primary or not"
 
     # Two lenses of ONE source: two edges into it, still one child.
-    other_lens = await seed.create_lens(authenticated_context, primary, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    other_lens = await seed.create_lens(
+        authenticated_context, primary, slices=[{"axis": "y", "start": 8, "stop": 40}]
+    )
     two_lens_fusion = await _derive(
         authenticated_context,
         "SelfFused",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(primary_lens.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(other_lens.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "LENS",
+                "lens": str(primary_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {
+                "kind": "LENS",
+                "lens": str(other_lens.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+        ],
     )
     assert not two_lens_fusion.errors, two_lens_fusion.errors
-    assert len(two_lens_fusion.data["createArrayDataset"]["derivedFrom"]) == 2, "the dedup below is only a test if two edges really land in one source"
+    assert len(two_lens_fusion.data["createArrayDataset"]["derivedFrom"]) == 2, (
+        "the dedup below is only a test if two edges really land in one source"
+    )
 
-    result = await schema.execute(DERIVED_DATASETS, context_value=authenticated_context, variable_values={"id": str(primary.pk)})
+    result = await schema.execute(
+        DERIVED_DATASETS,
+        context_value=authenticated_context,
+        variable_values={"id": str(primary.pk)},
+    )
     assert not result.errors, result.errors
     names = [child["name"] for child in result.data["arrayDataset"]["derivedDatasets"]]
-    assert names.count("SelfFused") == 1, f"one child, however many of its edges land here: {names}"
+    assert names.count("SelfFused") == 1, (
+        f"one child, however many of its edges land here: {names}"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -379,17 +585,32 @@ async def test_an_unmappable_child_is_still_a_child(authenticated_context: HttpC
     source = await seed.create_array_dataset(authenticated_context, "Raw")
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    measured = await _derive(authenticated_context, "Measurements", lens=lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "UNMAPPABLE"})
+    measured = await _derive(
+        authenticated_context,
+        "Measurements",
+        lens=lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "UNMAPPABLE"},
+    )
     assert not measured.errors, measured.errors
 
-    result = await schema.execute(DERIVED_DATASETS, context_value=authenticated_context, variable_values={"id": str(source.pk)})
+    result = await schema.execute(
+        DERIVED_DATASETS,
+        context_value=authenticated_context,
+        variable_values={"id": str(source.pk)},
+    )
     assert not result.errors, result.errors
-    assert [child["name"] for child in result.data["arrayDataset"]["derivedDatasets"]] == ["Measurements"]
+    assert [
+        child["name"] for child in result.data["arrayDataset"]["derivedDatasets"]
+    ] == ["Measurements"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_calibrated_dataset_is_not_its_own_child(authenticated_context: HttpContext):
+async def test_a_calibrated_dataset_is_not_its_own_child(
+    authenticated_context: HttpContext,
+):
     """A calibration runs intrinsic -> PHYSICAL, and both ends belong to one dataset.
 
     Which means it looks exactly like a derivation landing in this dataset's space, from
@@ -409,14 +630,22 @@ async def test_a_calibrated_dataset_is_not_its_own_child(authenticated_context: 
         scale=[1.0, 0.325, 0.325],
     )
 
-    result = await schema.execute(DERIVED_DATASETS, context_value=authenticated_context, variable_values={"id": str(dataset.pk)})
+    result = await schema.execute(
+        DERIVED_DATASETS,
+        context_value=authenticated_context,
+        variable_values={"id": str(dataset.pk)},
+    )
     assert not result.errors, result.errors
-    assert result.data["arrayDataset"]["derivedDatasets"] == [], "a calibration is a space of one's own, not a descendant"
+    assert result.data["arrayDataset"]["derivedDatasets"] == [], (
+        "a calibration is a space of one's own, not a descendant"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_projection_drops_an_axis_as_by_dimension(authenticated_context: HttpContext):
+async def test_a_projection_drops_an_axis_as_by_dimension(
+    authenticated_context: HttpContext,
+):
     """A max-z projection is a rank change, and BY_DIMENSION is how a rank change is stated."""
     axes = [
         seed.axis("c", enums.AxisType.CHANNEL),
@@ -424,7 +653,9 @@ async def test_a_projection_drops_an_axis_as_by_dimension(authenticated_context:
         seed.axis("y", enums.AxisType.SPACE),
         seed.axis("x", enums.AxisType.SPACE),
     ]
-    source = await seed.create_array_dataset(authenticated_context, "Volume", axes=axes, shapes=[[2, 16, 32, 32]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Volume", axes=axes, shapes=[[2, 16, 32, 32]]
+    )
     source_lens = await seed.create_lens(authenticated_context, source, slices=[])
 
     flat_axes = [
@@ -438,7 +669,16 @@ async def test_a_projection_drops_an_axis_as_by_dimension(authenticated_context:
         lens=source_lens,
         axes=flat_axes,
         shape=[2, 32, 32],
-        transform={"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["c", "y", "x"], "outputAxes": ["c", "y", "x"]}]},
+        transform={
+            "kind": "BY_DIMENSION",
+            "parts": [
+                {
+                    "kind": "IDENTITY",
+                    "inputAxes": ["c", "y", "x"],
+                    "outputAxes": ["c", "y", "x"],
+                }
+            ],
+        },
     )
     assert not derived.errors, derived.errors
 
@@ -452,28 +692,46 @@ async def test_a_projection_drops_an_axis_as_by_dimension(authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registration(authenticated_context: HttpContext):
+async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registration(
+    authenticated_context: HttpContext,
+):
     """One mask for a whole movie needs no registration of its own: it sits where the movie sits.
 
     The mask is `(y, x)`, the movie `(t, y, x)`, and the derivation keeps `y` and `x` and says
     nothing about `t`. Only the movie is registered. The mask's layer is accepted and placed,
     and its map carries the movie's pixel size -- on the two axes it has, and no others.
     """
-    movie_axes = [seed.axis("t", enums.AxisType.TIME), seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)]
-    movie = await seed.create_array_dataset(authenticated_context, "Movie", axes=movie_axes, shapes=[[10, 64, 64]])
+    movie_axes = [
+        seed.axis("t", enums.AxisType.TIME),
+        seed.axis("y", enums.AxisType.SPACE),
+        seed.axis("x", enums.AxisType.SPACE),
+    ]
+    movie = await seed.create_array_dataset(
+        authenticated_context, "Movie", axes=movie_axes, shapes=[[10, 64, 64]]
+    )
     movie_lens = await seed.create_lens(authenticated_context, movie, slices=[])
 
     derived = await _derive(
         authenticated_context,
         "Cells",
         lens=movie_lens,
-        axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         shape=[64, 64],
-        transform={"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]},
+        transform={
+            "kind": "BY_DIMENSION",
+            "parts": [
+                {"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}
+            ],
+        },
         valueRelation="CATEGORIZED",
     )
     assert not derived.errors, derived.errors
-    mask = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    mask = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
     mask_lens = await seed.create_lens(authenticated_context, mask, slices=[])
 
     scene = await seed.create_scene(authenticated_context, "Field")  # world (z, y, x)
@@ -485,7 +743,17 @@ async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registratio
             "input": {
                 "input": str(movie_system.pk),
                 "output": str(scene.world_id),
-                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [0.5, 0.25]}]},
+                "transform": {
+                    "kind": "BY_DIMENSION",
+                    "parts": [
+                        {
+                            "kind": "SCALE",
+                            "inputAxes": ["y", "x"],
+                            "outputAxes": ["y", "x"],
+                            "scale": [0.5, 0.25],
+                        }
+                    ],
+                },
             }
         },
     )
@@ -508,18 +776,30 @@ async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registratio
     assert layer["placement"] == "PLACED"
     affine = layer["asAffine"]
     assert affine["inputAxes"] == ["y", "x"] and affine["outputAxes"] == ["y", "x"]
-    assert affine["matrix"] == [[0.5, 0.0, 0.0], [0.0, 0.25, 0.0]], "the movie's pixel size, inherited through the derivation"
-    assert affine["total"] is False, "the mask says nothing about the world's third axis, and the map does not pretend it does"
+    assert affine["matrix"] == [[0.5, 0.0, 0.0], [0.0, 0.25, 0.0]], (
+        "the movie's pixel size, inherited through the derivation"
+    )
+    assert affine["total"] is False, (
+        "the mask says nothing about the world's third axis, and the map does not pretend it does"
+    )
 
     def edges_into_world() -> list[int]:
-        return list(models.Transformation.objects.filter(output_id=scene.world_id).values_list("input_id", flat=True))
+        return list(
+            models.Transformation.objects.filter(output_id=scene.world_id).values_list(
+                "input_id", flat=True
+            )
+        )
 
-    assert await sync_to_async(edges_into_world)() == [movie_system.pk], "the mask was never registered"
+    assert await sync_to_async(edges_into_world)() == [movie_system.pk], (
+        "the mask was never registered"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_identity_is_not_a_rank_claim_in_disguise(authenticated_context: HttpContext):
+async def test_identity_is_not_a_rank_claim_in_disguise(
+    authenticated_context: HttpContext,
+):
     """IDENTITY says the two grids ARE the same. Between different axes that is a lie.
 
     IDENTITY carries no parameters, so no rank check would otherwise look at it -- and it
@@ -533,7 +813,9 @@ async def test_identity_is_not_a_rank_claim_in_disguise(authenticated_context: H
         seed.axis("y", enums.AxisType.SPACE),
         seed.axis("x", enums.AxisType.SPACE),
     ]
-    source = await seed.create_array_dataset(authenticated_context, "Volume", axes=axes, shapes=[[2, 16, 32, 32]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Volume", axes=axes, shapes=[[2, 16, 32, 32]]
+    )
     source_lens = await seed.create_lens(authenticated_context, source, slices=[])
 
     flat_axes = [
@@ -541,15 +823,26 @@ async def test_identity_is_not_a_rank_claim_in_disguise(authenticated_context: H
         seed.axis("y", enums.AxisType.SPACE),
         seed.axis("x", enums.AxisType.SPACE),
     ]
-    derived = await _derive(authenticated_context, "MaxZ", lens=source_lens, axes=flat_axes, shape=[2, 32, 32], transform={"kind": "IDENTITY"})
+    derived = await _derive(
+        authenticated_context,
+        "MaxZ",
+        lens=source_lens,
+        axes=flat_axes,
+        shape=[2, 32, 32],
+        transform={"kind": "IDENTITY"},
+    )
 
-    assert derived.errors, "an identity between (c,z,y,x) and (c,y,x) is a rank change wearing an identity's clothes"
+    assert derived.errors, (
+        "an identity between (c,z,y,x) and (c,y,x) is a rank change wearing an identity's clothes"
+    )
     assert "IDENTITY" in str(derived.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_context: HttpContext):
+async def test_a_categorized_derivation_bootstraps_a_label_layer(
+    authenticated_context: HttpContext,
+):
     """`valueRelation` is the structural signal LABEL inference was missing.
 
     The spatial kind says where a threshold's pixels sit (IDENTITY); CATEGORIZED says
@@ -571,13 +864,25 @@ async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_c
         valueRelation="CATEGORIZED",
     )
     assert not derived.errors, derived.errors
-    assert derived.data["createArrayDataset"]["derivedFrom"][0]["valueRelation"] == "CATEGORIZED", "the statement rides the derivation edge itself"
-    mask = await sync_to_async(models.ArrayDataset.objects.get)(pk=derived.data["createArrayDataset"]["id"])
+    assert (
+        derived.data["createArrayDataset"]["derivedFrom"][0]["valueRelation"]
+        == "CATEGORIZED"
+    ), "the statement rides the derivation edge itself"
+    mask = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=derived.data["createArrayDataset"]["id"]
+    )
 
     staged = await schema.execute(
         "mutation S($input: CreateSceneFromCoordinateSystemInput!) { createSceneFromCoordinateSystem(input: $input) { id } }",
         context_value=authenticated_context,
-        variable_values={"input": {"coordinateSystem": str(await sync_to_async(lambda: mask.intrinsic_coordinate_system.pk)()), "policy": {}}},
+        variable_values={
+            "input": {
+                "coordinateSystem": str(
+                    await sync_to_async(lambda: mask.intrinsic_coordinate_system.pk)()
+                ),
+                "policy": {},
+            }
+        },
     )
     assert not staged.errors, staged.errors
 
@@ -585,8 +890,12 @@ async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_c
         return models.Layer.objects.get(lens__arraylens__dataset=mask)
 
     layer = await sync_to_async(label_layer)()
-    assert layer.kind == enums.LayerKindChoices.LABEL.value, "a stated categorization bootstraps a label layer without an override"
-    assert layer.render_graph is None and layer.label_render is not None, "a label layer carries a label recipe, not a render graph"
+    assert layer.kind == enums.LayerKindChoices.LABEL.value, (
+        "a stated categorization bootstraps a label layer without an override"
+    )
+    assert layer.render_graph is None and layer.label_render is not None, (
+        "a label layer carries a label recipe, not a render graph"
+    )
     assert layer.blending == enums.BlendingChoices.NORMAL.value
 
     # The orthogonality, from the other side: transformed values are still an intensity.
@@ -600,24 +909,41 @@ async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_c
         valueRelation="TRANSFORMED",
     )
     assert not deconvolved.errors, deconvolved.errors
-    intensity = await sync_to_async(models.ArrayDataset.objects.get)(pk=deconvolved.data["createArrayDataset"]["id"])
+    intensity = await sync_to_async(models.ArrayDataset.objects.get)(
+        pk=deconvolved.data["createArrayDataset"]["id"]
+    )
 
     staged = await schema.execute(
         "mutation S($input: CreateSceneFromCoordinateSystemInput!) { createSceneFromCoordinateSystem(input: $input) { id } }",
         context_value=authenticated_context,
-        variable_values={"input": {"coordinateSystem": str(await sync_to_async(lambda: intensity.intrinsic_coordinate_system.pk)()), "policy": {}}},
+        variable_values={
+            "input": {
+                "coordinateSystem": str(
+                    await sync_to_async(
+                        lambda: intensity.intrinsic_coordinate_system.pk
+                    )()
+                ),
+                "policy": {},
+            }
+        },
     )
     assert not staged.errors, staged.errors
 
     def intensity_layers() -> list[models.Layer]:
-        return list(models.Layer.objects.filter(lens__arraylens__dataset=intensity).order_by("order"))
+        return list(
+            models.Layer.objects.filter(lens__arraylens__dataset=intensity).order_by(
+                "order"
+            )
+        )
 
     # Three, because an intensity image is drawn a channel at a time -- where the label map
     # above is one layer whatever its channel count, its values being ids rather than signals.
     layers = await sync_to_async(intensity_layers)()
     assert len(layers) == 3
     for layer in layers:
-        assert layer.kind == enums.LayerKindChoices.INTENSITY.value, "new numbers are still an intensity, not labels"
+        assert layer.kind == enums.LayerKindChoices.INTENSITY.value, (
+            "new numbers are still an intensity, not labels"
+        )
         assert layer.label_render is None
 
 
@@ -625,7 +951,6 @@ async def test_a_categorized_derivation_bootstraps_a_label_layer(authenticated_c
 # rested on there being a class of edge -- a registration into a shared space -- across which
 # values were known not to travel. There is no such class any more: every edge is an edge, and
 # `valueRelation` rides whichever one its author thinks it describes.
-
 
 
 _DATASETS = """
@@ -636,7 +961,9 @@ query List($filters: ArrayDatasetFilter) {
 
 
 async def _names(ctx: HttpContext, filters: dict) -> set[str]:
-    result = await schema.execute(_DATASETS, context_value=ctx, variable_values={"filters": filters})
+    result = await schema.execute(
+        _DATASETS, context_value=ctx, variable_values={"filters": filters}
+    )
     assert not result.errors, result.errors
     return {d["name"] for d in result.data["arrayDatasets"]}
 
@@ -656,7 +983,14 @@ async def test_derived_from_and_not_derived_filters(authenticated_context: HttpC
     source = await seed.create_array_dataset(ctx, "Acquired")
     lens = await seed.create_lens(ctx, source, slices=[])
 
-    child = await _derive(ctx, "Deconvolved", lens=lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    child = await _derive(
+        ctx,
+        "Deconvolved",
+        lens=lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "IDENTITY"},
+    )
     assert not child.errors, child.errors
 
     # The calibration edge is the trap: it leaves the source's intrinsic system just as a
@@ -681,8 +1015,13 @@ async def test_derived_from_and_not_derived_filters(authenticated_context: HttpC
     # beside the counts' GROUP BY / HAVING, and the two must still compose.
     assert await _names(ctx, {"notDerived": True, "spec": ["IMAGE"]}) == {"Acquired"}
     assert await _names(ctx, {"notDerived": True, "spec": ["VOLUME"]}) == set()
-    assert await _names(ctx, {"derivedFrom": str(source.pk), "spec": ["IMAGE", "MULTICHANNEL"]}) == {"Deconvolved"}
-    assert await _names(ctx, {"derivedFrom": str(source.pk), "hasPhysicalSpace": True}) == set()
+    assert await _names(
+        ctx, {"derivedFrom": str(source.pk), "spec": ["IMAGE", "MULTICHANNEL"]}
+    ) == {"Deconvolved"}
+    assert (
+        await _names(ctx, {"derivedFrom": str(source.pk), "hasPhysicalSpace": True})
+        == set()
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -693,7 +1032,15 @@ async def test_derivation_filters_are_kind_blind(authenticated_context: HttpCont
     source = await seed.create_array_dataset(ctx, "Acquired")
     lens = await seed.create_lens(ctx, source, slices=[])
 
-    unmappable = await _derive(ctx, "Segmented", lens=lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "UNMAPPABLE"}, valueRelation="CATEGORIZED")
+    unmappable = await _derive(
+        ctx,
+        "Segmented",
+        lens=lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "UNMAPPABLE"},
+        valueRelation="CATEGORIZED",
+    )
     assert not unmappable.errors, unmappable.errors
 
     assert await _names(ctx, {"derivedFrom": str(source.pk)}) == {"Segmented"}
@@ -702,7 +1049,9 @@ async def test_derivation_filters_are_kind_blind(authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_derived_from_reports_every_parent_of_a_fusion(authenticated_context: HttpContext):
+async def test_derived_from_reports_every_parent_of_a_fusion(
+    authenticated_context: HttpContext,
+):
     """A fusion has two real parents, and is a child of both -- not only the one that places it."""
     ctx = authenticated_context
     first = await seed.create_array_dataset(ctx, "ChannelA")
@@ -715,7 +1064,10 @@ async def test_derived_from_reports_every_parent_of_a_fusion(authenticated_conte
         "Fused",
         axes=seed.SIMPLE_AXES,
         shape=[3, 64, 64],
-        entries=[{"kind": "LENS", "lens": str(lens_a.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(lens_b.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {"kind": "LENS", "lens": str(lens_a.pk), "transform": {"kind": "IDENTITY"}},
+            {"kind": "LENS", "lens": str(lens_b.pk), "transform": {"kind": "IDENTITY"}},
+        ],
     )
     assert not fused.errors, fused.errors
 
@@ -740,20 +1092,36 @@ async def test_a_derivation_may_be_a_map_axis(authenticated_context: HttpContext
     result = await _derive(
         ctx,
         "Transposed",
-        axes=[seed.axis("c", enums.AxisType.CHANNEL), seed.axis("x", enums.AxisType.SPACE), seed.axis("y", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("c", enums.AxisType.CHANNEL),
+            seed.axis("x", enums.AxisType.SPACE),
+            seed.axis("y", enums.AxisType.SPACE),
+        ],
         shape=[3, 64, 64],
         lens=lens,
-        transform={"kind": "MAP_AXIS", "inputAxes": ["c", "x", "y"], "outputAxes": ["c", "y", "x"]},
+        transform={
+            "kind": "MAP_AXIS",
+            "inputAxes": ["c", "x", "y"],
+            "outputAxes": ["c", "y", "x"],
+        },
     )
     assert not result.errors, result.errors
 
     reported = result.data["createArrayDataset"]["derivedFrom"][0]
     assert reported["kind"] == "MAP_AXIS"
-    assert reported["inputAxes"] == ["c", "x", "y"] and reported["outputAxes"] == ["c", "y", "x"]
+    assert reported["inputAxes"] == ["c", "x", "y"] and reported["outputAxes"] == [
+        "c",
+        "y",
+        "x",
+    ]
 
     edge = await sync_to_async(models.Transformation.objects.get)(pk=reported["id"])
-    assert edge.validity == enums.PlacementValidityChoices.MANUAL.value, "a derivation is an authored claim"
-    assert edge.params == {}, "a MAP_AXIS's map is its axis lists; it carries no parameters"
+    assert edge.validity == enums.PlacementValidityChoices.MANUAL.value, (
+        "a derivation is an authored claim"
+    )
+    assert edge.params == {}, (
+        "a MAP_AXIS's map is its axis lists; it carries no parameters"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -775,26 +1143,51 @@ def test_a_derivation_may_have_a_field_part(authenticated_context: HttpContext):
     ctx = seed._creation(authenticated_context)
 
     def build() -> models.Transformation:
-        mask_space = models.CoordinateSystem.objects.create(name="mask", creator=ctx.user, organization=ctx.organization)
+        mask_space = models.CoordinateSystem.objects.create(
+            name="mask", creator=ctx.user, organization=ctx.organization
+        )
         graph_logic.create_pixel_axes(mask_space, seed.YX_AXES)
-        models.ArrayDataset.objects.create(name="mask", coordinate_system=mask_space, creator=ctx.user, organization=ctx.organization)
-        objects_space = models.CoordinateSystem.objects.create(name="objects", creator=ctx.user, organization=ctx.organization)
-        models.Axis.objects.create(coordinate_system=objects_space, order=0, name="i", type=enums.AxisTypeChoices.INDEX.value)
+        models.ArrayDataset.objects.create(
+            name="mask",
+            coordinate_system=mask_space,
+            creator=ctx.user,
+            organization=ctx.organization,
+        )
+        objects_space = models.CoordinateSystem.objects.create(
+            name="objects", creator=ctx.user, organization=ctx.organization
+        )
+        models.Axis.objects.create(
+            coordinate_system=objects_space,
+            order=0,
+            name="i",
+            type=enums.AxisTypeChoices.INDEX.value,
+        )
         return graph_logic.write_relation_edge(
             name="mask <- objects",
             input_system=mask_space,
             output_system=objects_space,
             kind="BY_DIMENSION",
-            parts=[{"kind": "FIELD", "input_axes": ["y", "x"], "output_axes": ["i"], "field": mask_space}],
+            parts=[
+                {
+                    "kind": "FIELD",
+                    "input_axes": ["y", "x"],
+                    "output_axes": ["i"],
+                    "field": mask_space,
+                }
+            ],
             ctx=ctx,
         )
 
     edge = build()
     assert edge.kind == enums.TransformKindChoices.BY_DIMENSION.value
     assert edge.input_axes == ["y", "x"] and edge.output_axes == ["i"]
-    assert edge.parts[0]["field"] == "self" and not edge.field_links.exists(), "a self field links nothing, or PROTECT would make the mask undeletable"
+    assert edge.parts[0]["field"] == "self" and not edge.field_links.exists(), (
+        "a self field links nothing, or PROTECT would make the mask undeletable"
+    )
     assert edge.validity == enums.PlacementValidityChoices.MANUAL.value
-    assert graph_logic.is_traversable(edge) and not graph_logic.is_reverse_traversable(edge), "a FIELD derivation places one way, forwards"
+    assert graph_logic.is_traversable(edge) and not graph_logic.is_reverse_traversable(
+        edge
+    ), "a FIELD derivation places one way, forwards"
 
 
 # ---------------------------------------------------------------------------
@@ -809,7 +1202,15 @@ def test_a_derivation_may_have_a_field_part(authenticated_context: HttpContext):
 # ---------------------------------------------------------------------------
 
 
-async def _create_with_pyramid(ctx: HttpContext, name: str, *, axes: list, shapes: list[list[int]], scale_method: str | None, derived_from: list | None = None):
+async def _create_with_pyramid(
+    ctx: HttpContext,
+    name: str,
+    *,
+    axes: list,
+    shapes: list[list[int]],
+    scale_method: str | None,
+    derived_from: list | None = None,
+):
     """Run `createArrayDataset` over a pyramid of `shapes`, stating how each level above 0 was built (or not).
 
     Every level but the first becomes a `scales` entry, so a single-entry `shapes` is an
@@ -854,7 +1255,16 @@ async def _create_with_pyramid(ctx: HttpContext, name: str, *, axes: list, shape
         )
 
 
-async def _derive_with_pyramid(ctx: HttpContext, name: str, *, lens, value_relation: str, scale_method: str | None, axes: list | None = None, shapes: list[list[int]] | None = None):
+async def _derive_with_pyramid(
+    ctx: HttpContext,
+    name: str,
+    *,
+    lens,
+    value_relation: str,
+    scale_method: str | None,
+    axes: list | None = None,
+    shapes: list[list[int]] | None = None,
+):
     """A two-level derived dataset, stating how level 1 was downsampled (or not)."""
     return await _create_with_pyramid(
         ctx,
@@ -862,52 +1272,95 @@ async def _derive_with_pyramid(ctx: HttpContext, name: str, *, lens, value_relat
         axes=axes or seed.YX_AXES,
         shapes=shapes or [[64, 64], [32, 32]],
         scale_method=scale_method,
-        derived_from=[{"kind": "LENS", "lens": str(lens.pk), "transform": {"kind": "IDENTITY"}, "valueRelation": value_relation}],
+        derived_from=[
+            {
+                "kind": "LENS",
+                "lens": str(lens.pk),
+                "transform": {"kind": "IDENTITY"},
+                "valueRelation": value_relation,
+            }
+        ],
     )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_categorized_pyramid_refuses_an_averaged_level(authenticated_context: HttpContext):
+async def test_a_categorized_pyramid_refuses_an_averaged_level(
+    authenticated_context: HttpContext,
+):
     """AREA over ids returns a number that was in neither source voxel."""
-    source = await seed.create_array_dataset(authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    result = await _derive_with_pyramid(authenticated_context, "Mask", lens=lens, value_relation="CATEGORIZED", scale_method="AREA")
-    assert result.errors, "expected an averaged pyramid over a CATEGORIZED dataset to be refused"
+    result = await _derive_with_pyramid(
+        authenticated_context,
+        "Mask",
+        lens=lens,
+        value_relation="CATEGORIZED",
+        scale_method="AREA",
+    )
+    assert result.errors, (
+        "expected an averaged pyramid over a CATEGORIZED dataset to be refused"
+    )
     assert "may not have been downsampled with AREA" in str(result.errors[0])
-    assert not await models.ArrayDataset.objects.filter(name="Mask").aexists(), "the refusal ran before anything was written"
+    assert not await models.ArrayDataset.objects.filter(name="Mask").aexists(), (
+        "the refusal ran before anything was written"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_categorized_pyramid_must_say_how_it_was_built(authenticated_context: HttpContext):
+async def test_a_categorized_pyramid_must_say_how_it_was_built(
+    authenticated_context: HttpContext,
+):
     """Silence is not compliance: nothing about two arrays says whether one was averaged.
 
     The value could not be derived even in principle, so an unstated method over data
     already declared to be ids is refused rather than assumed benign.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    result = await _derive_with_pyramid(authenticated_context, "Mask", lens=lens, value_relation="CATEGORIZED", scale_method=None)
-    assert result.errors, "expected an undeclared method over a CATEGORIZED dataset to be refused"
+    result = await _derive_with_pyramid(
+        authenticated_context,
+        "Mask",
+        lens=lens,
+        value_relation="CATEGORIZED",
+        scale_method=None,
+    )
+    assert result.errors, (
+        "expected an undeclared method over a CATEGORIZED dataset to be refused"
+    )
     assert "must say how it was downsampled" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_label_compliant_pyramid_is_stored_and_reported(authenticated_context: HttpContext):
+async def test_a_label_compliant_pyramid_is_stored_and_reported(
+    authenticated_context: HttpContext,
+):
     """MODE is accepted, stored on the level, and read back through the dataset.
 
     The stored value is the point: `scaleMethod` has been on `ScaleInput` since the initial
     schema, described as recorded, and was dropped by `to_pydantic()` before any resolver
     saw it. This is the assertion that it now survives the round trip.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    result = await _derive_with_pyramid(authenticated_context, "Mask", lens=lens, value_relation="CATEGORIZED", scale_method="MODE")
+    result = await _derive_with_pyramid(
+        authenticated_context,
+        "Mask",
+        lens=lens,
+        value_relation="CATEGORIZED",
+        scale_method="MODE",
+    )
     assert not result.errors, result.errors
 
     read = await schema.execute(
@@ -918,7 +1371,9 @@ async def test_a_label_compliant_pyramid_is_stored_and_reported(authenticated_co
     assert not read.errors, read.errors
     data = read.data["arrayDataset"]
     assert data["pyramidIsLabelCompliant"] is True
-    assert sorted((array["level"], array["scaleMethod"]) for array in data["dataArrays"]) == [(0, None), (1, "MODE")], "level 0 was downsampled from nothing"
+    assert sorted(
+        (array["level"], array["scaleMethod"]) for array in data["dataArrays"]
+    ) == [(0, None), (1, "MODE")], "level 0 was downsampled from nothing"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -930,10 +1385,18 @@ async def test_an_intensity_pyramid_may_be_averaged(authenticated_context: HttpC
     later be declared a mask by a `keyedBy` edge, and this is the field that would say the
     levels cannot be trusted.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    result = await _derive_with_pyramid(authenticated_context, "Deconvolved", lens=lens, value_relation="TRANSFORMED", scale_method="AREA")
+    result = await _derive_with_pyramid(
+        authenticated_context,
+        "Deconvolved",
+        lens=lens,
+        value_relation="TRANSFORMED",
+        scale_method="AREA",
+    )
     assert not result.errors, result.errors
 
     read = await schema.execute(
@@ -942,21 +1405,33 @@ async def test_an_intensity_pyramid_may_be_averaged(authenticated_context: HttpC
         variable_values={"id": result.data["createArrayDataset"]["id"]},
     )
     assert not read.errors, read.errors
-    assert read.data["arrayDataset"]["pyramidIsLabelCompliant"] is False, "true of the levels, whatever the values turn out to be"
+    assert read.data["arrayDataset"]["pyramidIsLabelCompliant"] is False, (
+        "true of the levels, whatever the values turn out to be"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unstated_pyramid_reports_null_not_compliant(authenticated_context: HttpContext):
+async def test_an_unstated_pyramid_reports_null_not_compliant(
+    authenticated_context: HttpContext,
+):
     """Null is its own answer: nobody said, which is not the same as nobody averaged.
 
     Every level written before `scaleMethod` was stored reads this way, and collapsing it
     into either true or false would manufacture an answer out of a gap in the record.
     """
-    source = await seed.create_array_dataset(authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
-    result = await _derive_with_pyramid(authenticated_context, "Unstated", lens=lens, value_relation="TRANSFORMED", scale_method=None)
+    result = await _derive_with_pyramid(
+        authenticated_context,
+        "Unstated",
+        lens=lens,
+        value_relation="TRANSFORMED",
+        scale_method=None,
+    )
     assert not result.errors, result.errors
 
     read = await schema.execute(
@@ -970,9 +1445,13 @@ async def test_an_unstated_pyramid_reports_null_not_compliant(authenticated_cont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unpyramided_dataset_is_trivially_compliant(authenticated_context: HttpContext):
+async def test_an_unpyramided_dataset_is_trivially_compliant(
+    authenticated_context: HttpContext,
+):
     """One level, nothing downsampled, nothing that could be wrong."""
-    dataset = await seed.create_array_dataset(authenticated_context, "Flat", axes=seed.YX_AXES, shapes=[[64, 64]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Flat", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
 
     read = await schema.execute(
         "query D($id: ID!) { arrayDataset(id: $id) { pyramidIsLabelCompliant } }",
@@ -1002,7 +1481,9 @@ _OBJECT_YX_AXES = [
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_index_axis_refuses_an_averaged_pyramid_with_no_derivation(authenticated_context: HttpContext):
+async def test_an_index_axis_refuses_an_averaged_pyramid_with_no_derivation(
+    authenticated_context: HttpContext,
+):
     """The case the CATEGORIZED signal cannot reach: an ingest that declares no derivation.
 
     Nothing about this dataset says what its values are except its axes, and one of them
@@ -1015,18 +1496,26 @@ async def test_an_index_axis_refuses_an_averaged_pyramid_with_no_derivation(auth
         shapes=[[8, 64, 64], [8, 32, 32]],
         scale_method="AREA",
     )
-    assert result.errors, "expected an averaged pyramid over an INDEX-axis dataset to be refused"
+    assert result.errors, (
+        "expected an averaged pyramid over an INDEX-axis dataset to be refused"
+    )
     message = str(result.errors[0])
     assert "may not have been downsampled with AREA" in message
     assert "'object'" in message, "the refusal has to name the axis it is about"
-    assert not await models.ArrayDataset.objects.filter(name="Masks").aexists(), "the refusal ran before anything was written"
+    assert not await models.ArrayDataset.objects.filter(name="Masks").aexists(), (
+        "the refusal ran before anything was written"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_index_axis_refuses_an_averaged_pyramid_whatever_the_derivation_says(authenticated_context: HttpContext):
+async def test_an_index_axis_refuses_an_averaged_pyramid_whatever_the_derivation_says(
+    authenticated_context: HttpContext,
+):
     """TRANSFORMED does not buy an INDEX-axis dataset an average: the two signals are independent."""
-    source = await seed.create_array_dataset(authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(authenticated_context, source, slices=[])
 
     result = await _derive_with_pyramid(
@@ -1038,13 +1527,17 @@ async def test_an_index_axis_refuses_an_averaged_pyramid_whatever_the_derivation
         axes=_OBJECT_YX_AXES,
         shapes=[[8, 64, 64], [8, 32, 32]],
     )
-    assert result.errors, "expected the axis trigger to fire independently of the value relation"
+    assert result.errors, (
+        "expected the axis trigger to fire independently of the value relation"
+    )
     assert "may not have been downsampled with AREA" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_index_axis_pyramid_must_say_how_it_was_built(authenticated_context: HttpContext):
+async def test_an_index_axis_pyramid_must_say_how_it_was_built(
+    authenticated_context: HttpContext,
+):
     """Silence is not compliance here either -- the same strictness the CATEGORIZED case gets."""
     result = await _create_with_pyramid(
         authenticated_context,
@@ -1053,13 +1546,17 @@ async def test_an_index_axis_pyramid_must_say_how_it_was_built(authenticated_con
         shapes=[[8, 64, 64], [8, 32, 32]],
         scale_method=None,
     )
-    assert result.errors, "expected an undeclared method over an INDEX-axis dataset to be refused"
+    assert result.errors, (
+        "expected an undeclared method over an INDEX-axis dataset to be refused"
+    )
     assert "must say how it was downsampled" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_index_axis_pyramid_built_by_picking_is_accepted(authenticated_context: HttpContext):
+async def test_an_index_axis_pyramid_built_by_picking_is_accepted(
+    authenticated_context: HttpContext,
+):
     """MODE is what the guard is asking for, and the level reads back saying so."""
     result = await _create_with_pyramid(
         authenticated_context,
@@ -1078,12 +1575,16 @@ async def test_an_index_axis_pyramid_built_by_picking_is_accepted(authenticated_
     assert not read.errors, read.errors
     data = read.data["arrayDataset"]
     assert data["pyramidIsLabelCompliant"] is True
-    assert sorted((array["level"], array["scaleMethod"]) for array in data["dataArrays"]) == [(0, None), (1, "MODE")]
+    assert sorted(
+        (array["level"], array["scaleMethod"]) for array in data["dataArrays"]
+    ) == [(0, None), (1, "MODE")]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unpyramided_index_axis_dataset_is_accepted(authenticated_context: HttpContext):
+async def test_an_unpyramided_index_axis_dataset_is_accepted(
+    authenticated_context: HttpContext,
+):
     """The guard is about levels, not about axes: with nothing downsampled there is nothing to state.
 
     The negative that keeps it honest -- an INDEX axis must not become a reason to refuse an
@@ -1101,58 +1602,102 @@ async def test_an_unpyramided_index_axis_dataset_is_accepted(authenticated_conte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_container_and_its_whole_lens_are_one_source(authenticated_context: HttpContext):
+async def test_a_container_and_its_whole_lens_are_one_source(
+    authenticated_context: HttpContext,
+):
     """`{DATASET: d}` and `{LENS: d's whole lens}` resolve to one space; named together they are a duplicate, not two edges into one system."""
     ctx = authenticated_context
-    source = await seed.create_array_dataset(ctx, "raw", axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        ctx, "raw", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     whole = await seed.create_lens(ctx, source)
     both = await _derive(
         ctx,
         "twice",
         axes=seed.YX_AXES,
         shape=[64, 64],
-        entries=[{"kind": "DATASET", "dataset": str(source.pk), "transform": {"kind": "IDENTITY"}}, {"kind": "LENS", "lens": str(whole.pk), "transform": {"kind": "IDENTITY"}}],
+        entries=[
+            {
+                "kind": "DATASET",
+                "dataset": str(source.pk),
+                "transform": {"kind": "IDENTITY"},
+            },
+            {"kind": "LENS", "lens": str(whole.pk), "transform": {"kind": "IDENTITY"}},
+        ],
     )
     assert both.errors and "one source" in both.errors[0].message, both.errors
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_network_lens_is_never_a_named_derivation_source(authenticated_context: HttpContext):
+async def test_a_network_lens_is_never_a_named_derivation_source(
+    authenticated_context: HttpContext,
+):
     from tests.test_network_layers import _collection as _network_collection
 
     ctx = authenticated_context
     network = await _network_collection(ctx)
     whole = await seed.create_windowed_lens(ctx, network)
-    refused = await _derive(ctx, "from-a-network", axes=seed.YX_AXES, shape=[64, 64], lens=whole)
-    assert refused.errors and "never a named derivation source" in refused.errors[0].message, refused.errors
+    refused = await _derive(
+        ctx, "from-a-network", axes=seed.YX_AXES, shape=[64, 64], lens=whole
+    )
+    assert (
+        refused.errors
+        and "never a named derivation source" in refused.errors[0].message
+    ), refused.errors
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_derived_from_a_table_is_derived_to_the_filter_too(authenticated_context: HttpContext):
+async def test_a_dataset_derived_from_a_table_is_derived_to_the_filter_too(
+    authenticated_context: HttpContext,
+):
     """`derivedFrom` on the type and `notDerived` on the filter read the same edges: a reconstruction from a table is derived, whatever its parent's kind."""
     from tests.test_layer_kinds import _seed_table_dataset
 
     ctx = authenticated_context
     table, _ = await _seed_table_dataset(ctx, "localizations")
-    made = await _derive(ctx, "reconstruction", axes=seed.YX_AXES, shape=[64, 64], entries=[{"kind": "TABLE_DATASET", "tableDataset": str(table.pk), "transform": {"kind": "IDENTITY"}}])
+    made = await _derive(
+        ctx,
+        "reconstruction",
+        axes=seed.YX_AXES,
+        shape=[64, 64],
+        entries=[
+            {
+                "kind": "TABLE_DATASET",
+                "tableDataset": str(table.pk),
+                "transform": {"kind": "IDENTITY"},
+            }
+        ],
+    )
     assert not made.errors, made.errors
     assert made.data["createArrayDataset"]["derivedFrom"], "the type reports the parent"
-    acquired = await seed.create_array_dataset(ctx, "acquired", axes=seed.YX_AXES, shapes=[[64, 64]])
+    acquired = await seed.create_array_dataset(
+        ctx, "acquired", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
 
     async def ids(not_derived: bool) -> set[str]:
-        result = await schema.execute("query D($v: Boolean!) { arrayDatasets(filters: { notDerived: $v }) { id } }", context_value=ctx, variable_values={"v": not_derived})
+        result = await schema.execute(
+            "query D($v: Boolean!) { arrayDatasets(filters: { notDerived: $v }) { id } }",
+            context_value=ctx,
+            variable_values={"v": not_derived},
+        )
         assert not result.errors, result.errors
         return {row["id"] for row in result.data["arrayDatasets"]}
 
-    assert made.data["createArrayDataset"]["id"] in await ids(False), "derived from a table is derived"
-    assert str(acquired.pk) in await ids(True) and made.data["createArrayDataset"]["id"] not in await ids(True)
+    assert made.data["createArrayDataset"]["id"] in await ids(False), (
+        "derived from a table is derived"
+    )
+    assert str(acquired.pk) in await ids(True) and made.data["createArrayDataset"][
+        "id"
+    ] not in await ids(True)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_long_dataset_name_does_not_refuse_the_dataset(authenticated_context: HttpContext):
+async def test_a_long_dataset_name_does_not_refuse_the_dataset(
+    authenticated_context: HttpContext,
+):
     """Every name `createArrayDataset` derives from the dataset's is longer than the dataset's.
 
     The intrinsic space is `<name>/intrinsic`, each level's `<name>/<level>`, and a derivation
@@ -1162,19 +1707,37 @@ async def test_a_long_dataset_name_does_not_refuse_the_dataset(authenticated_con
     long as what it was derived from.
     """
     ctx = authenticated_context
-    source = await seed.create_array_dataset(ctx, "r" * 600, axes=seed.YX_AXES, shapes=[[64, 64]])
+    source = await seed.create_array_dataset(
+        ctx, "r" * 600, axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
     lens = await seed.create_lens(ctx, source, slices=[])
     name = "d" * 600
 
-    result = await _derive_with_pyramid(ctx, name, lens=lens, value_relation="TRANSFORMED", scale_method="AREA")
+    result = await _derive_with_pyramid(
+        ctx, name, lens=lens, value_relation="TRANSFORMED", scale_method="AREA"
+    )
     assert not result.errors, result.errors
 
-    dataset = await sync_to_async(models.ArrayDataset.objects.select_related("coordinate_system").get)(pk=result.data["createArrayDataset"]["id"])
-    assert dataset.coordinate_system.name == f"{name}/intrinsic", "whole, not cut to fit"
-    level_one = await sync_to_async(lambda: models.DataArray.objects.select_related("coordinate_system").get(dataset=dataset, level=1))()
+    dataset = await sync_to_async(
+        models.ArrayDataset.objects.select_related("coordinate_system").get
+    )(pk=result.data["createArrayDataset"]["id"])
+    assert dataset.coordinate_system.name == f"{name}/intrinsic", (
+        "whole, not cut to fit"
+    )
+    level_one = await sync_to_async(
+        lambda: models.DataArray.objects.select_related("coordinate_system").get(
+            dataset=dataset, level=1
+        )
+    )()
     assert level_one.coordinate_system.name == f"{name}/1"
-    derivation = await sync_to_async(lambda: models.Transformation.objects.filter(input=dataset.coordinate_system, name__startswith=f"{name} <- ").first())()
-    assert derivation is not None and len(derivation.name) > 1200, "the derivation edge carries both names"
+    derivation = await sync_to_async(
+        lambda: models.Transformation.objects.filter(
+            input=dataset.coordinate_system, name__startswith=f"{name} <- "
+        ).first()
+    )()
+    assert derivation is not None and len(derivation.name) > 1200, (
+        "the derivation edge carries both names"
+    )
 
 
 _LENSES = """
@@ -1191,14 +1754,18 @@ mutation M($input: CreateAnnotationCollectionInput!) {
 
 
 async def _lens_ids(ctx: HttpContext, filters: dict) -> set[str]:
-    result = await schema.execute(_LENSES, context_value=ctx, variable_values={"filters": filters})
+    result = await schema.execute(
+        _LENSES, context_value=ctx, variable_values={"filters": filters}
+    )
     assert not result.errors, result.errors
     return {lens["id"] for lens in result.data["lenses"]}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_lens_not_derived_judges_array_lenses_only(authenticated_context: HttpContext):
+async def test_lens_not_derived_judges_array_lenses_only(
+    authenticated_context: HttpContext,
+):
     """`LensFilter.notDerived` drops the lenses over a derived dataset and keeps every other kind.
 
     The annotation collection is the trap: it carries a derivation edge into the dataset it was
@@ -1209,7 +1776,14 @@ async def test_lens_not_derived_judges_array_lenses_only(authenticated_context: 
     source = await seed.create_array_dataset(ctx, "Acquired")
     lens = await seed.create_lens(ctx, source, slices=[])
 
-    child = await _derive(ctx, "Deconvolved", lens=lens, axes=seed.SIMPLE_AXES, shape=[3, 64, 64], transform={"kind": "IDENTITY"})
+    child = await _derive(
+        ctx,
+        "Deconvolved",
+        lens=lens,
+        axes=seed.SIMPLE_AXES,
+        shape=[3, 64, 64],
+        transform={"kind": "IDENTITY"},
+    )
     assert not child.errors, child.errors
 
     drawn = await schema.execute(
@@ -1218,19 +1792,43 @@ async def test_lens_not_derived_judges_array_lenses_only(authenticated_context: 
         variable_values={
             "input": {
                 "name": "Drawn",
-                "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                "derivedFrom": [{"kind": "DATASET", "dataset": str(source.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
+                "axes": [
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "x", "type": "SPACE"},
+                ],
+                "derivedFrom": [
+                    {
+                        "kind": "DATASET",
+                        "dataset": str(source.pk),
+                        "transform": {
+                            "kind": "BY_DIMENSION",
+                            "parts": [
+                                {
+                                    "kind": "IDENTITY",
+                                    "inputAxes": ["y", "x"],
+                                    "outputAxes": ["y", "x"],
+                                }
+                            ],
+                        },
+                    }
+                ],
             }
         },
     )
     assert not drawn.errors, drawn.errors
 
     acquired = str(lens.pk)
-    derived = await seed.whole_lens_id(models.ArrayDataset, child.data["createArrayDataset"]["id"])
-    collection = await seed.whole_lens_id(models.AnnotationCollection, drawn.data["createAnnotationCollection"]["id"])
+    derived = await seed.whole_lens_id(
+        models.ArrayDataset, child.data["createArrayDataset"]["id"]
+    )
+    collection = await seed.whole_lens_id(
+        models.AnnotationCollection, drawn.data["createAnnotationCollection"]["id"]
+    )
 
     whole = await _lens_ids(ctx, {"sliced": False})
     assert {acquired, derived, collection} <= whole
 
-    assert await _lens_ids(ctx, {"sliced": False, "notDerived": True}) == whole - {derived}
+    assert await _lens_ids(ctx, {"sliced": False, "notDerived": True}) == whole - {
+        derived
+    }
     assert await _lens_ids(ctx, {"sliced": False, "notDerived": False}) == {derived}

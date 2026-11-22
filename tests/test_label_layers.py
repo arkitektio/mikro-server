@@ -82,7 +82,9 @@ OBJECT_COLUMNS = [
 ]
 
 
-async def _parquet(ctx: HttpContext, key: str, columns: list[tuple[str, str]] | None = None) -> models.ParquetStore:
+async def _parquet(
+    ctx: HttpContext, key: str, columns: list[tuple[str, str]] | None = None
+) -> models.ParquetStore:
     """A finished store carrying the file's own schema.
 
     The schema is load-bearing since 3b: `createTableDataset` reads a column's name and type
@@ -91,29 +93,56 @@ async def _parquet(ctx: HttpContext, key: str, columns: list[tuple[str, str]] | 
     no unit test has.
     """
     return await sync_to_async(models.ParquetStore.objects.create)(
-        path=f"s3://parquet/{key}", bucket="parquet", key=key, organization=ctx.request.organization,
-        populated=True, columns=[{"name": name, "type": dtype, "nullable": True} for name, dtype in (columns or [])],
+        path=f"s3://parquet/{key}",
+        bucket="parquet",
+        key=key,
+        organization=ctx.request.organization,
+        populated=True,
+        columns=[
+            {"name": name, "type": dtype, "nullable": True}
+            for name, dtype in (columns or [])
+        ],
     )
 
 
-async def _mask_scene_lens(ctx: HttpContext, name: str = "nuclei labels") -> tuple[models.ArrayDataset, models.Scene, models.Lens]:
+async def _mask_scene_lens(
+    ctx: HttpContext, name: str = "nuclei labels"
+) -> tuple[models.ArrayDataset, models.Scene, models.Lens]:
     """A placed mask: the dataset, a scene its intrinsic system is registered into, and a lens."""
-    dataset = await seed.create_array_dataset(ctx, name, axes=TYX_AXES, shapes=[[10, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        ctx, name, axes=TYX_AXES, shapes=[[10, 64, 64]]
+    )
     lens = await seed.create_lens(ctx, dataset)
     scene = await seed.create_scene(ctx, f"{name} scene")
     await seed.register_into_scene(ctx, scene, dataset)
     return dataset, scene, lens
 
 
-async def _object_table(ctx: HttpContext, mask: models.ArrayDataset, name: str = "nuclei morphology", *, keyed: bool = True) -> str:
+async def _object_table(
+    ctx: HttpContext,
+    mask: models.ArrayDataset,
+    name: str = "nuclei morphology",
+    *,
+    keyed: bool = True,
+) -> str:
     """A per-object table, keyed off the mask (or deliberately not, for the refusal)."""
     variables = {
         "input": {
             "name": name,
-            "data": str((await _parquet(ctx, name.replace(" ", "-"), seed.split_declaration(OBJECT_COLUMNS)[0])).pk),
+            "data": str(
+                (
+                    await _parquet(
+                        ctx,
+                        name.replace(" ", "-"),
+                        seed.split_declaration(OBJECT_COLUMNS)[0],
+                    )
+                ).pk
+            ),
             **seed.split_payload(
                 OBJECT_COLUMNS,
-                keyed_by=[{"kind": "DATASET", "dataset": str(mask.pk)}] if keyed else None,
+                keyed_by=[{"kind": "DATASET", "dataset": str(mask.pk)}]
+                if keyed
+                else None,
             ),
         }
     }
@@ -146,7 +175,17 @@ async def test_color_by_dereferences_the_field_edge(authenticated_context: HttpC
             "input": {
                 "scene": str(scene.id),
                 "lens": str(lens.id),
-                "render": {"colorBys": [{"table": table, "column": "cell_type", "colormap": "HUES", "label": "Cell type"}], "activeColorBy": 0},
+                "render": {
+                    "colorBys": [
+                        {
+                            "table": table,
+                            "column": "cell_type",
+                            "colormap": "HUES",
+                            "label": "Cell type",
+                        }
+                    ],
+                    "activeColorBy": 0,
+                },
             }
         },
     )
@@ -156,10 +195,14 @@ async def test_color_by_dereferences_the_field_edge(authenticated_context: HttpC
     (color_by,) = data["labelRender"]["colorBys"]
     assert color_by["table"] == table
     assert color_by["column"] == "cell_type"
-    assert color_by["colormap"] == "HUES", "a categorical column takes a qualitative colormap -- a colour per distinct value"
+    assert color_by["colormap"] == "HUES", (
+        "a categorical column takes a qualitative colormap -- a colour per distinct value"
+    )
     assert color_by["label"] == "Cell type", "the caption the picker row shows"
     assert color_by["joinPath"] == [], "the direct case: the mask's ids key this table"
-    assert data["labelRender"]["activeColorBy"] == 0, "publishing one colouring and drawing it are two statements"
+    assert data["labelRender"]["activeColorBy"] == 0, (
+        "publishing one colouring and drawing it are two statements"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -176,7 +219,12 @@ async def test_a_measure_column_takes_a_colormap(authenticated_context: HttpCont
             "input": {
                 "scene": str(scene.id),
                 "lens": str(lens.id),
-                "render": {"colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}], "activeColorBy": 0},
+                "render": {
+                    "colorBys": [
+                        {"table": table, "column": "area", "colormap": "VIRIDIS"}
+                    ],
+                    "activeColorBy": 0,
+                },
             }
         },
     )
@@ -188,7 +236,9 @@ async def test_a_measure_column_takes_a_colormap(authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_color_by_refuses_a_table_no_field_edge_reaches(authenticated_context: HttpContext):
+async def test_color_by_refuses_a_table_no_field_edge_reaches(
+    authenticated_context: HttpContext,
+):
     """A table the mask does not key into is a join nothing can execute.
 
     The table is real and the column exists; what is missing is the one thing that makes
@@ -197,7 +247,9 @@ async def test_color_by_refuses_a_table_no_field_edge_reaches(authenticated_cont
     rule no renderer could follow.
     """
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
-    unrelated = await _object_table(authenticated_context, mask, name="unrelated objects", keyed=False)
+    unrelated = await _object_table(
+        authenticated_context, mask, name="unrelated objects", keyed=False
+    )
 
     result = await schema.execute(
         CREATE_LABEL_LAYER,
@@ -206,19 +258,29 @@ async def test_color_by_refuses_a_table_no_field_edge_reaches(authenticated_cont
             "input": {
                 "scene": str(scene.id),
                 "lens": str(lens.id),
-                "render": {"colorBys": [{"table": unrelated, "column": "area", "colormap": "VIRIDIS"}]},
+                "render": {
+                    "colorBys": [
+                        {"table": unrelated, "column": "area", "colormap": "VIRIDIS"}
+                    ]
+                },
             }
         },
     )
     assert result.errors, "expected a colorBy naming an unkeyed table to be refused"
-    assert "colorBys[0]:" in str(result.errors[0]), "the entry's index rides in the refusal"
+    assert "colorBys[0]:" in str(result.errors[0]), (
+        "the entry's index rides in the refusal"
+    )
     assert "not reachable from this mask by a FIELD edge" in str(result.errors[0])
-    assert await models.Layer.objects.filter(scene_id=scene.id).acount() == 0, "the refusal left no layer behind"
+    assert await models.Layer.objects.filter(scene_id=scene.id).acount() == 0, (
+        "the refusal left no layer behind"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_color_by_refuses_a_colormap_over_a_categorical_column(authenticated_context: HttpContext):
+async def test_color_by_refuses_a_colormap_over_a_categorical_column(
+    authenticated_context: HttpContext,
+):
     """A *continuous* colormap over a class column would impose an order the values do not have.
 
     A qualitative one does not, which is the whole reason the enum has both sorts, so the
@@ -234,17 +296,27 @@ async def test_color_by_refuses_a_colormap_over_a_categorical_column(authenticat
             "input": {
                 "scene": str(scene.id),
                 "lens": str(lens.id),
-                "render": {"colorBys": [{"table": table, "column": "cell_type", "colormap": "VIRIDIS"}]},
+                "render": {
+                    "colorBys": [
+                        {"table": table, "column": "cell_type", "colormap": "VIRIDIS"}
+                    ]
+                },
             }
         },
     )
-    assert result.errors, "expected a continuous colormap over a LABEL column to be refused"
-    assert "categorical" in str(result.errors[0]) and "qualitative" in str(result.errors[0])
+    assert result.errors, (
+        "expected a continuous colormap over a LABEL column to be refused"
+    )
+    assert "categorical" in str(result.errors[0]) and "qualitative" in str(
+        result.errors[0]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_color_by_refuses_a_qualitative_colormap_over_a_measure_column(authenticated_context: HttpContext):
+async def test_color_by_refuses_a_qualitative_colormap_over_a_measure_column(
+    authenticated_context: HttpContext,
+):
     """And the mirror: a palette over a continuous measurement throws its order away."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
@@ -256,17 +328,23 @@ async def test_color_by_refuses_a_qualitative_colormap_over_a_measure_column(aut
             "input": {
                 "scene": str(scene.id),
                 "lens": str(lens.id),
-                "render": {"colorBys": [{"table": table, "column": "area", "colormap": "HUES"}]},
+                "render": {
+                    "colorBys": [{"table": table, "column": "area", "colormap": "HUES"}]
+                },
             }
         },
     )
-    assert result.errors, "expected a qualitative colormap over an ATTRIBUTE column to be refused"
+    assert result.errors, (
+        "expected a qualitative colormap over an ATTRIBUTE column to be refused"
+    )
     assert "measured" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_color_by_refuses_an_undeclared_column(authenticated_context: HttpContext):
+async def test_color_by_refuses_an_undeclared_column(
+    authenticated_context: HttpContext,
+):
     """The edge is right and the column is not: the table's own schema settles it."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
@@ -278,7 +356,11 @@ async def test_color_by_refuses_an_undeclared_column(authenticated_context: Http
             "input": {
                 "scene": str(scene.id),
                 "lens": str(lens.id),
-                "render": {"colorBys": [{"table": table, "column": "perimeter", "colormap": "VIRIDIS"}]},
+                "render": {
+                    "colorBys": [
+                        {"table": table, "column": "perimeter", "colormap": "VIRIDIS"}
+                    ]
+                },
             }
         },
     )
@@ -308,9 +390,18 @@ async def test_update_is_a_patch_not_a_replacement(authenticated_context: HttpCo
                 "render": {
                     "selected": [7, 42],
                     "showUnselected": False,
-                    "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}],
+                    "colorBys": [
+                        {"table": table, "column": "area", "colormap": "VIRIDIS"}
+                    ],
                     "activeColorBy": 0,
-                    "filterBys": [{"table": table, "column": "area", "min": 100.0, "label": "Large"}],
+                    "filterBys": [
+                        {
+                            "table": table,
+                            "column": "area",
+                            "min": 100.0,
+                            "label": "Large",
+                        }
+                    ],
                     "activeFilterBys": [0],
                 },
             }
@@ -322,14 +413,24 @@ async def test_update_is_a_patch_not_a_replacement(authenticated_context: HttpCo
     updated = await schema.execute(
         UPDATE_LABEL_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"id": layer_id, "render": {"contour": True, "contourWidth": 2.0}, "opacity": 0.5}},
+        variable_values={
+            "input": {
+                "id": layer_id,
+                "render": {"contour": True, "contourWidth": 2.0},
+                "opacity": 0.5,
+            }
+        },
     )
     assert not updated.errors, updated.errors
     render = updated.data["updateLabelLayer"]["labelRender"]
-    assert render["contour"] is True and render["contourWidth"] == 2.0, "what was sent changed"
+    assert render["contour"] is True and render["contourWidth"] == 2.0, (
+        "what was sent changed"
+    )
     assert render["selected"] == [7, 42], "what was not sent survived"
     assert render["showUnselected"] is False
-    assert [entry["column"] for entry in render["colorBys"]] == ["area"], "the picker the client is not sending survived"
+    assert [entry["column"] for entry in render["colorBys"]] == ["area"], (
+        "the picker the client is not sending survived"
+    )
     assert render["activeColorBy"] == 0
     assert [entry["column"] for entry in render["filterBys"]] == ["area"]
     assert render["activeFilterBys"] == [0]
@@ -338,7 +439,9 @@ async def test_update_is_a_patch_not_a_replacement(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_label_layer_refuses_an_image_layer(authenticated_context: HttpContext):
+async def test_update_label_layer_refuses_an_image_layer(
+    authenticated_context: HttpContext,
+):
     """The two kinds' render settings are different vocabularies, so their updates are too."""
     _, scene, lens = await _mask_scene_lens(authenticated_context)
 
@@ -352,7 +455,12 @@ async def test_update_label_layer_refuses_an_image_layer(authenticated_context: 
     result = await schema.execute(
         UPDATE_LABEL_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"id": created.data["createIntensityLayer"]["id"], "render": {"contour": True}}},
+        variable_values={
+            "input": {
+                "id": created.data["createIntensityLayer"]["id"],
+                "render": {"contour": True},
+            }
+        },
     )
     assert result.errors, "expected updateLabelLayer over an image layer to be refused"
     assert "not a label layer" in str(result.errors[0])
@@ -383,7 +491,14 @@ async def test_update_layer_refuses_a_label_layer(authenticated_context: HttpCon
         variable_values={
             "input": {
                 "id": layer_id,
-                "renderGraph": {"root": {"kind": "blend", "children": [{"kind": "channel", "transfer": {"colormap": "VIRIDIS"}}]}},
+                "renderGraph": {
+                    "root": {
+                        "kind": "blend",
+                        "children": [
+                            {"kind": "channel", "transfer": {"colormap": "VIRIDIS"}}
+                        ],
+                    }
+                },
             }
         },
     )
@@ -391,12 +506,16 @@ async def test_update_layer_refuses_a_label_layer(authenticated_context: HttpCon
     assert "not its render vocabulary" in str(result.errors[0])
 
     layer = await models.Layer.objects.aget(id=layer_id)
-    assert layer.render_graph is None and layer.label_render is not None, "the refusal left one recipe, not two"
+    assert layer.render_graph is None and layer.label_render is not None, (
+        "the refusal left one recipe, not two"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_label_layer_resolves_through_the_scene_interface(authenticated_context: HttpContext):
+async def test_a_label_layer_resolves_through_the_scene_interface(
+    authenticated_context: HttpContext,
+):
     """`Scene.layers` returns it as a `LabelLayer`, and it places like any lens-backed layer.
 
     This is what the `layer_types` registration buys: a subtype reachable only through the
@@ -414,12 +533,18 @@ async def test_a_label_layer_resolves_through_the_scene_interface(authenticated_
     )
     assert not created.errors, created.errors
 
-    result = await schema.execute(SCENE_LAYERS, context_value=authenticated_context, variable_values={"id": str(scene.id)})
+    result = await schema.execute(
+        SCENE_LAYERS,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.id)},
+    )
     assert not result.errors, result.errors
     (layer,) = result.data["scene"]["layers"]
     assert layer["__typename"] == "LabelLayer"
     assert layer["labelRender"]["background"] == 0
-    assert len(layer["levelPaths"]) == 1, "one pyramid level, placed like any lens-backed layer"
+    assert len(layer["levelPaths"]) == 1, (
+        "one pyramid level, placed like any lens-backed layer"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -450,7 +575,12 @@ query Options($lens: ID!, $filters: ColumnOptionFilter, $maxJoinDepth: Int) {
 
 TRACK_COLUMNS = [
     {"name": "track_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
-    {"name": "mean_velocity", "dtype": "DOUBLE", "role": "ATTRIBUTE", "unit": "micrometer / second"},
+    {
+        "name": "mean_velocity",
+        "dtype": "DOUBLE",
+        "role": "ATTRIBUTE",
+        "unit": "micrometer / second",
+    },
 ]
 
 
@@ -459,23 +589,60 @@ async def _tracks_table(ctx: HttpContext, name: str = "nuclei tracks") -> str:
     result = await schema.execute(
         "mutation Create($input: CreateTableDatasetInput!) { createTableDataset(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"name": name, "data": str((await _parquet(ctx, name.replace(" ", "-"), seed.split_declaration(TRACK_COLUMNS)[0])).pk), **seed.split_payload(TRACK_COLUMNS)}},
+        variable_values={
+            "input": {
+                "name": name,
+                "data": str(
+                    (
+                        await _parquet(
+                            ctx,
+                            name.replace(" ", "-"),
+                            seed.split_declaration(TRACK_COLUMNS)[0],
+                        )
+                    ).pk
+                ),
+                **seed.split_payload(TRACK_COLUMNS),
+            }
+        },
     )
     assert not result.errors, result.errors
     return result.data["createTableDataset"]["id"]
 
 
-async def _hopping_object_table(ctx: HttpContext, mask: models.ArrayDataset, tracks: str, name: str = "nuclei morphology") -> str:
+async def _hopping_object_table(
+    ctx: HttpContext,
+    mask: models.ArrayDataset,
+    tracks: str,
+    name: str = "nuclei morphology",
+) -> str:
     """The per-object table, with a column whose values identify rows of `tracks`."""
-    columns = [*OBJECT_COLUMNS, {"name": "instance_id", "dtype": "BIGINT", "role": "TRACK_ID", "references": tracks}]
+    columns = [
+        *OBJECT_COLUMNS,
+        {
+            "name": "instance_id",
+            "dtype": "BIGINT",
+            "role": "TRACK_ID",
+            "references": tracks,
+        },
+    ]
     result = await schema.execute(
         "mutation Create($input: CreateTableDatasetInput!) { createTableDataset(input: $input) { id } }",
         context_value=ctx,
         variable_values={
             "input": {
                 "name": name,
-                "data": str((await _parquet(ctx, name.replace(" ", "-"), seed.split_declaration(columns)[0])).pk),
-                **seed.split_payload(columns, keyed_by=[{"kind": "DATASET", "dataset": str(mask.pk)}]),
+                "data": str(
+                    (
+                        await _parquet(
+                            ctx,
+                            name.replace(" ", "-"),
+                            seed.split_declaration(columns)[0],
+                        )
+                    ).pk
+                ),
+                **seed.split_payload(
+                    columns, keyed_by=[{"kind": "DATASET", "dataset": str(mask.pk)}]
+                ),
             }
         },
     )
@@ -487,13 +654,17 @@ async def _create(ctx: HttpContext, scene, lens, render: dict):
     return await schema.execute(
         CREATE_LABEL_LAYER,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": str(lens.id), "render": render}},
+        variable_values={
+            "input": {"scene": str(scene.id), "lens": str(lens.id), "render": render}
+        },
     )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_picker_publishes_several_colourings_and_draws_one(authenticated_context: HttpContext):
+async def test_a_picker_publishes_several_colourings_and_draws_one(
+    authenticated_context: HttpContext,
+):
     """The whole point of a list: two honest readings of one mask, and one of them showing.
 
     Area through a colormap and cell type through class colours are not two attempts at the
@@ -509,21 +680,35 @@ async def test_a_picker_publishes_several_colourings_and_draws_one(authenticated
         lens,
         {
             "colorBys": [
-                {"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"},
-                {"table": table, "column": "cell_type", "colormap": "HUES", "label": "Cell type"},
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                },
+                {
+                    "table": table,
+                    "column": "cell_type",
+                    "colormap": "HUES",
+                    "label": "Cell type",
+                },
             ],
             "activeColorBy": 1,
         },
     )
     assert not result.errors, result.errors
     render = result.data["createLabelLayer"]["labelRender"]
-    assert [entry["label"] for entry in render["colorBys"]] == ["Area", "Cell type"], "the order published is the order a menu shows"
+    assert [entry["label"] for entry in render["colorBys"]] == ["Area", "Cell type"], (
+        "the order published is the order a menu shows"
+    )
     assert render["activeColorBy"] == 1
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_deprecated_color_by_reads_the_active_entry(authenticated_context: HttpContext):
+async def test_the_deprecated_color_by_reads_the_active_entry(
+    authenticated_context: HttpContext,
+):
     """One copy of the choice, and it is the index -- the old field is a view onto it.
 
     Kept because clients selecting `colorBy` predate the picker. It is derived on every read,
@@ -532,7 +717,7 @@ async def test_the_deprecated_color_by_reads_the_active_entry(authenticated_cont
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
 
-    query = 'mutation C($input: CreateLabelLayerInput!) { createLabelLayer(input: $input) { labelRender { colorBy { column } } } }'
+    query = "mutation C($input: CreateLabelLayerInput!) { createLabelLayer(input: $input) { labelRender { colorBy { column } } } }"
     variables = {
         "input": {
             "scene": str(scene.id),
@@ -546,19 +731,30 @@ async def test_the_deprecated_color_by_reads_the_active_entry(authenticated_cont
             },
         }
     }
-    result = await schema.execute(query, context_value=authenticated_context, variable_values=variables)
+    result = await schema.execute(
+        query, context_value=authenticated_context, variable_values=variables
+    )
     assert not result.errors, result.errors
-    assert result.data["createLabelLayer"]["labelRender"]["colorBy"]["column"] == "cell_type"
+    assert (
+        result.data["createLabelLayer"]["labelRender"]["colorBy"]["column"]
+        == "cell_type"
+    )
 
     variables["input"]["render"].pop("activeColorBy")
-    result = await schema.execute(query, context_value=authenticated_context, variable_values=variables)
+    result = await schema.execute(
+        query, context_value=authenticated_context, variable_values=variables
+    )
     assert not result.errors, result.errors
-    assert result.data["createLabelLayer"]["labelRender"]["colorBy"] is None, "a published picker nobody has chosen from draws the hash"
+    assert result.data["createLabelLayer"]["labelRender"]["colorBy"] is None, (
+        "a published picker nobody has chosen from draws the hash"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_active_index_that_points_at_nothing_is_refused(authenticated_context: HttpContext):
+async def test_an_active_index_that_points_at_nothing_is_refused(
+    authenticated_context: HttpContext,
+):
     """Past the end, and below the beginning.
 
     A negative index is the dangerous one: `colorBys[-1]` is valid Python and a valid `Int`, so
@@ -568,24 +764,34 @@ async def test_an_active_index_that_points_at_nothing_is_refused(authenticated_c
     table = await _object_table(authenticated_context, mask)
     entry = {"table": table, "column": "area", "colormap": "VIRIDIS"}
 
-    past_end = await _create(authenticated_context, scene, lens, {"colorBys": [entry], "activeColorBy": 1})
+    past_end = await _create(
+        authenticated_context, scene, lens, {"colorBys": [entry], "activeColorBy": 1}
+    )
     assert past_end.errors, "expected an index past the last entry to be refused"
     assert "indexed 0..0" in str(past_end.errors[0])
 
-    negative = await _create(authenticated_context, scene, lens, {"colorBys": [entry], "activeColorBy": -1})
+    negative = await _create(
+        authenticated_context, scene, lens, {"colorBys": [entry], "activeColorBy": -1}
+    )
     assert negative.errors, "expected a negative index to be refused"
     assert "counts from 0" in str(negative.errors[0])
 
     empty = await _create(authenticated_context, scene, lens, {"activeColorBy": 0})
     assert empty.errors, "expected an index into an empty picker to be refused"
-    assert "hash each id to a colour" in str(empty.errors[0]), "the refusal names what a null index means on a mask, not on a mesh"
+    assert "hash each id to a colour" in str(empty.errors[0]), (
+        "the refusal names what a null index means on a mask, not on a mesh"
+    )
 
-    assert await models.Layer.objects.filter(scene_id=scene.id).acount() == 0, "no refusal left a layer behind"
+    assert await models.Layer.objects.filter(scene_id=scene.id).acount() == 0, (
+        "no refusal left a layer behind"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_entries_that_render_identically_are_refused(authenticated_context: HttpContext):
+async def test_two_entries_that_render_identically_are_refused(
+    authenticated_context: HttpContext,
+):
     """A picker whose two rows draw the same thing asks a viewer to choose between a thing and itself.
 
     The caption is deliberately not part of what makes an entry distinct -- a second name is not
@@ -600,8 +806,18 @@ async def test_two_entries_that_render_identically_are_refused(authenticated_con
         lens,
         {
             "colorBys": [
-                {"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"},
-                {"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Size"},
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                },
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Size",
+                },
             ]
         },
     )
@@ -614,8 +830,18 @@ async def test_two_entries_that_render_identically_are_refused(authenticated_con
         lens,
         {
             "colorBys": [
-                {"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"},
-                {"table": table, "column": "area", "colormap": "MAGMA", "label": "Area (magma)"},
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                },
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "MAGMA",
+                    "label": "Area (magma)",
+                },
             ]
         },
     )
@@ -624,7 +850,9 @@ async def test_two_entries_that_render_identically_are_refused(authenticated_con
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filters_keep_and_drop_objects_by_the_same_join(authenticated_context: HttpContext):
+async def test_filters_keep_and_drop_objects_by_the_same_join(
+    authenticated_context: HttpContext,
+):
     """The colour picker's sibling: which objects are drawn, over the same FIELD edge.
 
     Several rules at once is the normal case, not a contradiction -- they combine with AND --
@@ -642,16 +870,31 @@ async def test_filters_keep_and_drop_objects_by_the_same_join(authenticated_cont
             "filterBys": [
                 {"table": table, "column": "area", "min": 100.0, "label": "Large"},
                 {"table": table, "column": "area", "max": 100.0, "label": "Small"},
-                {"table": table, "column": "cell_type", "values": ["debris"], "exclude": True, "label": "Not debris"},
+                {
+                    "table": table,
+                    "column": "cell_type",
+                    "values": ["debris"],
+                    "exclude": True,
+                    "label": "Not debris",
+                },
             ],
             "activeFilterBys": [0, 2],
         },
     )
     assert not result.errors, result.errors
     render = result.data["createLabelLayer"]["labelRender"]
-    assert [entry["label"] for entry in render["filterBys"]] == ["Large", "Small", "Not debris"]
-    assert render["filterBys"][0]["min"] == 100.0 and render["filterBys"][0]["max"] is None, "one open end is still a range"
-    assert render["filterBys"][2]["values"] == ["debris"] and render["filterBys"][2]["exclude"] is True
+    assert [entry["label"] for entry in render["filterBys"]] == [
+        "Large",
+        "Small",
+        "Not debris",
+    ]
+    assert (
+        render["filterBys"][0]["min"] == 100.0 and render["filterBys"][0]["max"] is None
+    ), "one open end is still a range"
+    assert (
+        render["filterBys"][2]["values"] == ["debris"]
+        and render["filterBys"][2]["exclude"] is True
+    )
     assert render["activeFilterBys"] == [0, 2], "two rules applied at once, ANDed"
 
 
@@ -667,25 +910,56 @@ async def test_a_filter_must_match_the_column_role(authenticated_context: HttpCo
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
 
-    bounded_class = await _create(authenticated_context, scene, lens, {"filterBys": [{"table": table, "column": "cell_type", "min": 1.0}]})
+    bounded_class = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {"filterBys": [{"table": table, "column": "cell_type", "min": 1.0}]},
+    )
     assert bounded_class.errors, "expected a bound over a LABEL column to be refused"
-    assert "filterBys[0]:" in str(bounded_class.errors[0]) and "categorical" in str(bounded_class.errors[0])
+    assert "filterBys[0]:" in str(bounded_class.errors[0]) and "categorical" in str(
+        bounded_class.errors[0]
+    )
 
-    listed_measure = await _create(authenticated_context, scene, lens, {"filterBys": [{"table": table, "column": "area", "values": ["3.5"]}]})
-    assert listed_measure.errors, "expected a values list over an ATTRIBUTE column to be refused"
+    listed_measure = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {"filterBys": [{"table": table, "column": "area", "values": ["3.5"]}]},
+    )
+    assert listed_measure.errors, (
+        "expected a values list over an ATTRIBUTE column to be refused"
+    )
     assert "measured" in str(listed_measure.errors[0])
 
-    both = await _create(authenticated_context, scene, lens, {"filterBys": [{"table": table, "column": "area", "min": 1.0, "values": ["3.5"]}]})
+    both = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {
+            "filterBys": [
+                {"table": table, "column": "area", "min": 1.0, "values": ["3.5"]}
+            ]
+        },
+    )
     assert both.errors, "expected a rule naming both halves to be refused"
 
-    neither = await _create(authenticated_context, scene, lens, {"filterBys": [{"table": table, "column": "area"}]})
+    neither = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {"filterBys": [{"table": table, "column": "area"}]},
+    )
     assert neither.errors, "expected a rule that matches everything to be refused"
 
     duplicate_index = await _create(
         authenticated_context,
         scene,
         lens,
-        {"filterBys": [{"table": table, "column": "area", "min": 1.0}], "activeFilterBys": [0, 0]},
+        {
+            "filterBys": [{"table": table, "column": "area", "min": 1.0}],
+            "activeFilterBys": [0, 0],
+        },
     )
     assert duplicate_index.errors, "expected the same rule applied twice to be refused"
     assert "narrows nothing" in str(duplicate_index.errors[0])
@@ -693,7 +967,9 @@ async def test_a_filter_must_match_the_column_role(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_picker_entry_may_reach_one_table_further(authenticated_context: HttpContext):
+async def test_a_picker_entry_may_reach_one_table_further(
+    authenticated_context: HttpContext,
+):
     """`joinPath` is the hop the coordinate graph deliberately stops before.
 
     The mask's ids key the object table; `instance_id` *references* the tracks table, which is a
@@ -724,22 +1000,37 @@ async def test_a_picker_entry_may_reach_one_table_further(authenticated_context:
     assert not result.errors, result.errors
     (entry,) = result.data["createLabelLayer"]["labelRender"]["colorBys"]
     assert entry["table"] == tracks
-    assert entry["joinPath"] == [{"table": objects, "column": "instance_id"}], "stored as the server resolved it"
+    assert entry["joinPath"] == [{"table": objects, "column": "instance_id"}], (
+        "stored as the server resolved it"
+    )
 
     # And the hop is checked: a path whose column identifies rows of something else is refused.
     wrong = await _create(
         authenticated_context,
         scene,
         lens,
-        {"colorBys": [{"table": tracks, "column": "mean_velocity", "colormap": "VIRIDIS", "joinPath": [{"table": objects, "column": "area"}]}]},
+        {
+            "colorBys": [
+                {
+                    "table": tracks,
+                    "column": "mean_velocity",
+                    "colormap": "VIRIDIS",
+                    "joinPath": [{"table": objects, "column": "area"}],
+                }
+            ]
+        },
     )
-    assert wrong.errors, "expected a hop through a column that references nothing to be refused"
+    assert wrong.errors, (
+        "expected a hop through a column that references nothing to be refused"
+    )
     assert "references no table" in str(wrong.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(authenticated_context: HttpContext):
+async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(
+    authenticated_context: HttpContext,
+):
     """The order *is* the identity, so there is nothing to merge on -- and `[]` finally means 'none'.
 
     This is what a picker buys that a single `colorBy` could not: a patch reads an omitted field
@@ -754,9 +1045,18 @@ async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(authentica
         scene,
         lens,
         {
-            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"}],
+            "colorBys": [
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                }
+            ],
             "activeColorBy": 0,
-            "filterBys": [{"table": table, "column": "area", "min": 100.0, "label": "Large"}],
+            "filterBys": [
+                {"table": table, "column": "area", "min": 100.0, "label": "Large"}
+            ],
             "activeFilterBys": [0],
         },
     )
@@ -769,19 +1069,35 @@ async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(authentica
         variable_values={
             "input": {
                 "id": layer_id,
-                "render": {"colorBys": [{"table": table, "column": "cell_type", "colormap": "HUES", "label": "Cell type"}], "activeColorBy": 0},
+                "render": {
+                    "colorBys": [
+                        {
+                            "table": table,
+                            "column": "cell_type",
+                            "colormap": "HUES",
+                            "label": "Cell type",
+                        }
+                    ],
+                    "activeColorBy": 0,
+                },
             }
         },
     )
     assert not replaced.errors, replaced.errors
     render = replaced.data["updateLabelLayer"]["labelRender"]
-    assert [entry["label"] for entry in render["colorBys"]] == ["Cell type"], "replaced, never merged"
-    assert [entry["label"] for entry in render["filterBys"]] == ["Large"], "the picker nobody named is untouched"
+    assert [entry["label"] for entry in render["colorBys"]] == ["Cell type"], (
+        "replaced, never merged"
+    )
+    assert [entry["label"] for entry in render["filterBys"]] == ["Large"], (
+        "the picker nobody named is untouched"
+    )
 
     cleared = await schema.execute(
         UPDATE_LABEL_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"id": layer_id, "render": {"colorBys": [], "filterBys": []}}},
+        variable_values={
+            "input": {"id": layer_id, "render": {"colorBys": [], "filterBys": []}}
+        },
     )
     assert not cleared.errors, cleared.errors
     render = cleared.data["updateLabelLayer"]["labelRender"]
@@ -792,7 +1108,9 @@ async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(authentica
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_switching_the_active_entry_needs_nothing_but_the_index(authenticated_context: HttpContext):
+async def test_switching_the_active_entry_needs_nothing_but_the_index(
+    authenticated_context: HttpContext,
+):
     """The click-a-picker-row path, which is the one a viewer walks constantly.
 
     Naming an index and nothing else must not require resending the picker -- and must not walk
@@ -809,8 +1127,18 @@ async def test_switching_the_active_entry_needs_nothing_but_the_index(authentica
         lens,
         {
             "colorBys": [
-                {"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"},
-                {"table": table, "column": "cell_type", "colormap": "HUES", "label": "Cell type"},
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                },
+                {
+                    "table": table,
+                    "column": "cell_type",
+                    "colormap": "HUES",
+                    "label": "Cell type",
+                },
             ],
             "activeColorBy": 0,
             "filterBys": [
@@ -826,12 +1154,21 @@ async def test_switching_the_active_entry_needs_nothing_but_the_index(authentica
     switched = await schema.execute(
         UPDATE_LABEL_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"id": layer_id, "render": {"activeColorBy": 1, "activeFilterBys": [1]}}},
+        variable_values={
+            "input": {
+                "id": layer_id,
+                "render": {"activeColorBy": 1, "activeFilterBys": [1]},
+            }
+        },
     )
     assert not switched.errors, switched.errors
     render = switched.data["updateLabelLayer"]["labelRender"]
-    assert render["activeColorBy"] == 1 and render["activeFilterBys"] == [1], "the switch took"
-    assert [entry["label"] for entry in render["colorBys"]] == ["Area", "Cell type"], "the picker nobody resent is intact"
+    assert render["activeColorBy"] == 1 and render["activeFilterBys"] == [1], (
+        "the switch took"
+    )
+    assert [entry["label"] for entry in render["colorBys"]] == ["Area", "Cell type"], (
+        "the picker nobody resent is intact"
+    )
     assert [entry["label"] for entry in render["filterBys"]] == ["Large", "Small"]
 
     # And an index alone is still checked -- against the stored picker, since none was sent.
@@ -846,7 +1183,9 @@ async def test_switching_the_active_entry_needs_nothing_but_the_index(authentica
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_shortened_picker_drops_the_indices_it_no_longer_holds(authenticated_context: HttpContext):
+async def test_a_shortened_picker_drops_the_indices_it_no_longer_holds(
+    authenticated_context: HttpContext,
+):
     """A patch cannot say 'and switch that one off', so an unpublished entry stops being shown.
 
     The indices that survive keep pointing at what they pointed at, because the list is replaced
@@ -861,8 +1200,18 @@ async def test_a_shortened_picker_drops_the_indices_it_no_longer_holds(authentic
         lens,
         {
             "colorBys": [
-                {"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"},
-                {"table": table, "column": "cell_type", "colormap": "HUES", "label": "Cell type"},
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                },
+                {
+                    "table": table,
+                    "column": "cell_type",
+                    "colormap": "HUES",
+                    "label": "Cell type",
+                },
             ],
             "activeColorBy": 1,
             "filterBys": [
@@ -881,21 +1230,41 @@ async def test_a_shortened_picker_drops_the_indices_it_no_longer_holds(authentic
             "input": {
                 "id": created.data["createLabelLayer"]["id"],
                 "render": {
-                    "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"}],
-                    "filterBys": [{"table": table, "column": "area", "min": 100.0, "label": "Large"}],
+                    "colorBys": [
+                        {
+                            "table": table,
+                            "column": "area",
+                            "colormap": "VIRIDIS",
+                            "label": "Area",
+                        }
+                    ],
+                    "filterBys": [
+                        {
+                            "table": table,
+                            "column": "area",
+                            "min": 100.0,
+                            "label": "Large",
+                        }
+                    ],
                 },
             }
         },
     )
     assert not shortened.errors, shortened.errors
     render = shortened.data["updateLabelLayer"]["labelRender"]
-    assert render["activeColorBy"] is None, "the entry that was drawn is no longer published"
-    assert render["activeFilterBys"] == [0], "the rule that survived is still applied; the one that did not is gone"
+    assert render["activeColorBy"] is None, (
+        "the entry that was drawn is no longer published"
+    )
+    assert render["activeFilterBys"] == [0], (
+        "the rule that survived is still applied; the one that did not is gone"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_options_offered_are_the_options_accepted(authenticated_context: HttpContext):
+async def test_the_options_offered_are_the_options_accepted(
+    authenticated_context: HttpContext,
+):
     """The invariant a lens-rooted options query exists for, asserted by writing what it returns.
 
     A picker built on a set that merely overlaps the write path's either hides legal choices or
@@ -905,42 +1274,73 @@ async def test_the_options_offered_are_the_options_accepted(authenticated_contex
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     tracks = await _tracks_table(authenticated_context)
     objects = await _hopping_object_table(authenticated_context, mask, tracks)
-    await _object_table(authenticated_context, mask, name="unrelated objects", keyed=False)
+    await _object_table(
+        authenticated_context, mask, name="unrelated objects", keyed=False
+    )
 
-    result = await schema.execute(LABEL_OPTIONS, context_value=authenticated_context, variable_values={"lens": str(lens.id), "maxJoinDepth": 1})
+    result = await schema.execute(
+        LABEL_OPTIONS,
+        context_value=authenticated_context,
+        variable_values={"lens": str(lens.id), "maxJoinDepth": 1},
+    )
     assert not result.errors, result.errors
     options = result.data["labelColorByOptions"]
 
     direct = {option["column"]["name"] for option in options if not option["joinPath"]}
-    assert direct == {"t", "i", "area", "cell_type", "instance_id"}, "every column of the keyed table, and nothing from the table no edge reaches"
+    assert direct == {"t", "i", "area", "cell_type", "instance_id"}, (
+        "every column of the keyed table, and nothing from the table no edge reaches"
+    )
     hopped = [option for option in options if option["joinPath"]]
-    assert {option["column"]["name"] for option in hopped} == {"track_id", "mean_velocity"}
-    assert next(option for option in hopped if option["column"]["name"] == "mean_velocity")["joinPath"] == [
-        {"table": {"id": objects}, "column": {"name": "instance_id"}}
-    ]
+    assert {option["column"]["name"] for option in hopped} == {
+        "track_id",
+        "mean_velocity",
+    }
+    assert next(
+        option for option in hopped if option["column"]["name"] == "mean_velocity"
+    )["joinPath"] == [{"table": {"id": objects}, "column": {"name": "instance_id"}}]
 
-    assert [(option["table"]["id"], option["column"]["name"]) for option in result.data["labelFilterByOptions"]] == [
-        (option["table"]["id"], option["column"]["name"]) for option in options
-    ], "one relation, one walk, two names"
+    assert [
+        (option["table"]["id"], option["column"]["name"])
+        for option in result.data["labelFilterByOptions"]
+    ] == [(option["table"]["id"], option["column"]["name"]) for option in options], (
+        "one relation, one walk, two names"
+    )
 
     # Written back verbatim, every one of them is accepted -- which is the whole claim.
     for option in options:
         entry = {
             "table": option["table"]["id"],
             "column": option["column"]["name"],
-            "joinPath": [{"table": step["table"]["id"], "column": step["column"]["name"]} for step in option["joinPath"]],
+            "joinPath": [
+                {"table": step["table"]["id"], "column": step["column"]["name"]}
+                for step in option["joinPath"]
+            ],
         }
-        entry.update({"colormap": "VIRIDIS"} if option["control"] == "MEASURE" else {"colormap": "HUES"})
-        written = await _create(authenticated_context, scene, lens, {"colorBys": [entry]})
-        assert not written.errors, f"{option['column']['name']} was offered and refused: {written.errors}"
+        entry.update(
+            {"colormap": "VIRIDIS"}
+            if option["control"] == "MEASURE"
+            else {"colormap": "HUES"}
+        )
+        written = await _create(
+            authenticated_context, scene, lens, {"colorBys": [entry]}
+        )
+        assert not written.errors, (
+            f"{option['column']['name']} was offered and refused: {written.errors}"
+        )
 
     narrowed = await schema.execute(
         LABEL_OPTIONS,
         context_value=authenticated_context,
-        variable_values={"lens": str(lens.id), "maxJoinDepth": 1, "filters": {"directOnly": True, "controls": ["CATEGORICAL"]}},
+        variable_values={
+            "lens": str(lens.id),
+            "maxJoinDepth": 1,
+            "filters": {"directOnly": True, "controls": ["CATEGORICAL"]},
+        },
     )
     assert not narrowed.errors, narrowed.errors
-    assert {option["column"]["name"] for option in narrowed.data["labelColorByOptions"]} == {"cell_type", "instance_id"}
+    assert {
+        option["column"]["name"] for option in narrowed.data["labelColorByOptions"]
+    } == {"cell_type", "instance_id"}
 
 
 DELETE_TABLE = """
@@ -952,7 +1352,9 @@ mutation Delete($input: DeleteTableDatasetInput!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_a_picker_names_cannot_be_deleted(authenticated_context: HttpContext):
+async def test_a_table_a_picker_names_cannot_be_deleted(
+    authenticated_context: HttpContext,
+):
     """PROTECT, spelled out in a guard because the reference lives in JSON and cascades nowhere.
 
     The boundary refuses a picker naming an unreachable table; deleting the table afterwards
@@ -963,18 +1365,38 @@ async def test_a_table_a_picker_names_cannot_be_deleted(authenticated_context: H
     table = await _object_table(authenticated_context, mask)
     spare = await _object_table(authenticated_context, mask, name="unused objects")
 
-    created = await _create(authenticated_context, scene, lens, {"colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}], "activeColorBy": 0})
+    created = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {
+            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}],
+            "activeColorBy": 0,
+        },
+    )
     assert not created.errors, created.errors
 
-    refused = await schema.execute(DELETE_TABLE, context_value=authenticated_context, variable_values={"input": {"id": table}})
+    refused = await schema.execute(
+        DELETE_TABLE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": table}},
+    )
     assert refused.errors, "expected a table a picker colours by to be protected"
     message = str(refused.errors[0])
     assert "cannot be deleted" in message
-    assert f"scene '{scene.name}'" in message, "name what is holding it, or the caller has nowhere to go"
-    assert await models.TableDataset.objects.filter(id=table).aexists(), "the refusal left the table alone"
+    assert f"scene '{scene.name}'" in message, (
+        "name what is holding it, or the caller has nowhere to go"
+    )
+    assert await models.TableDataset.objects.filter(id=table).aexists(), (
+        "the refusal left the table alone"
+    )
 
     # A table nothing names is still deletable: the guard protects, it does not freeze.
-    freed = await schema.execute(DELETE_TABLE, context_value=authenticated_context, variable_values={"input": {"id": spare}})
+    freed = await schema.execute(
+        DELETE_TABLE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": spare}},
+    )
     assert not freed.errors, freed.errors
 
     # Clearing the picker releases it -- the way out the refusal names.
@@ -986,7 +1408,11 @@ async def test_a_table_a_picker_names_cannot_be_deleted(authenticated_context: H
     )
     assert not cleared.errors, cleared.errors
 
-    now_allowed = await schema.execute(DELETE_TABLE, context_value=authenticated_context, variable_values={"input": {"id": table}})
+    now_allowed = await schema.execute(
+        DELETE_TABLE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": table}},
+    )
     assert not now_allowed.errors, now_allowed.errors
 
 
@@ -999,7 +1425,9 @@ mutation Delete($input: DeleteTransformationInput!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_field_edge_a_picker_reaches_through_is_protected(authenticated_context: HttpContext):
+async def test_the_field_edge_a_picker_reaches_through_is_protected(
+    authenticated_context: HttpContext,
+):
     """The second route to a stranded picker: keep the table, remove the crossing.
 
     And the reason the guard asks a hypothetical rather than reading the edge: a *rival* FIELD
@@ -1010,18 +1438,36 @@ async def test_the_field_edge_a_picker_reaches_through_is_protected(authenticate
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
 
-    created = await _create(authenticated_context, scene, lens, {"colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}], "activeColorBy": 0})
+    created = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {
+            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}],
+            "activeColorBy": 0,
+        },
+    )
     assert not created.errors, created.errors
 
     def field_edges() -> list[models.Transformation]:
-        return list(models.Transformation.objects.filter(graph_logic.dereference_q()).order_by("pk"))
+        return list(
+            models.Transformation.objects.filter(graph_logic.dereference_q()).order_by(
+                "pk"
+            )
+        )
 
     edges = await sync_to_async(field_edges)()
     assert len(edges) == 1, "createTableDataset(keyedBy:) authored exactly one crossing"
     edge = edges[0]
 
-    refused = await schema.execute(DELETE_EDGE, context_value=authenticated_context, variable_values={"input": {"id": str(edge.pk)}})
-    assert refused.errors, "expected the only crossing a picker reaches through to be protected"
+    refused = await schema.execute(
+        DELETE_EDGE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": str(edge.pk)}},
+    )
+    assert refused.errors, (
+        "expected the only crossing a picker reaches through to be protected"
+    )
     message = str(refused.errors[0])
     assert "cannot be deleted" in message
     assert f"scene '{scene.name}'" in message
@@ -1038,17 +1484,29 @@ async def test_the_field_edge_a_picker_reaches_through_is_protected(authenticate
     rival = await sync_to_async(author_rival)()
     assert rival.pk != edge.pk
 
-    allowed = await schema.execute(DELETE_EDGE, context_value=authenticated_context, variable_values={"input": {"id": str(edge.pk)}})
-    assert not allowed.errors, f"a rival crossing still reaches the table, so this delete breaks nothing: {allowed.errors}"
+    allowed = await schema.execute(
+        DELETE_EDGE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": str(edge.pk)}},
+    )
+    assert not allowed.errors, (
+        f"a rival crossing still reaches the table, so this delete breaks nothing: {allowed.errors}"
+    )
 
     # With the rival now the last one, the protection is back.
-    refused_again = await schema.execute(DELETE_EDGE, context_value=authenticated_context, variable_values={"input": {"id": str(rival.pk)}})
+    refused_again = await schema.execute(
+        DELETE_EDGE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": str(rival.pk)}},
+    )
     assert refused_again.errors, "the last crossing is protected again"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_the_edge(authenticated_context: HttpContext):
+async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_the_edge(
+    authenticated_context: HttpContext,
+):
     """`deleteRegistration(dataset: mask, world: <the table's space>)` matches the crossing too.
 
     It used to delete it with no guard at all, stranding the picker `deleteTransformation`
@@ -1056,11 +1514,27 @@ async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_th
     """
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
-    created = await _create(authenticated_context, scene, lens, {"colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}], "activeColorBy": 0})
+    created = await _create(
+        authenticated_context,
+        scene,
+        lens,
+        {
+            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS"}],
+            "activeColorBy": 0,
+        },
+    )
     assert not created.errors, created.errors
 
-    world = await sync_to_async(lambda: str(models.TableDataset.objects.get(pk=table).coordinate_system_id))()
-    crossings = await sync_to_async(lambda: list(models.Transformation.objects.filter(graph_logic.dereference_q()).values_list("pk", flat=True)))()
+    world = await sync_to_async(
+        lambda: str(models.TableDataset.objects.get(pk=table).coordinate_system_id)
+    )()
+    crossings = await sync_to_async(
+        lambda: list(
+            models.Transformation.objects.filter(
+                graph_logic.dereference_q()
+            ).values_list("pk", flat=True)
+        )
+    )()
     assert len(crossings) == 1
 
     refused = await schema.execute(
@@ -1068,14 +1542,18 @@ async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_th
         context_value=authenticated_context,
         variable_values={"input": {"dataset": str(mask.pk), "world": world}},
     )
-    assert refused.errors, "the only crossing a picker reaches through is protected whichever mutation names it"
+    assert refused.errors, (
+        "the only crossing a picker reaches through is protected whichever mutation names it"
+    )
     assert "cannot be deleted" in str(refused.errors[0]), str(refused.errors[0])
     assert await models.Transformation.objects.filter(pk=crossings[0]).aexists()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_guard_finds_a_table_a_join_path_only_passes_through(authenticated_context: HttpContext):
+async def test_the_guard_finds_a_table_a_join_path_only_passes_through(
+    authenticated_context: HttpContext,
+):
     """The half that is easy to forget: a hop table is named nowhere but inside `joinPath`.
 
     Deleting a table the path merely passes through breaks the join exactly as thoroughly as
@@ -1105,17 +1583,29 @@ async def test_the_guard_finds_a_table_a_join_path_only_passes_through(authentic
     assert not created.errors, created.errors
 
     # `objects` appears only as a hop -- no entry reads a value from it.
-    hop_refused = await schema.execute(DELETE_TABLE, context_value=authenticated_context, variable_values={"input": {"id": objects}})
-    assert hop_refused.errors, "expected the table the path hops through to be protected too"
+    hop_refused = await schema.execute(
+        DELETE_TABLE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": objects}},
+    )
+    assert hop_refused.errors, (
+        "expected the table the path hops through to be protected too"
+    )
     assert "cannot be deleted" in str(hop_refused.errors[0])
 
-    terminal_refused = await schema.execute(DELETE_TABLE, context_value=authenticated_context, variable_values={"input": {"id": tracks}})
+    terminal_refused = await schema.execute(
+        DELETE_TABLE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": tracks}},
+    )
     assert terminal_refused.errors, "and the table the value is read from"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_update_checks_reachability_as_hard_as_a_create(authenticated_context: HttpContext):
+async def test_an_update_checks_reachability_as_hard_as_a_create(
+    authenticated_context: HttpContext,
+):
     """A patch is a write, so it gets the write path's checks -- both pickers, both directions.
 
     The easy bug here is an update that trusts what it is handed because *something* on the
@@ -1125,16 +1615,27 @@ async def test_an_update_checks_reachability_as_hard_as_a_create(authenticated_c
     """
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
-    unrelated = await _object_table(authenticated_context, mask, name="someone else's objects", keyed=False)
+    unrelated = await _object_table(
+        authenticated_context, mask, name="someone else's objects", keyed=False
+    )
 
     created = await _create(
         authenticated_context,
         scene,
         lens,
         {
-            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"}],
+            "colorBys": [
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                }
+            ],
             "activeColorBy": 0,
-            "filterBys": [{"table": table, "column": "area", "min": 1.0, "label": "Big"}],
+            "filterBys": [
+                {"table": table, "column": "area", "min": 1.0, "label": "Big"}
+            ],
             "activeFilterBys": [0],
         },
     )
@@ -1149,26 +1650,53 @@ async def test_an_update_checks_reachability_as_hard_as_a_create(authenticated_c
             variable_values={"input": {"id": layer_id, "render": render}},
         )
 
-    unreachable_colour = await patch({"colorBys": [{"table": unrelated, "column": "area", "colormap": "VIRIDIS"}]})
-    assert unreachable_colour.errors, "expected an update naming an unkeyed table to be refused"
+    unreachable_colour = await patch(
+        {"colorBys": [{"table": unrelated, "column": "area", "colormap": "VIRIDIS"}]}
+    )
+    assert unreachable_colour.errors, (
+        "expected an update naming an unkeyed table to be refused"
+    )
     assert "colorBys[0]:" in str(unreachable_colour.errors[0])
-    assert "not reachable from this mask by a FIELD edge" in str(unreachable_colour.errors[0])
+    assert "not reachable from this mask by a FIELD edge" in str(
+        unreachable_colour.errors[0]
+    )
 
-    unreachable_rule = await patch({"filterBys": [{"table": unrelated, "column": "area", "min": 1.0}]})
-    assert unreachable_rule.errors, "expected the filter picker to be checked on update too"
+    unreachable_rule = await patch(
+        {"filterBys": [{"table": unrelated, "column": "area", "min": 1.0}]}
+    )
+    assert unreachable_rule.errors, (
+        "expected the filter picker to be checked on update too"
+    )
     assert "filterBys[0]:" in str(unreachable_rule.errors[0])
-    assert "not reachable from this mask by a FIELD edge" in str(unreachable_rule.errors[0])
+    assert "not reachable from this mask by a FIELD edge" in str(
+        unreachable_rule.errors[0]
+    )
 
-    unknown_column = await patch({"colorBys": [{"table": table, "column": "nope", "colormap": "VIRIDIS"}]})
+    unknown_column = await patch(
+        {"colorBys": [{"table": table, "column": "nope", "colormap": "VIRIDIS"}]}
+    )
     assert unknown_column.errors
     assert "declares no column 'nope'" in str(unknown_column.errors[0])
 
     # A hop is checked on update as well: the path is part of the entry, not decoration.
-    bad_hop = await patch({"colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS", "joinPath": [{"table": table, "column": "area"}]}]})
+    bad_hop = await patch(
+        {
+            "colorBys": [
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "joinPath": [{"table": table, "column": "area"}],
+                }
+            ]
+        }
+    )
     assert bad_hop.errors
     assert "references no table" in str(bad_hop.errors[0])
 
-    assert (await models.Layer.objects.aget(id=layer_id)).label_render == before, "every refusal left the stored recipe exactly as it was"
+    assert (await models.Layer.objects.aget(id=layer_id)).label_render == before, (
+        "every refusal left the stored recipe exactly as it was"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1190,12 +1718,18 @@ async def test_a_lens_offers_its_own_options(authenticated_context: HttpContext)
     )
     assert not nested.errors, nested.errors
 
-    flat = await schema.execute(LABEL_OPTIONS, context_value=authenticated_context, variable_values={"lens": str(lens.id)})
+    flat = await schema.execute(
+        LABEL_OPTIONS,
+        context_value=authenticated_context,
+        variable_values={"lens": str(lens.id)},
+    )
     assert not flat.errors, flat.errors
 
-    assert [option["column"]["name"] for option in nested.data["lens"]["colorByOptions"]] == [
-        option["column"]["name"] for option in flat.data["labelColorByOptions"]
-    ], "one walk, one answer, two ways to ask"
+    assert [
+        option["column"]["name"] for option in nested.data["lens"]["colorByOptions"]
+    ] == [option["column"]["name"] for option in flat.data["labelColorByOptions"]], (
+        "one walk, one answer, two ways to ask"
+    )
 
 
 # The two tests that lived here exercised `_fold_into_pickers`, the one-time data migration in
@@ -1211,7 +1745,9 @@ async def test_a_lens_offers_its_own_options(authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_active_entry_can_be_cleared_without_clearing_the_picker(authenticated_context: HttpContext):
+async def test_the_active_entry_can_be_cleared_without_clearing_the_picker(
+    authenticated_context: HttpContext,
+):
     """The case that had no spelling at all.
 
     "Publish these colourings but draw none of them -- hash the ids" was unreachable while
@@ -1227,7 +1763,14 @@ async def test_the_active_entry_can_be_cleared_without_clearing_the_picker(authe
         scene,
         lens,
         {
-            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"}],
+            "colorBys": [
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                }
+            ],
             "activeColorBy": 0,
         },
     )
@@ -1247,7 +1790,9 @@ async def test_the_active_entry_can_be_cleared_without_clearing_the_picker(authe
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_omitted_active_entry_still_leaves_the_choice_alone(authenticated_context: HttpContext):
+async def test_an_omitted_active_entry_still_leaves_the_choice_alone(
+    authenticated_context: HttpContext,
+):
     """The other half of the same distinction, and the regression this could break.
 
     Omitting the field has always meant "keep it", and it still must -- a client toggling
@@ -1261,7 +1806,14 @@ async def test_an_omitted_active_entry_still_leaves_the_choice_alone(authenticat
         scene,
         lens,
         {
-            "colorBys": [{"table": table, "column": "area", "colormap": "VIRIDIS", "label": "Area"}],
+            "colorBys": [
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "VIRIDIS",
+                    "label": "Area",
+                }
+            ],
             "activeColorBy": 0,
         },
     )
@@ -1280,7 +1832,9 @@ async def test_an_omitted_active_entry_still_leaves_the_choice_alone(authenticat
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(authenticated_context: HttpContext):
+async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(
+    authenticated_context: HttpContext,
+):
     """The union's message, and why it is better than the branches it replaced.
 
     `ColorByInputModel` used to hand-check which fields each kind reads in four branches, each
@@ -1295,7 +1849,11 @@ async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(a
         authenticated_context,
         scene,
         lens,
-        {"colorBys": [{"table": table, "column": "area", "lens": "1", "colormap": "VIRIDIS"}]},
+        {
+            "colorBys": [
+                {"table": table, "column": "area", "lens": "1", "colormap": "VIRIDIS"}
+            ]
+        },
     )
     assert mixed.errors
     message = str(mixed.errors[0])
@@ -1314,7 +1872,9 @@ async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(a
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_colouring_can_leave_the_bottom_of_its_window_undrawn(authenticated_context: HttpContext):
+async def test_a_colouring_can_leave_the_bottom_of_its_window_undrawn(
+    authenticated_context: HttpContext,
+):
     """`hideBelowMin` is stored on the entry, defaults off, and is part of what a colouring is.
 
     A measure read over an image: the objects at the bottom of the window are not painted with
@@ -1330,21 +1890,36 @@ async def test_a_colouring_can_leave_the_bottom_of_its_window_undrawn(authentica
         lens,
         {
             "colorBys": [
-                {"table": table, "column": "area", "colormap": "MAGMA", "label": "Area"},
-                {"table": table, "column": "area", "colormap": "MAGMA", "hideBelowMin": True, "label": "Area, over the image"},
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "MAGMA",
+                    "label": "Area",
+                },
+                {
+                    "table": table,
+                    "column": "area",
+                    "colormap": "MAGMA",
+                    "hideBelowMin": True,
+                    "label": "Area, over the image",
+                },
             ],
             "activeColorBy": 1,
         },
     )
     assert not result.errors, result.errors
     plain, over_image = result.data["createLabelLayer"]["labelRender"]["colorBys"]
-    assert plain["hideBelowMin"] is False, "omitted means everything is painted, as it always was"
+    assert plain["hideBelowMin"] is False, (
+        "omitted means everything is painted, as it always was"
+    )
     assert over_image["hideBelowMin"] is True
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_hiding_the_bottom_needs_a_window_with_a_bottom(authenticated_context: HttpContext):
+async def test_hiding_the_bottom_needs_a_window_with_a_bottom(
+    authenticated_context: HttpContext,
+):
     """A qualitative colormap has no bottom, so there is nothing for `hideBelowMin` to hide."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
@@ -1353,7 +1928,16 @@ async def test_hiding_the_bottom_needs_a_window_with_a_bottom(authenticated_cont
         authenticated_context,
         scene,
         lens,
-        {"colorBys": [{"table": table, "column": "cell_type", "colormap": "HUES", "hideBelowMin": True}]},
+        {
+            "colorBys": [
+                {
+                    "table": table,
+                    "column": "cell_type",
+                    "colormap": "HUES",
+                    "hideBelowMin": True,
+                }
+            ]
+        },
     )
     assert result.errors
     assert "hideBelowMin" in str(result.errors[0])

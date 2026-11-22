@@ -8,21 +8,26 @@ collections and annotation collections just as readily.
 
 import datetime
 import logging
-from typing import TYPE_CHECKING, Annotated, List, Optional, cast
+from typing import TYPE_CHECKING, Annotated, Optional, cast
 
 import kante
-from strawberry.scalars import JSON
 import strawberry
+from arkitekt_datalayer.types import BigFileStore
+from django.db.models import Prefetch
 from kante.types import Info
 from strawberry import auto
-
-from django.db.models import Prefetch
+from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginationInput
 
 from core import enums, filters, models, order
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
+from core.types._shared import (
+    DESCRIPTORS_DESCRIPTION,
+    OrgScoped,
+    apply_link_filters,
+    build_prescoped_queryset,
+    resolve_descriptors,
+)
 from core.types.auth import Organization, ProvenanceEntry, Task, User
-from arkitekt_datalayer.types import BigFileStore
 from embeddings.strawberry import Embedding, embedding_of
 
 if TYPE_CHECKING:
@@ -51,13 +56,21 @@ def _source_links_prefetch(info: Info) -> Prefetch:
 
     whole = models.ArrayLens.objects.filter(slices=[]).order_by("pk")
     links = (
-        models.FileLink.objects.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value)
-        .select_related("dataset", "table_dataset", "mesh_collection", "annotation_collection")
+        models.FileLink.objects.filter(
+            direction=enums.FileLinkDirectionChoices.SOURCE.value
+        )
+        .select_related(
+            "dataset", "table_dataset", "mesh_collection", "annotation_collection"
+        )
         .prefetch_related(
             "dataset__data_arrays",
             "dataset__coordinate_system__axes",
             Prefetch("dataset__lenses", queryset=whole, to_attr=_FULL_LENSES_ATTR),
-            Prefetch("dataset__lenses", queryset=whole.select_related("default_scene"), to_attr=_NOMINATING_LENS_ATTR),
+            Prefetch(
+                "dataset__lenses",
+                queryset=whole.select_related("default_scene"),
+                to_attr=_NOMINATING_LENS_ATTR,
+            ),
         )
         .order_by("pk")
     )
@@ -86,13 +99,21 @@ def _asks_only_sources(filters_input) -> bool:  # noqa: ANN001 - a strawberry Fi
     description="A file in its original format (e.g. a microscopy vendor file), stored in a BigFileStore. Files are the raw bytes that array datasets, table datasets and mesh collections are converted from.",
 )
 class File:
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
     id: auto
     name: auto
-    created_at: datetime.datetime = kante.django_field(description="When this file was registered")
+    created_at: datetime.datetime = kante.django_field(
+        description="When this file was registered"
+    )
     store: BigFileStore
-    folder: Optional["Folder"] = kante.django_field(description="The folder this file is filed in, or null once its folder was deleted (deleting a folder unfiles what is in it and destroys nothing). Organisational only: it says where a user keeps the file, nothing about its contents")
+    folder: Optional["Folder"] = kante.django_field(
+        description="The folder this file is filed in, or null once its folder was deleted (deleting a folder unfiles what is in it and destroys nothing). Organisational only: it says where a user keeps the file, nothing about its contents"
+    )
 
     @kante.django_field(
         description=(
@@ -106,13 +127,19 @@ class File:
         info: Info,
         filters: filters.FileLinkFilter | None = strawberry.UNSET,
         pagination: OffsetPaginationInput | None = None,
-    ) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming this file as a source: from the page's prefetch when the filter allows, one query otherwise."""
         prefetched = getattr(self, _SOURCE_LINKS_ATTR, None)
         if prefetched is not None and _asks_only_sources(filters):
             links = list(prefetched)
         else:
-            links = apply_link_filters(self.links.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value).order_by("pk"), filters, info)
+            links = apply_link_filters(
+                self.links.filter(
+                    direction=enums.FileLinkDirectionChoices.SOURCE.value
+                ).order_by("pk"),
+                filters,
+                info,
+            )
         if pagination is None:
             return list(links)
         offset = pagination.offset or 0
@@ -124,12 +151,18 @@ class File:
         description="How many containers `derivedContainers` lists, optionally of one kind: a count for a tile, without loading the links",
         prefetch_related=[_source_links_prefetch],
     )
-    def derived_containers_count(self, info: Info, kind: enums.FileLinkContainerKind | None = None) -> int:
+    def derived_containers_count(
+        self, info: Info, kind: enums.FileLinkContainerKind | None = None
+    ) -> int:
         """The number of SOURCE links of this file, from the page's prefetch when there is one."""
         column = filters.FILE_LINK_CONTAINER_COLUMNS[kind] if kind is not None else None
         prefetched = getattr(self, _SOURCE_LINKS_ATTR, None)
         if prefetched is not None:
-            return sum(1 for link in prefetched if column is None or getattr(link, f"{column}_id") is not None)
+            return sum(
+                1
+                for link in prefetched
+                if column is None or getattr(link, f"{column}_id") is not None
+            )
         links = self.links.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value)
         if column is not None:
             links = links.filter(**{f"{column}__isnull": False})
@@ -139,17 +172,35 @@ class File:
         description="The containers this file was written from: the dataset exported to OME-TIFF, the mesh collection written to STL. The mirror of `derivedContainers`",
         prefetch_related=["links__file"],
     )
-    def exported_from(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def exported_from(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming this file as a rendition."""
-        return apply_link_filters(self.links.filter(direction=enums.FileLinkDirectionChoices.RENDITION.value).order_by("pk"), filters, info)
+        return apply_link_filters(
+            self.links.filter(
+                direction=enums.FileLinkDirectionChoices.RENDITION.value
+            ).order_by("pk"),
+            filters,
+            info,
+        )
 
-    provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this file")
+    provenance_entries: list["ProvenanceEntry"] = kante.django_field(
+        description="Provenance entries for this file"
+    )
     creator: User = kante.django_field(description="The user who created this file")
-    created_through: Optional[Task] = kante.django_field(description="The task this file was created through, if any")
-    created_through_by: Optional[User] = kante.django_field(description="The assigner of the creating task, if any")
-    organization: Organization = kante.django_field(description="The organization this file belongs to")
+    created_through: Task | None = kante.django_field(
+        description="The task this file was created through, if any"
+    )
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
+    organization: Organization = kante.django_field(
+        description="The organization this file belongs to"
+    )
     size: float | None = kante.django_field(description="The size of the file in bytes")
-    content_type: str | None = kante.django_field(description="The content type of the file")
+    content_type: str | None = kante.django_field(
+        description="The content type of the file"
+    )
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
@@ -164,36 +215,62 @@ class File:
     description="A folder is a collection of the things mikro stores. It mimics a folder in a file system and is the top-level container for organising data.",
 )
 class Folder(OrgScoped):
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION
+    )
 
     id: auto
-    files: List["File"]
+    files: list["File"]
     # The four containers `FileLink` calls "a thing holding data". Being in a folder says
     # nothing about where any of them sit in space.
-    array_datasets: List[Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(description="The array datasets filed in this folder")
-    table_datasets: List[Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(description="The table datasets filed in this folder")
-    mesh_collections: List[Annotated["MeshCollection", strawberry.lazy("core.types.coords")]] = kante.django_field(description="The mesh collections filed in this folder")
-    annotation_collections: List[Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(description="The annotation collections filed in this folder")
-    fixtures: List[Annotated["Fixture", strawberry.lazy("core.types.coords")]] = kante.django_field(description="The fixtures filed in this folder")
+    array_datasets: list[
+        Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")]
+    ] = kante.django_field(description="The array datasets filed in this folder")
+    table_datasets: list[
+        Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]
+    ] = kante.django_field(description="The table datasets filed in this folder")
+    mesh_collections: list[
+        Annotated["MeshCollection", strawberry.lazy("core.types.coords")]
+    ] = kante.django_field(description="The mesh collections filed in this folder")
+    annotation_collections: list[
+        Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")]
+    ] = kante.django_field(
+        description="The annotation collections filed in this folder"
+    )
+    fixtures: list[Annotated["Fixture", strawberry.lazy("core.types.coords")]] = (
+        kante.django_field(description="The fixtures filed in this folder")
+    )
     parent: Optional["Folder"]
-    children: List["Folder"]
+    children: list["Folder"]
     description: str | None
     name: str
-    provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this folder")
+    provenance_entries: list["ProvenanceEntry"] = kante.django_field(
+        description="Provenance entries for this folder"
+    )
     is_default: bool
 
-    @kante.django_field(description="This folder's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    @kante.django_field(
+        description="This folder's stored vector, as `<model id>:<floats>`. Null until it has been indexed."
+    )
     def embedding(self) -> Embedding | None:
         return embedding_of(self)
 
     created_at: datetime.datetime
     creator: User
-    created_through: Optional[Task] = kante.django_field(description="The task this folder was created through, if any")
-    created_through_by: Optional[User] = kante.django_field(description="The assigner of the creating task, if any")
+    created_through: Task | None = kante.django_field(
+        description="The task this folder was created through, if any"
+    )
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
 
     @kante.django_field()
     def pinned(self, info: Info) -> bool:
-        return cast(models.Folder, self).pinned_by.filter(id=info.context.request.user.id).exists()
+        return (
+            cast(models.Folder, self)
+            .pinned_by.filter(id=info.context.request.user.id)
+            .exists()
+        )
 
     @kante.django_field()
     def tags(self, info: Info) -> list[str]:

@@ -34,7 +34,9 @@ query Provenance($id: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_json_field_change_does_not_break_the_provenance_query(authenticated_context: HttpContext):
+async def test_a_json_field_change_does_not_break_the_provenance_query(
+    authenticated_context: HttpContext,
+):
     """A list-valued change reads back as a string, and keeps its native type in the JSON twin."""
     ctx = authenticated_context
     store = await ZarrStore.objects.acreate(
@@ -78,14 +80,26 @@ async def test_a_json_field_change_does_not_break_the_provenance_query(authentic
     )
     assert not renamed.errors, renamed.errors
 
-    result = await schema.execute(PROVENANCE, context_value=ctx, variable_values={"id": dataset_id})
+    result = await schema.execute(
+        PROVENANCE, context_value=ctx, variable_values={"id": dataset_id}
+    )
     assert not result.errors, result.errors
     assert result.data
 
-    changes = [change for entry in result.data["arrayDataset"]["provenanceEntries"] for change in entry["effectiveChanges"]]
+    changes = [
+        change
+        for entry in result.data["arrayDataset"]["provenanceEntries"]
+        for change in entry["effectiveChanges"]
+    ]
     spec = [change for change in changes if change["field"] == "stored_spec"]
-    assert spec, "the axis writer materializes stored_spec after creation, so the history has this change"
+    assert spec, (
+        "the axis writer materializes stored_spec after creation, so the history has this change"
+    )
 
     change = spec[-1]
-    assert isinstance(change["newValue"], str), "String fields must receive a string, whatever the column holds"
-    assert change["newValueJson"] == ["IMAGE", "MULTICHANNEL"], "the JSON twin keeps the native type a client can actually use"
+    assert isinstance(change["newValue"], str), (
+        "String fields must receive a string, whatever the column holds"
+    )
+    assert change["newValueJson"] == ["IMAGE", "MULTICHANNEL"], (
+        "the JSON twin keeps the native type a client can actually use"
+    )

@@ -36,7 +36,9 @@ from pydantic import BeforeValidator, PlainSerializer
 from . import scalars as _scalars
 
 
-def _markers(pint_cls: type[_scalars.PintQuantity]) -> tuple[BeforeValidator, PlainSerializer]:
+def _markers(
+    pint_cls: type[_scalars.PintQuantity],
+) -> tuple[BeforeValidator, PlainSerializer]:
     """Build the (validator, serializer) pair for one quantity dimension."""
     reference_unit = pint_cls.reference_unit
     scale = pint_cls.scale
@@ -67,7 +69,9 @@ def _markers(pint_cls: type[_scalars.PintQuantity]) -> tuple[BeforeValidator, Pl
             "unit": base_unit,
         }
 
-    return BeforeValidator(validate), PlainSerializer(serialize, return_type=dict, when_used="json")
+    return BeforeValidator(validate), PlainSerializer(
+        serialize, return_type=dict, when_used="json"
+    )
 
 
 # One storage type per dimension used in JSON config blobs. Assembled as literal
@@ -118,7 +122,7 @@ def _generic_markers() -> tuple[BeforeValidator, PlainSerializer]:
         if value is None:
             return None
         if isinstance(value, dict):  # JSON read-back
-            return f'{value["magnitude"]} {value["unit"]}'
+            return f"{value['magnitude']} {value['unit']}"
         return _scalars.generic_quantity_string(value)
 
     def serialize(value: Any) -> Any:
@@ -126,7 +130,9 @@ def _generic_markers() -> tuple[BeforeValidator, PlainSerializer]:
             return None
         return _scalars.generic_quantity_struct(value)
 
-    return BeforeValidator(validate), PlainSerializer(serialize, return_type=dict, when_used="json")
+    return BeforeValidator(validate), PlainSerializer(
+        serialize, return_type=dict, when_used="json"
+    )
 
 
 _generic = _generic_markers()

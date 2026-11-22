@@ -32,8 +32,9 @@ query, deliberately: the blast radius of a modelling error grows with discovery,
 surfacing it beats silently returning a subset that looks complete.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 from core import enums, models
 from core.logic import graph as graph_logic
@@ -195,7 +196,13 @@ class AttributePlanSpec:
         return self.hops[0]
 
 
-def _table_lookup(table: "models.TableDataset", key_columns: list[PlanKeySpec], *, include_index: bool = False, key_map: "KeyMapSpec | None" = None) -> LookupSpec:
+def _table_lookup(
+    table: "models.TableDataset",
+    key_columns: list[PlanKeySpec],
+    *,
+    include_index: bool = False,
+    key_map: "KeyMapSpec | None" = None,
+) -> LookupSpec:
     """The TABLE half over ``table``, bound by ``key_columns``: every non-coordinate column selected.
 
     There is no narrower rule available: a table declares all of its columns, so "the caller
@@ -208,31 +215,74 @@ def _table_lookup(table: "models.TableDataset", key_columns: list[PlanKeySpec], 
     otherwise name, and what a row *is* (its mesh, its label) is spelled by that index.
     ``key_map`` maps the held id before it binds (a SAME_ROWS hop across a relabel).
     """
-    attributes = [column for column in table.columns.all() if column.role != enums.ColumnRoleChoices.COORDINATE.value]
+    attributes = [
+        column
+        for column in table.columns.all()
+        if column.role != enums.ColumnRoleChoices.COORDINATE.value
+    ]
     if include_index:
-        attributes = [*(column for column in table.columns.all() if column.role == enums.ColumnRoleChoices.COORDINATE.value), *attributes]
-    return LookupSpec(kind="TABLE", store=table.store, key_columns=key_columns, attributes=attributes, key_map=key_map)
+        attributes = [
+            *(
+                column
+                for column in table.columns.all()
+                if column.role == enums.ColumnRoleChoices.COORDINATE.value
+            ),
+            *attributes,
+        ]
+    return LookupSpec(
+        kind="TABLE",
+        store=table.store,
+        key_columns=key_columns,
+        attributes=attributes,
+        key_map=key_map,
+    )
 
 
-def _sparse_lookup(sparse_array: "models.SparseArray", *, key_axis: str, key_held: str, value_axes: list[str]) -> LookupSpec:
+def _sparse_lookup(
+    sparse_array: "models.SparseArray",
+    *,
+    key_axis: str,
+    key_held: str,
+    value_axes: list[str],
+) -> LookupSpec:
     """The SPARSE half: one contiguous read of ``sparse_array`` at the position held under ``key_held``."""
-    return LookupSpec(kind="SPARSE", sparse_array=sparse_array, key_axis=key_axis, key_held=key_held, value_axes=value_axes)
+    return LookupSpec(
+        kind="SPARSE",
+        sparse_array=sparse_array,
+        key_axis=key_axis,
+        key_held=key_held,
+        value_axes=value_axes,
+    )
 
 
-def _array_lookup(*, key_axis: str, key_held: str, key_map: KeyMapSpec, value_axes: list[str]) -> LookupSpec:
+def _array_lookup(
+    *, key_axis: str, key_held: str, key_map: KeyMapSpec, value_axes: list[str]
+) -> LookupSpec:
     """The ARRAY half: the whole of a dense array at the position the id held under ``key_held`` maps to."""
-    return LookupSpec(kind="ARRAY", key_axis=key_axis, key_held=key_held, key_map=key_map, value_axes=value_axes)
+    return LookupSpec(
+        kind="ARRAY",
+        key_axis=key_axis,
+        key_held=key_held,
+        key_map=key_map,
+        value_axes=value_axes,
+    )
 
 
 def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
     """A walk's hop as a plan hop: the same facts, with the lookup the worker will run built in."""
     if found.table is not None:
-        relabelled = found.key_scale is not None and (found.key_scale != 1.0 or found.key_offset != 0.0)
+        relabelled = found.key_scale is not None and (
+            found.key_scale != 1.0 or found.key_offset != 0.0
+        )
         lookup = _table_lookup(
             found.table,
             [PlanKeySpec(axis=found.held, column=found.key_column)],
             include_index=found.direction == "REVERSE",
-            key_map=KeyMapSpec(scale=float(found.key_scale), offset=float(found.key_offset)) if relabelled else None,
+            key_map=KeyMapSpec(
+                scale=float(found.key_scale), offset=float(found.key_offset)
+            )
+            if relabelled
+            else None,
         )
     elif found.array_dataset is not None:
         # Held under the INDEX column's name, never the axis': the parent is a table row, and
@@ -240,11 +290,18 @@ def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
         lookup = _array_lookup(
             key_axis=str(found.key_axis),
             key_held=found.via_column.name,
-            key_map=KeyMapSpec(scale=float(found.key_scale), offset=float(found.key_offset)),
+            key_map=KeyMapSpec(
+                scale=float(found.key_scale), offset=float(found.key_offset)
+            ),
             value_axes=list(found.value_axes),
         )
     else:
-        lookup = _sparse_lookup(found.sparse_array, key_axis=str(found.key_axis), key_held=found.held, value_axes=list(found.value_axes))
+        lookup = _sparse_lookup(
+            found.sparse_array,
+            key_axis=str(found.key_axis),
+            key_held=found.held,
+            value_axes=list(found.value_axes),
+        )
     return HopSpec(
         index=found.index,
         parent=found.parent,
@@ -260,7 +317,9 @@ def _hop_from(found: "join_walk.JoinHop") -> HopSpec:
     )
 
 
-def resolve_field_store(system: "models.CoordinateSystem") -> "models.ZarrStore | models.FabriksStore | models.KonnektionStore":
+def resolve_field_store(
+    system: "models.CoordinateSystem",
+) -> "models.ZarrStore | models.FabriksStore | models.KonnektionStore":
     """The store holding whatever carries the ids: an array's zarr, or a collection's prefix.
 
     Four owners resolve. An ARRAY system answers with its own level's store and an
@@ -302,7 +361,9 @@ def resolve_field_store(system: "models.CoordinateSystem") -> "models.ZarrStore 
             )
             store = collection.store
     if store is None:
-        raise ValueError(f"The array behind coordinate system '{system.name}' has no zarr store, so a worker could not sample it.")
+        raise ValueError(
+            f"The array behind coordinate system '{system.name}' has no zarr store, so a worker could not sample it."
+        )
     return store
 
 
@@ -327,7 +388,9 @@ def field_edges_from(
     is to ask the walk without the edge -- guessing from the edge alone is wrong the moment a
     rival edge (RFC-9 allows them) still provides the crossing.
     """
-    paths = graph_logic.fact_paths(system, organization=organization, max_depth=max_depth)
+    paths = graph_logic.fact_paths(
+        system, organization=organization, max_depth=max_depth
+    )
 
     edges = (
         models.Transformation.objects.filter(
@@ -336,7 +399,8 @@ def field_edges_from(
             organization=organization,
         )
         .exclude(pk__in=list(excluding))
-        .select_related("input", "output").prefetch_related("output__table_datasets__store")
+        .select_related("input", "output")
+        .prefetch_related("output__table_datasets__store")
         .prefetch_related("input__axes", "output__axes")
         .order_by("id")
     )
@@ -367,8 +431,10 @@ def field_reachable_tables(
     states which slice. A sparse colouring does, by naming the position along the identified
     axis; a column colouring has nowhere to put one.
     """
-    _, edges = field_edges_from(system, organization, max_depth=max_depth, excluding=excluding)
-    candidates: dict[str, "models.TableDataset"] = {}
+    _, edges = field_edges_from(
+        system, organization, max_depth=max_depth, excluding=excluding
+    )
+    candidates: dict[str, models.TableDataset] = {}
     for edge in edges:
         output = edge.output
         table = next(iter(output.table_datasets.all()[:1]), None)
@@ -400,8 +466,10 @@ def field_reachable_sparse_datasets(
     and identified on the other is what a sparse dataset **is**, and a sparse colouring says
     which slice it means. That is the whole difference between the two variants.
     """
-    _, edges = field_edges_from(system, organization, max_depth=max_depth, excluding=excluding)
-    datasets: dict[str, "models.SparseDataset"] = {}
+    _, edges = field_edges_from(
+        system, organization, max_depth=max_depth, excluding=excluding
+    )
+    datasets: dict[str, models.SparseDataset] = {}
     for edge in edges:
         output = edge.output
         dataset = next(iter(output.sparse_datasets.all()[:1]), None)
@@ -440,7 +508,11 @@ def build_attribute_plans(
         if table is None and matrix is None:
             continue  # a warp-field target: a pixel grid, and neither record-land nor a matrix
 
-        key = next(part for part in graph_logic.field_parts_of(edge) if (part.get("params") or {}).get("dereference"))
+        key = next(
+            part
+            for part in graph_logic.field_parts_of(edge)
+            if (part.get("params") or {}).get("dereference")
+        )
         field_system = edge.field_of(key)
         store = resolve_field_store(field_system)
 
@@ -449,7 +521,12 @@ def build_attribute_plans(
         # Off the EDGE's own IDENTITY parts, never the probed system: a discovered plan's root
         # can have different axes than where the caller stands (a (t,c,y,x) image's (t,y,x)
         # mask passes `t` through, as a part says, and must not invent a `c`).
-        passthrough = [axis for part in edge.parts or [] if part.get("kind") == enums.PartKind.IDENTITY.value for axis in part.get("input_axes") or []]
+        passthrough = [
+            axis
+            for part in edge.parts or []
+            if part.get("kind") == enums.PartKind.IDENTITY.value
+            for axis in part.get("input_axes") or []
+        ]
 
         if matrix is not None:
             # **The id selects a slice, not a row.** One read of `indptr` at the id, one of the
@@ -477,9 +554,31 @@ def build_attribute_plans(
             plans.append(
                 AttributePlanSpec(
                     edge=edge,
-                    path=[PlanStepSpec(edge=step_edge, inverted=inverted) for step_edge, inverted in paths[edge.input_id]],
-                    sample=SampleSpec(system=field_system, store=store, consumes=consumes, produces=produces, passthrough=passthrough),
-                    hops=[HopSpec(index=0, parent=None, cardinality="ONE", sparse_dataset=matrix, lookup=_sparse_lookup(sparse_array, key_axis=key_axis, key_held=key_axis, value_axes=others))],
+                    path=[
+                        PlanStepSpec(edge=step_edge, inverted=inverted)
+                        for step_edge, inverted in paths[edge.input_id]
+                    ],
+                    sample=SampleSpec(
+                        system=field_system,
+                        store=store,
+                        consumes=consumes,
+                        produces=produces,
+                        passthrough=passthrough,
+                    ),
+                    hops=[
+                        HopSpec(
+                            index=0,
+                            parent=None,
+                            cardinality="ONE",
+                            sparse_dataset=matrix,
+                            lookup=_sparse_lookup(
+                                sparse_array,
+                                key_axis=key_axis,
+                                key_held=key_axis,
+                                value_axes=others,
+                            ),
+                        )
+                    ],
                 )
             )
             continue
@@ -505,7 +604,12 @@ def build_attribute_plans(
         if table.pk in product_spaces:
             continue
 
-        coordinate_columns = {column.name: column for column in table.columns_by_role(enums.ColumnRoleChoices.COORDINATE.value)}
+        coordinate_columns = {
+            column.name: column
+            for column in table.columns_by_role(
+                enums.ColumnRoleChoices.COORDINATE.value
+            )
+        }
         # A long-form CHANNEL the key does not pass through is the reader's to pick, so an id
         # alone finds one row per channel -- a slice, not a row -- and no plan states that
         # honestly yet; passed through (the image's `c`), it is bound like `t` and keys the row.
@@ -529,9 +633,26 @@ def build_attribute_plans(
         plans.append(
             AttributePlanSpec(
                 edge=edge,
-                path=[PlanStepSpec(edge=step_edge, inverted=inverted) for step_edge, inverted in paths[edge.input_id]],
-                sample=SampleSpec(system=field_system, store=store, consumes=consumes, produces=produces, passthrough=passthrough),
-                hops=[HopSpec(index=0, parent=None, cardinality="ONE", table=table, lookup=_table_lookup(table, key_columns))],
+                path=[
+                    PlanStepSpec(edge=step_edge, inverted=inverted)
+                    for step_edge, inverted in paths[edge.input_id]
+                ],
+                sample=SampleSpec(
+                    system=field_system,
+                    store=store,
+                    consumes=consumes,
+                    produces=produces,
+                    passthrough=passthrough,
+                ),
+                hops=[
+                    HopSpec(
+                        index=0,
+                        parent=None,
+                        cardinality="ONE",
+                        table=table,
+                        lookup=_table_lookup(table, key_columns),
+                    )
+                ],
             )
         )
 
@@ -542,10 +663,16 @@ def build_attribute_plans(
     # Then the hops, one walk for every landing at once. After the sort, so a hop's root
     # position is the plan's final position.
     roots = [
-        join_walk.JoinRoot(table=plan.landing.table, sparse_dataset=plan.landing.sparse_dataset, arrived_axis=plan.landing.lookup.key_axis)
+        join_walk.JoinRoot(
+            table=plan.landing.table,
+            sparse_dataset=plan.landing.sparse_dataset,
+            arrived_axis=plan.landing.lookup.key_axis,
+        )
         for plan in plans
     ]
-    for position, found in join_walk.walk_joins(roots, organization, max_join_depth=max_join_depth).items():
+    for position, found in join_walk.walk_joins(
+        roots, organization, max_join_depth=max_join_depth
+    ).items():
         plans[position].hops.extend(_hop_from(hop) for hop in found)
     return plans
 
@@ -559,7 +686,9 @@ class RowPlanSpec:
     hops: list[HopSpec]
 
 
-def build_row_plan(table: "models.TableDataset", *, organization: "Organization", max_join_depth: int) -> RowPlanSpec:
+def build_row_plan(
+    table: "models.TableDataset", *, organization: "Organization", max_join_depth: int
+) -> RowPlanSpec:
     """The plan a picked row executes: its own table first, then every hop the schema allows.
 
     A chart of values draws rows, and a picked point already holds its row's id -- there is
@@ -580,6 +709,20 @@ def build_row_plan(table: "models.TableDataset", *, organization: "Organization"
             "Declare its row id as an INDEX coordinate column (`ColumnInput(axis_type=INDEX)`)."
         )
     key = PlanKeySpec(axis=index.name, column=index)
-    landing = HopSpec(index=0, parent=None, cardinality="ONE", table=table, lookup=_table_lookup(table, [key]))
-    found = join_walk.walk_joins([join_walk.JoinRoot(table=table)], organization, max_join_depth=max_join_depth, reverse_references=True, same_rows=True)
-    return RowPlanSpec(table=table, key=key, hops=[landing, *(_hop_from(hop) for hop in found[0])])
+    landing = HopSpec(
+        index=0,
+        parent=None,
+        cardinality="ONE",
+        table=table,
+        lookup=_table_lookup(table, [key]),
+    )
+    found = join_walk.walk_joins(
+        [join_walk.JoinRoot(table=table)],
+        organization,
+        max_join_depth=max_join_depth,
+        reverse_references=True,
+        same_rows=True,
+    )
+    return RowPlanSpec(
+        table=table, key=key, hops=[landing, *(_hop_from(hop) for hop in found[0])]
+    )

@@ -41,10 +41,17 @@ def test_the_footer_gives_rows_ranges_and_nulls_without_a_scan(tmp_path: Path):
     footer = table_stats.read_footer(_write_parquet(tmp_path))
 
     assert footer.row_count == 1000
-    assert footer.columns["object"] == table_stats.ColumnFooter(minimum=0.0, maximum=999.0, null_count=0)
-    assert footer.columns["area"] == table_stats.ColumnFooter(minimum=0.0, maximum=1498.5, null_count=0)
+    assert footer.columns["object"] == table_stats.ColumnFooter(
+        minimum=0.0, maximum=999.0, null_count=0
+    )
+    assert footer.columns["area"] == table_stats.ColumnFooter(
+        minimum=0.0, maximum=1498.5, null_count=0
+    )
     assert footer.columns["label"].null_count == 334
-    assert (footer.columns["label"].minimum, footer.columns["seen"].maximum) == (None, None), "only numbers have a range"
+    assert (footer.columns["label"].minimum, footer.columns["seen"].maximum) == (
+        None,
+        None,
+    ), "only numbers have a range"
 
 
 async def _query(ctx: HttpContext, query: str, **variables: object) -> dict:
@@ -56,13 +63,17 @@ async def _query(ctx: HttpContext, query: str, **variables: object) -> dict:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_tables_footer_facts_are_read_on_the_table(authenticated_context: HttpContext, tmp_path: Path):
+async def test_a_tables_footer_facts_are_read_on_the_table(
+    authenticated_context: HttpContext, tmp_path: Path
+):
     ctx = authenticated_context
     created = await _create_table(ctx, "cells")
     query = "query Q($id: ID!) { tableDataset(id: $id) { rowCount columns { name stats { min max nullCount } } } }"
 
     unread = (await _query(ctx, query, id=created["id"]))["tableDataset"]
-    assert unread["rowCount"] is None, "a store whose parquet cannot be read leaves the table without a count, and the create succeeds"
+    assert unread["rowCount"] is None, (
+        "a store whose parquet cannot be read leaves the table without a count, and the create succeeds"
+    )
 
     location = _write_parquet(tmp_path)
     table = await models.TableDataset.objects.aget(pk=created["id"])
@@ -70,7 +81,9 @@ async def test_a_tables_footer_facts_are_read_on_the_table(authenticated_context
 
     read = (await _query(ctx, query, id=created["id"]))["tableDataset"]
     assert read["rowCount"] == 1000
-    assert read["columns"] == [{"name": "object", "stats": {"min": 0.0, "max": 999.0, "nullCount": 0}}]
+    assert read["columns"] == [
+        {"name": "object", "stats": {"min": 0.0, "max": 999.0, "nullCount": 0}}
+    ]
 
 
 ANCHOR = """
@@ -84,53 +97,148 @@ SUMMARY = "query Q($id: ID!) { tableDataset(id: $id) { columns { name summary { 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_client_pins_a_column_summary_to_the_table(authenticated_context: HttpContext):
+async def test_a_client_pins_a_column_summary_to_the_table(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     table = await _create_table(ctx, "summarised")
-    summary = {"column": "object", "histogram": [3, 5, 2], "bins": [0, 10, 20, 30], "distinctValues": [1, 2, 3], "distinctCount": 3}
+    summary = {
+        "column": "object",
+        "histogram": [3, 5, 2],
+        "bins": [0, 10, 20, 30],
+        "distinctValues": [1, 2, 3],
+        "distinctCount": 3,
+    }
 
-    pinned = await _query(ctx, ANCHOR, input={"table": table["id"], "anchor": {"axisAnchors": [], "columnSummaries": [summary]}})
-    assert pinned["createCoordinateAnchor"]["columnSummaries"] == [{"column": {"name": "object"}, "histogram": [3.0, 5.0, 2.0], "bins": [0.0, 10.0, 20.0, 30.0], "distinctCount": 3}]
+    pinned = await _query(
+        ctx,
+        ANCHOR,
+        input={
+            "table": table["id"],
+            "anchor": {"axisAnchors": [], "columnSummaries": [summary]},
+        },
+    )
+    assert pinned["createCoordinateAnchor"]["columnSummaries"] == [
+        {
+            "column": {"name": "object"},
+            "histogram": [3.0, 5.0, 2.0],
+            "bins": [0.0, 10.0, 20.0, 30.0],
+            "distinctCount": 3,
+        }
+    ]
 
-    read = (await _query(ctx, SUMMARY, id=table["id"]))["tableDataset"]["columns"][0]["summary"]
-    assert read == {"histogram": [3.0, 5.0, 2.0], "bins": [0.0, 10.0, 20.0, 30.0], "distinctValues": [1, 2, 3], "distinctCount": 3}
+    read = (await _query(ctx, SUMMARY, id=table["id"]))["tableDataset"]["columns"][0][
+        "summary"
+    ]
+    assert read == {
+        "histogram": [3.0, 5.0, 2.0],
+        "bins": [0.0, 10.0, 20.0, 30.0],
+        "distinctValues": [1, 2, 3],
+        "distinctCount": 3,
+    }
 
-    again = {**summary, "histogram": [10], "bins": [0, 30], "distinctValues": None, "distinctCount": None}
-    await _query(ctx, ANCHOR, input={"table": table["id"], "anchor": {"axisAnchors": [], "columnSummaries": [again]}})
-    read = (await _query(ctx, SUMMARY, id=table["id"]))["tableDataset"]["columns"][0]["summary"]
-    assert read["histogram"] == [10.0], "a summary stated again replaces the earlier one"
-    assert await models.ColumnSummary.objects.filter(column__table_id=table["id"]).acount() == 1
+    again = {
+        **summary,
+        "histogram": [10],
+        "bins": [0, 30],
+        "distinctValues": None,
+        "distinctCount": None,
+    }
+    await _query(
+        ctx,
+        ANCHOR,
+        input={
+            "table": table["id"],
+            "anchor": {"axisAnchors": [], "columnSummaries": [again]},
+        },
+    )
+    read = (await _query(ctx, SUMMARY, id=table["id"]))["tableDataset"]["columns"][0][
+        "summary"
+    ]
+    assert read["histogram"] == [10.0], (
+        "a summary stated again replaces the earlier one"
+    )
+    assert (
+        await models.ColumnSummary.objects.filter(column__table_id=table["id"]).acount()
+        == 1
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_column_summary_is_refused_where_it_cannot_belong(authenticated_context: HttpContext):
+async def test_a_column_summary_is_refused_where_it_cannot_belong(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     table = await _create_table(ctx, "strict")
     dataset = await _create_array_dataset(ctx, "image")
 
     async def refused(input: dict) -> str:
-        result = await schema.execute(ANCHOR, context_value=ctx, variable_values={"input": input})
+        result = await schema.execute(
+            ANCHOR, context_value=ctx, variable_values={"input": input}
+        )
         assert result.errors, result.data
         return str(result.errors[0])
 
-    assert "not a column of this table" in await refused({"table": table["id"], "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "area"}]}})
-    assert "table's anchor" in await refused({"dataset": dataset["id"], "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "object"}]}})
-    assert "bin edges" in await refused({"table": table["id"], "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "object", "histogram": [1, 2], "bins": [0]}]}})
+    assert "not a column of this table" in await refused(
+        {
+            "table": table["id"],
+            "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "area"}]},
+        }
+    )
+    assert "table's anchor" in await refused(
+        {
+            "dataset": dataset["id"],
+            "anchor": {"axisAnchors": [], "columnSummaries": [{"column": "object"}]},
+        }
+    )
+    assert "bin edges" in await refused(
+        {
+            "table": table["id"],
+            "anchor": {
+                "axisAnchors": [],
+                "columnSummaries": [
+                    {"column": "object", "histogram": [1, 2], "bins": [0]}
+                ],
+            },
+        }
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_counts_past_32_bits_are_answered_and_accepted(authenticated_context: HttpContext):
+async def test_counts_past_32_bits_are_answered_and_accepted(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     created = await _create_table(ctx, "huge")
     huge = 3 * 2**31
     await models.TableDataset.objects.filter(pk=created["id"]).aupdate(row_count=huge)
     await models.Column.objects.filter(table_id=created["id"]).aupdate(null_count=huge)
 
-    read = (await _query(ctx, "query Q($id: ID!) { tableDataset(id: $id) { rowCount columns { stats { nullCount } } } }", id=created["id"]))["tableDataset"]
+    read = (
+        await _query(
+            ctx,
+            "query Q($id: ID!) { tableDataset(id: $id) { rowCount columns { stats { nullCount } } } }",
+            id=created["id"],
+        )
+    )["tableDataset"]
     assert read == {"rowCount": huge, "columns": [{"stats": {"nullCount": huge}}]}
 
-    summary = {"column": "object", "histogram": [1], "bins": [0, 1], "distinctCount": huge}
-    pinned = await _query(ctx, ANCHOR, input={"table": created["id"], "anchor": {"axisAnchors": [], "columnSummaries": [summary]}})
-    assert pinned["createCoordinateAnchor"]["columnSummaries"][0]["distinctCount"] == huge
+    summary = {
+        "column": "object",
+        "histogram": [1],
+        "bins": [0, 1],
+        "distinctCount": huge,
+    }
+    pinned = await _query(
+        ctx,
+        ANCHOR,
+        input={
+            "table": created["id"],
+            "anchor": {"axisAnchors": [], "columnSummaries": [summary]},
+        },
+    )
+    assert (
+        pinned["createCoordinateAnchor"]["columnSummaries"][0]["distinctCount"] == huge
+    )

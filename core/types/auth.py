@@ -1,32 +1,40 @@
-import strawberry
-import strawberry_django
-from strawberry.scalars import JSON
-from typing import TYPE_CHECKING, Annotated, Optional
-from core import filters, order
-from kante.types import Info
 import datetime
 from enum import Enum
+from typing import TYPE_CHECKING, Annotated
+
+import kante
+import strawberry
+import strawberry_django
+from authentikate import models as amodels
+from kante.types import Info
 from koherent.models import ProvenanceEntryModel as ProvenanceEntryModel
 from koherent.models import Task as TaskModel
-import kante
+from strawberry.scalars import JSON
 
+from core import filters, order
 from core.types._shared import OrgScoped
-
-from authentikate import models as amodels
 
 if TYPE_CHECKING:
     from core.types.folder import Folder
 
 
-@kante.django_type(amodels.Organization, description="An organization (tenant). Every object in mikro is scoped to exactly one organization, and queries only ever see the current organization's data.")
+@kante.django_type(
+    amodels.Organization,
+    description="An organization (tenant). Every object in mikro is scoped to exactly one organization, and queries only ever see the current organization's data.",
+)
 class Organization:
     """An organization (tenant); every object is scoped to exactly one organization."""
 
     id: strawberry.ID
-    identifier: str = strawberry_django.field(description="The organization across issuers and services: `<issuer>#<org>`.")
+    identifier: str = strawberry_django.field(
+        description="The organization across issuers and services: `<issuer>#<org>`."
+    )
 
 
-@kante.django_type(amodels.User, description="A user account. The sub is the stable subject identifier from the identity provider; creator and assigner fields across the API reference this type.")
+@kante.django_type(
+    amodels.User,
+    description="A user account. The sub is the stable subject identifier from the identity provider; creator and assigner fields across the API reference this type.",
+)
 class User:
     """A user account; sub is the stable subject identifier from the identity provider."""
 
@@ -35,7 +43,10 @@ class User:
     preferred_username: str
 
 
-@kante.django_type(amodels.Membership, description="A user's membership in an organization, carrying the roles they hold there.")
+@kante.django_type(
+    amodels.Membership,
+    description="A user's membership in an organization, carrying the roles they hold there.",
+)
 class Membership:
     """A user's membership in an organization, carrying the roles they hold there."""
 
@@ -47,7 +58,10 @@ class Membership:
     folders: list[Annotated["Folder", strawberry.lazy("core.types.folder")]]
 
 
-@kante.django_type(amodels.Client, description="An OAuth client (application) that can act against the API, e.g. the app a change was made through.")
+@kante.django_type(
+    amodels.Client,
+    description="An OAuth client (application) that can act against the API, e.g. the app a change was made through.",
+)
 class Client:
     """An OAuth client (application) that can act against the API."""
 
@@ -87,10 +101,18 @@ class ModelChange:
     """The change made to a model."""
 
     field: str = strawberry.field(description="The field that was changed.")
-    old_value: str | None = strawberry.field(description="The old value of the field, rendered as text.")
-    new_value: str | None = strawberry.field(description="The new value of the field, rendered as text.")
-    old_value_json: JSON | None = strawberry.field(description="The old value of the field, preserving its native JSON type.")
-    new_value_json: JSON | None = strawberry.field(description="The new value of the field, preserving its native JSON type.")
+    old_value: str | None = strawberry.field(
+        description="The old value of the field, rendered as text."
+    )
+    new_value: str | None = strawberry.field(
+        description="The new value of the field, rendered as text."
+    )
+    old_value_json: JSON | None = strawberry.field(
+        description="The old value of the field, preserving its native JSON type."
+    )
+    new_value_json: JSON | None = strawberry.field(
+        description="The new value of the field, preserving its native JSON type."
+    )
 
 
 @kante.django_type(
@@ -105,27 +127,45 @@ class Task(OrgScoped):
 
     id: strawberry.ID
     task_id: str = kante.django_field(description="The rekuest task id")
-    parent_task_id: str | None = kante.django_field(description="The immediate parent task id, if any")
-    root_task_id: str = kante.django_field(description="The root task id of the whole causal tree")
-    assigner: User | None = kante.django_field(description="The root human causer that assigned the task")
-    assigner_sub: str = kante.django_field(description="The raw root human causer sub claim")
+    parent_task_id: str | None = kante.django_field(
+        description="The immediate parent task id, if any"
+    )
+    root_task_id: str = kante.django_field(
+        description="The root task id of the whole causal tree"
+    )
+    assigner: User | None = kante.django_field(
+        description="The root human causer that assigned the task"
+    )
+    assigner_sub: str = kante.django_field(
+        description="The raw root human causer sub claim"
+    )
     caller_sub: str = kante.django_field(description="The immediate causer of this hop")
     agent_sub: str = kante.django_field(description="The executing agent user sub")
-    agent_client_id: str = kante.django_field(description="The executing agent OAuth client id")
+    agent_client_id: str = kante.django_field(
+        description="The executing agent OAuth client id"
+    )
     issuer: str = kante.django_field(description="The provenance issuer id")
     token_id: str = kante.django_field(description="The unique single-use token id")
-    args_hash: str = kante.django_field(description="The SHA-256 of the canonicalized args")
-    args_hash_algorithm: str = kante.django_field(description="The args canonicalization algorithm/version")
-    organization: Organization = kante.django_field(description="The organization the task ran in")
+    args_hash: str = kante.django_field(
+        description="The SHA-256 of the canonicalized args"
+    )
+    args_hash_algorithm: str = kante.django_field(
+        description="The args canonicalization algorithm/version"
+    )
+    organization: Organization = kante.django_field(
+        description="The organization the task ran in"
+    )
     created_at: datetime.datetime
 
 
-@strawberry_django.type(ProvenanceEntryModel, pagination=True, description="A provenance event for a model.")
+@strawberry_django.type(
+    ProvenanceEntryModel, pagination=True, description="A provenance event for a model."
+)
 class ProvenanceEntry:
     """A change made to a model."""
 
     client: Client | None
-    task: Optional[Task] = strawberry_django.field(
+    task: Task | None = strawberry_django.field(
         description="The task during which the change occurred, if any."
     )
 
@@ -171,15 +211,21 @@ class ProvenanceEntry:
                     field=change.field,
                     old_value=None if change.old is None else str(change.old),
                     new_value=None if change.new is None else str(change.new),
-                    old_value_json=None if change.old is None else _to_json_safe(change.old),
-                    new_value_json=None if change.new is None else _to_json_safe(change.new),
+                    old_value_json=None
+                    if change.old is None
+                    else _to_json_safe(change.old),
+                    new_value_json=None
+                    if change.new is None
+                    else _to_json_safe(change.new),
                 )
             )
 
         return changes
 
 
-@strawberry.type(description="A permission a specific user holds on a specific object. Clients use it to inspect and manage per-object access control.")
+@strawberry.type(
+    description="A permission a specific user holds on a specific object. Clients use it to inspect and manage per-object access control."
+)
 class UserObjectPermission:
     """A permission a specific user holds on a specific object. Clients use it to inspect and manage per-object access control."""
 

@@ -52,4 +52,3 @@ def test_no_input_accepts_an_embedding():
 def test_the_raw_model_column_is_never_published():
     """`embeddingModel` is carried inside the `Embedding` string, never as its own field."""
     assert "embeddingModel" not in str(schema)
-

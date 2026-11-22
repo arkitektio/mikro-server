@@ -17,19 +17,25 @@ from core import models
 from mikro_server.schema import schema
 from tests import seed
 
-backfill_migration = importlib.import_module("core.migrations.0014_backfill_scene_annotation_created_at")
+backfill_migration = importlib.import_module(
+    "core.migrations.0014_backfill_scene_annotation_created_at"
+)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_new_scene_is_filtered_and_ordered_by_when_it_was_made(authenticated_context: HttpContext):
+async def test_a_new_scene_is_filtered_and_ordered_by_when_it_was_made(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     before = timezone.now() - datetime.timedelta(seconds=1)
     await seed.create_scene(ctx, "Old")
     await seed.create_scene(ctx, "New")
 
     def age_old() -> None:
-        models.Scene.objects.filter(name="Old").update(created_at=timezone.now() - datetime.timedelta(days=30))
+        models.Scene.objects.filter(name="Old").update(
+            created_at=timezone.now() - datetime.timedelta(days=30)
+        )
 
     await sync_to_async(age_old)()
     result = await schema.execute(
@@ -53,20 +59,36 @@ async def test_a_new_scene_is_filtered_and_ordered_by_when_it_was_made(authentic
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_backfill_takes_the_first_history_row_and_leaves_none_null(authenticated_context: HttpContext):
+async def test_the_backfill_takes_the_first_history_row_and_leaves_none_null(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Before the column")
     drawn_at = timezone.now() - datetime.timedelta(days=400)
 
-    def forget_and_backfill() -> tuple[datetime.datetime | None, list[datetime.datetime | None]]:
+    def forget_and_backfill() -> tuple[
+        datetime.datetime | None, list[datetime.datetime | None]
+    ]:
         models.Scene.objects.filter(pk=scene.pk).update(created_at=None)
-        global_apps.get_model("core", "HistoricalScene").objects.filter(id=scene.pk).update(history_date=drawn_at)
-        orphan = models.Scene.objects.create(name="No history", organization=ctx.request.organization, world=scene.world)
+        global_apps.get_model("core", "HistoricalScene").objects.filter(
+            id=scene.pk
+        ).update(history_date=drawn_at)
+        orphan = models.Scene.objects.create(
+            name="No history", organization=ctx.request.organization, world=scene.world
+        )
         models.Scene.objects.filter(pk=orphan.pk).update(created_at=None)
-        global_apps.get_model("core", "HistoricalScene").objects.filter(id=orphan.pk).delete()
+        global_apps.get_model("core", "HistoricalScene").objects.filter(
+            id=orphan.pk
+        ).delete()
         backfill_migration.backfill(global_apps, None)
-        return models.Scene.objects.get(pk=scene.pk).created_at, list(models.Scene.objects.filter(pk=orphan.pk).values_list("created_at", flat=True))
+        return models.Scene.objects.get(pk=scene.pk).created_at, list(
+            models.Scene.objects.filter(pk=orphan.pk).values_list(
+                "created_at", flat=True
+            )
+        )
 
     restored, orphaned = await sync_to_async(forget_and_backfill)()
     assert restored == drawn_at
-    assert orphaned == [None], "a row with no history stays null rather than taking the migration's time"
+    assert orphaned == [None], (
+        "a row with no history stays null rather than taking the migration's time"
+    )

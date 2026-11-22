@@ -11,8 +11,14 @@ from kante.context import HttpContext
 
 from core.models import File, Folder, MetaSchema, UnstructuredMeta
 from mikro_server.schema import schema
-from tests.seed import create_array_dataset, create_file, create_folder, create_lens, create_scene, register_into_scene
-
+from tests.seed import (
+    create_array_dataset,
+    create_file,
+    create_folder,
+    create_lens,
+    create_scene,
+    register_into_scene,
+)
 
 #: Every top-level list field, by its SDL name. Each must come back empty for the other org.
 LIST_FIELDS = [
@@ -56,33 +62,45 @@ async def _seed(ctx: HttpContext) -> dict[str, str]:
 
 
 async def _ids(field: str, ctx: HttpContext, args: str = "") -> list[str]:
-    result = await schema.execute(f"query {{ {field}{args} {{ id }} }}", context_value=ctx)
+    result = await schema.execute(
+        f"query {{ {field}{args} {{ id }} }}", context_value=ctx
+    )
     assert not result.errors, result.errors
     return [row["id"] for row in result.data[field]]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_list_fields_hide_the_other_org(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_list_fields_hide_the_other_org(
+    db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext
+):
     await _seed(authenticated_context)
 
     # Sanity: the seeding org sees its own rows, so an empty list below means scoped, not broken.
     assert await _ids("folders", authenticated_context)
     assert await _ids("arrayDatasets", authenticated_context)
 
-    leaks = {field: ids for field in LIST_FIELDS if (ids := await _ids(field, same_user_other_org_context))}
+    leaks = {
+        field: ids
+        for field in LIST_FIELDS
+        if (ids := await _ids(field, same_user_other_org_context))
+    }
     assert not leaks, f"the same user acting in another org sees: {leaks}"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_single_fields_refuse_the_other_org(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_single_fields_refuse_the_other_org(
+    db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext
+):
     seeded = await _seed(authenticated_context)
 
     leaked = []
     for field, id_ in seeded.items():
         query = f'query {{ {field}(id: "{id_}") {{ id }} }}'
-        assert not (await schema.execute(query, context_value=authenticated_context)).errors, field
+        assert not (
+            await schema.execute(query, context_value=authenticated_context)
+        ).errors, field
         result = await schema.execute(query, context_value=same_user_other_org_context)
         if not result.errors:
             leaked.append(field)
@@ -91,18 +109,24 @@ async def test_single_fields_refuse_the_other_org(db, authenticated_context: Htt
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_pinned_and_mine_stay_in_the_acting_org(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_pinned_and_mine_stay_in_the_acting_org(
+    db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext
+):
     await _seed(authenticated_context)
 
     assert await _ids("folders", authenticated_context, "(filters: {pinned: true})")
-    assert not await _ids("folders", same_user_other_org_context, "(filters: {pinned: true})")
+    assert not await _ids(
+        "folders", same_user_other_org_context, "(filters: {pinned: true})"
+    )
     assert await _ids("myfolders", authenticated_context)
     assert not await _ids("myfolders", same_user_other_org_context)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_myfolders_only_lists_the_callers_folders(db, authenticated_context: HttpContext, bot_context: HttpContext):
+async def test_myfolders_only_lists_the_callers_folders(
+    db, authenticated_context: HttpContext, bot_context: HttpContext
+):
     mine = await create_folder(authenticated_context, "Mine")
     theirs = await create_folder(bot_context, "Theirs")
 
@@ -114,7 +138,12 @@ async def test_myfolders_only_lists_the_callers_folders(db, authenticated_contex
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mutation", ["createFolder", "ensureFolder", "updateFolder"])
-async def test_folder_parent_must_be_in_the_acting_org(db, mutation: str, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_folder_parent_must_be_in_the_acting_org(
+    db,
+    mutation: str,
+    authenticated_context: HttpContext,
+    same_user_other_org_context: HttpContext,
+):
     parent = await create_folder(authenticated_context, "Org A Parent")
     own = await create_folder(same_user_other_org_context, "Org B Folder")
     extra = f', id: "{own.pk}"' if mutation == "updateFolder" else ""
@@ -135,7 +164,9 @@ async def test_folder_parent_must_be_in_the_acting_org(db, mutation: str, authen
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_rename_without_parent_keeps_the_parent(db, authenticated_context: HttpContext):
+async def test_rename_without_parent_keeps_the_parent(
+    db, authenticated_context: HttpContext
+):
     parent = await create_folder(authenticated_context, "Parent")
     child = await create_folder(authenticated_context, "Child", parent=parent)
 
@@ -152,13 +183,15 @@ async def test_rename_without_parent_keeps_the_parent(db, authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_children_do_not_cross_orgs(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_children_do_not_cross_orgs(
+    db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext
+):
     """Even a cross-org row already in the database (written before the fix) stays out of `children`."""
     parent = await create_folder(authenticated_context, "Org A Parent")
     await create_folder(same_user_other_org_context, "Org B Child", parent=parent)
 
     result = await schema.execute(
-        'query($parent: ID!) { children(parent: $parent) { ... on Folder { id name } } }',
+        "query($parent: ID!) { children(parent: $parent) { ... on Folder { id name } } }",
         variable_values={"parent": str(parent.pk)},
         context_value=authenticated_context,
     )
@@ -168,10 +201,14 @@ async def test_children_do_not_cross_orgs(db, authenticated_context: HttpContext
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_unstructured_meta_refuses_foreign_file_and_schema(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_unstructured_meta_refuses_foreign_file_and_schema(
+    db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext
+):
     folder = await create_folder(authenticated_context, "Org A")
     file = await create_file(authenticated_context, "a.tif", folder)
-    foreign_schema = await MetaSchema.objects.acreate(name="s", schema={}, organization=authenticated_context.request.organization)
+    foreign_schema = await MetaSchema.objects.acreate(
+        name="s", schema={}, organization=authenticated_context.request.organization
+    )
     own_folder = await create_folder(same_user_other_org_context, "Org B")
     own_file = await create_file(same_user_other_org_context, "b.tif", own_folder)
 
@@ -180,10 +217,16 @@ async def test_unstructured_meta_refuses_foreign_file_and_schema(db, authenticat
             attachUnstructuredMeta(input: {name: "m", meta: {}, file: $file, schema: $schema}) { id }
         }
     """
-    on_foreign_file = await schema.execute(mutation, variable_values={"file": str(file.pk)}, context_value=same_user_other_org_context)
+    on_foreign_file = await schema.execute(
+        mutation,
+        variable_values={"file": str(file.pk)},
+        context_value=same_user_other_org_context,
+    )
     assert on_foreign_file.errors, "metadata was attached to another org's file"
     with_foreign_schema = await schema.execute(
-        mutation, variable_values={"file": str(own_file.pk), "schema": str(foreign_schema.pk)}, context_value=same_user_other_org_context
+        mutation,
+        variable_values={"file": str(own_file.pk), "schema": str(foreign_schema.pk)},
+        context_value=same_user_other_org_context,
     )
     assert with_foreign_schema.errors, "metadata referenced another org's schema"
     assert not await UnstructuredMeta.objects.aexists()
@@ -192,7 +235,9 @@ async def test_unstructured_meta_refuses_foreign_file_and_schema(db, authenticat
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_permissions_query_refuses_foreign_object(db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext):
+async def test_permissions_query_refuses_foreign_object(
+    db, authenticated_context: HttpContext, same_user_other_org_context: HttpContext
+):
     folder = await create_folder(authenticated_context, "Org A")
 
     result = await schema.execute(

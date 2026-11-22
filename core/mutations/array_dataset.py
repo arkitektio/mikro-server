@@ -1,32 +1,35 @@
-from kante.types import Info
-import strawberry
-
-from core import enums, types, models, scalars
-from core import derived
-from arkitekt_datalayer.datalayer import get_current_datalayer
+import datetime
 import json
+import logging
 
 import kante
-import datetime
-
+import strawberry
+from arkitekt_datalayer.datalayer import get_current_datalayer
+from django.db import transaction
+from kante.types import Info
 from pydantic import BaseModel, Field, model_validator
+
+from core import derived, enums, models, scalars, types
+from core.creation import CreationContext
+from core.inputs.coords import (
+    AxisInput,
+    AxisInputModel,
+    DerivedFromInput,
+    DerivedFromSpec,
+)
+from core.inputs.file_link import SourceFileInput, SourceFileInputModel
+from core.logic import coordinate_system as coordinate_system_logic
+from core.logic import coords as coords_logic
+from core.logic import deletion as deletion_logic
+from core.logic import file_link as file_link_logic
+from core.logic import folder as folder_logic
+from core.logic import graph as graph_logic
+from core.mutations._generic import assert_can_delete, make_delete, self_owner
+from core.scoping import get_for_org
+from lightpath.inputs.models import LightpathGraphInputModel
 from lightpath.inputs.types import LightpathGraphInput
 from optikit.inputs import OptikitStateInput
 from optikit.models import OptikitStateModel
-from lightpath.inputs.models import LightpathGraphInputModel
-from core.creation import CreationContext
-from core.inputs.coords import AxisInput, AxisInputModel, DerivedFromInput, DerivedFromSpec
-from core.inputs.file_link import SourceFileInput, SourceFileInputModel
-from core.logic import coordinate_system as coordinate_system_logic
-from core.logic import file_link as file_link_logic
-from core.logic import folder as folder_logic
-from core.logic import coords as coords_logic
-from core.logic import graph as graph_logic
-from core.logic import deletion as deletion_logic
-from core.mutations._generic import assert_can_delete, make_delete, self_owner
-from core.scoping import get_for_org
-import logging
-from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +39,17 @@ class AxisAnchorInputModel(BaseModel):
     value: int
 
 
-@kante.pydantic_input(AxisAnchorInputModel, description="Input type for an axis anchor, which pins one axis to one discrete position")
+@kante.pydantic_input(
+    AxisAnchorInputModel,
+    description="Input type for an axis anchor, which pins one axis to one discrete position",
+)
 class AxisAnchorInput:
-    axis: str = strawberry.field(description="The axis to anchor to, e.g. 'x', 'y', 'z', 'c', or 't'")
-    value: int = strawberry.field(description="The position to anchor the axis to, e.g. 0 for the first position along that axis")
+    axis: str = strawberry.field(
+        description="The axis to anchor to, e.g. 'x', 'y', 'z', 'c', or 't'"
+    )
+    value: int = strawberry.field(
+        description="The position to anchor the axis to, e.g. 0 for the first position along that axis"
+    )
 
 
 class OmeMetadataInputModel(BaseModel):
@@ -48,26 +58,55 @@ class OmeMetadataInputModel(BaseModel):
 
 @kante.pydantic_input(OmeMetadataInputModel, description="Input type for OME metadata")
 class OmeMetadataInput:
-    metadata_string: str = strawberry.field(description="The OME metadata as a JSON string")
+    metadata_string: str = strawberry.field(
+        description="The OME metadata as a JSON string"
+    )
 
 
 class ValueHistogramInputModel(BaseModel):
-    histogram: list[float] = Field(..., description="The histogram of the pixel values (y values)")
-    bins: list[float] = Field(..., description="The bin indices of the histogram (x values)")
-    min: float | None = Field(None, description="The minimum pixel value of the histogram")
-    max: float | None = Field(None, description="The maximum pixel value of the histogram")
-    p1: float | None = Field(None, description="The 1st percentile pixel value of the histogram")
-    p99: float | None = Field(None, description="The 99th percentile pixel value of the histogram")
+    histogram: list[float] = Field(
+        ..., description="The histogram of the pixel values (y values)"
+    )
+    bins: list[float] = Field(
+        ..., description="The bin indices of the histogram (x values)"
+    )
+    min: float | None = Field(
+        None, description="The minimum pixel value of the histogram"
+    )
+    max: float | None = Field(
+        None, description="The maximum pixel value of the histogram"
+    )
+    p1: float | None = Field(
+        None, description="The 1st percentile pixel value of the histogram"
+    )
+    p99: float | None = Field(
+        None, description="The 99th percentile pixel value of the histogram"
+    )
 
 
-@kante.pydantic_input(ValueHistogramInputModel, description="Input type for a value histogram, which specifies the histogram of pixel values along certain dimensions to provide additional context about the distribution of pixel values in an image")
+@kante.pydantic_input(
+    ValueHistogramInputModel,
+    description="Input type for a value histogram, which specifies the histogram of pixel values along certain dimensions to provide additional context about the distribution of pixel values in an image",
+)
 class ValueHistogramInput:
-    histogram: list[float] = strawberry.field(description="The histogram of the pixel values (y values)")
-    bins: list[float] = strawberry.field(description="The bin indices of the histogram (x values)")
-    min: float | None = strawberry.field(default=None, description="The minimum pixel value of the histogram")
-    max: float | None = strawberry.field(default=None, description="The maximum pixel value of the histogram")
-    p1: float | None = strawberry.field(default=None, description="The 1st percentile pixel value of the histogram")
-    p99: float | None = strawberry.field(default=None, description="The 99th percentile pixel value of the histogram")
+    histogram: list[float] = strawberry.field(
+        description="The histogram of the pixel values (y values)"
+    )
+    bins: list[float] = strawberry.field(
+        description="The bin indices of the histogram (x values)"
+    )
+    min: float | None = strawberry.field(
+        default=None, description="The minimum pixel value of the histogram"
+    )
+    max: float | None = strawberry.field(
+        default=None, description="The maximum pixel value of the histogram"
+    )
+    p1: float | None = strawberry.field(
+        default=None, description="The 1st percentile pixel value of the histogram"
+    )
+    p99: float | None = strawberry.field(
+        default=None, description="The 99th percentile pixel value of the histogram"
+    )
 
 
 #: One distinct value of a column, as the parquet holds it.
@@ -76,14 +115,26 @@ DistinctValue = str | float | int | bool | None
 
 class ColumnSummaryInputModel(BaseModel):
     column: str = Field(..., description="The name of the column summarised")
-    histogram: list[float] = Field(default_factory=list, description="The counts per bin (y values)")
-    bins: list[float] = Field(default_factory=list, description="The bins (x values): their edges, one more than the counts, or their centres, as many")
-    distinct_values: list[DistinctValue] | None = Field(None, description="The distinct values, most frequent first")
-    distinct_count: int | None = Field(None, ge=0, description="How many distinct values the column holds")
+    histogram: list[float] = Field(
+        default_factory=list, description="The counts per bin (y values)"
+    )
+    bins: list[float] = Field(
+        default_factory=list,
+        description="The bins (x values): their edges, one more than the counts, or their centres, as many",
+    )
+    distinct_values: list[DistinctValue] | None = Field(
+        None, description="The distinct values, most frequent first"
+    )
+    distinct_count: int | None = Field(
+        None, ge=0, description="How many distinct values the column holds"
+    )
 
     @model_validator(mode="after")
     def _bins_fit_the_counts(self) -> "ColumnSummaryInputModel":
-        if self.histogram and len(self.bins) not in (len(self.histogram), len(self.histogram) + 1):
+        if self.histogram and len(self.bins) not in (
+            len(self.histogram),
+            len(self.histogram) + 1,
+        ):
             raise ValueError(
                 f"A histogram of {len(self.histogram)} counts has {len(self.histogram)} bin centres or {len(self.histogram) + 1} bin edges, but `bins` has {len(self.bins)} entries."
             )
@@ -98,11 +149,23 @@ class ColumnSummaryInputModel(BaseModel):
     ),
 )
 class ColumnSummaryInput:
-    column: str = strawberry.field(description="The name of the column summarised. Must be a column of the anchor's table")
-    histogram: list[float] = strawberry.field(default_factory=list, description="The counts per bin (y values)")
-    bins: list[float] = strawberry.field(default_factory=list, description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
-    distinct_values: scalars.Any | None = strawberry.field(default=None, description="The column's distinct values as a JSON list, most frequent first, as many as you listed")
-    distinct_count: scalars.RowCount | None = strawberry.field(default=None, description="How many distinct values the column holds")
+    column: str = strawberry.field(
+        description="The name of the column summarised. Must be a column of the anchor's table"
+    )
+    histogram: list[float] = strawberry.field(
+        default_factory=list, description="The counts per bin (y values)"
+    )
+    bins: list[float] = strawberry.field(
+        default_factory=list,
+        description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts",
+    )
+    distinct_values: scalars.Any | None = strawberry.field(
+        default=None,
+        description="The column's distinct values as a JSON list, most frequent first, as many as you listed",
+    )
+    distinct_count: scalars.RowCount | None = strawberry.field(
+        default=None, description="How many distinct values the column holds"
+    )
 
 
 class PhasorHistogramInputModel(BaseModel):
@@ -110,8 +173,12 @@ class PhasorHistogramInputModel(BaseModel):
     counts: list[float] = Field(..., description="The flattened bins x bins density")
     # Optional with a None default rather than a real default, because the strawberry bridge
     # passes None through for an unset field; the defaults are applied where they are written.
-    harmonic: int | None = Field(None, description="The harmonic the phasor was taken at")
-    bins: int | None = Field(None, description="The resolution of the square (g, s) density grid")
+    harmonic: int | None = Field(
+        None, description="The harmonic the phasor was taken at"
+    )
+    bins: int | None = Field(
+        None, description="The resolution of the square (g, s) density grid"
+    )
     g_min: float | None = Field(None)
     g_max: float | None = Field(None)
     s_min: float | None = Field(None)
@@ -121,50 +188,113 @@ class PhasorHistogramInputModel(BaseModel):
     profile: list[float] | None = Field(None)
 
 
-@kante.pydantic_input(PhasorHistogramInputModel, description="Input type for a phasor distribution: the 2D (g, s) density of a phasor taken over one axis at one harmonic, plus the summed profile it came from. Persisted so a client can pick a value range for a phasor overlay without reading the cube")
+@kante.pydantic_input(
+    PhasorHistogramInputModel,
+    description="Input type for a phasor distribution: the 2D (g, s) density of a phasor taken over one axis at one harmonic, plus the summed profile it came from. Persisted so a client can pick a value range for a phasor overlay without reading the cube",
+)
 class PhasorHistogramInput:
-    axis: str = strawberry.field(description="The axis the phasor was taken over, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset")
-    counts: list[float] = strawberry.field(description="The flattened bins x bins (g, s) density, row-major with s outermost")
-    harmonic: int | None = strawberry.field(default=None, description="The harmonic the phasor was taken at (default 1)")
-    bins: int | None = strawberry.field(default=None, description="The resolution of the square density grid (default 256)")
-    g_min: float | None = strawberry.field(default=None, description="The lower g bound of the grid (default 0)")
-    g_max: float | None = strawberry.field(default=None, description="The upper g bound of the grid (default 1)")
-    s_min: float | None = strawberry.field(default=None, description="The lower s bound of the grid (default 0)")
-    s_max: float | None = strawberry.field(default=None, description="The upper s bound of the grid (default 0.6)")
-    total: int | None = strawberry.field(default=None, description="The number of pixels that contributed, so counts can be normalized")
-    calibrated: bool | None = strawberry.field(default=None, description="Whether the g/s were reference-corrected when computed (default false)")
-    profile: list[float] | None = strawberry.field(default=None, description="The summed profile along the phasor axis: a decay for a MICROTIME axis, a spectrum for a SPECTRUM one")
+    axis: str = strawberry.field(
+        description="The axis the phasor was taken over, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset"
+    )
+    counts: list[float] = strawberry.field(
+        description="The flattened bins x bins (g, s) density, row-major with s outermost"
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="The harmonic the phasor was taken at (default 1)"
+    )
+    bins: int | None = strawberry.field(
+        default=None,
+        description="The resolution of the square density grid (default 256)",
+    )
+    g_min: float | None = strawberry.field(
+        default=None, description="The lower g bound of the grid (default 0)"
+    )
+    g_max: float | None = strawberry.field(
+        default=None, description="The upper g bound of the grid (default 1)"
+    )
+    s_min: float | None = strawberry.field(
+        default=None, description="The lower s bound of the grid (default 0)"
+    )
+    s_max: float | None = strawberry.field(
+        default=None, description="The upper s bound of the grid (default 0.6)"
+    )
+    total: int | None = strawberry.field(
+        default=None,
+        description="The number of pixels that contributed, so counts can be normalized",
+    )
+    calibrated: bool | None = strawberry.field(
+        default=None,
+        description="Whether the g/s were reference-corrected when computed (default false)",
+    )
+    profile: list[float] | None = strawberry.field(
+        default=None,
+        description="The summed profile along the phasor axis: a decay for a MICROTIME axis, a spectrum for a SPECTRUM one",
+    )
 
 
 class PhasorCalibrationInputModel(BaseModel):
     axis: str = Field(..., description="The axis the correction applies to")
-    harmonic: int | None = Field(None, description="The harmonic the correction applies at")
-    phase_offset: float | None = Field(None, description="The phase correction in radians")
-    modulation_factor: float | None = Field(None, description="The modulation correction")
-    reference: str | None = Field(None, description="What the correction was measured against")
+    harmonic: int | None = Field(
+        None, description="The harmonic the correction applies at"
+    )
+    phase_offset: float | None = Field(
+        None, description="The phase correction in radians"
+    )
+    modulation_factor: float | None = Field(
+        None, description="The modulation correction"
+    )
+    reference: str | None = Field(
+        None, description="What the correction was measured against"
+    )
 
 
-@kante.pydantic_input(PhasorCalibrationInputModel, description="Input type for an instrument-response correction: the phase offset and modulation factor taking a raw phasor to a calibrated one")
+@kante.pydantic_input(
+    PhasorCalibrationInputModel,
+    description="Input type for an instrument-response correction: the phase offset and modulation factor taking a raw phasor to a calibrated one",
+)
 class PhasorCalibrationInput:
-    axis: str = strawberry.field(description="The axis the correction applies to, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset")
-    harmonic: int | None = strawberry.field(default=None, description="The harmonic the correction applies at (default 1)")
-    phase_offset: float | None = strawberry.field(default=None, description="The phase correction in radians, added to each pixel's phase")
-    modulation_factor: float | None = strawberry.field(default=None, description="The modulation correction, multiplied into each pixel's modulus")
-    reference: str | None = strawberry.field(default=None, description="What the correction was measured against, e.g. 'Rhodamine 6G, 4.1 ns'")
+    axis: str = strawberry.field(
+        description="The axis the correction applies to, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset"
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="The harmonic the correction applies at (default 1)"
+    )
+    phase_offset: float | None = strawberry.field(
+        default=None,
+        description="The phase correction in radians, added to each pixel's phase",
+    )
+    modulation_factor: float | None = strawberry.field(
+        default=None,
+        description="The modulation correction, multiplied into each pixel's modulus",
+    )
+    reference: str | None = strawberry.field(
+        default=None,
+        description="What the correction was measured against, e.g. 'Rhodamine 6G, 4.1 ns'",
+    )
 
 
 class LabelInputModel(BaseModel):
     label: str
 
 
-@kante.pydantic_input(LabelInputModel, description="Input type for a label, which specifies a label to associate with a coordinate anchor or an image")
+@kante.pydantic_input(
+    LabelInputModel,
+    description="Input type for a label, which specifies a label to associate with a coordinate anchor or an image",
+)
 class LabelInput:
-    label: str = strawberry.field(description="The label to associate with the coordinate anchor or image, which can provide additional context about the content of the image or the significance of the coordinate anchor")
+    label: str = strawberry.field(
+        description="The label to associate with the coordinate anchor or image, which can provide additional context about the content of the image or the significance of the coordinate anchor"
+    )
 
 
 class AcquisitionWindowInputModel(BaseModel):
-    start: datetime.datetime = Field(..., description="When the first of the data at these coordinates was acquired")
-    end: datetime.datetime | None = Field(None, description="When the last of it was acquired. Defaults to start: one instant")
+    start: datetime.datetime = Field(
+        ..., description="When the first of the data at these coordinates was acquired"
+    )
+    end: datetime.datetime | None = Field(
+        None,
+        description="When the last of it was acquired. Defaults to start: one instant",
+    )
 
     @model_validator(mode="after")
     def _a_window_is_a_span_of_known_moments(self) -> "AcquisitionWindowInputModel":
@@ -172,16 +302,28 @@ class AcquisitionWindowInputModel(BaseModel):
         # server's zone and compared with everyone else's as if it were.
         for name, moment in (("start", self.start), ("end", self.end)):
             if moment is not None and moment.utcoffset() is None:
-                raise ValueError(f"The acquisition window's {name} ({moment.isoformat()}) has no time zone. State it with an offset, e.g. {moment.isoformat()}+00:00 for UTC.")
+                raise ValueError(
+                    f"The acquisition window's {name} ({moment.isoformat()}) has no time zone. State it with an offset, e.g. {moment.isoformat()}+00:00 for UTC."
+                )
         if self.end is not None and self.end < self.start:
-            raise ValueError(f"The acquisition window ends ({self.end.isoformat()}) before it starts ({self.start.isoformat()}).")
+            raise ValueError(
+                f"The acquisition window ends ({self.end.isoformat()}) before it starts ({self.start.isoformat()})."
+            )
         return self
 
 
-@kante.pydantic_input(AcquisitionWindowInputModel, description="Input type for an acquisition window: when the data at an anchor's coordinates was acquired, from the first of it to the last")
+@kante.pydantic_input(
+    AcquisitionWindowInputModel,
+    description="Input type for an acquisition window: when the data at an anchor's coordinates was acquired, from the first of it to the last",
+)
 class AcquisitionWindowInput:
-    start: datetime.datetime = strawberry.field(description="When the first of the data at these coordinates was acquired, with a time zone")
-    end: datetime.datetime | None = strawberry.field(default=None, description="When the last of it was acquired, with a time zone. Defaults to start: one instant")
+    start: datetime.datetime = strawberry.field(
+        description="When the first of the data at these coordinates was acquired, with a time zone"
+    )
+    end: datetime.datetime | None = strawberry.field(
+        default=None,
+        description="When the last of it was acquired, with a time zone. Defaults to start: one instant",
+    )
 
 
 class CoordinateAnchorInputModel(BaseModel):
@@ -197,17 +339,46 @@ class CoordinateAnchorInputModel(BaseModel):
     column_summaries: list[ColumnSummaryInputModel] | None = None
 
 
-@kante.pydantic_input(CoordinateAnchorInputModel, description="Input type for a coordinate anchor, which specifies a list of dimension anchors to anchor to")
+@kante.pydantic_input(
+    CoordinateAnchorInputModel,
+    description="Input type for a coordinate anchor, which specifies a list of dimension anchors to anchor to",
+)
 class CoordinateAnchorInput:
-    axis_anchors: list[AxisAnchorInput] = strawberry.field(description="A list of dimension anchors to anchor to, e.g. [{'axis': 'z', 'value': 0}, {'axis': 't', 'value': 5}] to anchor to the first position along the z dimension and the sixth position along the t dimension")
-    microscope: OptikitStateInput | None = strawberry.field(default=None, description="Optional recorded microscope (Optikit) state to associate with the coordinate anchor: the hardware truth -- stage pose, environment, per-device settings -- at this coordinate, as composable typed input (quantities like '100.5 um' or '20 mW' where the setting carries a unit). An acquisition fact, recorded at ingest like the other spokes")
-    ome_metadata: OmeMetadataInput | None = strawberry.field(default=None, description="Optional OME metadata to associate with the coordinate anchor, which can provide additional context about the axes being anchored to")
-    value_histogram: ValueHistogramInput | None = strawberry.field(default=None, description="Optional value histogram to associate with the coordinate anchor, which can provide additional context about the distribution of pixel values along the anchored dimensions")
-    label: LabelInput | None = strawberry.field(default=None, description="Optional label to associate with the coordinate anchor, which can provide additional context about the significance of the coordinate anchor or the content of the image at that coordinate")
-    light_graph: LightpathGraphInput | None = strawberry.field(default=None, description="Optional lightpath graph to associate with the coordinate anchor, which can provide additional context about the optical path that was used to acquire the image at that coordinate")
-    phasor_histogram: PhasorHistogramInput | None = strawberry.field(default=None, description="Optional phasor distribution to associate with the coordinate anchor, for a converter that already computed one. It is more usually attached after ingest with createPhasorHistogram, since computing it means reading the cube")
-    phasor_calibration: PhasorCalibrationInput | None = strawberry.field(default=None, description="Optional instrument-response correction to associate with the coordinate anchor, taking a raw phasor at this coordinate to a calibrated one")
-    acquisition_window: AcquisitionWindowInput | None = strawberry.field(default=None, description="Optional acquisition window: when the data at these coordinates was acquired. An anchor holding over the whole dataset gives its span; one pinned to a frame gives that frame's. The dataset's `acquisitionStart`/`acquisitionEnd` are derived from these")
+    axis_anchors: list[AxisAnchorInput] = strawberry.field(
+        description="A list of dimension anchors to anchor to, e.g. [{'axis': 'z', 'value': 0}, {'axis': 't', 'value': 5}] to anchor to the first position along the z dimension and the sixth position along the t dimension"
+    )
+    microscope: OptikitStateInput | None = strawberry.field(
+        default=None,
+        description="Optional recorded microscope (Optikit) state to associate with the coordinate anchor: the hardware truth -- stage pose, environment, per-device settings -- at this coordinate, as composable typed input (quantities like '100.5 um' or '20 mW' where the setting carries a unit). An acquisition fact, recorded at ingest like the other spokes",
+    )
+    ome_metadata: OmeMetadataInput | None = strawberry.field(
+        default=None,
+        description="Optional OME metadata to associate with the coordinate anchor, which can provide additional context about the axes being anchored to",
+    )
+    value_histogram: ValueHistogramInput | None = strawberry.field(
+        default=None,
+        description="Optional value histogram to associate with the coordinate anchor, which can provide additional context about the distribution of pixel values along the anchored dimensions",
+    )
+    label: LabelInput | None = strawberry.field(
+        default=None,
+        description="Optional label to associate with the coordinate anchor, which can provide additional context about the significance of the coordinate anchor or the content of the image at that coordinate",
+    )
+    light_graph: LightpathGraphInput | None = strawberry.field(
+        default=None,
+        description="Optional lightpath graph to associate with the coordinate anchor, which can provide additional context about the optical path that was used to acquire the image at that coordinate",
+    )
+    phasor_histogram: PhasorHistogramInput | None = strawberry.field(
+        default=None,
+        description="Optional phasor distribution to associate with the coordinate anchor, for a converter that already computed one. It is more usually attached after ingest with createPhasorHistogram, since computing it means reading the cube",
+    )
+    phasor_calibration: PhasorCalibrationInput | None = strawberry.field(
+        default=None,
+        description="Optional instrument-response correction to associate with the coordinate anchor, taking a raw phasor at this coordinate to a calibrated one",
+    )
+    acquisition_window: AcquisitionWindowInput | None = strawberry.field(
+        default=None,
+        description="Optional acquisition window: when the data at these coordinates was acquired. An anchor holding over the whole dataset gives its span; one pinned to a frame gives that frame's. The dataset's `acquisitionStart`/`acquisitionEnd` are derived from these",
+    )
     column_summaries: list[ColumnSummaryInput] | None = strawberry.field(
         default=None,
         description="(table only) What you computed over columns of the table, one entry per column: a histogram, the distinct values. Pinned to the global anchor (no axis anchors) it summarises the whole table; a summary stated again for a column replaces the earlier one",
@@ -225,17 +396,25 @@ _LEVEL_TRANSLATION_DESCRIPTION = "This level's offset per axis, in level-0 voxel
 
 class ScaleInputModel(BaseModel):
     level: int
-    array: str = Field(..., description="The array-like object to create the image from")
+    array: str = Field(
+        ..., description="The array-like object to create the image from"
+    )
     scale_method: enums.ScaleMethod | None = None
-    scale: list[float] | None = Field(default=None, description=_LEVEL_SCALE_DESCRIPTION)
-    translation: list[float] | None = Field(default=None, description=_LEVEL_TRANSLATION_DESCRIPTION)
+    scale: list[float] | None = Field(
+        default=None, description=_LEVEL_SCALE_DESCRIPTION
+    )
+    translation: list[float] | None = Field(
+        default=None, description=_LEVEL_TRANSLATION_DESCRIPTION
+    )
 
     @model_validator(mode="after")
     def _both_or_neither(self) -> "ScaleInputModel":
         # No translation is implied by a scale: a stride's is 0 and a block reduction's is a
         # half voxel per halving, and only the writer knows which it ran.
         if (self.scale is None) != (self.translation is None):
-            raise ValueError(f"Pyramid level {self.level}: state `scale` and `translation` together, or neither -- a scale alone does not say whether a voxel is a strided sample (offset 0) or a block's centre ((scale - 1) / 2)")
+            raise ValueError(
+                f"Pyramid level {self.level}: state `scale` and `translation` together, or neither -- a scale alone does not say whether a voxel is a strided sample (offset 0) or a block's centre ((scale - 1) / 2)"
+            )
         return self
 
 
@@ -246,10 +425,18 @@ class ScaleInputModel(BaseModel):
 class ScaleInput:
     """Input for one pyramid level."""
 
-    level: int = strawberry.field(description="The level of the scale, where 0 is the highest resolution scale and higher levels are lower resolution scales")
-    array: scalars.ArrayLike = strawberry.field(description="The array-like object to create the image from")
-    scale: list[float] | None = strawberry.field(default=None, description=_LEVEL_SCALE_DESCRIPTION)
-    translation: list[float] | None = strawberry.field(default=None, description=_LEVEL_TRANSLATION_DESCRIPTION)
+    level: int = strawberry.field(
+        description="The level of the scale, where 0 is the highest resolution scale and higher levels are lower resolution scales"
+    )
+    array: scalars.ArrayLike = strawberry.field(
+        description="The array-like object to create the image from"
+    )
+    scale: list[float] | None = strawberry.field(
+        default=None, description=_LEVEL_SCALE_DESCRIPTION
+    )
+    translation: list[float] | None = strawberry.field(
+        default=None, description=_LEVEL_TRANSLATION_DESCRIPTION
+    )
     scale_method: enums.ScaleMethod | None = strawberry.field(
         default=None,
         description="How this level's voxels were computed from the level above it. Stated, never derived -- nothing about two arrays says whether one was averaged or picked out of the other. **Required, and restricted to NEAREST or MODE, when this dataset's primary derivation is declared CATEGORIZED, or when any of its axes is an INDEX axis** -- an axis that enumerates objects: over an array of object ids every other method returns numbers that were not in the input, and an invented id is an object that does not exist",
@@ -267,12 +454,20 @@ class CreateDatasetInputModel(BaseModel):
     source_files: list[SourceFileInputModel] | None = None
 
 
-@kante.pydantic_input(CreateDatasetInputModel, description="Input type for creating an array dataset. Its axes are structural (name and kind); physical units, if known, arrive afterwards through createCoordinateSystem with a registrations entry naming the dataset")
+@kante.pydantic_input(
+    CreateDatasetInputModel,
+    description="Input type for creating an array dataset. Its axes are structural (name and kind); physical units, if known, arrive afterwards through createCoordinateSystem with a registrations entry naming the dataset",
+)
 class CreateArrayDatasetInput:
     """Input for creating an array dataset."""
 
-    data: scalars.ArrayLike = strawberry.field(description="The array-like object to create the image from")
-    scales: list[ScaleInput] = strawberry.field(default_factory=list, description="The lower-resolution pyramid levels. Omit for a single-level dataset. A level placed by its `scale` and `translation`, checked against its shape; one that states neither is read as a resize of level 0, its scale level 0's shape over its own")
+    data: scalars.ArrayLike = strawberry.field(
+        description="The array-like object to create the image from"
+    )
+    scales: list[ScaleInput] = strawberry.field(
+        default_factory=list,
+        description="The lower-resolution pyramid levels. Omit for a single-level dataset. A level placed by its `scale` and `translation`, checked against its shape; one that states neither is read as a resize of level 0, its scale level 0's shape over its own",
+    )
     name: str = strawberry.field(description="The name of the image")
     axes: list[AxisInput] = strawberry.field(
         description="The dataset's structural axes, in array order (slowest-varying first) -- they must describe the store's dimensions, and are checked against its shape. No ordering by type is required beyond that: (z, c, y, x) and (c, z, y, x) are both accepted as given. They carry no units: the intrinsic space is the pixel grid"
@@ -282,7 +477,8 @@ class CreateArrayDatasetInput:
         description="The folder to file this dataset in. Organisational only -- it says nothing about where the data sits in space. Defaults to the user's default folder",
     )
     anchors: list[CoordinateAnchorInput] | None = strawberry.field(
-        default=None, description="Optional list of coordinate anchors to associate with the dataset, each pinning metadata spokes (OME metadata, histograms, labels) to specific positions along certain axes"
+        default=None,
+        description="Optional list of coordinate anchors to associate with the dataset, each pinning metadata spokes (OME metadata, histograms, labels) to specific positions along certain axes",
     )
     derived_from: list[DerivedFromInput] | None = strawberry.field(
         default=None,
@@ -314,16 +510,29 @@ def _parse_json_object(value: str | None, field: str) -> dict:
         parsed = json.loads(value)
     except json.JSONDecodeError as exc:
         head = value.strip()[:80]
-        hint = " It looks like XML; OME-XML must be converted to JSON before it is sent." if head.startswith("<") else ""
-        raise ValueError(f"{field} is not valid JSON ({exc}).{hint} It starts: {head!r}") from exc
+        hint = (
+            " It looks like XML; OME-XML must be converted to JSON before it is sent."
+            if head.startswith("<")
+            else ""
+        )
+        raise ValueError(
+            f"{field} is not valid JSON ({exc}).{hint} It starts: {head!r}"
+        ) from exc
 
     if not isinstance(parsed, dict):
-        raise ValueError(f"{field} must be a JSON object, not a {type(parsed).__name__}.")
+        raise ValueError(
+            f"{field} must be a JSON object, not a {type(parsed).__name__}."
+        )
 
     return parsed
 
 
-def assert_pyramid_is_label_compliant(name: str, scales: list[ScaleInputModel], axes: list[AxisInputModel], derived_from: list | None) -> None:
+def assert_pyramid_is_label_compliant(
+    name: str,
+    scales: list[ScaleInputModel],
+    axes: list[AxisInputModel],
+    derived_from: list | None,
+) -> None:
     """A pyramid over object ids may only have been built by picking, never by averaging.
 
     The guard exists because the damage is silent and permanent. Downsample a mask with an
@@ -357,7 +566,10 @@ def assert_pyramid_is_label_compliant(name: str, scales: list[ScaleInputModel], 
     That case is reported instead, on ``ArrayDataset.pyramidIsLabelCompliant``.
     """
     primary = next(iter(derived_from or []), None)
-    categorized = primary is not None and primary.value_relation == enums.ValueRelation.CATEGORIZED
+    categorized = (
+        primary is not None
+        and primary.value_relation == enums.ValueRelation.CATEGORIZED
+    )
     indexed = [axis.name for axis in axes if axis.type == enums.AxisType.INDEX]
     if not categorized and not indexed:
         return
@@ -451,7 +663,9 @@ def create_array_dataset(
     model = input.to_pydantic()
 
     # Before anything is written: a pyramid the values forbid must not leave a dataset behind.
-    assert_pyramid_is_label_compliant(model.name, model.scales, model.axes, model.derived_from)
+    assert_pyramid_is_label_compliant(
+        model.name, model.scales, model.axes, model.derived_from
+    )
 
     datalayer = get_current_datalayer()
 
@@ -463,7 +677,10 @@ def create_array_dataset(
     # AssertionError rather than as prose a caller could act on.
     assert_axes_describe_the_store(model.axes, data_store)
 
-    axis_specs = [coords_logic.AxisSpec(name=axis.name, type=axis.type.value) for axis in model.axes]
+    axis_specs = [
+        coords_logic.AxisSpec(name=axis.name, type=axis.type.value)
+        for axis in model.axes
+    ]
 
     # The declared order is taken as given. It is the store's dimension order -- that is
     # what `assert_axes_describe_the_store` above has just checked it against -- and no
@@ -483,7 +700,9 @@ def create_array_dataset(
     dataset = models.ArrayDataset.objects.create(
         name=model.name,
         coordinate_system=intrinsic,
-        folder=folder_logic.folder_for_new_container(info, ctx, model.folder, model.derived_from),
+        folder=folder_logic.folder_for_new_container(
+            info, ctx, model.folder, model.derived_from
+        ),
         creator=ctx.user,
         organization=ctx.organization,
         **ctx.provenance_kwargs(),
@@ -493,9 +712,20 @@ def create_array_dataset(
     # back, or the mutation answers `spec: []` for the dataset it has just described.
     dataset.refresh_from_db(fields=["stored_spec"])
 
-    levels = [(0, data_store)] + [(scale.level, get_for_org(models.ZarrStore, info, id=scale.array)) for scale in model.scales]
-    scale_methods = {scale.level: scale.scale_method.value for scale in model.scales if scale.scale_method is not None}
-    stated = {scale.level: (scale.scale, scale.translation) for scale in model.scales if scale.scale is not None and scale.translation is not None}
+    levels = [(0, data_store)] + [
+        (scale.level, get_for_org(models.ZarrStore, info, id=scale.array))
+        for scale in model.scales
+    ]
+    scale_methods = {
+        scale.level: scale.scale_method.value
+        for scale in model.scales
+        if scale.scale_method is not None
+    }
+    stated = {
+        scale.level: (scale.scale, scale.translation)
+        for scale in model.scales
+        if scale.scale is not None and scale.translation is not None
+    }
 
     for level, store in levels:
         if level != 0:
@@ -552,9 +782,17 @@ def create_array_dataset(
     coordinate_system_logic.whole_lens(dataset)
 
     if model.derived_from:
-        coordinate_system_logic.write_derivation_edges(info, name=dataset.name, own_system=intrinsic, derived_from=model.derived_from, ctx=ctx)
+        coordinate_system_logic.write_derivation_edges(
+            info,
+            name=dataset.name,
+            own_system=intrinsic,
+            derived_from=model.derived_from,
+            ctx=ctx,
+        )
 
-    file_link_logic.write_file_links(info, container=dataset, source_files=model.source_files or [], ctx=ctx)
+    file_link_logic.write_file_links(
+        info, container=dataset, source_files=model.source_files or [], ctx=ctx
+    )
 
     # One derivation for every anchor stated, not one per spoke (core.derived).
     with derived.deferred():
@@ -588,7 +826,9 @@ def create_array_dataset(
 # ---------------------------------------------------------------------------
 
 
-def _assert_phasor_axis(axis_name: str, axis_specs: list[coords_logic.AxisSpec]) -> None:
+def _assert_phasor_axis(
+    axis_name: str, axis_specs: list[coords_logic.AxisSpec]
+) -> None:
     """Check the axis a phasor was taken over is one a DFT means something over.
 
     The same rule the render node enforces (`core.mutations.layer.assert_phasor_axis`), applied
@@ -597,18 +837,28 @@ def _assert_phasor_axis(axis_name: str, axis_specs: list[coords_logic.AxisSpec])
     """
     axis = next((spec for spec in axis_specs if spec.name == axis_name), None)
     if axis is None:
-        raise ValueError(f"axis '{axis_name}' is not an axis of this dataset ({[spec.name for spec in axis_specs]})")
+        raise ValueError(
+            f"axis '{axis_name}' is not an axis of this dataset ({[spec.name for spec in axis_specs]})"
+        )
     if not coords_logic.is_phasor_axis(axis.type):
-        raise ValueError(f"axis '{axis_name}' is a {axis.type} axis, not a MICROTIME or SPECTRUM axis. A phasor is only defined over a continuously sampled axis -- an arrival-time histogram or a spectrum.")
+        raise ValueError(
+            f"axis '{axis_name}' is a {axis.type} axis, not a MICROTIME or SPECTRUM axis. A phasor is only defined over a continuously sampled axis -- an arrival-time histogram or a spectrum."
+        )
 
 
-def _write_phasor_histogram(anchor: "models.CoordinateAnchor", input: PhasorHistogramInputModel, axis_specs: list[coords_logic.AxisSpec]) -> "models.PhasorHistogram":
+def _write_phasor_histogram(
+    anchor: "models.CoordinateAnchor",
+    input: PhasorHistogramInputModel,
+    axis_specs: list[coords_logic.AxisSpec],
+) -> "models.PhasorHistogram":
     """Create or replace the phasor distribution at (anchor, axis, harmonic)."""
     _assert_phasor_axis(input.axis, axis_specs)
 
     bins = input.bins if input.bins is not None else 256
     if len(input.counts) != bins * bins:
-        raise ValueError(f"counts has {len(input.counts)} entries but bins is {bins}, which needs {bins * bins}. It is the flattened bins x bins density grid, row-major with s outermost.")
+        raise ValueError(
+            f"counts has {len(input.counts)} entries but bins is {bins}, which needs {bins * bins}. It is the flattened bins x bins density grid, row-major with s outermost."
+        )
 
     histogram, _ = models.PhasorHistogram.objects.update_or_create(
         anchor=anchor,
@@ -629,7 +879,11 @@ def _write_phasor_histogram(anchor: "models.CoordinateAnchor", input: PhasorHist
     return histogram
 
 
-def _write_phasor_calibration(anchor: "models.CoordinateAnchor", input: PhasorCalibrationInputModel, axis_specs: list[coords_logic.AxisSpec]) -> "models.PhasorCalibration":
+def _write_phasor_calibration(
+    anchor: "models.CoordinateAnchor",
+    input: PhasorCalibrationInputModel,
+    axis_specs: list[coords_logic.AxisSpec],
+) -> "models.PhasorCalibration":
     """Create or replace the instrument-response correction at (anchor, axis, harmonic)."""
     _assert_phasor_axis(input.axis, axis_specs)
 
@@ -653,10 +907,17 @@ _ARRAY_ONLY_SPOKES: tuple[str, ...] = ("phasor_histogram", "phasor_calibration")
 
 
 #: Which anchor column each container kind is keyed on.
-_CONTAINER_FIELDS: dict[type, str] = {models.ArrayDataset: "dataset", models.TableDataset: "table", models.SparseDataset: "sparse"}
+_CONTAINER_FIELDS: dict[type, str] = {
+    models.ArrayDataset: "dataset",
+    models.TableDataset: "table",
+    models.SparseDataset: "sparse",
+}
 
 
-def _get_or_create_anchor(container: "models.ArrayDataset | models.TableDataset | models.SparseDataset", axis_anchors: list[AxisAnchorInputModel] | None) -> "models.CoordinateAnchor":
+def _get_or_create_anchor(
+    container: "models.ArrayDataset | models.TableDataset | models.SparseDataset",
+    axis_anchors: list[AxisAnchorInputModel] | None,
+) -> "models.CoordinateAnchor":
     """Get-or-create rather than create: two spokes at one coordinate are two spokes of *one* anchor.
 
     A phasor distribution and an intensity histogram at the same coordinate, or a microscope
@@ -664,16 +925,28 @@ def _get_or_create_anchor(container: "models.ArrayDataset | models.TableDataset 
     Keyed on the container -- an array, table or sparse dataset -- and the coordinates; the
     namespaces cannot collide because an anchor has exactly one container.
     """
-    coordinates = {axis_anchor.axis: axis_anchor.value for axis_anchor in axis_anchors or []}
+    coordinates = {
+        axis_anchor.axis: axis_anchor.value for axis_anchor in axis_anchors or []
+    }
     try:
-        field = next(field for kind, field in _CONTAINER_FIELDS.items() if isinstance(container, kind))
+        field = next(
+            field
+            for kind, field in _CONTAINER_FIELDS.items()
+            if isinstance(container, kind)
+        )
     except StopIteration:
-        raise TypeError(f"A coordinate anchor pins into an array, table or sparse dataset, not a {type(container).__name__}.") from None
-    anchor, _ = models.CoordinateAnchor.objects.get_or_create(coordinates=coordinates, **{field: container})
+        raise TypeError(
+            f"A coordinate anchor pins into an array, table or sparse dataset, not a {type(container).__name__}."
+        ) from None
+    anchor, _ = models.CoordinateAnchor.objects.get_or_create(
+        coordinates=coordinates, **{field: container}
+    )
     return anchor
 
 
-def assert_anchors_name_axes(anchors: list, axis_names: list[str], *, what: str = "dataset") -> None:
+def assert_anchors_name_axes(
+    anchors: list, axis_names: list[str], *, what: str = "dataset"
+) -> None:
     """Refuse an anchor pinned along an axis the container does not have, or pinned twice.
 
     An anchor's ``coordinates`` are keyed by axis name and read back by name, so ``{"z": 3}``
@@ -686,18 +959,31 @@ def assert_anchors_name_axes(anchors: list, axis_names: list[str], *, what: str 
     for anchor in anchors:
         coordinates = {entry.axis: entry.value for entry in anchor.axis_anchors}
         if len(coordinates) != len(anchor.axis_anchors):
-            raise ValueError(f"An anchor names an axis once, but {[entry.axis for entry in anchor.axis_anchors]} repeats one. One position per axis; a second position is a second anchor.")
+            raise ValueError(
+                f"An anchor names an axis once, but {[entry.axis for entry in anchor.axis_anchors]} repeats one. One position per axis; a second position is a second anchor."
+            )
         unknown = sorted(set(coordinates) - set(axis_names))
         if unknown:
             if not axis_names:
-                raise ValueError(f"This {what} has no coordinate columns, so its anchors can only be global ({{}}), but an anchor pins {unknown}.")
-            raise ValueError(f"An anchor pins the axes its {what} has, but {unknown} {'is' if len(unknown) == 1 else 'are'} not among {axis_names}.")
+                raise ValueError(
+                    f"This {what} has no coordinate columns, so its anchors can only be global ({{}}), but an anchor pins {unknown}."
+                )
+            raise ValueError(
+                f"An anchor pins the axes its {what} has, but {unknown} {'is' if len(unknown) == 1 else 'are'} not among {axis_names}."
+            )
         if coordinates in seen:
-            raise ValueError(f"Two anchors are pinned to the same coordinates {coordinates or '{} (the whole ' + what + ')'}. One anchor per coordinate: put every spoke for it on the one anchor.")
+            raise ValueError(
+                f"Two anchors are pinned to the same coordinates {coordinates or '{} (the whole ' + what + ')'}. One anchor per coordinate: put every spoke for it on the one anchor."
+            )
         seen.append(coordinates)
 
 
-def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnchorInputModel, *, axis_specs: list | None = None) -> None:
+def _write_anchor_spokes(
+    anchor: "models.CoordinateAnchor",
+    input: CoordinateAnchorInputModel,
+    *,
+    axis_specs: list | None = None,
+) -> None:
     """Write every spoke the input states onto ``anchor``, replacing one already there.
 
     The one write path for anchor metadata, whether stated at ingest (``createArrayDataset``,
@@ -708,20 +994,34 @@ def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnc
     table does not.
     """
     if anchor.dataset_id is None:
-        offending = [name for name in _ARRAY_ONLY_SPOKES if getattr(input, name) is not None]
+        offending = [
+            name for name in _ARRAY_ONLY_SPOKES if getattr(input, name) is not None
+        ]
         if offending:
-            raise ValueError(f"{', '.join(repr(name) for name in offending)} {'is an array-only spoke' if len(offending) == 1 else 'are array-only spokes'} and cannot be attached to a table or sparse anchor.")
+            raise ValueError(
+                f"{', '.join(repr(name) for name in offending)} {'is an array-only spoke' if len(offending) == 1 else 'are array-only spokes'} and cannot be attached to a table or sparse anchor."
+            )
 
     if input.microscope:
         # The same write path as the lightpath graph: the typed model's dump IS the
         # stored JSON, so the column never grows a shape the types cannot express.
-        models.OptikitState.objects.update_or_create(anchor=anchor, defaults={"state": input.microscope.model_dump()})
+        models.OptikitState.objects.update_or_create(
+            anchor=anchor, defaults={"state": input.microscope.model_dump()}
+        )
 
     if input.ome_metadata:
-        logger.debug("Creating OME metadata for coordinate anchor with coordinates %s", anchor.coordinates)
+        logger.debug(
+            "Creating OME metadata for coordinate anchor with coordinates %s",
+            anchor.coordinates,
+        )
         models.OmeMetadata.objects.update_or_create(
             anchor=anchor,
-            defaults={"metadata": _parse_json_object(input.ome_metadata.metadata_string, "anchor.omeMetadata.metadataString")},
+            defaults={
+                "metadata": _parse_json_object(
+                    input.ome_metadata.metadata_string,
+                    "anchor.omeMetadata.metadataString",
+                )
+            },
         )
 
     if input.value_histogram:
@@ -738,19 +1038,27 @@ def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnc
         )
 
     if input.label:
-        models.ChannelLabel.objects.update_or_create(anchor=anchor, defaults={"label": input.label.label})
+        models.ChannelLabel.objects.update_or_create(
+            anchor=anchor, defaults={"label": input.label.label}
+        )
 
     if input.light_graph:
         # The storage graph's dump, not the input's: `to_graph` builds the union the
         # read side rebuilds, so the column cannot grow a shape the types cannot
         # express -- which is what the comment above claims for every spoke, and what
         # dumping the input model directly quietly broke for this one.
-        models.LightPath.objects.update_or_create(anchor=anchor, defaults={"graph": input.light_graph.to_graph().model_dump(mode="json")})
+        models.LightPath.objects.update_or_create(
+            anchor=anchor,
+            defaults={"graph": input.light_graph.to_graph().model_dump(mode="json")},
+        )
 
     if input.acquisition_window:
         # Saving it derives the container's acquisition columns again (core/signals.py).
         window = input.acquisition_window
-        models.AcquisitionWindow.objects.update_or_create(anchor=anchor, defaults={"start": window.start, "end": window.end or window.start})
+        models.AcquisitionWindow.objects.update_or_create(
+            anchor=anchor,
+            defaults={"start": window.start, "end": window.end or window.start},
+        )
 
     if input.phasor_histogram:
         _write_phasor_histogram(anchor, input.phasor_histogram, axis_specs or [])
@@ -762,48 +1070,104 @@ def _write_anchor_spokes(anchor: "models.CoordinateAnchor", input: CoordinateAnc
         _write_column_summaries(anchor, input.column_summaries)
 
 
-def _write_column_summaries(anchor: "models.CoordinateAnchor", summaries: list[ColumnSummaryInputModel]) -> None:
+def _write_column_summaries(
+    anchor: "models.CoordinateAnchor", summaries: list[ColumnSummaryInputModel]
+) -> None:
     """Pin each column summary to ``anchor``, replacing one already pinned for that column."""
     if anchor.table_id is None:
-        raise ValueError("Column summaries summarise a table's columns, so they pin to a table's anchor; this anchor is an array's or a sparse dataset's.")
-    columns = {column.name: column for column in models.Column.objects.filter(table_id=anchor.table_id)}
+        raise ValueError(
+            "Column summaries summarise a table's columns, so they pin to a table's anchor; this anchor is an array's or a sparse dataset's."
+        )
+    columns = {
+        column.name: column
+        for column in models.Column.objects.filter(table_id=anchor.table_id)
+    }
     named = [summary.column for summary in summaries]
     if len(set(named)) != len(named):
-        raise ValueError(f"A column is summarised once per anchor, but {named} repeats one.")
+        raise ValueError(
+            f"A column is summarised once per anchor, but {named} repeats one."
+        )
     unknown = sorted(set(named) - set(columns))
     if unknown:
-        raise ValueError(f"{unknown} {'is' if len(unknown) == 1 else 'are'} not a column of this table; its columns are {sorted(columns)}.")
+        raise ValueError(
+            f"{unknown} {'is' if len(unknown) == 1 else 'are'} not a column of this table; its columns are {sorted(columns)}."
+        )
     for summary in summaries:
         models.ColumnSummary.objects.update_or_create(
             anchor=anchor,
             column=columns[summary.column],
-            defaults={"histogram": summary.histogram, "bins": summary.bins, "distinct_values": summary.distinct_values, "distinct_count": summary.distinct_count},
+            defaults={
+                "histogram": summary.histogram,
+                "bins": summary.bins,
+                "distinct_values": summary.distinct_values,
+                "distinct_count": summary.distinct_count,
+            },
         )
 
 
 class CreatePhasorHistogramInputModel(PhasorHistogramInputModel):
-    dataset: str = Field(description="The ID of the dataset the phasor was computed from")
-    axis_anchors: list[AxisAnchorInputModel] | None = Field(None, description="The coordinates the distribution is pinned to")
+    dataset: str = Field(
+        description="The ID of the dataset the phasor was computed from"
+    )
+    axis_anchors: list[AxisAnchorInputModel] | None = Field(
+        None, description="The coordinates the distribution is pinned to"
+    )
 
 
-@kante.pydantic_input(CreatePhasorHistogramInputModel, description="Attach a phasor distribution to a dataset: the 2D (g, s) density of a phasor taken over one axis at one harmonic. Computed after ingest by a task that reads the cube; recomputing at the same harmonic replaces it, while a second harmonic lands beside the first")
+@kante.pydantic_input(
+    CreatePhasorHistogramInputModel,
+    description="Attach a phasor distribution to a dataset: the 2D (g, s) density of a phasor taken over one axis at one harmonic. Computed after ingest by a task that reads the cube; recomputing at the same harmonic replaces it, while a second harmonic lands beside the first",
+)
 class CreatePhasorHistogramInput:
-    dataset: strawberry.ID = strawberry.field(description="The ID of the dataset the phasor was computed from")
-    axis: str = strawberry.field(description="The axis the phasor was taken over, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset")
-    counts: list[float] = strawberry.field(description="The flattened bins x bins (g, s) density, row-major with s outermost")
-    axis_anchors: list[AxisAnchorInput] | None = strawberry.field(default=None, description="The coordinates the distribution is pinned to, e.g. [{'axis': 'c', 'value': 0}] for one detection channel. Omit for a distribution global over the dataset")
-    harmonic: int | None = strawberry.field(default=None, description="The harmonic the phasor was taken at (default 1)")
-    bins: int | None = strawberry.field(default=None, description="The resolution of the square density grid (default 256)")
-    g_min: float | None = strawberry.field(default=None, description="The lower g bound of the grid (default 0)")
-    g_max: float | None = strawberry.field(default=None, description="The upper g bound of the grid (default 1)")
-    s_min: float | None = strawberry.field(default=None, description="The lower s bound of the grid (default 0)")
-    s_max: float | None = strawberry.field(default=None, description="The upper s bound of the grid (default 0.6)")
-    total: int | None = strawberry.field(default=None, description="The number of pixels that contributed, so counts can be normalized")
-    calibrated: bool | None = strawberry.field(default=None, description="Whether the g/s were reference-corrected when computed (default false)")
-    profile: list[float] | None = strawberry.field(default=None, description="The summed profile along the phasor axis: a decay for a MICROTIME axis, a spectrum for a SPECTRUM one")
+    dataset: strawberry.ID = strawberry.field(
+        description="The ID of the dataset the phasor was computed from"
+    )
+    axis: str = strawberry.field(
+        description="The axis the phasor was taken over, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset"
+    )
+    counts: list[float] = strawberry.field(
+        description="The flattened bins x bins (g, s) density, row-major with s outermost"
+    )
+    axis_anchors: list[AxisAnchorInput] | None = strawberry.field(
+        default=None,
+        description="The coordinates the distribution is pinned to, e.g. [{'axis': 'c', 'value': 0}] for one detection channel. Omit for a distribution global over the dataset",
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="The harmonic the phasor was taken at (default 1)"
+    )
+    bins: int | None = strawberry.field(
+        default=None,
+        description="The resolution of the square density grid (default 256)",
+    )
+    g_min: float | None = strawberry.field(
+        default=None, description="The lower g bound of the grid (default 0)"
+    )
+    g_max: float | None = strawberry.field(
+        default=None, description="The upper g bound of the grid (default 1)"
+    )
+    s_min: float | None = strawberry.field(
+        default=None, description="The lower s bound of the grid (default 0)"
+    )
+    s_max: float | None = strawberry.field(
+        default=None, description="The upper s bound of the grid (default 0.6)"
+    )
+    total: int | None = strawberry.field(
+        default=None,
+        description="The number of pixels that contributed, so counts can be normalized",
+    )
+    calibrated: bool | None = strawberry.field(
+        default=None,
+        description="Whether the g/s were reference-corrected when computed (default false)",
+    )
+    profile: list[float] | None = strawberry.field(
+        default=None,
+        description="The summed profile along the phasor axis: a decay for a MICROTIME axis, a spectrum for a SPECTRUM one",
+    )
 
 
-def create_phasor_histogram(info: Info, input: CreatePhasorHistogramInput) -> types.PhasorHistogram:
+def create_phasor_histogram(
+    info: Info, input: CreatePhasorHistogramInput
+) -> types.PhasorHistogram:
     """Attach a phasor distribution to a dataset."""
     model = input.to_pydantic()
 
@@ -814,21 +1178,46 @@ def create_phasor_histogram(info: Info, input: CreatePhasorHistogramInput) -> ty
 
 class CreatePhasorCalibrationInputModel(PhasorCalibrationInputModel):
     dataset: str = Field(description="The ID of the dataset the correction applies to")
-    axis_anchors: list[AxisAnchorInputModel] | None = Field(None, description="The coordinates the correction is pinned to")
+    axis_anchors: list[AxisAnchorInputModel] | None = Field(
+        None, description="The coordinates the correction is pinned to"
+    )
 
 
-@kante.pydantic_input(CreatePhasorCalibrationInputModel, description="Attach an instrument-response correction to a dataset, taking a raw phasor to a calibrated one. Measured once per detector from a reference acquisition. Its absence is legitimate: an uncalibrated phasor still renders, its hue is just not traceable to an absolute lifetime")
+@kante.pydantic_input(
+    CreatePhasorCalibrationInputModel,
+    description="Attach an instrument-response correction to a dataset, taking a raw phasor to a calibrated one. Measured once per detector from a reference acquisition. Its absence is legitimate: an uncalibrated phasor still renders, its hue is just not traceable to an absolute lifetime",
+)
 class CreatePhasorCalibrationInput:
-    dataset: strawberry.ID = strawberry.field(description="The ID of the dataset the correction applies to")
-    axis: str = strawberry.field(description="The axis the correction applies to, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset")
-    axis_anchors: list[AxisAnchorInput] | None = strawberry.field(default=None, description="The coordinates the correction is pinned to, e.g. [{'axis': 'c', 'value': 0}] -- the IRF differs per detector. Omit for a correction global over the dataset")
-    harmonic: int | None = strawberry.field(default=None, description="The harmonic the correction applies at (default 1)")
-    phase_offset: float | None = strawberry.field(default=None, description="The phase correction in radians, added to each pixel's phase")
-    modulation_factor: float | None = strawberry.field(default=None, description="The modulation correction, multiplied into each pixel's modulus")
-    reference: str | None = strawberry.field(default=None, description="What the correction was measured against, e.g. 'Rhodamine 6G, 4.1 ns'")
+    dataset: strawberry.ID = strawberry.field(
+        description="The ID of the dataset the correction applies to"
+    )
+    axis: str = strawberry.field(
+        description="The axis the correction applies to, e.g. 'tau'. Must be a MICROTIME or SPECTRUM axis of the dataset"
+    )
+    axis_anchors: list[AxisAnchorInput] | None = strawberry.field(
+        default=None,
+        description="The coordinates the correction is pinned to, e.g. [{'axis': 'c', 'value': 0}] -- the IRF differs per detector. Omit for a correction global over the dataset",
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="The harmonic the correction applies at (default 1)"
+    )
+    phase_offset: float | None = strawberry.field(
+        default=None,
+        description="The phase correction in radians, added to each pixel's phase",
+    )
+    modulation_factor: float | None = strawberry.field(
+        default=None,
+        description="The modulation correction, multiplied into each pixel's modulus",
+    )
+    reference: str | None = strawberry.field(
+        default=None,
+        description="What the correction was measured against, e.g. 'Rhodamine 6G, 4.1 ns'",
+    )
 
 
-def create_phasor_calibration(info: Info, input: CreatePhasorCalibrationInput) -> types.PhasorCalibration:
+def create_phasor_calibration(
+    info: Info, input: CreatePhasorCalibrationInput
+) -> types.PhasorCalibration:
     """Attach an instrument-response correction to a dataset."""
     model = input.to_pydantic()
 
@@ -852,10 +1241,14 @@ class UpdateArrayDatasetInput:
 
     id: strawberry.ID = strawberry.field(description="The ID of the dataset to update")
     name: str | None = strawberry.field(default=None, description="A new name")
-    description: str | None = strawberry.field(default=None, description="A new description")
+    description: str | None = strawberry.field(
+        default=None, description="A new description"
+    )
 
 
-def update_array_dataset(info: Info, input: UpdateArrayDatasetInput) -> types.ArrayDataset:
+def update_array_dataset(
+    info: Info, input: UpdateArrayDatasetInput
+) -> types.ArrayDataset:
     """Rename a dataset, or redescribe it. Those two fields are the whole of what is editable.
 
     Deliberately not here: the arrays, the axes, and the coordinate systems derived from them.
@@ -884,18 +1277,31 @@ class SetDefaultSceneInputModel(BaseModel):
     """A dataset and the scene it nominates, or null to clear."""
 
     dataset: str = Field(description="The dataset to nominate a scene for")
-    scene: str | None = Field(default=None, description="The scene to nominate, or null to clear the nomination")
+    scene: str | None = Field(
+        default=None,
+        description="The scene to nominate, or null to clear the nomination",
+    )
 
 
-@kante.pydantic_input(SetDefaultSceneInputModel, description="Nominate the scene to open for a dataset, and take its thumbnail from: the same write as `setLensDefaultScene` on the dataset's whole lens")
+@kante.pydantic_input(
+    SetDefaultSceneInputModel,
+    description="Nominate the scene to open for a dataset, and take its thumbnail from: the same write as `setLensDefaultScene` on the dataset's whole lens",
+)
 class SetDefaultSceneInput:
     """Input for nominating a dataset's default scene."""
 
-    dataset: strawberry.ID = strawberry.field(description="The dataset to nominate a scene for")
-    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to nominate. Null clears the nomination, and the dataset then reports no `latestSnapshot`")
+    dataset: strawberry.ID = strawberry.field(
+        description="The dataset to nominate a scene for"
+    )
+    scene: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The scene to nominate. Null clears the nomination, and the dataset then reports no `latestSnapshot`",
+    )
 
 
-def nominate_default_scene(info: Info, dataset: "models.ArrayDataset", scene: "models.Scene | None") -> "models.ArrayDataset":
+def nominate_default_scene(
+    info: Info, dataset: "models.ArrayDataset", scene: "models.Scene | None"
+) -> "models.ArrayDataset":
     """Write one dataset's nomination -- which its whole lens holds -- having checked the caller may.
 
     **Guarded on the dataset, not the scene**, and that is not a detail: `Scene` carries no
@@ -933,12 +1339,24 @@ class DeleteArrayDatasetInputModel(BaseModel):
     cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-@kante.pydantic_input(DeleteArrayDatasetInputModel, description="Input for deleting an array dataset by ID")
+@kante.pydantic_input(
+    DeleteArrayDatasetInputModel,
+    description="Input for deleting an array dataset by ID",
+)
 class DeleteArrayDatasetInput:
     """Input for deleting an array dataset by ID"""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the array dataset to delete")
-    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the array dataset to delete"
+    )
+    cascade: bool = strawberry.field(
+        default=False, description=deletion_logic.CASCADE_DESCRIPTION
+    )
 
 
-delete_array_dataset = make_delete(models.ArrayDataset, DeleteArrayDatasetInput, owner=self_owner, lineage_kind="dataset")
+delete_array_dataset = make_delete(
+    models.ArrayDataset,
+    DeleteArrayDatasetInput,
+    owner=self_owner,
+    lineage_kind="dataset",
+)

@@ -26,10 +26,24 @@ async def test_a_chart_remembers_its_layout(authenticated_context: HttpContext):
     ctx = authenticated_context
     _, _, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
-    stacked = (await _ok(ctx, LAYOUT, {"input": {"id": chart["id"], "layout": "STACKED"}}))["updateChart"]
+    stacked = (
+        await _ok(ctx, LAYOUT, {"input": {"id": chart["id"], "layout": "STACKED"}})
+    )["updateChart"]
     assert stacked["layout"] == "STACKED"
 
-    axis = (await _ok(ctx, CHART, {"input": {"name": "profile", "axis": {"name": "t", "type": "TIME", "unit": "second"}, "layout": "OVERLAY"}}))["createChart"]
+    axis = (
+        await _ok(
+            ctx,
+            CHART,
+            {
+                "input": {
+                    "name": "profile",
+                    "axis": {"name": "t", "type": "TIME", "unit": "second"},
+                    "layout": "OVERLAY",
+                }
+            },
+        )
+    )["createChart"]
     assert axis["layout"] == "OVERLAY"
 
 
@@ -40,4 +54,6 @@ async def test_any_chart_takes_any_layout(authenticated_context: HttpContext):
     ctx = authenticated_context
     _, _, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
-    assert (await _ok(ctx, LAYOUT, {"input": {"id": chart["id"], "layout": "OVERLAY"}}))["updateChart"]["layout"] == "OVERLAY"
+    assert (
+        await _ok(ctx, LAYOUT, {"input": {"id": chart["id"], "layout": "OVERLAY"}})
+    )["updateChart"]["layout"] == "OVERLAY"

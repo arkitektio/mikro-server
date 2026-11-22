@@ -25,7 +25,9 @@ from tests import seed
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_roi_behind_a_map_axis_edge_is_permuted_not_mislabelled(authenticated_context: HttpContext):
+async def test_an_roi_behind_a_map_axis_edge_is_permuted_not_mislabelled(
+    authenticated_context: HttpContext,
+):
     """The box is pushed through the permutation, rather than handed back untouched."""
     dataset = await seed.create_array_dataset(authenticated_context, "Volume")
 
@@ -38,8 +40,16 @@ async def test_an_roi_behind_a_map_axis_edge_is_permuted_not_mislabelled(authent
             name="Transposed",
             organization=authenticated_context.request.organization,
         )
-        for index, (name, axis_type) in enumerate([("c", enums.AxisTypeChoices.CHANNEL.value), ("x", enums.AxisTypeChoices.SPACE.value), ("y", enums.AxisTypeChoices.SPACE.value)]):
-            models.Axis.objects.create(coordinate_system=transposed, order=index, name=name, type=axis_type)
+        for index, (name, axis_type) in enumerate(
+            [
+                ("c", enums.AxisTypeChoices.CHANNEL.value),
+                ("x", enums.AxisTypeChoices.SPACE.value),
+                ("y", enums.AxisTypeChoices.SPACE.value),
+            ]
+        ):
+            models.Axis.objects.create(
+                coordinate_system=transposed, order=index, name=name, type=axis_type
+            )
 
         models.Transformation.objects.create(
             kind=enums.TransformKindChoices.MAP_AXIS.value,
@@ -62,6 +72,8 @@ async def test_an_roi_behind_a_map_axis_edge_is_permuted_not_mislabelled(authent
     # Drawn as (c, x, y) = (2, 30, 10); in the dataset's (c, y, x) pixel grid that is
     # (2, 10, 30) -- the box pads by half a voxel, as it always has. Before the fix it came
     # back as (2, 30, 10): the raw numbers, unpermuted, with an intrinsic label on them.
-    assert bbox["max"][1] < bbox["max"][2], f"the y and x extents must have swapped: {bbox['max']}"
+    assert bbox["max"][1] < bbox["max"][2], (
+        f"the y and x extents must have swapped: {bbox['max']}"
+    )
     assert bbox["max"] == [2.5, 10.5, 30.5]
     assert bbox["min"] == [-0.5, -0.5, -0.5]

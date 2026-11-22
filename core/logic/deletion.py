@@ -40,7 +40,17 @@ MAX_DEPTH = lineage_logic.MAX_DEPTH
 MAX_NODES = lineage_logic.MAX_LIMIT
 
 #: The kinds a delete follows lineage for: every node kind the walk can reach.
-LINEAGE_KINDS: tuple[str, ...] = ("dataset", "tabledataset", "sparsedataset", "meshcollection", "networkcollection", "annotationcollection", "fixture", lineage_logic.FILE, lineage_logic.ANNOTATION)
+LINEAGE_KINDS: tuple[str, ...] = (
+    "dataset",
+    "tabledataset",
+    "sparsedataset",
+    "meshcollection",
+    "networkcollection",
+    "annotationcollection",
+    "fixture",
+    lineage_logic.FILE,
+    lineage_logic.ANNOTATION,
+)
 
 CASCADE_DESCRIPTION = (
     "Also delete everything made from it -- the closure `preflightDelete<Model>` lists: derived data, data computed within a shape, shapes refined or converted from it, "
@@ -106,14 +116,26 @@ def plan(targets: list[NodeKey], *, organization) -> Plan:  # noqa: ANN001 - aut
     truncated = False
 
     while True:
-        collections = {int(pk) for kind, pk in roots if kind == "annotationcollection"} - collections_seen
+        collections = {
+            int(pk) for kind, pk in roots if kind == "annotationcollection"
+        } - collections_seen
         collections_seen |= collections
-        extra = [root for root in _shapes_with_children_elsewhere(collections) if root not in roots]
+        extra = [
+            root
+            for root in _shapes_with_children_elsewhere(collections)
+            if root not in roots
+        ]
         roots.extend(extra)
         if len(roots) > lineage_logic.MAX_ROOTS:
             return Plan(targets=targets, casualties=[], truncated=True)
 
-        walked = lineage_logic.descendants(roots, organization=organization, down=MAX_DEPTH, limit=MAX_NODES, fanout=lineage_logic.MAX_FANOUT)
+        walked = lineage_logic.descendants(
+            roots,
+            organization=organization,
+            down=MAX_DEPTH,
+            limit=MAX_NODES,
+            fanout=lineage_logic.MAX_FANOUT,
+        )
         truncated = any(entry.more for entry in walked)
         found: dict[NodeKey, Casualty] = {}
         for entry in walked:
@@ -123,22 +145,50 @@ def plan(targets: list[NodeKey], *, organization) -> Plan:  # noqa: ANN001 - aut
                     continue
                 known = found.get(key)
                 if known is None or node.depth < known.depth:
-                    found[key] = Casualty(kind=node.kind, pk=node.pk, name=node.name, depth=node.depth, parent=entry.parents.get(key, entry.root))
+                    found[key] = Casualty(
+                        kind=node.kind,
+                        pk=node.pk,
+                        name=node.name,
+                        depth=node.depth,
+                        parent=entry.parents.get(key, entry.root),
+                    )
 
         # A casualty collection may hold shapes something elsewhere was made from: walk again.
-        new_collections = {int(pk) for kind, pk in found if kind == "annotationcollection"} - collections_seen
+        new_collections = {
+            int(pk) for kind, pk in found if kind == "annotationcollection"
+        } - collections_seen
         if not new_collections:
             break
-        roots.extend(key for key in found if key[0] == "annotationcollection" and int(key[1]) in new_collections)
+        roots.extend(
+            key
+            for key in found
+            if key[0] == "annotationcollection" and int(key[1]) in new_collections
+        )
 
     # A shape of a collection that is itself going goes with it -- by CASCADE, not as a casualty
     # of its own. What was made from it elsewhere stays listed.
     shapes = [pk for kind, pk in found if kind == lineage_logic.ANNOTATION]
     if shapes and collections_seen:
-        inside = {str(pk) for pk in models.Annotation.objects.filter(pk__in=shapes, collection_id__in=collections_seen).values_list("pk", flat=True)}
-        found = {key: casualty for key, casualty in found.items() if not (key[0] == lineage_logic.ANNOTATION and key[1] in inside)}
-    casualties = sorted(found.values(), key=lambda casualty: (casualty.depth, casualty.kind, str(casualty.pk)))
-    return Plan(targets=targets, casualties=casualties, truncated=truncated or len(found) >= MAX_NODES)
+        inside = {
+            str(pk)
+            for pk in models.Annotation.objects.filter(
+                pk__in=shapes, collection_id__in=collections_seen
+            ).values_list("pk", flat=True)
+        }
+        found = {
+            key: casualty
+            for key, casualty in found.items()
+            if not (key[0] == lineage_logic.ANNOTATION and key[1] in inside)
+        }
+    casualties = sorted(
+        found.values(),
+        key=lambda casualty: (casualty.depth, casualty.kind, str(casualty.pk)),
+    )
+    return Plan(
+        targets=targets,
+        casualties=casualties,
+        truncated=truncated or len(found) >= MAX_NODES,
+    )
 
 
 def instances(keys: Iterable[NodeKey], organization) -> dict[NodeKey, Model]:  # noqa: ANN001 - authentikate's Organization
@@ -149,7 +199,11 @@ def instances(keys: Iterable[NodeKey], organization) -> dict[NodeKey, Model]:  #
     found: dict[NodeKey, Model] = {}
     for kind, pks in by_kind.items():
         model = lineage_logic.model_of(kind)
-        scope = {"collection__organization": organization} if kind == lineage_logic.ANNOTATION else {"organization": organization}
+        scope = (
+            {"collection__organization": organization}
+            if kind == lineage_logic.ANNOTATION
+            else {"organization": organization}
+        )
         for row in model.objects.filter(pk__in=pks, **scope):
             found[(kind, lineage_logic.node_pk(kind, row.pk))] = row
     return found
@@ -164,13 +218,21 @@ class Blocker:
     reason: str
 
 
-def _checks(info: Info, rows: dict[NodeKey, Model], owner: Callable[[Model], Iterable[int | None]] | None) -> list[Blocker]:
+def _checks(
+    info: Info,
+    rows: dict[NodeKey, Model],
+    owner: Callable[[Model], Iterable[int | None]] | None,
+) -> list[Blocker]:
     """Every row's own refusals: not the caller's to delete, or a delete guard."""
-    from core.mutations._generic import assert_can_delete  # the permission half lives with the mutations
+    from core.mutations._generic import (
+        assert_can_delete,  # the permission half lives with the mutations
+    )
 
     blockers: list[Blocker] = []
     for (kind, pk), row in rows.items():
-        checks: list[Callable[[], None]] = [lambda row=row: compositions_logic.assert_deletable(row)]
+        checks: list[Callable[[], None]] = [
+            lambda row=row: compositions_logic.assert_deletable(row)
+        ]
         if owner is not None:
             checks.insert(0, lambda row=row: assert_can_delete(info, row, owner))
         for check in checks:
@@ -194,10 +256,16 @@ def _collect(rows: list[Model]) -> tuple[Collector | None, list[str]]:
         for group in by_model.values():
             collector.collect(group)
     except (ProtectedError, RestrictedError) as error:
-        held = list(error.protected_objects if isinstance(error, ProtectedError) else error.restricted_objects)
+        held = list(
+            error.protected_objects
+            if isinstance(error, ProtectedError)
+            else error.restricted_objects
+        )
         named = ", ".join(f"{type(obj).__name__} {obj.pk}" for obj in held[:5])
         more = f" and {len(held) - 5} more" if len(held) > 5 else ""
-        return None, [f"Still referenced by {named}{more}, which may not be deleted with it"]
+        return None, [
+            f"Still referenced by {named}{more}, which may not be deleted with it"
+        ]
     return collector, []
 
 
@@ -219,7 +287,9 @@ def _counts(collector: Collector, explicit: list[Model]) -> list[tuple[str, int]
     """
     named = {(type(row), row.pk) for row in explicit}
     collected = [model for model in collector.data if model._meta.app_label == "core"]
-    parents = {parent for model in collected for parent in model._meta.get_parent_list()}
+    parents = {
+        parent for model in collected for parent in model._meta.get_parent_list()
+    }
     counts: dict[str, int] = {}
 
     def add(model: type, count: int) -> None:
@@ -243,13 +313,24 @@ def _internal_links(rows: list[Model]) -> "QuerySet[models.AnnotationDerivation]
     deletes, not what is deleted, would decide whether it succeeds.
     """
     shapes = [row.pk for row in rows if isinstance(row, models.Annotation)]
-    collections = [row.pk for row in rows if isinstance(row, models.AnnotationCollection)]
+    collections = [
+        row.pk for row in rows if isinstance(row, models.AnnotationCollection)
+    ]
     if not shapes and not collections:
         return models.AnnotationDerivation.objects.none()
-    return models.AnnotationDerivation.objects.filter(Q(child_id__in=shapes) | Q(child__collection_id__in=collections))
+    return models.AnnotationDerivation.objects.filter(
+        Q(child_id__in=shapes) | Q(child__collection_id__in=collections)
+    )
 
 
-def preflight(info: Info, target: Model, kind: str, owner: Callable[[Model], Iterable[int | None]] | None, *, keep_target: bool = False) -> Preflight:
+def preflight(
+    info: Info,
+    target: Model,
+    kind: str,
+    owner: Callable[[Model], Iterable[int | None]] | None,
+    *,
+    keep_target: bool = False,
+) -> Preflight:
     """What deleting ``target`` would take along and what stops it, computed and not acted on.
 
     With ``keep_target`` it is what :func:`delete_derived` would do: the same casualties, the
@@ -269,7 +350,9 @@ def preflight(info: Info, target: Model, kind: str, owner: Callable[[Model], Ite
     with transaction.atomic():
         _internal_links(list(rows.values())).delete()
         collector, refused = _collect(list(rows.values()))
-        blockers.extend(Blocker(kind=kind, pk=key[1], reason=reason) for reason in refused)
+        blockers.extend(
+            Blocker(kind=kind, pk=key[1], reason=reason) for reason in refused
+        )
         if collector is not None:
             counts = _counts(collector, list(rows.values()))
         transaction.set_rollback(True)
@@ -278,15 +361,29 @@ def preflight(info: Info, target: Model, kind: str, owner: Callable[[Model], Ite
 
 def refusal(planned: Plan) -> str:
     """Why a delete without ``cascade`` was refused, naming what is downstream."""
-    shown = ", ".join(f"{casualty.kind} '{casualty.name}'" for casualty in planned.casualties[:5])
-    more = f" and {len(planned.casualties) - 5} more" if len(planned.casualties) > 5 else ""
+    shown = ", ".join(
+        f"{casualty.kind} '{casualty.name}'" for casualty in planned.casualties[:5]
+    )
+    more = (
+        f" and {len(planned.casualties) - 5} more"
+        if len(planned.casualties) > 5
+        else ""
+    )
     return (
         f"{len(planned.casualties)} thing(s) were made from it -- {shown}{more} -- and would lose where they came from. "
         "Delete them first, or pass `cascade: true` to delete them with it (`preflightDelete<Model>` lists what that takes)"
     )
 
 
-def delete_with_lineage(info: Info, target: Model, kind: str, *, cascade: bool, owner: Callable[[Model], Iterable[int | None]] | None, delete: Callable[[Model], None] | None = None) -> None:
+def delete_with_lineage(
+    info: Info,
+    target: Model,
+    kind: str,
+    *,
+    cascade: bool,
+    owner: Callable[[Model], Iterable[int | None]] | None,
+    delete: Callable[[Model], None] | None = None,
+) -> None:
     """Delete ``target``, and with ``cascade`` everything made from it -- or refuse.
 
     The target's own owner and guard checks have already run (``make_delete``). Every casualty
@@ -308,31 +405,50 @@ def _refuse_truncated(planned: Plan) -> None:
         )
 
 
-def _checked_casualties(info: Info, planned: Plan, owner: Callable[[Model], Iterable[int | None]] | None) -> dict[NodeKey, Model]:
+def _checked_casualties(
+    info: Info, planned: Plan, owner: Callable[[Model], Iterable[int | None]] | None
+) -> dict[NodeKey, Model]:
     """The rows behind a plan's casualties, every one held to its owner and delete guards -- or a refusal."""
-    casualties = instances(((c.kind, c.pk) for c in planned.casualties), info.context.request.organization)
+    casualties = instances(
+        ((c.kind, c.pk) for c in planned.casualties), info.context.request.organization
+    )
     blockers = _checks(info, casualties, owner)
     if blockers:
         first = blockers[0]
-        raise ValueError(f"Cannot delete {first.kind} {first.pk} along with it: {first.reason}")
+        raise ValueError(
+            f"Cannot delete {first.kind} {first.pk} along with it: {first.reason}"
+        )
     return casualties
 
 
 def _farthest_first(planned: Plan, casualties: dict[NodeKey, Model]) -> list[Model]:
     """Farthest first, so a row never outlives what it was made from inside the transaction."""
-    return [casualties[(c.kind, c.pk)] for c in sorted(planned.casualties, key=lambda c: -c.depth) if (c.kind, c.pk) in casualties]
+    return [
+        casualties[(c.kind, c.pk)]
+        for c in sorted(planned.casualties, key=lambda c: -c.depth)
+        if (c.kind, c.pk) in casualties
+    ]
 
 
-def _delete_rows(order: list[Model], target: Model | None = None, *, delete: Callable[[Model], None] | None = None) -> None:
+def _delete_rows(
+    order: list[Model],
+    target: Model | None = None,
+    *,
+    delete: Callable[[Model], None] | None = None,
+) -> None:
     """Delete ``order`` (farthest first) and then ``target``, if any, in one transaction."""
     everything = [*order, target] if target is not None else list(order)
     with transaction.atomic():
         _internal_links(everything).delete()
         # Collected *before* the delete, because the cascade has to still be walkable, and
         # flagged after it, so a delete that raises flags nothing (see make_delete).
-        orphaned = [store for row in everything for store in storage.stores_orphaned_by(row)]
+        orphaned = [
+            store for row in everything for store in storage.stores_orphaned_by(row)
+        ]
         for row in order:
-            if type(row).objects.filter(pk=row.pk).exists():  # a collection deleted earlier took its shapes
+            if (
+                type(row).objects.filter(pk=row.pk).exists()
+            ):  # a collection deleted earlier took its shapes
                 row.delete()
         if target is not None:
             if delete is None:
@@ -342,7 +458,13 @@ def _delete_rows(order: list[Model], target: Model | None = None, *, delete: Cal
         storage.flag_orphaned(orphaned)
 
 
-def delete_derived(info: Info, target: Model, kind: str, *, owner: Callable[[Model], Iterable[int | None]] | None) -> list[NodeKey]:
+def delete_derived(
+    info: Info,
+    target: Model,
+    kind: str,
+    *,
+    owner: Callable[[Model], Iterable[int | None]] | None,
+) -> list[NodeKey]:
     """Delete everything made from ``target``, transitively, and leave ``target`` standing.
 
     The same closure and the same checks as a cascade (:func:`delete_with_lineage`), the target

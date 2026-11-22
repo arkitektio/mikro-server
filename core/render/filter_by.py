@@ -106,20 +106,32 @@ class FilterByModel(BaseModel):
             )
 
         if self.kind == "COLUMN":
-            missing = [name for name in ("table", "column") if getattr(self, name) is None]
+            missing = [
+                name for name in ("table", "column") if getattr(self, name) is None
+            ]
             if missing:
-                raise ValueError(f"a column rule reads a column of a table, so it requires {missing}")
+                raise ValueError(
+                    f"a column rule reads a column of a table, so it requires {missing}"
+                )
             if self.lens is not None:
-                raise ValueError("a column rule does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
+                raise ValueError(
+                    "a column rule does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it"
+                )
             return self
 
         if self.kind == "GRAPH":
             if self.attribute is None:
-                raise ValueError("a graph rule tests a per-node value the collection carries, so it requires `attribute`")
+                raise ValueError(
+                    "a graph rule tests a per-node value the collection carries, so it requires `attribute`"
+                )
             if self.table is not None or self.column is not None or self.join_path:
-                raise ValueError("a graph rule does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
+                raise ValueError(
+                    "a graph rule does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them"
+                )
             if self.lens is not None:
-                raise ValueError("a graph rule does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
+                raise ValueError(
+                    "a graph rule does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it"
+                )
             if self.values is not None:
                 raise ValueError(
                     "a graph rule is measured -- Strahler order, degree, a radius are ordered values every one -- so it is bounded with `min`/`max`, never matched against a `values` set"
@@ -129,9 +141,13 @@ class FilterByModel(BaseModel):
             return self
 
         if self.lens is None:
-            raise ValueError("a sparse rule tests one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by")
+            raise ValueError(
+                "a sparse rule tests one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by"
+            )
         if self.table is not None or self.column is not None or self.join_path:
-            raise ValueError("a sparse rule does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
+            raise ValueError(
+                "a sparse rule does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them"
+            )
         if self.values is not None:
             raise ValueError(
                 "a sparse rule is measured -- a slice of a matrix is a value per object -- so it is bounded with `min`/`max`, never matched against a `values` set. "
@@ -147,13 +163,17 @@ class FilterByModel(BaseModel):
                 "`filterBy` takes either bounds (`min`/`max`, for a measure column) or `values` (for a categorical one), never both: which applies follows from the column's declared role, not from a choice here"
             )
         if not bounded and self.values is None:
-            raise ValueError("A `filterBy` naming neither a bound nor any values matches every row, which is not a filter -- give it a `min`, a `max`, or a `values` list")
+            raise ValueError(
+                "A `filterBy` naming neither a bound nor any values matches every row, which is not a filter -- give it a `min`, a `max`, or a `values` list"
+            )
         return self
 
     @model_validator(mode="after")
     def _bounds_are_a_range(self) -> "FilterByModel":
         if self.min is not None and self.max is not None and self.min > self.max:
-            raise ValueError(f"`min` is {self.min} and `max` is {self.max}, which is an empty range: nothing can be both above the one and below the other")
+            raise ValueError(
+                f"`min` is {self.min} and `max` is {self.max}, which is an empty range: nothing can be both above the one and below the other"
+            )
         return self
 
     @model_validator(mode="after")
@@ -161,7 +181,9 @@ class FilterByModel(BaseModel):
         # An empty list is not "match nothing" here, it is a caller who meant to send something.
         # "Draw nothing" is expressible -- switch the layer off -- and is never what a filter is for.
         if self.values is not None and not self.values:
-            raise ValueError("`values` is empty, which would match no object at all. Omit the filter to draw everything, or hide the layer to draw nothing")
+            raise ValueError(
+                "`values` is empty, which would match no object at all. Omit the filter to draw everything, or hide the layer to draw nothing"
+            )
         return self
 
 
@@ -193,7 +215,9 @@ class NetworkFilterByModel(PickerFilterByModel):
     """
 
 
-def filters_for_windows(table_id: str, windows: "Iterable[WindowLike]") -> list[LabelFilterByModel]:
+def filters_for_windows(
+    table_id: str, windows: "Iterable[WindowLike]"
+) -> list[LabelFilterByModel]:
     """A table lens' windows as row filters a renderer applies: one COLUMN rule per window, inclusive on both ends, as a window is.
 
     A window names a column outright: a coordinate column (a table's axes are its coordinate
@@ -201,4 +225,14 @@ def filters_for_windows(table_id: str, windows: "Iterable[WindowLike]") -> list[
     of whatever ``filterBys`` the layer offers. Derived on read, never stored -- the lens is
     the one record of what it selects.
     """
-    return [LabelFilterByModel(kind="COLUMN", table=table_id, column=window.axis, min=window.min, max=window.max, label=f"{window.axis} window") for window in windows]
+    return [
+        LabelFilterByModel(
+            kind="COLUMN",
+            table=table_id,
+            column=window.axis,
+            min=window.min,
+            max=window.max,
+            label=f"{window.axis} window",
+        )
+        for window in windows
+    ]

@@ -50,11 +50,17 @@ _PHYSICAL_AXES = [
 ]
 
 
-async def _calibrate(ctx: HttpContext, dataset: models.ArrayDataset) -> models.CoordinateSystem:
-    return await seed.create_physical_space(ctx, dataset, _PHYSICAL_AXES, scale=[1.0, 0.5, 0.5], name="Stage")
+async def _calibrate(
+    ctx: HttpContext, dataset: models.ArrayDataset
+) -> models.CoordinateSystem:
+    return await seed.create_physical_space(
+        ctx, dataset, _PHYSICAL_AXES, scale=[1.0, 0.5, 0.5], name="Stage"
+    )
 
 
-async def _register(ctx: HttpContext, dataset: models.ArrayDataset, scene: models.Scene) -> models.Transformation:
+async def _register(
+    ctx: HttpContext, dataset: models.ArrayDataset, scene: models.Scene
+) -> models.Transformation:
     def write() -> models.Transformation:
         # Authoring the edge into the world IS the placement (one truth per space):
         # there is no scene membership to join.
@@ -69,18 +75,30 @@ async def _register(ctx: HttpContext, dataset: models.ArrayDataset, scene: model
     return await sync_to_async(write)()
 
 
-async def _graph(ctx: HttpContext, system: models.CoordinateSystem, max_depth: int | None = None) -> dict:
-    result = await schema.execute(GRAPH, context_value=ctx, variable_values={"id": str(system.pk), "maxDepth": max_depth})
+async def _graph(
+    ctx: HttpContext, system: models.CoordinateSystem, max_depth: int | None = None
+) -> dict:
+    result = await schema.execute(
+        GRAPH,
+        context_value=ctx,
+        variable_values={"id": str(system.pk), "maxDepth": max_depth},
+    )
     assert not result.errors, result.errors
     return result.data["coordinateGraph"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(authenticated_context: HttpContext):
+async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(
+    authenticated_context: HttpContext,
+):
     """From a dataset's pixel grid: its levels, its lens, its calibration, and the world it sits in."""
-    dataset = await seed.create_array_dataset(authenticated_context, "Volume", shapes=[[3, 64, 64], [3, 32, 32]])
-    await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Volume", shapes=[[3, 64, 64], [3, 32, 32]]
+    )
+    await seed.create_lens(
+        authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]
+    )
     await _calibrate(authenticated_context, dataset)
     scene = await seed.create_scene(authenticated_context, "Composition")
     await _register(authenticated_context, dataset, scene)
@@ -95,8 +113,19 @@ async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(authenticat
     # scene's world. The last two hold nothing at all -- a calibrated space and a world are
     # both just reference frames, which is exactly what RFC-9 collapsed PHYSICAL and SHARED
     # into.
-    inhabitants = sorted(sorted(r["__typename"] for r in system["residents"]) for system in graph["systems"])
-    assert inhabitants == [[], [], ["ArrayDataset", "DataArray"], ["ArrayLens"], ["DataArray"]], inhabitants  # the whole lens is the dataset's handle, not a second resident of its grid
+    inhabitants = sorted(
+        sorted(r["__typename"] for r in system["residents"])
+        for system in graph["systems"]
+    )
+    assert inhabitants == [
+        [],
+        [],
+        ["ArrayDataset", "DataArray"],
+        ["ArrayLens"],
+        ["DataArray"],
+    ], (
+        inhabitants
+    )  # the whole lens is the dataset's handle, not a second resident of its grid
 
     # Every edge is inside the component: no endpoint dangles.
     ids = {system["id"] for system in graph["systems"]}
@@ -109,7 +138,9 @@ async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(authenticat
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_edge_pointing_into_the_root_still_relates_to_it(authenticated_context: HttpContext):
+async def test_an_edge_pointing_into_the_root_still_relates_to_it(
+    authenticated_context: HttpContext,
+):
     """Reachability is undirected: from a PHYSICAL system, the calibration points *in*.
 
     A forward-only walk leaves this system with no edges at all -- a calibration maps pixels
@@ -122,22 +153,37 @@ async def test_an_edge_pointing_into_the_root_still_relates_to_it(authenticated_
 
     graph = await _graph(authenticated_context, calibration)
 
-    assert graph["root"]["residents"] == [], "a calibrated space holds nothing; the edge is what relates it"
-    assert graph["transformations"], "the calibration edge points into this system, and it relates to it"
+    assert graph["root"]["residents"] == [], (
+        "a calibrated space holds nothing; the edge is what relates it"
+    )
+    assert graph["transformations"], (
+        "the calibration edge points into this system, and it relates to it"
+    )
 
-    inhabitants = sorted(sorted(r["__typename"] for r in system["residents"]) for system in graph["systems"])
+    inhabitants = sorted(
+        sorted(r["__typename"] for r in system["residents"])
+        for system in graph["systems"]
+    )
     # A single-level dataset has one pixel grid, shared by the dataset and its level 0.
     assert inhabitants == [[], ["ArrayDataset", "DataArray"]], inhabitants
 
-    calibration_edge = next(edge for edge in graph["transformations"] if edge["output"]["id"] == str(calibration.pk))
+    calibration_edge = next(
+        edge
+        for edge in graph["transformations"]
+        if edge["output"]["id"] == str(calibration.pk)
+    )
     # Reached backwards, but reported forwards: the client still knows which way it composes.
     intrinsic_id = await sync_to_async(lambda: str(dataset.coordinate_system.pk))()
-    assert calibration_edge["input"]["id"] == intrinsic_id, "the calibration sets out from the dataset's own space"
+    assert calibration_edge["input"]["id"] == intrinsic_id, (
+        "the calibration sets out from the dataset's own space"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_datasets_in_one_scene_reach_each_other_through_world(authenticated_context: HttpContext):
+async def test_two_datasets_in_one_scene_reach_each_other_through_world(
+    authenticated_context: HttpContext,
+):
     """Relatedness is transitive, which is exactly what no filter on `transformations` can express."""
     first = await seed.create_array_dataset(authenticated_context, "First")
     second = await seed.create_array_dataset(authenticated_context, "Second")
@@ -150,12 +196,16 @@ async def test_two_datasets_in_one_scene_reach_each_other_through_world(authenti
 
     graph = await _graph(authenticated_context, intrinsic)
 
-    assert str(other.pk) in {system["id"] for system in graph["systems"]}, "the second dataset is two hops away, through the world both are registered into"
+    assert str(other.pk) in {system["id"] for system in graph["systems"]}, (
+        "the second dataset is two hops away, through the world both are registered into"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_max_depth_bounds_the_walk_and_leaves_no_edge_dangling(authenticated_context: HttpContext):
+async def test_max_depth_bounds_the_walk_and_leaves_no_edge_dangling(
+    authenticated_context: HttpContext,
+):
     """A depth cutoff must cut whole edges, not leave ones pointing at systems it did not return."""
     first = await seed.create_array_dataset(authenticated_context, "First")
     second = await seed.create_array_dataset(authenticated_context, "Second")
@@ -169,14 +219,20 @@ async def test_max_depth_bounds_the_walk_and_leaves_no_edge_dangling(authenticat
     graph = await _graph(authenticated_context, intrinsic, max_depth=1)
 
     ids = {system["id"] for system in graph["systems"]}
-    assert str(other.pk) not in ids, "the second dataset is two hops away and the walk was bounded at one"
+    assert str(other.pk) not in ids, (
+        "the second dataset is two hops away and the walk was bounded at one"
+    )
     for edge in graph["transformations"]:
-        assert edge["input"]["id"] in ids and edge["output"]["id"] in ids, "a bounded walk must not return an edge whose endpoint it withheld"
+        assert edge["input"]["id"] in ids and edge["output"]["id"] in ids, (
+            "a bounded walk must not return an edge whose endpoint it withheld"
+        )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_walk_stops_at_the_organization_boundary(authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_the_walk_stops_at_the_organization_boundary(
+    authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """A graph walk crosses foreign keys, and every one of them is a chance to cross a tenant.
 
     The traversal is not a filtered list the scoping layer would narrow on its own: it issues
@@ -190,7 +246,11 @@ async def test_the_walk_stops_at_the_organization_boundary(authenticated_context
     foreign = await sync_to_async(lambda: theirs.intrinsic_coordinate_system)()
 
     # Their system is not ours to read at all.
-    denied = await schema.execute(GRAPH, context_value=authenticated_context, variable_values={"id": str(foreign.pk), "maxDepth": None})
+    denied = await schema.execute(
+        GRAPH,
+        context_value=authenticated_context,
+        variable_values={"id": str(foreign.pk), "maxDepth": None},
+    )
     assert denied.errors, "a foreign coordinate system must not be a valid root"
 
     # And nothing of theirs turns up in ours.
@@ -200,7 +260,9 @@ async def test_the_walk_stops_at_the_organization_boundary(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_walk_is_flat_in_the_size_of_the_graph(authenticated_context: HttpContext):
+async def test_the_walk_is_flat_in_the_size_of_the_graph(
+    authenticated_context: HttpContext,
+):
     """The cost is the depth of the walk, not the width of it.
 
     A custom resolver returns a plain list, and a plain list is invisible to the optimizer --
@@ -211,19 +273,34 @@ async def test_the_walk_is_flat_in_the_size_of_the_graph(authenticated_context: 
 
     async def measure(dataset_count: int) -> tuple[int, int]:
         scene = await seed.create_scene(authenticated_context, "Composition")
-        datasets = [await seed.create_array_dataset(authenticated_context, f"D{index}", shapes=[[3, 64, 64], [3, 32, 32]]) for index in range(dataset_count)]
+        datasets = [
+            await seed.create_array_dataset(
+                authenticated_context, f"D{index}", shapes=[[3, 64, 64], [3, 32, 32]]
+            )
+            for index in range(dataset_count)
+        ]
         for dataset in datasets:
             await seed.create_lens(authenticated_context, dataset, slices=[])
             await _calibrate(authenticated_context, dataset)
             await _register(authenticated_context, dataset, scene)
 
-        intrinsic = await sync_to_async(lambda: datasets[0].intrinsic_coordinate_system)()
+        intrinsic = await sync_to_async(
+            lambda: datasets[0].intrinsic_coordinate_system
+        )()
         variables = {"id": str(intrinsic.pk), "maxDepth": None}
 
-        await schema.execute(GRAPH, context_value=_fresh_request(authenticated_context), variable_values=variables)
+        await schema.execute(
+            GRAPH,
+            context_value=_fresh_request(authenticated_context),
+            variable_values=variables,
+        )
 
         with QueryCounter() as counter:
-            result = await schema.execute(GRAPH, context_value=_fresh_request(authenticated_context), variable_values=variables)
+            result = await schema.execute(
+                GRAPH,
+                context_value=_fresh_request(authenticated_context),
+                variable_values=variables,
+            )
         assert not result.errors, result.errors
         return len(result.data["coordinateGraph"]["systems"]), len(counter)
 
@@ -234,5 +311,9 @@ async def test_the_walk_is_flat_in_the_size_of_the_graph(authenticated_context: 
 
     large_systems, large_queries = await measure(6)
 
-    assert large_systems > small_systems, "the six-dataset graph must actually be bigger"
-    assert large_queries == small_queries, f"the walk's query count grows with the graph: {small_queries} for 2 datasets, {large_queries} for 6"
+    assert large_systems > small_systems, (
+        "the six-dataset graph must actually be bigger"
+    )
+    assert large_queries == small_queries, (
+        f"the walk's query count grows with the graph: {small_queries} for 2 datasets, {large_queries} for 6"
+    )

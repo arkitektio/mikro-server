@@ -33,8 +33,9 @@ schema can fan out and the cost must grow with the depth a caller asked for rath
 size of someone's warehouse.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Literal
+from typing import TYPE_CHECKING, Literal
 
 from django.db.models import Prefetch, Q
 
@@ -68,7 +69,9 @@ NodeKey = tuple[str, int]
 
 #: The axis types whose positions enumerate things rather than measure them: the only axes of a
 #: dense array a row id can be a position along.
-_ENUMERATING_AXIS_TYPES = frozenset({enums.AxisTypeChoices.INDEX.value, enums.AxisTypeChoices.CHANNEL.value})
+_ENUMERATING_AXIS_TYPES = frozenset(
+    {enums.AxisTypeChoices.INDEX.value, enums.AxisTypeChoices.CHANNEL.value}
+)
 
 
 @dataclass(frozen=True)
@@ -87,7 +90,11 @@ class JoinRoot:
     @property
     def key(self) -> NodeKey:
         """The node this root is."""
-        return ("T", self.table.pk) if self.table is not None else ("S", self.sparse_dataset.pk)
+        return (
+            ("T", self.table.pk)
+            if self.table is not None
+            else ("S", self.sparse_dataset.pk)
+        )
 
     @property
     def cardinality(self) -> Cardinality:
@@ -139,7 +146,9 @@ class JoinHop:
     @property
     def held(self) -> str:
         """The name the worker holds the bound value(s) under: the via's own name."""
-        return self.via_column.name if self.via_column is not None else str(self.via_axis)
+        return (
+            self.via_column.name if self.via_column is not None else str(self.via_axis)
+        )
 
 
 @dataclass
@@ -159,7 +168,9 @@ class _Frontier:
     order: tuple = ()
 
 
-def load_tables(ids: Iterable[int], organization: "Organization") -> dict[int, "models.TableDataset"]:
+def load_tables(
+    ids: Iterable[int], organization: "Organization"
+) -> dict[int, "models.TableDataset"]:
     """One query for a whole level of tables, columns and their reference targets attached.
 
     Scoped to the organization even for hop targets. A reference is authored through
@@ -170,34 +181,56 @@ def load_tables(ids: Iterable[int], organization: "Organization") -> dict[int, "
     if not identifiers:
         return {}
     tables = (
-        models.TableDataset.objects.filter(pk__in=identifiers, organization=organization)
+        models.TableDataset.objects.filter(
+            pk__in=identifiers, organization=organization
+        )
         .select_related("store")
-        .prefetch_related(Prefetch("columns", queryset=models.Column.objects.select_related("references").order_by("order")))
+        .prefetch_related(
+            Prefetch(
+                "columns",
+                queryset=models.Column.objects.select_related("references").order_by(
+                    "order"
+                ),
+            )
+        )
     )
     return {table.pk: table for table in tables}
 
 
-def load_sparse_datasets(ids: Iterable[int], organization: "Organization") -> dict[int, "models.SparseDataset"]:
+def load_sparse_datasets(
+    ids: Iterable[int], organization: "Organization"
+) -> dict[int, "models.SparseDataset"]:
     """One query for a level of matrices: axes, layouts and axis references attached."""
     identifiers = list(ids)
     if not identifiers:
         return {}
-    datasets = models.SparseDataset.objects.filter(pk__in=identifiers, organization=organization).prefetch_related(
+    datasets = models.SparseDataset.objects.filter(
+        pk__in=identifiers, organization=organization
+    ).prefetch_related(
         "coordinate_system__axes",
         "arrays__store",
-        Prefetch("axis_references", queryset=models.SparseAxisReference.objects.select_related("references").order_by("pk")),
+        Prefetch(
+            "axis_references",
+            queryset=models.SparseAxisReference.objects.select_related(
+                "references"
+            ).order_by("pk"),
+        ),
     )
     return {dataset.pk: dataset for dataset in datasets}
 
 
-def _reverse_references(table_ids: Iterable[int], organization: "Organization") -> dict[int, list["models.SparseAxisReference"]]:
+def _reverse_references(
+    table_ids: Iterable[int], organization: "Organization"
+) -> dict[int, list["models.SparseAxisReference"]]:
     """The matrix axes whose positions are rows of each table -- the table->matrix door, one query."""
     identifiers = list(table_ids)
     if not identifiers:
         return {}
     by_table: dict[int, list] = {}
     references = (
-        models.SparseAxisReference.objects.filter(references_id__in=identifiers, dataset__organization=organization)
+        models.SparseAxisReference.objects.filter(
+            references_id__in=identifiers, dataset__organization=organization
+        )
         .select_related("dataset")
         .order_by("dataset_id", "pk")
     )
@@ -206,14 +239,18 @@ def _reverse_references(table_ids: Iterable[int], organization: "Organization") 
     return by_table
 
 
-def _referencing_columns(table_ids: Iterable[int], organization: "Organization") -> dict[int, list["models.Column"]]:
+def _referencing_columns(
+    table_ids: Iterable[int], organization: "Organization"
+) -> dict[int, list["models.Column"]]:
     """The columns of other tables whose values identify rows of each table -- a reference read backwards, one query."""
     identifiers = list(table_ids)
     if not identifiers:
         return {}
-    by_table: dict[int, list["models.Column"]] = {}
+    by_table: dict[int, list[models.Column]] = {}
     columns = (
-        models.Column.objects.filter(references_id__in=identifiers, table__organization=organization)
+        models.Column.objects.filter(
+            references_id__in=identifiers, table__organization=organization
+        )
         .exclude(role=enums.ColumnRoleChoices.COORDINATE.value)
         .select_related("table")
         .order_by("table_id", "order", "pk")
@@ -232,7 +269,9 @@ class _SameRows:
     key_offset: float
 
 
-def _same_row_tables(tables: "Iterable[models.TableDataset]", organization: "Organization") -> dict[int, list[_SameRows]]:
+def _same_row_tables(
+    tables: "Iterable[models.TableDataset]", organization: "Organization"
+) -> dict[int, list[_SameRows]]:
     """The tables whose rows ARE each table's rows, through an edge between the two frames -- one query.
 
     An edge qualifies in either direction when both of its ends are the spaces of single-INDEX
@@ -241,12 +280,20 @@ def _same_row_tables(tables: "Iterable[models.TableDataset]", organization: "Org
     A key (a dereferencing FIELD) is not one -- it says a mask's pixels name rows, not that two
     tables share them -- and an UNMAPPABLE states no correspondence at all.
     """
-    index_by_system = {table.coordinate_system_id: (table, column) for table in tables if table.coordinate_system_id is not None and (column := _index_column(table)) is not None}
+    index_by_system = {
+        table.coordinate_system_id: (table, column)
+        for table in tables
+        if table.coordinate_system_id is not None
+        and (column := _index_column(table)) is not None
+    }
     if not index_by_system:
         return {}
     systems = list(index_by_system)
     edges = list(
-        models.Transformation.objects.filter(Q(input_id__in=systems) | Q(output_id__in=systems), organization=organization)
+        models.Transformation.objects.filter(
+            Q(input_id__in=systems) | Q(output_id__in=systems),
+            organization=organization,
+        )
         .exclude(graph_logic.dereference_q())
         .exclude(kind=enums.TransformKindChoices.UNMAPPABLE.value)
         .select_related("input", "output")
@@ -257,15 +304,25 @@ def _same_row_tables(tables: "Iterable[models.TableDataset]", organization: "Org
     far_systems = {edge.output_id for edge in edges} | {edge.input_id for edge in edges}
     far_tables = {
         table.coordinate_system_id: table
-        for table in models.TableDataset.objects.filter(coordinate_system_id__in=far_systems, organization=organization).prefetch_related("columns")
+        for table in models.TableDataset.objects.filter(
+            coordinate_system_id__in=far_systems, organization=organization
+        ).prefetch_related("columns")
     }
 
     found: dict[int, list[_SameRows]] = {}
     seen: set[tuple[int, int]] = set()
     for edge in edges:
-        input_table = index_by_system.get(edge.input_id, (far_tables.get(edge.input_id), None))[0]
-        output_table = index_by_system.get(edge.output_id, (far_tables.get(edge.output_id), None))[0]
-        if input_table is None or output_table is None or input_table.pk == output_table.pk:
+        input_table = index_by_system.get(
+            edge.input_id, (far_tables.get(edge.input_id), None)
+        )[0]
+        output_table = index_by_system.get(
+            edge.output_id, (far_tables.get(edge.output_id), None)
+        )[0]
+        if (
+            input_table is None
+            or output_table is None
+            or input_table.pk == output_table.pk
+        ):
             continue
         input_index = _index_column(input_table)
         output_index = _index_column(output_table)
@@ -278,17 +335,37 @@ def _same_row_tables(tables: "Iterable[models.TableDataset]", organization: "Org
             continue
         if form is None:
             continue
-        acting = [position for position, coefficient in enumerate(form.coefficients) if coefficient != 0]
+        acting = [
+            position
+            for position, coefficient in enumerate(form.coefficients)
+            if coefficient != 0
+        ]
         if len(acting) != 1 or list(step.input_axes)[acting[0]] != input_index.name:
             continue
         factor = form.coefficients[acting[0]]
         # output = factor * input + constant, read from whichever end the walk stands on.
-        if edge.input_id in index_by_system and (input_table.pk, output_table.pk) not in seen:
+        if (
+            edge.input_id in index_by_system
+            and (input_table.pk, output_table.pk) not in seen
+        ):
             seen.add((input_table.pk, output_table.pk))
-            found.setdefault(input_table.pk, []).append(_SameRows(table_id=output_table.pk, key_scale=factor, key_offset=form.constant))
-        if edge.output_id in index_by_system and (output_table.pk, input_table.pk) not in seen:
+            found.setdefault(input_table.pk, []).append(
+                _SameRows(
+                    table_id=output_table.pk, key_scale=factor, key_offset=form.constant
+                )
+            )
+        if (
+            edge.output_id in index_by_system
+            and (output_table.pk, input_table.pk) not in seen
+        ):
             seen.add((output_table.pk, input_table.pk))
-            found.setdefault(output_table.pk, []).append(_SameRows(table_id=input_table.pk, key_scale=1.0 / factor, key_offset=-form.constant / factor))
+            found.setdefault(output_table.pk, []).append(
+                _SameRows(
+                    table_id=input_table.pk,
+                    key_scale=1.0 / factor,
+                    key_offset=-form.constant / factor,
+                )
+            )
     return found
 
 
@@ -303,7 +380,9 @@ class _ArrayDoor:
     value_axes: tuple[str, ...]
 
 
-def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Organization") -> dict[int, list[_ArrayDoor]]:
+def _derived_arrays(
+    tables: "Iterable[models.TableDataset]", organization: "Organization"
+) -> dict[int, list[_ArrayDoor]]:
     """The dense arrays each table's row ids are positions in -- the table->array door, one query.
 
     An array qualifies when a BY_DIMENSION edge runs from its own grid into the table's space,
@@ -320,7 +399,12 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
     Levels need no check of their own. An enumerating axis is never downsampled -- the write
     path refuses a pyramid that does -- so a position along it is the same at every level.
     """
-    index_columns = {table.coordinate_system_id: column for table in tables if table.coordinate_system_id is not None and (column := _index_column(table)) is not None}
+    index_columns = {
+        table.coordinate_system_id: column
+        for table in tables
+        if table.coordinate_system_id is not None
+        and (column := _index_column(table)) is not None
+    }
     if not index_columns:
         return {}
     tables_by_system = {table.coordinate_system_id: table.pk for table in tables}
@@ -332,7 +416,9 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
             organization=organization,
         )
         .select_related("input", "output")
-        .prefetch_related("input__axes", "output__axes", "input__datasets__data_arrays__store")
+        .prefetch_related(
+            "input__axes", "output__axes", "input__datasets__data_arrays__store"
+        )
         .order_by("pk")
     )
 
@@ -345,12 +431,18 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
         if list(edge.output_axes or []) != [column.name]:
             continue
         try:
-            form = coords_logic.step_forms(graph_logic._edge_step(edge)).get(column.name)
+            form = coords_logic.step_forms(graph_logic._edge_step(edge)).get(
+                column.name
+            )
         except coords_logic.NonAffineTransformError:
             continue
         if form is None:
             continue
-        acting = [position for position, coefficient in enumerate(form.coefficients) if coefficient != 0]
+        acting = [
+            position
+            for position, coefficient in enumerate(form.coefficients)
+            if coefficient != 0
+        ]
         if len(acting) != 1:
             continue
         axes = list(edge.input.axes.all())
@@ -358,10 +450,15 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
         if key_axis.type not in _ENUMERATING_AXIS_TYPES:
             continue
         factor = form.coefficients[acting[0]]
-        for dataset in sorted(edge.input.datasets.all(), key=lambda dataset: dataset.pk):
+        for dataset in sorted(
+            edge.input.datasets.all(), key=lambda dataset: dataset.pk
+        ):
             if dataset.organization_id != organization.pk:
                 continue
-            if not any(array.level == 0 and array.store_id is not None for array in dataset.data_arrays.all()):
+            if not any(
+                array.level == 0 and array.store_id is not None
+                for array in dataset.data_arrays.all()
+            ):
                 continue
             if (edge.output_id, dataset.pk) in seen:
                 continue
@@ -372,7 +469,9 @@ def _derived_arrays(tables: "Iterable[models.TableDataset]", organization: "Orga
                     key_axis=key_axis.name,
                     key_scale=1.0 / factor,
                     key_offset=-form.constant / factor,
-                    value_axes=tuple(axis.name for axis in axes if axis.name != key_axis.name),
+                    value_axes=tuple(
+                        axis.name for axis in axes if axis.name != key_axis.name
+                    ),
                 )
             )
     return doors
@@ -385,15 +484,26 @@ def _index_column(table: "models.TableDataset") -> "models.Column | None":
     reference to anything else at write time -- so this is defensive rather than a rule of its
     own; a target that somehow is not that shape simply gets no hop.
     """
-    coordinates = [column for column in table.columns.all() if column.role == enums.ColumnRoleChoices.COORDINATE.value]
-    if len(coordinates) != 1 or coordinates[0].axis_type != enums.AxisTypeChoices.INDEX.value:
+    coordinates = [
+        column
+        for column in table.columns.all()
+        if column.role == enums.ColumnRoleChoices.COORDINATE.value
+    ]
+    if (
+        len(coordinates) != 1
+        or coordinates[0].axis_type != enums.AxisTypeChoices.INDEX.value
+    ):
         return None
     return coordinates[0]
 
 
 def _attributes(table: "models.TableDataset") -> tuple["models.Column", ...]:
     """Every non-coordinate column: what a lookup selects. See ``build_attribute_plans`` for why all of them."""
-    return tuple(column for column in table.columns.all() if column.role != enums.ColumnRoleChoices.COORDINATE.value)
+    return tuple(
+        column
+        for column in table.columns.all()
+        if column.role != enums.ColumnRoleChoices.COORDINATE.value
+    )
 
 
 def walk_joins(
@@ -428,11 +538,26 @@ def walk_joins(
 
     # The roots reloaded with everything the first expansion needs, rather than widening the
     # FIELD walk that found them: that walk is shared with every picker and must stay cheap.
-    tables = load_tables((root.table.pk for root in roots if root.table is not None), organization)
-    matrices = load_sparse_datasets((root.sparse_dataset.pk for root in roots if root.sparse_dataset is not None), organization)
+    tables = load_tables(
+        (root.table.pk for root in roots if root.table is not None), organization
+    )
+    matrices = load_sparse_datasets(
+        (root.sparse_dataset.pk for root in roots if root.sparse_dataset is not None),
+        organization,
+    )
 
     frontier = [
-        _Frontier(root=position, key=root.key, parent=0, cardinality=root.cardinality, visited=frozenset({root.key}), join_path=(), crossed_matrix=root.sparse_dataset is not None, arrived_axis=root.arrived_axis, order=(position,))
+        _Frontier(
+            root=position,
+            key=root.key,
+            parent=0,
+            cardinality=root.cardinality,
+            visited=frozenset({root.key}),
+            join_path=(),
+            crossed_matrix=root.sparse_dataset is not None,
+            arrived_axis=root.arrived_axis,
+            order=(position,),
+        )
         for position, root in enumerate(roots)
     ]
     counters = {position: 1 for position in range(len(roots))}
@@ -441,35 +566,93 @@ def walk_joins(
         if not frontier:
             break
 
-        reverse = _reverse_references((tip.key[1] for tip in frontier if tip.key[0] == "T"), organization) if cross_matrices else {}
-        derived = _derived_arrays([tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"], organization) if cross_matrices else {}
-        referencing = _referencing_columns((tip.key[1] for tip in frontier if tip.key[0] == "T"), organization) if reverse_references else {}
-        alike = _same_row_tables([tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"], organization) if same_rows else {}
+        reverse = (
+            _reverse_references(
+                (tip.key[1] for tip in frontier if tip.key[0] == "T"), organization
+            )
+            if cross_matrices
+            else {}
+        )
+        derived = (
+            _derived_arrays(
+                [tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"],
+                organization,
+            )
+            if cross_matrices
+            else {}
+        )
+        referencing = (
+            _referencing_columns(
+                (tip.key[1] for tip in frontier if tip.key[0] == "T"), organization
+            )
+            if reverse_references
+            else {}
+        )
+        alike = (
+            _same_row_tables(
+                [tables[tip.key[1]] for tip in frontier if tip.key[0] == "T"],
+                organization,
+            )
+            if same_rows
+            else {}
+        )
         doors: dict[tuple[int, int], _ArrayDoor] = {}
 
         # First pass: what each tip could hop to, before any target is loaded, so the targets of
         # a whole level are fetched in two queries rather than one per hop.
-        candidates: list[tuple[tuple, _Frontier, "models.Column | None", str | None, NodeKey, dict]] = []
+        candidates: list[
+            tuple[tuple, _Frontier, models.Column | None, str | None, NodeKey, dict]
+        ] = []
         for tip in frontier:
             kind, pk = tip.key
             if kind == "T":
                 table = tables[pk]
                 for column in table.columns.all():
-                    if column.references_id is None or column.role == enums.ColumnRoleChoices.COORDINATE.value:
+                    if (
+                        column.references_id is None
+                        or column.role == enums.ColumnRoleChoices.COORDINATE.value
+                    ):
                         continue  # a COORDINATE reference is the product-space enumeration, not a hop
-                    candidates.append((tip.order + (column.order, 0), tip, column, None, ("T", column.references_id), {}))
+                    candidates.append(
+                        (
+                            tip.order + (column.order, 0),
+                            tip,
+                            column,
+                            None,
+                            ("T", column.references_id),
+                            {},
+                        )
+                    )
                 for reference in reverse.get(pk, []):
                     index_column = _index_column(table)
                     if index_column is None:
                         continue
-                    candidates.append((tip.order + (index_column.order, 1, reference.dataset_id), tip, index_column, reference.axis, ("S", reference.dataset_id), {}))
+                    candidates.append(
+                        (
+                            tip.order + (index_column.order, 1, reference.dataset_id),
+                            tip,
+                            index_column,
+                            reference.axis,
+                            ("S", reference.dataset_id),
+                            {},
+                        )
+                    )
                 for door in derived.get(pk, []):
                     index_column = _index_column(table)
                     if index_column is None:
                         continue
                     # Per table, not per tip: every branch standing on this table gets the hop.
                     doors[(pk, door.dataset.pk)] = door
-                    candidates.append((tip.order + (index_column.order, 2, door.dataset.pk), tip, index_column, door.key_axis, ("A", door.dataset.pk), {}))
+                    candidates.append(
+                        (
+                            tip.order + (index_column.order, 2, door.dataset.pk),
+                            tip,
+                            index_column,
+                            door.key_axis,
+                            ("A", door.dataset.pk),
+                            {},
+                        )
+                    )
                 index_column = _index_column(table)
                 if index_column is not None:
                     # One reverse hop per referencing table: two columns of one table naming these
@@ -479,23 +662,76 @@ def walk_joins(
                         if child_column.table_id in walked:
                             continue
                         walked.add(child_column.table_id)
-                        candidates.append((tip.order + (index_column.order, 3, child_column.table_id), tip, index_column, None, ("T", child_column.table_id), {"direction": "REVERSE", "key_column": child_column}))
+                        candidates.append(
+                            (
+                                tip.order
+                                + (index_column.order, 3, child_column.table_id),
+                                tip,
+                                index_column,
+                                None,
+                                ("T", child_column.table_id),
+                                {"direction": "REVERSE", "key_column": child_column},
+                            )
+                        )
                     for same in alike.get(pk, []):
-                        candidates.append((tip.order + (index_column.order, 4, same.table_id), tip, index_column, None, ("T", same.table_id), {"direction": "SAME_ROWS", "key_scale": same.key_scale, "key_offset": same.key_offset}))
+                        candidates.append(
+                            (
+                                tip.order + (index_column.order, 4, same.table_id),
+                                tip,
+                                index_column,
+                                None,
+                                ("T", same.table_id),
+                                {
+                                    "direction": "SAME_ROWS",
+                                    "key_scale": same.key_scale,
+                                    "key_offset": same.key_offset,
+                                },
+                            )
+                        )
             else:
                 matrix = matrices[pk]
                 names = matrix.axis_names
                 for reference in matrix.axis_references.all():
-                    if reference.axis == tip.arrived_axis or reference.axis not in names:
+                    if (
+                        reference.axis == tip.arrived_axis
+                        or reference.axis not in names
+                    ):
                         continue  # the axis the branch came in on leads back where it came from
-                    candidates.append((tip.order + (names.index(reference.axis),), tip, None, reference.axis, ("T", reference.references_id), {}))
+                    candidates.append(
+                        (
+                            tip.order + (names.index(reference.axis),),
+                            tip,
+                            None,
+                            reference.axis,
+                            ("T", reference.references_id),
+                            {},
+                        )
+                    )
 
         candidates = [entry for entry in candidates if entry[4] not in entry[1].visited]
         candidates.sort(key=lambda entry: (entry[0], entry[4]))
 
         # Second pass: load every target of the level at once, then build the hops in order.
-        tables.update(load_tables({entry[4][1] for entry in candidates if entry[4][0] == "T" and entry[4][1] not in tables}, organization))
-        matrices.update(load_sparse_datasets({entry[4][1] for entry in candidates if entry[4][0] == "S" and entry[4][1] not in matrices}, organization))
+        tables.update(
+            load_tables(
+                {
+                    entry[4][1]
+                    for entry in candidates
+                    if entry[4][0] == "T" and entry[4][1] not in tables
+                },
+                organization,
+            )
+        )
+        matrices.update(
+            load_sparse_datasets(
+                {
+                    entry[4][1]
+                    for entry in candidates
+                    if entry[4][0] == "S" and entry[4][1] not in matrices
+                },
+                organization,
+            )
+        )
 
         next_frontier: list[_Frontier] = []
         for order, tip, via_column, via_axis, key, extra in candidates:
@@ -505,9 +741,18 @@ def walk_joins(
                 door = doors[(tip.key[1], pk)]
                 hops[tip.root].append(
                     JoinHop(
-                        root=tip.root, index=counters[tip.root], parent=tip.parent, depth=depth, cardinality=tip.cardinality,
-                        via_column=via_column, via_axis=via_axis, array_dataset=door.dataset, key_axis=door.key_axis,
-                        key_scale=door.key_scale, key_offset=door.key_offset, value_axes=door.value_axes,
+                        root=tip.root,
+                        index=counters[tip.root],
+                        parent=tip.parent,
+                        depth=depth,
+                        cardinality=tip.cardinality,
+                        via_column=via_column,
+                        via_axis=via_axis,
+                        array_dataset=door.dataset,
+                        key_axis=door.key_axis,
+                        key_scale=door.key_scale,
+                        key_offset=door.key_offset,
+                        value_axes=door.value_axes,
                     )
                 )
                 counters[tip.root] += 1
@@ -515,18 +760,45 @@ def walk_joins(
             if kind == "T":
                 target = tables.get(pk)
                 direction: Direction = extra.get("direction", "FORWARD")
-                key_column = extra.get("key_column") or (_index_column(target) if target is not None else None)
-                if target is None or key_column is None or (direction != "FORWARD" and _index_column(target) is None):
+                key_column = extra.get("key_column") or (
+                    _index_column(target) if target is not None else None
+                )
+                if (
+                    target is None
+                    or key_column is None
+                    or (direction != "FORWARD" and _index_column(target) is None)
+                ):
                     continue
-                cardinality: Cardinality = "MANY" if tip.key[0] == "S" or direction == "REVERSE" else tip.cardinality
+                cardinality: Cardinality = (
+                    "MANY"
+                    if tip.key[0] == "S" or direction == "REVERSE"
+                    else tip.cardinality
+                )
                 # A stored `joinPath` names forward references only: past a matrix, a reverse read
                 # or a crossing between frames, no picker entry can say how it got here.
-                crossed = tip.crossed_matrix or via_axis is not None or direction != "FORWARD"
-                join_path = () if crossed else tip.join_path + ((tables[tip.key[1]], via_column),)
+                crossed = (
+                    tip.crossed_matrix or via_axis is not None or direction != "FORWARD"
+                )
+                join_path = (
+                    ()
+                    if crossed
+                    else tip.join_path + ((tables[tip.key[1]], via_column),)
+                )
                 hop = JoinHop(
-                    root=tip.root, index=counters[tip.root], parent=tip.parent, depth=depth, cardinality=cardinality,
-                    via_column=via_column, via_axis=via_axis, table=target, key_column=key_column, attributes=_attributes(target), join_path=join_path,
-                    direction=direction, key_scale=extra.get("key_scale"), key_offset=extra.get("key_offset"),
+                    root=tip.root,
+                    index=counters[tip.root],
+                    parent=tip.parent,
+                    depth=depth,
+                    cardinality=cardinality,
+                    via_column=via_column,
+                    via_axis=via_axis,
+                    table=target,
+                    key_column=key_column,
+                    attributes=_attributes(target),
+                    join_path=join_path,
+                    direction=direction,
+                    key_scale=extra.get("key_scale"),
+                    key_offset=extra.get("key_offset"),
                 )
                 arrived = None
             else:
@@ -538,8 +810,16 @@ def walk_joins(
                     continue  # from the other layout the same read is a scan of every byte: no hop rather than a slow one
                 names = target.axis_names
                 hop = JoinHop(
-                    root=tip.root, index=counters[tip.root], parent=tip.parent, depth=depth, cardinality=tip.cardinality,
-                    via_column=via_column, via_axis=via_axis, sparse_dataset=target, sparse_array=layout, key_axis=via_axis,
+                    root=tip.root,
+                    index=counters[tip.root],
+                    parent=tip.parent,
+                    depth=depth,
+                    cardinality=tip.cardinality,
+                    via_column=via_column,
+                    via_axis=via_axis,
+                    sparse_dataset=target,
+                    sparse_array=layout,
+                    key_axis=via_axis,
                     value_axes=tuple(name for name in names if name != via_axis),
                 )
                 crossed = True
@@ -547,7 +827,17 @@ def walk_joins(
             counters[tip.root] += 1
             hops[tip.root].append(hop)
             next_frontier.append(
-                _Frontier(root=tip.root, key=key, parent=hop.index, cardinality=hop.cardinality, visited=tip.visited | {key}, join_path=hop.join_path, crossed_matrix=crossed, arrived_axis=arrived, order=order)
+                _Frontier(
+                    root=tip.root,
+                    key=key,
+                    parent=hop.index,
+                    cardinality=hop.cardinality,
+                    visited=tip.visited | {key},
+                    join_path=hop.join_path,
+                    crossed_matrix=crossed,
+                    arrived_axis=arrived,
+                    order=order,
+                )
             )
 
         frontier = next_frontier

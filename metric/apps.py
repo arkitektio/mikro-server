@@ -13,4 +13,6 @@ class MetricConfig(AppConfig):
 
         from metric import logic, models
 
-        pruning.connect(logic.record_pruned, sender=models.Metric, dispatch_uid="metric-pruned")
+        pruning.connect(
+            logic.record_pruned, sender=models.Metric, dispatch_uid="metric-pruned"
+        )

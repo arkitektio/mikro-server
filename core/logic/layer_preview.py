@@ -19,9 +19,9 @@ in preview mode it does not write.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterable, Iterator
 
 from django.db import transaction
 
@@ -48,7 +48,9 @@ def is_previewing() -> bool:
     return _previewing.get()
 
 
-def persist_layer(*, channel_lens_ids: Iterable[int] | None = None, **fields) -> "models.Layer":
+def persist_layer(
+    *, channel_lens_ids: Iterable[int] | None = None, **fields
+) -> models.Layer:
     """Write a new layer row -- or, while :func:`previewing`, build the row it would be.
 
     ``channel_lens_ids`` is the image kind's index of the lenses its render graph names;
@@ -66,6 +68,8 @@ def persist_layer(*, channel_lens_ids: Iterable[int] | None = None, **fields) ->
     layer.pk = PREVIEW_PK
     # What `layer.channel_lenses.all()` answers for a row with no through-table entries.
     layer._prefetched_objects_cache = {
-        "channel_lenses": models.ArrayLens.objects.filter(pk__in=list(channel_lens_ids or [])),
+        "channel_lenses": models.ArrayLens.objects.filter(
+            pk__in=list(channel_lens_ids or [])
+        ),
     }
     return layer

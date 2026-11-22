@@ -16,18 +16,29 @@ from mikro_server.schema import schema
 from tests import seed
 
 TILE = "id name axisNames shape multiscale spec fullLens { id } defaultScene { id } latestSnapshot { id }"
-FILES = "query { files(pagination: {limit: 20}) { id derivedContainers(filters: {direction: SOURCE}) { id seriesIdentifier container { __typename ... on ArrayDataset { %s } } } } }" % TILE
+FILES = (
+    "query { files(pagination: {limit: 20}) { id derivedContainers(filters: {direction: SOURCE}) { id seriesIdentifier container { __typename ... on ArrayDataset { %s } } } } }"
+    % TILE
+)
 DATASETS = "query { arrayDatasets(pagination: {limit: 50}) { %s } }" % TILE
 
 
-async def _files_with_series(ctx: HttpContext, files: int, series: int, offset: int) -> None:
+async def _files_with_series(
+    ctx: HttpContext, files: int, series: int, offset: int
+) -> None:
     folder = await seed.create_folder(ctx, f"Tiles{offset}")
     for f in range(files):
         file = await seed.create_file(ctx, f"scan{offset}-{f}.lif", folder)
         for s in range(series):
-            dataset = await seed.create_array_dataset(ctx, f"scan{offset}-{f} S{s}", axes=seed.YX_AXES, shapes=[[32, 32]])
+            dataset = await seed.create_array_dataset(
+                ctx, f"scan{offset}-{f} S{s}", axes=seed.YX_AXES, shapes=[[32, 32]]
+            )
             await sync_to_async(models.FileLink.objects.create)(
-                file=file, dataset=dataset, series_identifier=str(s), direction=enums.FileLinkDirectionChoices.SOURCE.value, organization=ctx.request.organization
+                file=file,
+                dataset=dataset,
+                series_identifier=str(s),
+                direction=enums.FileLinkDirectionChoices.SOURCE.value,
+                organization=ctx.request.organization,
             )
 
 
@@ -56,9 +67,13 @@ async def _count(ctx: HttpContext, query: str) -> int:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_files_with_their_series_cost_the_same_at_any_size(authenticated_context: HttpContext) -> None:
+async def test_files_with_their_series_cost_the_same_at_any_size(
+    authenticated_context: HttpContext,
+) -> None:
     await _files_with_series(authenticated_context, files=2, series=2, offset=0)
-    await _count(authenticated_context, FILES)  # the first request also sets up its session
+    await _count(
+        authenticated_context, FILES
+    )  # the first request also sets up its session
     small = await _count(authenticated_context, FILES)
     await _files_with_series(authenticated_context, files=3, series=4, offset=1)
     large = await _count(authenticated_context, FILES)
@@ -67,9 +82,13 @@ async def test_files_with_their_series_cost_the_same_at_any_size(authenticated_c
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_page_of_dataset_tiles_costs_the_same_at_any_size(authenticated_context: HttpContext) -> None:
+async def test_a_page_of_dataset_tiles_costs_the_same_at_any_size(
+    authenticated_context: HttpContext,
+) -> None:
     await _files_with_series(authenticated_context, files=1, series=2, offset=0)
-    await _count(authenticated_context, DATASETS)  # the first request also sets up its session
+    await _count(
+        authenticated_context, DATASETS
+    )  # the first request also sets up its session
     small = await _count(authenticated_context, DATASETS)
     await _files_with_series(authenticated_context, files=2, series=5, offset=1)
     large = await _count(authenticated_context, DATASETS)

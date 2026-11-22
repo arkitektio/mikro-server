@@ -38,7 +38,9 @@ class CreateChartInput:
     """Input for creating a chart."""
 
     name: str = strawberry.field(description="The name of the chart")
-    description: str | None = strawberry.field(default=None, description="A free-form description of what the chart shows")
+    description: str | None = strawberry.field(
+        default=None, description="A free-form description of what the chart shows"
+    )
     coordinate_system: strawberry.ID | None = strawberry.field(
         default=None,
         description=(
@@ -65,19 +67,35 @@ def create_chart(info: Info, input: CreateChartInput) -> types.Chart:
     model = input.to_pydantic()
     ctx = CreationContext.from_info(info)
 
-    world = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system) if model.coordinate_system else None
-    return chart_logic.create_chart(name=model.name, description=model.description, world=world, axis=model.axis, layout=model.layout.value, ctx=ctx)
+    world = (
+        get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system)
+        if model.coordinate_system
+        else None
+    )
+    return chart_logic.create_chart(
+        name=model.name,
+        description=model.description,
+        world=world,
+        axis=model.axis,
+        layout=model.layout.value,
+        ctx=ctx,
+    )
 
 
 class ChartPolicyInputModel(BaseModel):
     nchildren: int = Field(default=32, ge=0)
 
 
-@kante.pydantic_input(ChartPolicyInputModel, description="How a chart is drawn from what is already placed in a space")
+@kante.pydantic_input(
+    ChartPolicyInputModel,
+    description="How a chart is drawn from what is already placed in a space",
+)
 class ChartPolicyInput:
     """How a chart is bootstrapped from a space."""
 
-    nchildren: int = strawberry.field(default=32, description="Draw at most this many layers")
+    nchildren: int = strawberry.field(
+        default=32, description="Draw at most this many layers"
+    )
 
 
 class CreateChartFromCoordinateSystemInputModel(BaseModel):
@@ -97,18 +115,32 @@ class CreateChartFromCoordinateSystemInputModel(BaseModel):
 class CreateChartFromCoordinateSystemInput:
     """Input for bootstrapping a chart over an existing coordinate system."""
 
-    coordinate_system: strawberry.ID = strawberry.field(description="The coordinate system to build the chart over. It becomes the chart's world as it is, and must have exactly one metric, unit-carrying axis")
-    name: str | None = strawberry.field(default=None, description="The name of the chart. Defaults to the coordinate system's name")
-    policy: ChartPolicyInput = strawberry.field(default_factory=ChartPolicyInput, description="How the chart is materialized")
+    coordinate_system: strawberry.ID = strawberry.field(
+        description="The coordinate system to build the chart over. It becomes the chart's world as it is, and must have exactly one metric, unit-carrying axis"
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="The name of the chart. Defaults to the coordinate system's name",
+    )
+    policy: ChartPolicyInput = strawberry.field(
+        default_factory=ChartPolicyInput, description="How the chart is materialized"
+    )
 
 
-def create_chart_from_coordinate_system(info: Info, input: CreateChartFromCoordinateSystemInput) -> types.Chart:
+def create_chart_from_coordinate_system(
+    info: Info, input: CreateChartFromCoordinateSystemInput
+) -> types.Chart:
     """Bootstrap a chart over an existing coordinate system and the sources laid along its axis."""
     model = input.to_pydantic()
     ctx = CreationContext.from_info(info)
 
     system = get_for_org(core_models.CoordinateSystem, info, id=model.coordinate_system)
-    return chart_logic.bootstrap_chart_from_system(system, name=model.name, policy=chart_logic.Policy(nchildren=model.policy.nchildren), ctx=ctx)
+    return chart_logic.bootstrap_chart_from_system(
+        system,
+        name=model.name,
+        policy=chart_logic.Policy(nchildren=model.policy.nchildren),
+        ctx=ctx,
+    )
 
 
 class UpdateChartInputModel(BaseModel):
@@ -119,14 +151,24 @@ class UpdateChartInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateChartInputModel, description="Input for renaming, re-describing or re-laying-out a chart. Its world is not editable: a chart over another space is another chart")
+@kante.pydantic_input(
+    UpdateChartInputModel,
+    description="Input for renaming, re-describing or re-laying-out a chart. Its world is not editable: a chart over another space is another chart",
+)
 class UpdateChartInput:
     """Input for updating a chart."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the chart to update")
-    name: str | None = strawberry.field(default=None, description="A new name. Omit to leave it as it is")
-    description: str | None = strawberry.field(default=None, description="A new description. Omit to leave it as it is")
-    layout: enums.ChartLayout | None = strawberry.field(default=None, description="How the layers share the screen, remembered for everyone who opens the chart. Omit to leave it as it is")
+    name: str | None = strawberry.field(
+        default=None, description="A new name. Omit to leave it as it is"
+    )
+    description: str | None = strawberry.field(
+        default=None, description="A new description. Omit to leave it as it is"
+    )
+    layout: enums.ChartLayout | None = strawberry.field(
+        default=None,
+        description="How the layers share the screen, remembered for everyone who opens the chart. Omit to leave it as it is",
+    )
 
 
 def update_chart(info: Info, input: UpdateChartInput) -> types.Chart:
@@ -156,7 +198,10 @@ class DeleteChartInputModel(BaseModel):
     id: str = Field(description="The ID of the chart to delete")
 
 
-@kante.pydantic_input(DeleteChartInputModel, description="Input for deleting a chart by ID. Deletes its layers and nothing they drew: the data, and the chart's world, are untouched")
+@kante.pydantic_input(
+    DeleteChartInputModel,
+    description="Input for deleting a chart by ID. Deletes its layers and nothing they drew: the data, and the chart's world, are untouched",
+)
 class DeleteChartInput:
     """Input for deleting a chart by ID"""
 

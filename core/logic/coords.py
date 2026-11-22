@@ -30,12 +30,12 @@ The conventions this module encodes:
 """
 
 import math
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Iterable, Mapping, Protocol, Sequence
-
-from kanne_server import scalars as kanne_scalars
+from typing import Protocol
 
 from core import enums
+from kanne_server import scalars as kanne_scalars
 
 # There is no axis *type* ordering rule and no rank table any more. RFC-5 states one --
 # time, then channel and custom types, then space -- and it was validated at ingest for
@@ -125,7 +125,9 @@ def effective_metric_group(axis_type: str, declared: str | None) -> str | None:
     return None
 
 
-def assert_metric_groups(axes: Sequence[tuple[str, str, str | None, str | None]]) -> None:
+def assert_metric_groups(
+    axes: Sequence[tuple[str, str, str | None, str | None]],
+) -> None:
     """Refuse a declared metric group that cannot be one: on an enumerating axis, or across dimensions.
 
     ``axes`` is ``(name, type, unit, declared_group)``. Two rules, both about what "one
@@ -143,7 +145,9 @@ def assert_metric_groups(axes: Sequence[tuple[str, str, str | None, str | None]]
         if not declared:
             continue
         if axis_type not in METRIC_AXIS_TYPES:
-            raise MetricGroupError(f"Axis '{name}' is a {axis_type} axis, which has no distance to share, so it cannot declare metric group '{declared}'. Only measured axes ({', '.join(sorted(METRIC_AXIS_TYPES))}) can.")
+            raise MetricGroupError(
+                f"Axis '{name}' is a {axis_type} axis, which has no distance to share, so it cannot declare metric group '{declared}'. Only measured axes ({', '.join(sorted(METRIC_AXIS_TYPES))}) can."
+            )
         by_group.setdefault(declared, []).append((name, unit))
 
     for group, members in by_group.items():
@@ -151,11 +155,25 @@ def assert_metric_groups(axes: Sequence[tuple[str, str, str | None, str | None]]
         for name, unit in members:
             if unit is not None and kanne_scalars.is_arbitrary_unit(unit):
                 continue
-            key = "unitless" if unit is None else str(dict(kanne_scalars.get_registry().Unit(kanne_scalars.normalize_compact_units(unit)).dimensionality))
+            key = (
+                "unitless"
+                if unit is None
+                else str(
+                    dict(
+                        kanne_scalars.get_registry()
+                        .Unit(kanne_scalars.normalize_compact_units(unit))
+                        .dimensionality
+                    )
+                )
+            )
             dimensions.setdefault(key, []).append(name)
         if len(dimensions) > 1:
-            described = "; ".join(f"{', '.join(names)} ({key})" for key, names in dimensions.items())
-            raise MetricGroupError(f"Metric group '{group}' says its axes share one distance, but they measure different things: {described}. Put axes in one group only when a step along one is comparable to a step along another.")
+            described = "; ".join(
+                f"{', '.join(names)} ({key})" for key, names in dimensions.items()
+            )
+            raise MetricGroupError(
+                f"Metric group '{group}' says its axes share one distance, but they measure different things: {described}. Put axes in one group only when a step along one is comparable to a step along another."
+            )
 
 
 class NonAffineTransformError(ValueError):
@@ -233,7 +251,9 @@ def assert_axis_names_unique(axes: Sequence[AxisSpec]) -> None:
 
     if duplicates:
         given = ", ".join(axis.name for axis in axes)
-        raise AxisOrderError(f"The axes of a coordinate system are named uniquely -- an edge names an axis to act on it -- but {sorted(duplicates)} appears more than once in [{given}]")
+        raise AxisOrderError(
+            f"The axes of a coordinate system are named uniquely -- an edge names an axis to act on it -- but {sorted(duplicates)} appears more than once in [{given}]"
+        )
 
 
 def assert_unit_matches_type(axis_name: str, axis_type: str, unit: str) -> None:
@@ -250,9 +270,15 @@ def assert_unit_matches_type(axis_name: str, axis_type: str, unit: str) -> None:
     if required is None or kanne_scalars.is_arbitrary_unit(unit):
         return
 
-    dimensionality = kanne_scalars.get_registry().Unit(kanne_scalars.normalize_compact_units(unit)).dimensionality
+    dimensionality = (
+        kanne_scalars.get_registry()
+        .Unit(kanne_scalars.normalize_compact_units(unit))
+        .dimensionality
+    )
     if dict(dimensionality) != {required: 1}:
-        raise AxisUnitError(f"Axis '{axis_name}' is a {axis_type} axis, so its unit must measure {required}, but '{unit}' does not. Use 'a.u.' for a genuinely arbitrary unit.")
+        raise AxisUnitError(
+            f"Axis '{axis_name}' is a {axis_type} axis, so its unit must measure {required}, but '{unit}' does not. Use 'a.u.' for a genuinely arbitrary unit."
+        )
 
 
 def units_are_interchangeable(source: str | None, target: str | None) -> bool:
@@ -277,10 +303,14 @@ def units_are_interchangeable(source: str | None, target: str | None) -> bool:
     """
     if not source or not target or source == target:
         return True
-    if kanne_scalars.is_arbitrary_unit(source) or kanne_scalars.is_arbitrary_unit(target):
+    if kanne_scalars.is_arbitrary_unit(source) or kanne_scalars.is_arbitrary_unit(
+        target
+    ):
         return True
     try:
-        return kanne_scalars.normalize_compact_units(source) == kanne_scalars.normalize_compact_units(target)
+        return kanne_scalars.normalize_compact_units(
+            source
+        ) == kanne_scalars.normalize_compact_units(target)
     except Exception:
         # An unparseable unit is not this function's error to raise -- `assert_unit_matches_type`
         # owns that, and raising a second one here would report the wrong problem.
@@ -294,9 +324,13 @@ def assert_at_most_one_time_axis(axes: Sequence[AxisSpec]) -> None:
     complains -- and `resolve_render_axes` silently picks the first and drops the
     second. A scene with two clocks has no meaning; it just renders one of them.
     """
-    time_axes = [axis.name for axis in axes if axis.type == enums.AxisTypeChoices.TIME.value]
+    time_axes = [
+        axis.name for axis in axes if axis.type == enums.AxisTypeChoices.TIME.value
+    ]
     if len(time_axes) > 1:
-        raise AxisOrderError(f"A coordinate system may carry at most one TIME axis, but was given {time_axes}")
+        raise AxisOrderError(
+            f"A coordinate system may carry at most one TIME axis, but was given {time_axes}"
+        )
 
 
 def spatial_axes(axes: Sequence[AxisSpec]) -> list[AxisSpec]:
@@ -375,10 +409,16 @@ def _is_trace(extended: Sequence[AxisSpec]) -> bool:
     """
     measured = [axis for axis in extended if axis.type in METRIC_AXIS_TYPES]
     beside = [axis for axis in extended if axis.type not in METRIC_AXIS_TYPES]
-    return len(measured) == 1 and len(beside) <= 1 and all(axis.type in ENUMERATING_AXIS_TYPES for axis in beside)
+    return (
+        len(measured) == 1
+        and len(beside) <= 1
+        and all(axis.type in ENUMERATING_AXIS_TYPES for axis in beside)
+    )
 
 
-def specs_for_axes(axes: Sequence[AxisSpec], shape: Sequence[int]) -> list[enums.ArrayDatasetSpec]:
+def specs_for_axes(
+    axes: Sequence[AxisSpec], shape: Sequence[int]
+) -> list[enums.ArrayDatasetSpec]:
     """Every spec these axes satisfy at this shape: the one spatial member, then a modifier per non-spatial axis type, then what the whole amounts to.
 
     **An axis counts only when it has more than one position.** A z axis of a single plane
@@ -398,13 +438,17 @@ def specs_for_axes(axes: Sequence[AxisSpec], shape: Sequence[int]) -> list[enums
     the stored column can never disagree with it.
     """
     if len(shape) != len(axes):
-        raise ValueError(f"{len(axes)} axes for a {len(shape)}-dimensional shape: a dataset's spec is read off its axes and their extents together.")
+        raise ValueError(
+            f"{len(axes)} axes for a {len(shape)}-dimensional shape: a dataset's spec is read off its axes and their extents together."
+        )
 
     extended = [axis for axis, extent in zip(axes, shape) if extent > 1]
     count = len(spatial_axes(extended))
     specs = [_SPATIAL_SPEC_BY_COUNT.get(count, enums.ArrayDatasetSpec.HYPERVOLUME)]
     present = {axis.type for axis in extended}
-    specs.extend(spec for axis_type, spec in _SPEC_BY_AXIS_TYPE.items() if axis_type in present)
+    specs.extend(
+        spec for axis_type, spec in _SPEC_BY_AXIS_TYPE.items() if axis_type in present
+    )
     if _is_trace(extended):
         specs.append(enums.ArrayDatasetSpec.TRACE)
     return specs
@@ -440,13 +484,31 @@ _PLACEMENT_SPEC_BY_COUNT: dict[int, enums.TableDatasetSpec] = {
 
 #: The placement specs a point or a track layer draws: at least two SPACE coordinate columns.
 POINT_TABLE_SPECS: frozenset[enums.TableDatasetSpec] = frozenset(
-    {enums.TableDatasetSpec.POINTS_2D, enums.TableDatasetSpec.POINTS_3D, enums.TableDatasetSpec.POINTS_ND}
+    {
+        enums.TableDatasetSpec.POINTS_2D,
+        enums.TableDatasetSpec.POINTS_3D,
+        enums.TableDatasetSpec.POINTS_ND,
+    }
 )
 
 #: The DuckDB type names that are numbers. A DECIMAL carries its precision in the name, so
 #: it is matched by prefix.
 _NUMERIC_DTYPES: frozenset[str] = frozenset(
-    {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT", "FLOAT", "REAL", "DOUBLE"}
+    {
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "HUGEINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+        "UHUGEINT",
+        "FLOAT",
+        "REAL",
+        "DOUBLE",
+    }
 )
 
 
@@ -456,7 +518,9 @@ def is_numeric_dtype(dtype: str) -> bool:
     return dtype in _NUMERIC_DTYPES or dtype.startswith("DECIMAL")
 
 
-def specs_for_columns(columns: Sequence[ColumnSpec], pinned: Iterable[str] = ()) -> list[enums.TableDatasetSpec]:
+def specs_for_columns(
+    columns: Sequence[ColumnSpec], pinned: Iterable[str] = ()
+) -> list[enums.TableDatasetSpec]:
     """Every spec these declared columns satisfy: the one placement member, then a modifier per declared fact, then what the whole amounts to.
 
     ``pinned`` names the coordinate columns a lens' windows hold to a single value
@@ -480,17 +544,30 @@ def specs_for_columns(columns: Sequence[ColumnSpec], pinned: Iterable[str] = ())
     lens' spec is this function over the same columns and its own pins, materialized when the lens is made.
     """
     held = set(pinned)
-    coordinates = [column for column in columns if column.role == enums.ColumnRoleChoices.COORDINATE.value and column.name not in held]
-    spatial = sum(1 for column in coordinates if column.axis_type == enums.AxisTypeChoices.SPACE.value)
+    coordinates = [
+        column
+        for column in columns
+        if column.role == enums.ColumnRoleChoices.COORDINATE.value
+        and column.name not in held
+    ]
+    spatial = sum(
+        1
+        for column in coordinates
+        if column.axis_type == enums.AxisTypeChoices.SPACE.value
+    )
     roles = {column.role for column in columns}
     per_collection: dict[int, int] = {}
     for column in columns:
         if column.node_references is not None:
-            per_collection[column.node_references] = per_collection.get(column.node_references, 0) + 1
+            per_collection[column.node_references] = (
+                per_collection.get(column.node_references, 0) + 1
+            )
     node_columns = set(per_collection.values())
 
     specs = [_PLACEMENT_SPEC_BY_COUNT.get(spatial, enums.TableDatasetSpec.POINTS_ND)]
-    if any(column.axis_type == enums.AxisTypeChoices.TIME.value for column in coordinates):
+    if any(
+        column.axis_type == enums.AxisTypeChoices.TIME.value for column in coordinates
+    ):
         specs.append(enums.TableDatasetSpec.TIMED)
     if enums.ColumnRoleChoices.TRACK_ID.value in roles:
         specs.append(enums.TableDatasetSpec.TRACKED)
@@ -504,7 +581,11 @@ def specs_for_columns(columns: Sequence[ColumnSpec], pinned: Iterable[str] = ())
         specs.append(enums.TableDatasetSpec.EDGE_TABLE)
 
     measured = sum(1 for column in coordinates if column.axis_type in METRIC_AXIS_TYPES)
-    has_value = any(column.role == enums.ColumnRoleChoices.ATTRIBUTE.value and is_numeric_dtype(column.dtype) for column in columns)
+    has_value = any(
+        column.role == enums.ColumnRoleChoices.ATTRIBUTE.value
+        and is_numeric_dtype(column.dtype)
+        for column in columns
+    )
     if measured == 1 and has_value:
         specs.append(enums.TableDatasetSpec.SERIES)
     return specs
@@ -512,7 +593,11 @@ def specs_for_columns(columns: Sequence[ColumnSpec], pinned: Iterable[str] = ())
 
 def pinned_axes(windows: Iterable["WindowLike"]) -> list[str]:
     """The axes these windows hold to a single value: ``min == max``. The window form of an extent of one."""
-    return [window.axis for window in windows if window.min is not None and window.min == window.max]
+    return [
+        window.axis
+        for window in windows
+        if window.min is not None and window.min == window.max
+    ]
 
 
 def pins(selection: Iterable[Mapping[str, object]]) -> dict[str, int | float]:
@@ -535,7 +620,11 @@ def pins(selection: Iterable[Mapping[str, object]]) -> dict[str, int | float]:
                 pinned[axis] = start
         else:
             low, high = entry.get("min"), entry.get("max")
-            if isinstance(low, int | float) and not isinstance(low, bool) and low == high:
+            if (
+                isinstance(low, int | float)
+                and not isinstance(low, bool)
+                and low == high
+            ):
                 pinned[axis] = low
     return pinned
 
@@ -548,7 +637,14 @@ _SPARSE_SPEC_BY_RANK: dict[int, enums.SparseDatasetSpec] = {
 }
 
 
-def is_sparse_slice(axis_names: Sequence[str], shape: Sequence[int], *, identified: Iterable[str], indexed: Iterable[str], windows: Sequence["WindowLike"]) -> bool:
+def is_sparse_slice(
+    axis_names: Sequence[str],
+    shape: Sequence[int],
+    *,
+    identified: Iterable[str],
+    indexed: Iterable[str],
+    windows: Sequence["WindowLike"],
+) -> bool:
     """Whether these windows cut one slice of a sparse matrix: what a SPARSE picker entry reads.
 
     One whole-number position, inside the axis' extent, on every axis the matrix identifies
@@ -561,9 +657,17 @@ def is_sparse_slice(axis_names: Sequence[str], shape: Sequence[int], *, identifi
         return False
     known = len(shape) == len(axis_names)
     for axis, window in windowed.items():
-        if window.min is None or window.min != window.max or window.min != int(window.min):
+        if (
+            window.min is None
+            or window.min != window.max
+            or window.min != int(window.min)
+        ):
             return False
-        if known and axis in axis_names and not 0 <= int(window.min) < shape[list(axis_names).index(axis)]:
+        if (
+            known
+            and axis in axis_names
+            and not 0 <= int(window.min) < shape[list(axis_names).index(axis)]
+        ):
             return False
     return bool(set(windowed) & set(indexed))
 
@@ -585,14 +689,22 @@ def specs_for_sparse(
     """
     known = len(shape) == len(axis_names)
     held = set(pinned_axes(windows))
-    free = [name for index, name in enumerate(axis_names) if name not in held and (not known or shape[index] > 1)]
+    free = [
+        name
+        for index, name in enumerate(axis_names)
+        if name not in held and (not known or shape[index] > 1)
+    ]
     specs = [_SPARSE_SPEC_BY_RANK.get(len(free), enums.SparseDatasetSpec.TENSOR)]
-    if is_sparse_slice(axis_names, shape, identified=identified, indexed=indexed, windows=windows):
+    if is_sparse_slice(
+        axis_names, shape, identified=identified, indexed=indexed, windows=windows
+    ):
         specs.append(enums.SparseDatasetSpec.SLICE)
     return specs
 
 
-def array_to_vertex_order(coords: Sequence[float], axes: Sequence[AxisSpec]) -> list[float]:
+def array_to_vertex_order(
+    coords: Sequence[float], axes: Sequence[AxisSpec]
+) -> list[float]:
     """Permute spatial coordinates from array order (z, y, x) to vertex order (x, y, z).
 
     THE permutation. Array order is slowest-varying first, matching a numpy shape
@@ -603,23 +715,36 @@ def array_to_vertex_order(coords: Sequence[float], axes: Sequence[AxisSpec]) -> 
     ``coords`` is indexed like the full axis list; only the spatial entries are
     returned, reversed.
     """
-    spatial_indices = [index for index, axis in enumerate(axes) if axis.type == enums.AxisTypeChoices.SPACE.value]
+    spatial_indices = [
+        index
+        for index, axis in enumerate(axes)
+        if axis.type == enums.AxisTypeChoices.SPACE.value
+    ]
     return [coords[index] for index in reversed(spatial_indices)]
 
 
-def vertex_to_array_order(vertex: Sequence[float], axes: Sequence[AxisSpec]) -> dict[str, float]:
+def vertex_to_array_order(
+    vertex: Sequence[float], axes: Sequence[AxisSpec]
+) -> dict[str, float]:
     """The inverse of :func:`array_to_vertex_order`: map (x, y, z) back onto named array axes."""
     spatial = spatial_axes(axes)
     if len(vertex) != len(spatial):
-        raise ValueError(f"Expected {len(spatial)} vertex components for spatial axes {[axis.name for axis in spatial]}, got {len(vertex)}")
-    return {axis.name: value for axis, value in zip(reversed(spatial), vertex, strict=True)}
+        raise ValueError(
+            f"Expected {len(spatial)} vertex components for spatial axes {[axis.name for axis in spatial]}, got {len(vertex)}"
+        )
+    return {
+        axis.name: value for axis, value in zip(reversed(spatial), vertex, strict=True)
+    }
 
 
 #: The screen axes, named. A spatial axis set that is exactly one of these is bound by name;
 #: anything else falls back to position. Two entries and three, and nothing in between: a
 #: partial match is the case that must *not* bind, because then one axis is chosen by name and
 #: its neighbour by position and the two can claim the same slot.
-_SCREEN_AXIS_NAMES: tuple[frozenset[str], ...] = (frozenset({"x", "y"}), frozenset({"x", "y", "z"}))
+_SCREEN_AXIS_NAMES: tuple[frozenset[str], ...] = (
+    frozenset({"x", "y"}),
+    frozenset({"x", "y", "z"}),
+)
 
 
 def resolve_render_axes(axes: Sequence[AxisSpec]) -> RenderAxes:
@@ -650,7 +775,9 @@ def resolve_render_axes(axes: Sequence[AxisSpec]) -> RenderAxes:
     """
     spatial = spatial_axes(axes)
     if len(spatial) < 2:
-        raise ValueError(f"A renderable coordinate system needs at least two spatial axes, got {[axis.name for axis in spatial]}")
+        raise ValueError(
+            f"A renderable coordinate system needs at least two spatial axes, got {[axis.name for axis in spatial]}"
+        )
 
     by_name = {axis.name.lower(): axis.name for axis in spatial}
     if len(by_name) == len(spatial) and frozenset(by_name) in _SCREEN_AXIS_NAMES:
@@ -663,16 +790,39 @@ def resolve_render_axes(axes: Sequence[AxisSpec]) -> RenderAxes:
         x=x,
         y=y,
         z=z,
-        t=next((axis.name for axis in axes if axis.type == enums.AxisTypeChoices.TIME.value), None),
-        intensity=next((axis.name for axis in axes if axis.type == enums.AxisTypeChoices.CHANNEL.value), None),
+        t=next(
+            (
+                axis.name
+                for axis in axes
+                if axis.type == enums.AxisTypeChoices.TIME.value
+            ),
+            None,
+        ),
+        intensity=next(
+            (
+                axis.name
+                for axis in axes
+                if axis.type == enums.AxisTypeChoices.CHANNEL.value
+            ),
+            None,
+        ),
         phasor=next((axis.name for axis in axes if axis.type in _PHASOR_TYPES), None),
         # DISPLACEMENT only, deliberately: a COORDINATE value axis holds absolute positions --
         # a lookup table, a warp target -- which is a map to follow, not an offset to draw.
-        vector=next((axis.name for axis in axes if axis.type == enums.AxisTypeChoices.DISPLACEMENT.value), None),
+        vector=next(
+            (
+                axis.name
+                for axis in axes
+                if axis.type == enums.AxisTypeChoices.DISPLACEMENT.value
+            ),
+            None,
+        ),
     )
 
 
-def is_renderable(axes: Sequence[AxisSpec], axis_names: Sequence[str], shape: Sequence[int]) -> bool:
+def is_renderable(
+    axes: Sequence[AxisSpec], axis_names: Sequence[str], shape: Sequence[int]
+) -> bool:
     """Whether data of this shape can be drawn at all: an x and a y axis of more than one pixel.
 
     The boolean form of the condition ``core.mutations.layer.assert_renderable`` raises on,
@@ -692,7 +842,13 @@ def is_renderable(axes: Sequence[AxisSpec], axis_names: Sequence[str], shape: Se
         return False
 
     def size(axis: str | None) -> int:
-        return shape[axis_names.index(axis)] if axis is not None and axis in axis_names and axis_names.index(axis) < len(shape) else 0
+        return (
+            shape[axis_names.index(axis)]
+            if axis is not None
+            and axis in axis_names
+            and axis_names.index(axis) < len(shape)
+            else 0
+        )
 
     return size(render.x) > 1 and size(render.y) > 1
 
@@ -734,7 +890,9 @@ def pyramid_transform(
     displacement) must keep their extent: c=0.5 between two channels is nonsense.
     """
     if not len(shape_0) == len(shape_level) == len(axes):
-        raise ValueError(f"shape_0 ({len(shape_0)}), shape_level ({len(shape_level)}) and axes ({len(axes)}) must agree in length")
+        raise ValueError(
+            f"shape_0 ({len(shape_0)}), shape_level ({len(shape_level)}) and axes ({len(axes)}) must agree in length"
+        )
 
     scale: list[float] = []
     translation: list[float] = []
@@ -748,7 +906,9 @@ def pyramid_transform(
         factor = shape_0[index] / shape_level[index]
 
         if axis.type not in _DOWNSAMPLABLE_TYPES and factor != 1:
-            raise ValueError(f"Axis '{axis.name}' is of categorical type {axis.type} and must not be downsampled (shape {shape_0[index]} -> {shape_level[index]}). A fractional coordinate between two categories is meaningless.")
+            raise ValueError(
+                f"Axis '{axis.name}' is of categorical type {axis.type} and must not be downsampled (shape {shape_0[index]} -> {shape_level[index]}). A fractional coordinate between two categories is meaningless."
+            )
 
         scale.append(factor)
         translation.append((factor - 1) / 2)
@@ -788,21 +948,37 @@ def stated_level_transform(
     """
     rank = len(axes)
     if not len(shape_0) == len(shape_level) == rank:
-        raise ValueError(f"shape_0 ({len(shape_0)}), shape_level ({len(shape_level)}) and axes ({rank}) must agree in length")
+        raise ValueError(
+            f"shape_0 ({len(shape_0)}), shape_level ({len(shape_level)}) and axes ({rank}) must agree in length"
+        )
     if len(scale) != rank or len(translation) != rank:
-        raise ValueError(f"A pyramid level states one scale and one translation per axis, in array order {[axis.name for axis in axes]}: got {len(scale)} scale(s) and {len(translation)} translation(s)")
+        raise ValueError(
+            f"A pyramid level states one scale and one translation per axis, in array order {[axis.name for axis in axes]}: got {len(scale)} scale(s) and {len(translation)} translation(s)"
+        )
 
     for index, axis in enumerate(axes):
         factor, offset = float(scale[index]), float(translation[index])
         size_0, size = shape_0[index], shape_level[index]
         if not math.isfinite(factor) or not math.isfinite(offset):
-            raise ValueError(f"Axis '{axis.name}': a pyramid level's scale and translation must be finite numbers, got scale {scale[index]} and translation {translation[index]}")
+            raise ValueError(
+                f"Axis '{axis.name}': a pyramid level's scale and translation must be finite numbers, got scale {scale[index]} and translation {translation[index]}"
+            )
         if factor < 1:
-            raise ValueError(f"Axis '{axis.name}' has scale {factor}: a pyramid level is coarser than level 0 or as fine, never finer, so its scale is at least 1")
-        if axis.type not in _DOWNSAMPLABLE_TYPES and (factor != 1 or offset != 0 or size != size_0):
-            raise ValueError(f"Axis '{axis.name}' is of categorical type {axis.type} and must not be downsampled or shifted: it takes scale 1 and translation 0 and keeps its {size_0} positions")
+            raise ValueError(
+                f"Axis '{axis.name}' has scale {factor}: a pyramid level is coarser than level 0 or as fine, never finer, so its scale is at least 1"
+            )
+        if axis.type not in _DOWNSAMPLABLE_TYPES and (
+            factor != 1 or offset != 0 or size != size_0
+        ):
+            raise ValueError(
+                f"Axis '{axis.name}' is of categorical type {axis.type} and must not be downsampled or shifted: it takes scale 1 and translation 0 and keeps its {size_0} positions"
+            )
         covered = size_0 / factor
-        if not math.floor(covered + _LEVEL_FACTOR_SLACK) <= size <= math.ceil(covered - _LEVEL_FACTOR_SLACK):
+        if (
+            not math.floor(covered + _LEVEL_FACTOR_SLACK)
+            <= size
+            <= math.ceil(covered - _LEVEL_FACTOR_SLACK)
+        ):
             raise ValueError(
                 f"Axis '{axis.name}': a scale of {factor} takes level 0's {size_0} voxels to {covered:g}, so the level would hold "
                 f"{math.floor(covered + _LEVEL_FACTOR_SLACK)} or {math.ceil(covered - _LEVEL_FACTOR_SLACK)} of them -- but it holds {size}. "
@@ -812,7 +988,9 @@ def stated_level_transform(
     return [float(value) for value in scale], [float(value) for value in translation]
 
 
-def lens_shape(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable) -> list[int]:
+def lens_shape(
+    dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable
+) -> list[int]:
     """The shape a lens' slices cut out of its dataset.
 
     Uses Python's own slice semantics, so negatives, omitted bounds and
@@ -826,13 +1004,17 @@ def lens_shape(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], 
         if selection is None:
             shape.append(size)
             continue
-        start, stop, step = slice(selection.start, selection.stop, selection.step).indices(size)
+        start, stop, step = slice(
+            selection.start, selection.stop, selection.step
+        ).indices(size)
         shape.append(len(range(start, stop, step)))
 
     return shape
 
 
-def lens_voxel_box(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable) -> tuple[list[float], list[float]]:
+def lens_voxel_box(
+    dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable
+) -> tuple[list[float], list[float]]:
     """The box of the voxels a lens keeps, in the lens' own space, half a voxel around each centre.
 
     Lens voxel ``i`` is dataset voxel ``start + i·step``, and that voxel's cell -- half a dataset
@@ -855,7 +1037,11 @@ def lens_voxel_box(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
     return mins, maxs
 
 
-def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
+def normalize_slices(
+    dataset_shape: Sequence[int],
+    dataset_axis_names: Sequence[str],
+    slices: Iterable["SliceLike"],
+) -> list[dict[str, int | str]]:
     """The one spelling of a selection: a lens' slices resolved against its dataset.
 
     A lens is a deterministic function of what it selects, so two callers asking for the
@@ -881,9 +1067,13 @@ def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[
     by_axis: dict[str, SliceLike] = {}
     for selection in slices:
         if selection.axis not in dataset_axis_names:
-            raise ValueError(f"Slice names axis '{selection.axis}', which the dataset does not have (its axes are {list(dataset_axis_names)})")
+            raise ValueError(
+                f"Slice names axis '{selection.axis}', which the dataset does not have (its axes are {list(dataset_axis_names)})"
+            )
         if selection.axis in by_axis:
-            raise ValueError(f"Axis '{selection.axis}' is sliced twice; one slice per axis")
+            raise ValueError(
+                f"Axis '{selection.axis}' is sliced twice; one slice per axis"
+            )
         by_axis[selection.axis] = selection
 
     normalized: list[dict[str, int | str]] = []
@@ -893,11 +1083,15 @@ def normalize_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[
             continue
         step = selection.step if selection.step is not None else 1
         if step <= 0:
-            raise ValueError(f"Slice over axis '{axis}' has step {step}; a lens narrows an axis, it does not reverse it, so the step must be positive")
+            raise ValueError(
+                f"Slice over axis '{axis}' has step {step}; a lens narrows an axis, it does not reverse it, so the step must be positive"
+            )
         start, stop, step = slice(selection.start, selection.stop, step).indices(size)
         count = len(range(start, stop, step))
         if count == 0:
-            raise ValueError(f"Slice over axis '{axis}' ({selection.start}:{selection.stop}:{selection.step}) selects nothing of its {size} positions")
+            raise ValueError(
+                f"Slice over axis '{axis}' ({selection.start}:{selection.stop}:{selection.step}) selects nothing of its {size} positions"
+            )
         if count == 1:
             # One position has no stride: `2:3:2` and `2:3` keep the same voxel, and a step
             # kept here would make them two rows -- and a stepped edge (a SCALE) for a crop.
@@ -919,7 +1113,9 @@ class WindowLike(Protocol):
     max: float | None
 
 
-def normalize_windows(axis_names: Sequence[str], windows: Iterable["WindowLike"]) -> list[dict[str, float | str | None]]:
+def normalize_windows(
+    axis_names: Sequence[str], windows: Iterable["WindowLike"]
+) -> list[dict[str, float | str | None]]:
     """The one spelling of a value selection over a container that is not an array.
 
     A window keeps the positions along an axis whose value lies in ``[min, max]``; it
@@ -934,9 +1130,13 @@ def normalize_windows(axis_names: Sequence[str], windows: Iterable["WindowLike"]
     by_axis: dict[str, WindowLike] = {}
     for window in windows:
         if window.axis not in axis_names:
-            raise ValueError(f"Window names axis '{window.axis}', which the container does not have (its axes are {list(axis_names)})")
+            raise ValueError(
+                f"Window names axis '{window.axis}', which the container does not have (its axes are {list(axis_names)})"
+            )
         if window.axis in by_axis:
-            raise ValueError(f"Axis '{window.axis}' is windowed twice; one window per axis")
+            raise ValueError(
+                f"Axis '{window.axis}' is windowed twice; one window per axis"
+            )
         by_axis[window.axis] = window
 
     normalized: list[dict[str, float | str | None]] = []
@@ -951,13 +1151,17 @@ def normalize_windows(axis_names: Sequence[str], windows: Iterable["WindowLike"]
         # A window is inclusive on both sides, so `[v, v]` keeps the positions at `v`: one
         # channel, one feature, one timepoint. Only a window whose min lies above its max is empty.
         if low is not None and high is not None and low > high:
-            raise ValueError(f"Window over axis '{axis}' runs from {low} to {high} and keeps nothing; its min must not exceed its max")
+            raise ValueError(
+                f"Window over axis '{axis}' runs from {low} to {high} and keeps nothing; its min must not exceed its max"
+            )
         normalized.append({"axis": axis, "min": low, "max": high})
 
     return normalized
 
 
-def lens_to_parent(dataset_axis_names: Sequence[str], slices: Iterable) -> tuple[str, dict]:
+def lens_to_parent(
+    dataset_axis_names: Sequence[str], slices: Iterable
+) -> tuple[str, dict]:
     """The edge from a lens' coordinate system to its dataset's level-0 array system.
 
     This closes a live correctness hole: slicing shifts voxel coordinates and
@@ -973,13 +1177,22 @@ def lens_to_parent(dataset_axis_names: Sequence[str], slices: Iterable) -> tuple
     """
     by_axis = {slice_.axis: slice_ for slice_ in slices}
 
-    starts = [float(by_axis[axis].start or 0) if axis in by_axis else 0.0 for axis in dataset_axis_names]
-    steps = [float(by_axis[axis].step or 1) if axis in by_axis else 1.0 for axis in dataset_axis_names]
+    starts = [
+        float(by_axis[axis].start or 0) if axis in by_axis else 0.0
+        for axis in dataset_axis_names
+    ]
+    steps = [
+        float(by_axis[axis].step or 1) if axis in by_axis else 1.0
+        for axis in dataset_axis_names
+    ]
 
     if all(step == 1 for step in steps):
         return enums.TransformKindChoices.TRANSLATION.value, {"translation": starts}
 
-    return enums.TransformKindChoices.SEQUENCE.value, {"scale": steps, "translation": starts}
+    return enums.TransformKindChoices.SEQUENCE.value, {
+        "scale": steps,
+        "translation": starts,
+    }
 
 
 # --- affine composition, for the derived ROI bounding box -------------------
@@ -987,12 +1200,17 @@ def lens_to_parent(dataset_axis_names: Sequence[str], slices: Iterable) -> tuple
 
 def identity_matrix(n: int) -> list[list[float]]:
     """An (n+1) x (n+1) homogeneous identity matrix."""
-    return [[1.0 if row == col else 0.0 for col in range(n + 1)] for row in range(n + 1)]
+    return [
+        [1.0 if row == col else 0.0 for col in range(n + 1)] for row in range(n + 1)
+    ]
 
 
 def matmul(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
     """Multiply two homogeneous matrices."""
-    return [[sum(a[i][k] * b[k][j] for k in range(len(b))) for j in range(len(b[0]))] for i in range(len(a))]
+    return [
+        [sum(a[i][k] * b[k][j] for k in range(len(b))) for j in range(len(b[0]))]
+        for i in range(len(a))
+    ]
 
 
 #: How close to zero a pivot may be, relative to the matrix's largest entry, before the
@@ -1039,7 +1257,9 @@ def invert_matrix(matrix: Sequence[Sequence[float]]) -> list[list[float]]:
     """
     size = len(matrix)
     if any(len(row) != size for row in matrix):
-        raise ValueError(f"Only a square matrix has an inverse, but this one is {size} x {[len(row) for row in matrix]}")
+        raise ValueError(
+            f"Only a square matrix has an inverse, but this one is {size} x {[len(row) for row in matrix]}"
+        )
 
     rows = [[float(value) for value in row] for row in matrix]
     # `identity_matrix` takes a *rank* and returns (n+1) x (n+1), being written for
@@ -1068,8 +1288,14 @@ def invert_matrix(matrix: Sequence[Sequence[float]]) -> list[list[float]]:
             factor = rows[index][column]
             if factor == 0.0:
                 continue
-            rows[index] = [value - factor * other for value, other in zip(rows[index], rows[column])]
-            result[index] = [value - factor * other for value, other in zip(result[index], result[column])]
+            rows[index] = [
+                value - factor * other
+                for value, other in zip(rows[index], rows[column])
+            ]
+            result[index] = [
+                value - factor * other
+                for value, other in zip(result[index], result[column])
+            ]
 
     return result
 
@@ -1127,7 +1353,11 @@ def to_matrix(kind: str, params: dict, n: int) -> list[list[float]]:
             matrix[i][n] = float(value)
         return matrix
 
-    if kind in (enums.TransformKindChoices.AFFINE.value, enums.TransformKindChoices.ROTATION.value, enums.TransformKindChoices.MAP_AXIS.value):
+    if kind in (
+        enums.TransformKindChoices.AFFINE.value,
+        enums.TransformKindChoices.ROTATION.value,
+        enums.TransformKindChoices.MAP_AXIS.value,
+    ):
         # MAP_AXIS is a permutation, which is an affine map -- but its permutation lives in
         # the edge's `inputAxes`/`outputAxes` *columns*, not in `params`, and this function
         # only ever sees params. `graph._edge_params` synthesizes the matrix from those two
@@ -1144,13 +1374,20 @@ def to_matrix(kind: str, params: dict, n: int) -> list[list[float]]:
     if kind == enums.TransformKindChoices.SEQUENCE.value:
         # The SEQUENCE emitted by lens_to_parent: scale, then translate.
         if "scale" in params:
-            matrix = matmul(to_matrix(enums.TransformKindChoices.SCALE.value, params, n), matrix)
+            matrix = matmul(
+                to_matrix(enums.TransformKindChoices.SCALE.value, params, n), matrix
+            )
         if "translation" in params:
-            matrix = matmul(to_matrix(enums.TransformKindChoices.TRANSLATION.value, params, n), matrix)
+            matrix = matmul(
+                to_matrix(enums.TransformKindChoices.TRANSLATION.value, params, n),
+                matrix,
+            )
         return matrix
 
     if kind == enums.TransformKindChoices.UNMAPPABLE.value:
-        raise NonAffineTransformError("an UNMAPPABLE edge declares that no point of one space corresponds to a point of the other, so it has no matrix -- not an affine one, and not any other")
+        raise NonAffineTransformError(
+            "an UNMAPPABLE edge declares that no point of one space corresponds to a point of the other, so it has no matrix -- not an affine one, and not any other"
+        )
 
     if kind == enums.TransformKindChoices.BY_DIMENSION.value:
         raise NonAffineTransformError(
@@ -1160,7 +1397,9 @@ def to_matrix(kind: str, params: dict, n: int) -> list[list[float]]:
     raise NonAffineTransformError(f"{kind} has no affine matrix")
 
 
-def permutation_matrix(input_axes: list[str], output_axes: list[str], axis_order: list[str]) -> list[list[float]]:
+def permutation_matrix(
+    input_axes: list[str], output_axes: list[str], axis_order: list[str]
+) -> list[list[float]]:
     """The affine matrix of a MAP_AXIS edge, a permutation written out.
 
     ``axis_order`` is the order the coordinate vector is written in, so a coordinate at
@@ -1176,7 +1415,9 @@ def permutation_matrix(input_axes: list[str], output_axes: list[str], axis_order
     for column, axis in enumerate(axis_order):
         target = mapping.get(axis, axis)
         if target not in axis_order:
-            raise NonAffineTransformError(f"A MAP_AXIS edge maps '{axis}' onto '{target}', which is not one of the axes {axis_order} its coordinates are written in")
+            raise NonAffineTransformError(
+                f"A MAP_AXIS edge maps '{axis}' onto '{target}', which is not one of the axes {axis_order} its coordinates are written in"
+            )
         matrix[axis_order.index(target)][column] = 1.0
 
     return matrix
@@ -1193,7 +1434,9 @@ def compose(edges: Sequence[tuple[str, dict]], n: int) -> list[list[float]]:
 def apply(matrix: list[list[float]], point: Sequence[float]) -> list[float]:
     """Apply a homogeneous matrix to a point."""
     n = len(point)
-    return [sum(matrix[i][j] * point[j] for j in range(n)) + matrix[i][n] for i in range(n)]
+    return [
+        sum(matrix[i][j] * point[j] for j in range(n)) + matrix[i][n] for i in range(n)
+    ]
 
 
 def bbox_corners(mins: Sequence[float], maxs: Sequence[float]) -> list[list[float]]:
@@ -1214,7 +1457,9 @@ def aabb(points: Sequence[Sequence[float]]) -> tuple[list[float], list[float]]:
     )
 
 
-def transformed_bbox(mins: Sequence[float], maxs: Sequence[float], edges: Sequence[tuple[str, dict]]) -> dict:
+def transformed_bbox(
+    mins: Sequence[float], maxs: Sequence[float], edges: Sequence[tuple[str, dict]]
+) -> dict:
     """The bounding box of a box after a chain of transformations.
 
     **Transforms all the corners**, not just the two extremes. An affine-transformed
@@ -1345,7 +1590,11 @@ class FieldForm:
 
     def single_term(self) -> tuple[int, float, float] | None:
         """``(source index, inner scale, inner offset)`` when this is a 1-D field read along one source axis -- a lookup."""
-        if len(self.inner) != 1 or self.component is not None or any(value != 0.0 for value in self.base.coefficients):
+        if (
+            len(self.inner) != 1
+            or self.component is not None
+            or any(value != 0.0 for value in self.base.coefficients)
+        ):
             return None
         term = _single_term(self.inner[0])
         if term is None:
@@ -1362,21 +1611,33 @@ class AxedForm:
     constant: float
 
 
-def _forms_from_matrix(matrix: list[list[float]], row_labels: Sequence[str], rank: int) -> dict[str, AxedForm]:
+def _forms_from_matrix(
+    matrix: list[list[float]], row_labels: Sequence[str], rank: int
+) -> dict[str, AxedForm]:
     """The rows of a homogeneous matrix as one labelled functional each."""
     return {
-        label: AxedForm(coefficients=tuple(float(matrix[index][column]) for column in range(rank)), constant=float(matrix[index][rank]))
+        label: AxedForm(
+            coefficients=tuple(float(matrix[index][column]) for column in range(rank)),
+            constant=float(matrix[index][rank]),
+        )
         for index, label in enumerate(row_labels)
         if index < len(matrix)
     }
 
 
-def _identity_form(axis: str, input_axes: Sequence[str], factor: float = 1.0) -> AxedForm:
+def _identity_form(
+    axis: str, input_axes: Sequence[str], factor: float = 1.0
+) -> AxedForm:
     """The functional that passes one input axis through, in the output axis' own unit."""
-    return AxedForm(coefficients=tuple(factor if name == axis else 0.0 for name in input_axes), constant=0.0)
+    return AxedForm(
+        coefficients=tuple(factor if name == axis else 0.0 for name in input_axes),
+        constant=0.0,
+    )
 
 
-def _unit_of(names: Sequence[str], units: Sequence[str | None], axis: str) -> str | None:
+def _unit_of(
+    names: Sequence[str], units: Sequence[str | None], axis: str
+) -> str | None:
     """One endpoint's unit for a named axis, or None when it has none or none were supplied."""
     if not units or axis not in names:
         return None
@@ -1422,11 +1683,17 @@ def unit_factor(source: str | None, target: str | None) -> float | None:
     """How much one ``source`` is worth in ``target``: 1.0 when either is absent or arbitrary, None when no conversion exists."""
     if not source or not target or source == target:
         return 1.0
-    if kanne_scalars.is_arbitrary_unit(source) or kanne_scalars.is_arbitrary_unit(target):
+    if kanne_scalars.is_arbitrary_unit(source) or kanne_scalars.is_arbitrary_unit(
+        target
+    ):
         return 1.0
     registry = kanne_scalars.get_registry()
     try:
-        return float(registry.Quantity(1.0, kanne_scalars.normalize_compact_units(source)).to(kanne_scalars.normalize_compact_units(target)).magnitude)
+        return float(
+            registry.Quantity(1.0, kanne_scalars.normalize_compact_units(source))
+            .to(kanne_scalars.normalize_compact_units(target))
+            .magnitude
+        )
     except Exception:
         return None
 
@@ -1455,19 +1722,36 @@ def _by_dimension_forms(step: AxedStep) -> dict[str, AxedForm]:
             coefficients = [0.0] * rank
             for column, in_axis in enumerate(part.input_axes):
                 if column < len(form.coefficients) and in_axis in step.input_axes:
-                    coefficients[step.input_axes.index(in_axis)] = float(form.coefficients[column])
-            forms[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=float(form.constant))
+                    coefficients[step.input_axes.index(in_axis)] = float(
+                        form.coefficients[column]
+                    )
+            forms[out_axis] = AxedForm(
+                coefficients=tuple(coefficients), constant=float(form.constant)
+            )
 
     for part in step.parts:
         if part.kind == enums.PartKind.FIELD.value:
             continue
         if part.kind == enums.PartKind.IDENTITY.value:
             for in_axis, out_axis in zip(part.input_axes, part.output_axes):
-                factor = unit_factor(_unit_of(step.input_axes, step.input_units, in_axis), _unit_of(step.output_axes, step.output_units, out_axis))
+                factor = unit_factor(
+                    _unit_of(step.input_axes, step.input_units, in_axis),
+                    _unit_of(step.output_axes, step.output_units, out_axis),
+                )
                 if factor is not None:
                     forms[out_axis] = _identity_form(in_axis, step.input_axes, factor)
             continue
-        lay(part, step_forms(AxedStep(kind=part.kind, params=part.params, input_axes=part.input_axes, output_axes=part.output_axes)))
+        lay(
+            part,
+            step_forms(
+                AxedStep(
+                    kind=part.kind,
+                    params=part.params,
+                    input_axes=part.input_axes,
+                    output_axes=part.output_axes,
+                )
+            ),
+        )
 
     return forms
 
@@ -1483,7 +1767,10 @@ def step_forms(step: AxedStep) -> dict[str, AxedForm]:
     if step.kind == enums.TransformKindChoices.BY_DIMENSION.value:
         return _by_dimension_forms(step)
 
-    if step.kind == enums.TransformKindChoices.IDENTITY.value and step.input_axes == step.output_axes:
+    if (
+        step.kind == enums.TransformKindChoices.IDENTITY.value
+        and step.input_axes == step.output_axes
+    ):
         # An IDENTITY passes every axis through, so every axis of it is the pass-through case
         # `_pass_through_factor` exists for. Without units on either side each factor is 1.0
         # and this is exactly what `_step_matrix` produced. Guarded on the two orders being
@@ -1501,7 +1788,11 @@ def step_forms(step: AxedStep) -> dict[str, AxedForm]:
     if step.kind == enums.TransformKindChoices.MAP_AXIS.value:
         # `permutation_matrix` writes its rows in the *input* system's axis order, because a
         # permutation relabels rather than reshapes -- so the row labels are the input's.
-        matrix = permutation_matrix(list(step.acts_on_input or ()), list(step.acts_on_output or ()), list(step.input_axes))
+        matrix = permutation_matrix(
+            list(step.acts_on_input or ()),
+            list(step.acts_on_output or ()),
+            list(step.input_axes),
+        )
         forms = _forms_from_matrix(matrix, step.input_axes, rank)
         return {axis: form for axis, form in forms.items() if axis in step.output_axes}
 
@@ -1519,7 +1810,9 @@ def step_forms(step: AxedStep) -> dict[str, AxedForm]:
         # describes is square and cannot reach a different output rank. `assert_edge_rank`
         # checks a scale or translation against the *input* rank only, so such an edge is
         # writable and only shows up here.
-        raise NonAffineTransformError(f"a {step.kind} edge maps {rank} axes onto {len(step.output_axes)}, so its parameters are not a square map -- only BY_DIMENSION states a rank change")
+        raise NonAffineTransformError(
+            f"a {step.kind} edge maps {rank} axes onto {len(step.output_axes)}, so its parameters are not a square map -- only BY_DIMENSION states a rank change"
+        )
 
     return _forms_from_matrix(_step_matrix(step, rank), step.output_axes, rank)
 
@@ -1551,7 +1844,9 @@ def _step_matrix(step: AxedStep, rank: int) -> list[list[float]]:
     return to_matrix(step.kind, step.params, rank)
 
 
-def compose_forms(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> dict[str, AxedForm]:
+def compose_forms(
+    steps: Sequence[AxedStep], source_axes: Sequence[str]
+) -> dict[str, AxedForm]:
     """Compose a path into one functional per destination axis it constrains.
 
     **Substitution, not per-step boxing.** Re-bounding a box at every step inflates it under
@@ -1569,16 +1864,25 @@ def compose_forms(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> dict
 
 def _single_term(form: AxedForm) -> tuple[int, float] | None:
     """The one source axis a functional reads, with its coefficient, or None when it reads zero or several."""
-    used = [(index, factor) for index, factor in enumerate(form.coefficients) if factor != 0.0]
+    used = [
+        (index, factor)
+        for index, factor in enumerate(form.coefficients)
+        if factor != 0.0
+    ]
     return used[0] if len(used) == 1 else None
 
 
 def _scaled_form(form: AxedForm, factor: float, constant: float = 0.0) -> AxedForm:
     """``factor * form + constant``."""
-    return AxedForm(coefficients=tuple(factor * value for value in form.coefficients), constant=factor * form.constant + constant)
+    return AxedForm(
+        coefficients=tuple(factor * value for value in form.coefficients),
+        constant=factor * form.constant + constant,
+    )
 
 
-def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> tuple[dict[str, AxedForm], dict[str, FieldForm]]:
+def compose_placement(
+    steps: Sequence[AxedStep], source_axes: Sequence[str]
+) -> tuple[dict[str, AxedForm], dict[str, FieldForm]]:
     """Compose a path into its affine functionals **and** the axes given by a field.
 
     A field map takes the place of a functional on the axes it gives and leaves every other
@@ -1592,7 +1896,9 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
     may only scale and offset a field's axis on its own (a session offset onto an experiment
     clock); anything that mixes it with another axis has no form this can state and drops it.
     """
-    current: dict[str, AxedForm] = {axis: _identity_form(axis, source_axes) for axis in source_axes}
+    current: dict[str, AxedForm] = {
+        axis: _identity_form(axis, source_axes) for axis in source_axes
+    }
     fields: dict[str, FieldForm] = {}
     rank = len(source_axes)
 
@@ -1601,13 +1907,21 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
         composed: dict[str, AxedForm] = {}
         carried: dict[str, FieldForm] = {}
         for out_axis, form in produced.items():
-            reads = [step.input_axes[index] for index, factor in enumerate(form.coefficients) if factor != 0.0 and index < len(step.input_axes)]
+            reads = [
+                step.input_axes[index]
+                for index, factor in enumerate(form.coefficients)
+                if factor != 0.0 and index < len(step.input_axes)
+            ]
             if any(axis in fields for axis in reads):
                 term = _single_term(form)
                 if term is not None:
                     index, factor = term
                     field = fields[step.input_axes[index]]
-                    carried[out_axis] = replace(field, scale=factor * field.scale, base=_scaled_form(field.base, factor, form.constant))
+                    carried[out_axis] = replace(
+                        field,
+                        scale=factor * field.scale,
+                        base=_scaled_form(field.base, factor, form.constant),
+                    )
                 continue
 
             coefficients = [0.0] * rank
@@ -1616,7 +1930,11 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
             for index, factor in enumerate(form.coefficients):
                 if factor == 0.0:
                     continue
-                inner = current.get(step.input_axes[index]) if index < len(step.input_axes) else None
+                inner = (
+                    current.get(step.input_axes[index])
+                    if index < len(step.input_axes)
+                    else None
+                )
                 if inner is None:
                     unconstrained = True
                     break
@@ -1625,7 +1943,9 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
                 constant += factor * inner.constant
             if unconstrained:
                 continue
-            composed[out_axis] = AxedForm(coefficients=tuple(coefficients), constant=constant)
+            composed[out_axis] = AxedForm(
+                coefficients=tuple(coefficients), constant=constant
+            )
 
         for part in step.parts:
             step_field = part.field
@@ -1640,7 +1960,15 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
                 if step_field.displacement:
                     # An offset is added to the position it is read at: the input axis of the
                     # same name, or the one in the same place when the names differ.
-                    position = out_axis if out_axis in step_field.input_axes else (step_field.input_axes[component] if component < len(step_field.input_axes) else None)
+                    position = (
+                        out_axis
+                        if out_axis in step_field.input_axes
+                        else (
+                            step_field.input_axes[component]
+                            if component < len(step_field.input_axes)
+                            else None
+                        )
+                    )
                     if position is None:
                         continue
                     base = current[position]
@@ -1657,7 +1985,9 @@ def compose_placement(steps: Sequence[AxedStep], source_axes: Sequence[str]) -> 
     return current, fields
 
 
-def _matrix_step(step: AxedStep, matrix: list[list[float]], *, kind: str | None = None) -> AxedStep:
+def _matrix_step(
+    step: AxedStep, matrix: list[list[float]], *, kind: str | None = None
+) -> AxedStep:
     """A reversed step carrying one homogeneous matrix as its `affine`, endpoints swapped.
 
     The matrix is homogeneous and (n+1) x (n+1); an `affine` parameter is M x (N+1) -- one
@@ -1707,7 +2037,15 @@ def invert_step(step: AxedStep) -> AxedStep:
         return AxedStep(kind=kind, params={}, **swapped)
 
     if kind == enums.TransformKindChoices.TRANSLATION.value:
-        return AxedStep(kind=kind, params={"translation": [-float(value) for value in step.params.get("translation") or ()]}, **swapped)
+        return AxedStep(
+            kind=kind,
+            params={
+                "translation": [
+                    -float(value) for value in step.params.get("translation") or ()
+                ]
+            },
+            **swapped,
+        )
 
     if kind == enums.TransformKindChoices.SCALE.value:
         factors = [float(value) for value in step.params.get("scale") or ()]
@@ -1716,20 +2054,32 @@ def invert_step(step: AxedStep) -> AxedStep:
         # exactly the ones nobody would think to check, so it is checked.
         collapsed = [index for index, factor in enumerate(factors) if factor == 0.0]
         if collapsed:
-            raise SingularTransformError(f"A SCALE map with a zero factor at {collapsed} ({factors}) collapses that axis onto a point, so it cannot be walked backwards")
-        return AxedStep(kind=kind, params={"scale": [1.0 / factor for factor in factors]}, **swapped)
+            raise SingularTransformError(
+                f"A SCALE map with a zero factor at {collapsed} ({factors}) collapses that axis onto a point, so it cannot be walked backwards"
+            )
+        return AxedStep(
+            kind=kind, params={"scale": [1.0 / factor for factor in factors]}, **swapped
+        )
 
     if kind == enums.TransformKindChoices.MAP_AXIS.value:
         # A permutation's inverse is the permutation read the other way round, and no
         # arithmetic at all. Sound because the two endpoint systems carry the same set of
         # axis names -- `graph.assert_edge_rank` holds a MAP_AXIS to exactly that, which is
         # also what makes `permutation_matrix` total.
-        return AxedStep(kind=kind, params={}, acts_on_input=step.acts_on_output, acts_on_output=step.acts_on_input, **swapped)
+        return AxedStep(
+            kind=kind,
+            params={},
+            acts_on_input=step.acts_on_output,
+            acts_on_output=step.acts_on_input,
+            **swapped,
+        )
 
     if any(part.kind == enums.PartKind.FIELD.value for part in step.parts):
         # `is_invertible` excludes every edge with a FIELD part, so the walk never flags one;
         # inverting it would mean searching an array this module never reads.
-        raise NonAffineTransformError(f"A {kind} edge with a FIELD part is walked forwards only: its inverse is a search through the array's values")
+        raise NonAffineTransformError(
+            f"A {kind} edge with a FIELD part is walked forwards only: its inverse is a search through the array's values"
+        )
 
     if kind == enums.TransformKindChoices.BY_DIMENSION.value:
         # Part by part, each through its own kind's inverse, its axes swapped: the parts are
@@ -1738,23 +2088,56 @@ def invert_step(step: AxedStep) -> AxedStep:
         parts = []
         for part in step.parts:
             if part.kind == enums.PartKind.IDENTITY.value:
-                parts.append(StepPart(kind=part.kind, input_axes=part.output_axes, output_axes=part.input_axes, params={}))
+                parts.append(
+                    StepPart(
+                        kind=part.kind,
+                        input_axes=part.output_axes,
+                        output_axes=part.input_axes,
+                        params={},
+                    )
+                )
                 continue
-            inverse = invert_step(AxedStep(kind=part.kind, params=part.params, input_axes=part.input_axes, output_axes=part.output_axes))
-            parts.append(StepPart(kind=inverse.kind, input_axes=part.output_axes, output_axes=part.input_axes, params=inverse.params))
+            inverse = invert_step(
+                AxedStep(
+                    kind=part.kind,
+                    params=part.params,
+                    input_axes=part.input_axes,
+                    output_axes=part.output_axes,
+                )
+            )
+            parts.append(
+                StepPart(
+                    kind=inverse.kind,
+                    input_axes=part.output_axes,
+                    output_axes=part.input_axes,
+                    params=inverse.params,
+                )
+            )
         return AxedStep(kind=kind, params={}, parts=tuple(parts), **swapped)
 
-    if kind in (enums.TransformKindChoices.AFFINE.value, enums.TransformKindChoices.ROTATION.value, enums.TransformKindChoices.SEQUENCE.value):
+    if kind in (
+        enums.TransformKindChoices.AFFINE.value,
+        enums.TransformKindChoices.ROTATION.value,
+        enums.TransformKindChoices.SEQUENCE.value,
+    ):
         rank = len(step.input_axes)
         # AFFINE, so the result reads as what it is. The inverse of a rotation is a rotation
         # and the inverse of a scale-then-translate sequence is neither -- keeping either
         # label would make `invariance_of`-shaped reasoning over the returned step wrong.
-        return _matrix_step(step, invert_matrix(_step_matrix(step, rank)), kind=enums.TransformKindChoices.AFFINE.value)
+        return _matrix_step(
+            step,
+            invert_matrix(_step_matrix(step, rank)),
+            kind=enums.TransformKindChoices.AFFINE.value,
+        )
 
-    raise NonAffineTransformError(f"A {kind} edge has no inverse at any rank, so a path may not walk it backwards")
+    raise NonAffineTransformError(
+        f"A {kind} edge has no inverse at any rank, so a path may not walk it backwards"
+    )
 
 
-def forms_to_matrix(forms: dict[str, AxedForm], destination_axes: Sequence[str]) -> tuple[list[list[float]], list[str]]:
+def forms_to_matrix(
+    forms: dict[str, AxedForm], destination_axes: Sequence[str]
+) -> tuple[list[list[float]], list[str]]:
     """Composed functionals as one M x (N+1) matrix, and the axes its rows are over.
 
     Rows in the **destination system's own axis order**, and only for the axes the path
@@ -1767,10 +2150,18 @@ def forms_to_matrix(forms: dict[str, AxedForm], destination_axes: Sequence[str])
     the translation: the layout `AffineTransformation.affine` already uses.
     """
     rows = [axis for axis in destination_axes if axis in forms]
-    return [[*(float(value) for value in forms[axis].coefficients), float(forms[axis].constant)] for axis in rows], rows
+    return [
+        [
+            *(float(value) for value in forms[axis].coefficients),
+            float(forms[axis].constant),
+        ]
+        for axis in rows
+    ], rows
 
 
-def form_interval(form: AxedForm, mins: Sequence[float], maxs: Sequence[float]) -> list[float]:
+def form_interval(
+    form: AxedForm, mins: Sequence[float], maxs: Sequence[float]
+) -> list[float]:
     """The exact range of one affine functional over an axis-aligned box.
 
     The closed form of what :func:`transformed_bbox` does by enumerating corners: an affine
@@ -1790,12 +2181,20 @@ def form_interval(form: AxedForm, mins: Sequence[float], maxs: Sequence[float]) 
     return [low, high]
 
 
-def axed_bbox(mins: Sequence[float], maxs: Sequence[float], forms: dict[str, AxedForm]) -> dict[str, list[float]]:
+def axed_bbox(
+    mins: Sequence[float], maxs: Sequence[float], forms: dict[str, AxedForm]
+) -> dict[str, list[float]]:
     """The axis-keyed extent of a box under an already-composed path."""
     return {axis: form_interval(form, mins, maxs) for axis, form in forms.items()}
 
 
-def annotation_box(axis_names: Sequence[str], vectors: Sequence[Sequence[float]], pins: Mapping[str, float], *, padded: bool = True) -> dict[str, list[float]] | None:
+def annotation_box(
+    axis_names: Sequence[str],
+    vectors: Sequence[Sequence[float]],
+    pins: Mapping[str, float],
+    *,
+    padded: bool = True,
+) -> dict[str, list[float]] | None:
     """An annotation's axis-keyed box in its drawing space: its vertices on the axes they span, its pins on the axes they name.
 
     A shape may have fewer components than its drawing space has axes -- a rectangle on one
@@ -1815,7 +2214,11 @@ def annotation_box(axis_names: Sequence[str], vectors: Sequence[Sequence[float]]
     if len(low) > len(axis_names):
         return None
     unpinned = [name for name in axis_names if name not in pins]
-    spanned = unpinned if len(unpinned) == len(low) else list(axis_names[len(axis_names) - len(low) :])
+    spanned = (
+        unpinned
+        if len(unpinned) == len(low)
+        else list(axis_names[len(axis_names) - len(low) :])
+    )
     box: dict[str, list[float]] = {}
     for name in axis_names:
         if name in spanned:
@@ -1833,10 +2236,18 @@ def window_bounds(windows: Iterable["WindowLike"]) -> dict[str, list[float]]:
     conjunction over the axes both sides name. The infinities here stay inside the comparison;
     nothing serializes them.
     """
-    return {window.axis: [-math.inf if window.min is None else float(window.min), math.inf if window.max is None else float(window.max)] for window in windows}
+    return {
+        window.axis: [
+            -math.inf if window.min is None else float(window.min),
+            math.inf if window.max is None else float(window.max),
+        ]
+        for window in windows
+    }
 
 
-def window_box(axis_names: Sequence[str], windows: Iterable["WindowLike"]) -> tuple[list[float], list[float]]:
+def window_box(
+    axis_names: Sequence[str], windows: Iterable["WindowLike"]
+) -> tuple[list[float], list[float]]:
     """A windowed lens' box, positional over its container's axes: a window's bounds on the axes it names, infinite elsewhere.
 
     The infinities are internal: they ride through :func:`form_interval` (a zero coefficient
@@ -1857,7 +2268,11 @@ def bounded_axes(box: dict[str, list[float]]) -> dict[str, list[float]]:
     which is what :func:`boxes_overlap` reads; an infinity written for it would survive into a
     GraphQL Float, which cannot carry one.
     """
-    return {axis: interval for axis, interval in box.items() if math.isfinite(interval[0]) and math.isfinite(interval[1])}
+    return {
+        axis: interval
+        for axis, interval in box.items()
+        if math.isfinite(interval[0]) and math.isfinite(interval[1])
+    }
 
 
 def shares_a_bounded_axis(a: dict[str, list[float]], b: dict[str, list[float]]) -> bool:
@@ -1865,7 +2280,12 @@ def shares_a_bounded_axis(a: dict[str, list[float]], b: dict[str, list[float]]) 
     return bool(set(a) & set(b))
 
 
-def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], parent_slices: Iterable["SliceLike"], child_slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
+def compose_slices(
+    dataset_shape: Sequence[int],
+    dataset_axis_names: Sequence[str],
+    parent_slices: Iterable["SliceLike"],
+    child_slices: Iterable["SliceLike"],
+) -> list[dict[str, int | str]]:
     """A crop of a crop, as slices of the dataset: the child's slices, stated in the parent lens' own index space, composed through the parent's.
 
     Lens voxel ``i`` of the parent is dataset voxel ``ps + i·pstep``, so a child slice
@@ -1880,9 +2300,13 @@ def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
     child_by_axis: dict[str, SliceLike] = {}
     for slice_ in child_slices:
         if slice_.axis not in dataset_axis_names:
-            raise ValueError(f"Axis '{slice_.axis}' is not an axis of the dataset, which the lens does not have either; its axes are {list(dataset_axis_names)}")
+            raise ValueError(
+                f"Axis '{slice_.axis}' is not an axis of the dataset, which the lens does not have either; its axes are {list(dataset_axis_names)}"
+            )
         if slice_.axis in child_by_axis:
-            raise ValueError(f"Axis '{slice_.axis}' is sliced twice; one slice per axis")
+            raise ValueError(
+                f"Axis '{slice_.axis}' is sliced twice; one slice per axis"
+            )
         child_by_axis[slice_.axis] = slice_
     composed: list[dict[str, int | str]] = []
     for axis, size in zip(dataset_axis_names, dataset_shape, strict=True):
@@ -1899,18 +2323,34 @@ def compose_slices(dataset_shape: Sequence[int], dataset_axis_names: Sequence[st
             composed.append({"axis": axis, "start": ps, "stop": pe, "step": pstep})
             continue
         if child.step is not None and child.step <= 0:
-            raise ValueError(f"Slice over axis '{axis}' has step {child.step}; a lens keeps every k-th voxel for a positive k")
+            raise ValueError(
+                f"Slice over axis '{axis}' has step {child.step}; a lens keeps every k-th voxel for a positive k"
+            )
         cs, ce, cst = slice(child.start, child.stop, child.step).indices(extent)
         count = len(range(cs, ce, cst))
         if count == 0:
-            raise ValueError(f"Slice over axis '{axis}' ({child.start}:{child.stop}:{child.step}) selects nothing of the {extent} voxels the lens has along it")
+            raise ValueError(
+                f"Slice over axis '{axis}' ({child.start}:{child.stop}:{child.step}) selects nothing of the {extent} voxels the lens has along it"
+            )
         start = ps + pstep * cs
         step = pstep * cst
-        composed.append({"axis": axis, "start": start, "stop": start + (count - 1) * step + 1, "step": step})
+        composed.append(
+            {
+                "axis": axis,
+                "start": start,
+                "stop": start + (count - 1) * step + 1,
+                "step": step,
+            }
+        )
     return composed
 
 
-def slices_under(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], kept_slices: Iterable["SliceLike"], box_slices: Iterable["SliceLike"]) -> list[dict[str, int | str]]:
+def slices_under(
+    dataset_shape: Sequence[int],
+    dataset_axis_names: Sequence[str],
+    kept_slices: Iterable["SliceLike"],
+    box_slices: Iterable["SliceLike"],
+) -> list[dict[str, int | str]]:
     """What a lens selects, narrowed to a box of the same dataset: both stated as slices of the dataset, the box a contiguous range per axis.
 
     The sibling of :func:`compose_slices`, for the case where the second selection is *not*
@@ -1930,8 +2370,16 @@ def slices_under(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str]
         box = box_by_axis.get(axis)
         if kept is None and box is None:
             continue
-        start, stop, step = slice(kept.start, kept.stop, kept.step).indices(size) if kept is not None else (0, size, 1)
-        low, high, _ = slice(box.start, box.stop, None).indices(size) if box is not None else (0, size, 1)
+        start, stop, step = (
+            slice(kept.start, kept.stop, kept.step).indices(size)
+            if kept is not None
+            else (0, size, 1)
+        )
+        low, high, _ = (
+            slice(box.start, box.stop, None).indices(size)
+            if box is not None
+            else (0, size, 1)
+        )
         if low > start:
             start += -(-(low - start) // step) * step
         stop = min(stop, high)
@@ -1944,7 +2392,12 @@ def slices_under(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str]
     return narrowed
 
 
-def lens_within(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str], parent_slices: Iterable["SliceLike"], child_slices: Iterable["SliceLike"]) -> bool:
+def lens_within(
+    dataset_shape: Sequence[int],
+    dataset_axis_names: Sequence[str],
+    parent_slices: Iterable["SliceLike"],
+    child_slices: Iterable["SliceLike"],
+) -> bool:
     """Whether every voxel a child lens keeps is one its parent keeps: a crop of a crop, however spelled.
 
     Per axis, the child's kept indices are a subset of the parent's. Decided on the index sets,
@@ -1958,14 +2411,24 @@ def lens_within(dataset_shape: Sequence[int], dataset_axis_names: Sequence[str],
         child = child_by_axis.get(axis)
         if child is None and parent is None:
             continue
-        kept_by_parent = set(range(*slice(parent.start, parent.stop, parent.step).indices(size))) if parent is not None else set(range(size))
-        kept_by_child = set(range(*slice(child.start, child.stop, child.step).indices(size))) if child is not None else set(range(size))
+        kept_by_parent = (
+            set(range(*slice(parent.start, parent.stop, parent.step).indices(size)))
+            if parent is not None
+            else set(range(size))
+        )
+        kept_by_child = (
+            set(range(*slice(child.start, child.stop, child.step).indices(size)))
+            if child is not None
+            else set(range(size))
+        )
         if not kept_by_child <= kept_by_parent:
             return False
     return True
 
 
-def windows_within(parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]) -> bool:
+def windows_within(
+    parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]
+) -> bool:
     """Whether every row a child window keeps is one its parent keeps: per axis the child's bounds lie inside the parent's, and an axis the parent bounds the child bounds too."""
     child_by_axis = {window.axis: window for window in child_windows}
     for parent in parent_windows:
@@ -1979,12 +2442,20 @@ def windows_within(parent_windows: Iterable["WindowLike"], child_windows: Iterab
     return True
 
 
-def channel_extents(axis_specs: Sequence[AxisSpec], shape: Sequence[int]) -> dict[str, int]:
+def channel_extents(
+    axis_specs: Sequence[AxisSpec], shape: Sequence[int]
+) -> dict[str, int]:
     """The extent of each CHANNEL axis of a lens, by name: what decides whether the lens pins one channel."""
-    return {spec.name: extent for spec, extent in zip(axis_specs, shape, strict=True) if spec.type == enums.AxisTypeChoices.CHANNEL.value}
+    return {
+        spec.name: extent
+        for spec, extent in zip(axis_specs, shape, strict=True)
+        if spec.type == enums.AxisTypeChoices.CHANNEL.value
+    }
 
 
-def intersect_windows(parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]) -> list[dict[str, float | str | None]]:
+def intersect_windows(
+    parent_windows: Iterable["WindowLike"], child_windows: Iterable["WindowLike"]
+) -> list[dict[str, float | str | None]]:
     """A window of a window: per axis the tighter of the two bounds, an open side staying open, an axis only one names passing through.
 
     Handed to :func:`normalize_windows`, which refuses a window that keeps nothing (a min at
@@ -1994,7 +2465,9 @@ def intersect_windows(parent_windows: Iterable["WindowLike"], child_windows: Ite
     named: set[str] = set()
     for window in child_windows:
         if window.axis in named:
-            raise ValueError(f"Axis '{window.axis}' is windowed twice; one window per axis")
+            raise ValueError(
+                f"Axis '{window.axis}' is windowed twice; one window per axis"
+            )
         named.add(window.axis)
     for window in (*parent_windows, *child_windows):
         low, high = bounds.setdefault(window.axis, [None, None])
@@ -2003,7 +2476,9 @@ def intersect_windows(parent_windows: Iterable["WindowLike"], child_windows: Ite
         if window.max is not None:
             high = float(window.max) if high is None else min(high, float(window.max))
         bounds[window.axis] = [low, high]
-    return [{"axis": axis, "min": low, "max": high} for axis, (low, high) in bounds.items()]
+    return [
+        {"axis": axis, "min": low, "max": high} for axis, (low, high) in bounds.items()
+    ]
 
 
 def box_to_slices(
@@ -2036,19 +2511,27 @@ def box_to_slices(
             if axis in pinned:
                 value = int(pinned[axis])
                 if not 0 <= value < size:
-                    raise ValueError(f"Pin {axis}={value} lies outside the dataset, whose axis '{axis}' has {size} positions")
-                slices.append({"axis": axis, "start": value, "stop": value + 1, "step": 1})
+                    raise ValueError(
+                        f"Pin {axis}={value} lies outside the dataset, whose axis '{axis}' has {size} positions"
+                    )
+                slices.append(
+                    {"axis": axis, "start": value, "stop": value + 1, "step": 1}
+                )
             continue
         low, high = form_interval(form, mins, maxs)
         start = max(0, math.floor(low - 0.5) + 1) if math.isfinite(low) else 0
         stop = min(size, math.ceil(high + 0.5)) if math.isfinite(high) else size
         if start >= stop:
-            raise ValueError(f"The box lies outside the dataset along '{axis}': it covers [{low}, {high}] and the axis spans [-0.5, {size - 0.5}]")
+            raise ValueError(
+                f"The box lies outside the dataset along '{axis}': it covers [{low}, {high}] and the axis spans [-0.5, {size - 0.5}]"
+            )
         slices.append({"axis": axis, "start": start, "stop": stop, "step": 1})
     return slices
 
 
-def boxes_overlap(a: dict[str, list[float]], b: dict[str, list[float]], *, closed: bool = True) -> bool:
+def boxes_overlap(
+    a: dict[str, list[float]], b: dict[str, list[float]], *, closed: bool = True
+) -> bool:
     """Whether two axis-keyed boxes overlap: a conjunction over the axes they BOTH constrain.
 
     An axis only one side constrains cannot exclude anything. A source registered on (y, x)

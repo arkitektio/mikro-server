@@ -26,7 +26,7 @@ construction and false of a table -- a localization table's `x` axis is identifi
 and should be -- so it belongs to the caller that means it.
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from kante.types import Info
 
@@ -39,7 +39,11 @@ def split_identifications(
     name: str,
     entries: Sequence[tuple[str, Sequence[object]]],
     axis_types: "dict[str, enums.AxisType | None] | None" = None,
-) -> tuple[dict[str, "models.TableDataset"], dict[str, "models.NetworkCollection"], list[tuple[str, object]]]:
+) -> tuple[
+    dict[str, "models.TableDataset"],
+    dict[str, "models.NetworkCollection"],
+    list[tuple[str, object]],
+]:
     """Resolve the no-edge references, and collect the identifications that author edges.
 
     Args:
@@ -63,12 +67,16 @@ def split_identifications(
         ``(name, identification)`` per edge-authoring source, in declaration order.
         An axis identified by two masks appears twice in ``keyed``, which is what fan-in is.
     """
-    references: dict[str, "models.TableDataset"] = {}
-    node_references: dict[str, "models.NetworkCollection"] = {}
+    references: dict[str, models.TableDataset] = {}
+    node_references: dict[str, models.NetworkCollection] = {}
     keyed: list[tuple[str, object]] = []
 
     for column_name, identifications in entries:
-        axis_type = axis_types.get(column_name) if axis_types is not None else enums.AxisType.INDEX
+        axis_type = (
+            axis_types.get(column_name)
+            if axis_types is not None
+            else enums.AxisType.INDEX
+        )
         for identification in identifications:
             if identification.AUTHORS_EDGE:
                 # A keying source's FIELD edge PRODUCES an axis of this space, so it can
@@ -101,7 +109,11 @@ def split_identifications(
             # is a foreign key, not a map -- but not a NODES one, whose composite scoping is
             # an axis convention.
             if axis_type is not None and axis_type != enums.AxisType.INDEX:
-                what = "a table" if identification.REFERENCE_TARGET == "table" else "a network collection's nodes"
+                what = (
+                    "a table"
+                    if identification.REFERENCE_TARGET == "table"
+                    else "a network collection's nodes"
+                )
                 raise ValueError(
                     f"Axis '{column_name}' of '{name}' is identified by {what}, but it is a {axis_type.value} axis: its values are positions rather than ids, so they place the "
                     "row in this space and cannot also identify rows elsewhere. Put the reference on a data column -- or, if its values really are ids, declare the column "
@@ -126,14 +138,20 @@ def split_identifications(
             if identification.REFERENCE_TARGET == "network_nodes":
                 from core.scoping import get_for_org
 
-                node_references[column_name] = get_for_org(models.NetworkCollection, info, id=identification.source_id)
+                node_references[column_name] = get_for_org(
+                    models.NetworkCollection, info, id=identification.source_id
+                )
             else:
-                references[column_name] = resolve_reference_target(info, identification.source_id, f"Column '{column_name}'")
+                references[column_name] = resolve_reference_target(
+                    info, identification.source_id, f"Column '{column_name}'"
+                )
 
     return references, node_references, keyed
 
 
-def resolve_reference_target(info: Info, target_id: str, label: str) -> "models.TableDataset":
+def resolve_reference_target(
+    info: Info, target_id: str, label: str
+) -> "models.TableDataset":
     """The table an identification names, checked to be one an id can be looked up in.
 
     Re-exported from :mod:`core.mutations.table_dataset`, where it lived while only that

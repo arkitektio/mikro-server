@@ -18,19 +18,18 @@ came from is UNMAPPABLE. That degenerate case is exactly the old FeatureCollecti
 
 from typing import TYPE_CHECKING
 
-from django.contrib.postgres.indexes import GinIndex
-from arkitekt_service.service.described import Described
-from django.db import models
-from django.contrib.auth import get_user_model
-
-from authentikate.models import Organization
 from arkitekt_datalayer.models import ParquetStore
-from koherent.fields import ProvenanceField
-from embeddings.models import EmbeddedDescriptionMixin
+from arkitekt_service.service.described import Described
+from authentikate.models import Organization
+from django.contrib.auth import get_user_model
+from django.contrib.postgres.indexes import GinIndex
+from django.db import models
 from django_choices_field import TextChoicesField
+from koherent.fields import ProvenanceField
 
 from core import enums
 from core.logic import coords as coords_logic
+from embeddings.models import EmbeddedDescriptionMixin
 
 if TYPE_CHECKING:
     from core.models.coords import CoordinateSystem
@@ -56,7 +55,12 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
     """
 
     name = models.CharField(max_length=8000, help_text="The name of this table dataset")
-    description = models.CharField(max_length=8000, null=True, blank=True, help_text="The description of this table dataset")
+    description = models.CharField(
+        max_length=8000,
+        null=True,
+        blank=True,
+        help_text="The description of this table dataset",
+    )
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`.
     folder = models.ForeignKey(
@@ -74,7 +78,10 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
         related_name="table_datasets",
         help_text="The Parquet store holding the rows. The client reads it directly with a datalayer access grant",
     )
-    provenance_metadata = models.JSONField(default=dict, help_text="How this table was produced (the run, its parameters and its inputs)")
+    provenance_metadata = models.JSONField(
+        default=dict,
+        help_text="How this table was produced (the run, its parameters and its inputs)",
+    )
 
     coordinate_system = models.ForeignKey(
         "CoordinateSystem",
@@ -88,14 +95,26 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
         help_text="The coordinate system this table's coordinate columns are expressed in. Its axes are derived from those columns, so there is no second copy that can disagree",
     )
 
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this table dataset was created")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this table dataset was created"
+    )
     row_count = models.BigIntegerField(
         null=True,
         blank=True,
         help_text="How many rows the parquet holds, read off its footer (never by scanning). Null until the footer was read: `createTableDataset` reads it, `record_table_stats` reads it for older tables",
     )
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created this table dataset")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this table dataset belongs to")
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that created this table dataset",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this table dataset belongs to",
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -134,9 +153,16 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
         ordering = ["-created_at"]
         indexes = [
             GinIndex(fields=["stored_spec"], name="table_dataset_spec_gin"),
-            GinIndex(fields=["stored_descriptors"], name="table_dataset_desc_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="table_dataset_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
             # Newest first per organization: the `roots` walk reads it in order and stops early.
-            models.Index(fields=["organization", "-created_at"], name="table_dataset_org_newest_idx"),
+            models.Index(
+                fields=["organization", "-created_at"],
+                name="table_dataset_org_newest_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -159,7 +185,11 @@ class TableDataset(EmbeddedDescriptionMixin, Described):
         enum grows, and a rolled-back release is started on rows a newer one wrote.
         """
         known = {member.value for member in enums.TableDatasetSpec}
-        return [enums.TableDatasetSpec(value) for value in self.stored_spec if value in known]
+        return [
+            enums.TableDatasetSpec(value)
+            for value in self.stored_spec
+            if value in known
+        ]
 
     @property
     def column_specs(self) -> list[coords_logic.ColumnSpec]:
@@ -197,7 +227,12 @@ class Column(models.Model):
     are not measured -- an id, a track id, a label, a colour -- refuse it.
     """
 
-    table = models.ForeignKey(TableDataset, on_delete=models.CASCADE, related_name="columns", help_text="The table dataset this column belongs to")
+    table = models.ForeignKey(
+        TableDataset,
+        on_delete=models.CASCADE,
+        related_name="columns",
+        help_text="The table dataset this column belongs to",
+    )
     # Relations between tables are schema facts, not coordinate facts. A FIELD edge is the
     # one crossing from geometry into record-land (it consumes spatial axes); once inside,
     # "this column's values identify rows of that table" does no coordinate work -- no walk
@@ -231,14 +266,45 @@ class Column(models.Model):
         related_name="node_referenced_by",
         help_text="The network collection whose NODE ids this INDEX coordinate column's values are, scoped by a sibling INDEX axis keyed by the same collection's object ids (a node id is unique only within its traced object, so the pair is the row's key). One such column makes the table per-node; two over one collection are its edges' (source, target), in axis declaration order. PROTECT for the reason `references` is: deleting the collection would orphan the meaning of every value in the column",
     )
-    order = models.PositiveSmallIntegerField(help_text="The column's position in the declared schema, which is the file's order -- the two are checked against each other at creation. Deliberately not the axis order: the axes are a sequence the caller states in `axes`, and a coordinate column's position in the file has nothing to do with its position in the space")
-    name = models.CharField(max_length=255, help_text="The column name, matching the Parquet column")
-    dtype = models.CharField(max_length=64, help_text="The column's data type, as a DuckDB type string, e.g. 'DOUBLE', 'BIGINT'")
-    role = TextChoicesField(choices_enum=enums.ColumnRoleChoices, default=enums.ColumnRoleChoices.ATTRIBUTE, help_text="What the column is for: a coordinate that places the row, or data hanging off it")
-    axis_type = TextChoicesField(choices_enum=enums.AxisTypeChoices, null=True, blank=True, help_text="(coordinate) The semantic axis type this column samples: SPACE, TIME, INDEX or CHANNEL")
-    unit = models.CharField(max_length=64, null=True, blank=True, help_text="The unit the column's values are in, e.g. 'nanometer' for a coordinate or 'micrometer**2' for a measured area. A pint unit, validated at the API boundary. Null for pixel-index coordinates and for anything not measured (an id, a label, a colour, which refuse one)")
-    long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the column")
-    description = models.CharField(max_length=1000, null=True, blank=True, help_text="A free-form description of what the column holds, e.g. 'mean GFP intensity within the segmented object'")
+    order = models.PositiveSmallIntegerField(
+        help_text="The column's position in the declared schema, which is the file's order -- the two are checked against each other at creation. Deliberately not the axis order: the axes are a sequence the caller states in `axes`, and a coordinate column's position in the file has nothing to do with its position in the space"
+    )
+    name = models.CharField(
+        max_length=255, help_text="The column name, matching the Parquet column"
+    )
+    dtype = models.CharField(
+        max_length=64,
+        help_text="The column's data type, as a DuckDB type string, e.g. 'DOUBLE', 'BIGINT'",
+    )
+    role = TextChoicesField(
+        choices_enum=enums.ColumnRoleChoices,
+        default=enums.ColumnRoleChoices.ATTRIBUTE,
+        help_text="What the column is for: a coordinate that places the row, or data hanging off it",
+    )
+    axis_type = TextChoicesField(
+        choices_enum=enums.AxisTypeChoices,
+        null=True,
+        blank=True,
+        help_text="(coordinate) The semantic axis type this column samples: SPACE, TIME, INDEX or CHANNEL",
+    )
+    unit = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        help_text="The unit the column's values are in, e.g. 'nanometer' for a coordinate or 'micrometer**2' for a measured area. A pint unit, validated at the API boundary. Null for pixel-index coordinates and for anything not measured (an id, a label, a colour, which refuse one)",
+    )
+    long_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="A human-readable name for the column",
+    )
+    description = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="A free-form description of what the column holds, e.g. 'mean GFP intensity within the segmented object'",
+    )
     varies_over = models.JSONField(
         null=True,
         blank=True,
@@ -246,17 +312,33 @@ class Column(models.Model):
     )
     # The footer's facts (`core.logic.table_stats`): read, never scanned. Null until read, and
     # for a column whose statistics are not numbers or that a row group states none for.
-    value_min = models.FloatField(null=True, blank=True, help_text="The smallest value in the column, from the parquet footer. Null for a non-numeric column, or until the footer was read")
-    value_max = models.FloatField(null=True, blank=True, help_text="The largest value in the column, from the parquet footer. Null for a non-numeric column, or until the footer was read")
-    null_count = models.BigIntegerField(null=True, blank=True, help_text="How many of the column's values are null, from the parquet footer. Null until the footer was read")
+    value_min = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The smallest value in the column, from the parquet footer. Null for a non-numeric column, or until the footer was read",
+    )
+    value_max = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The largest value in the column, from the parquet footer. Null for a non-numeric column, or until the footer was read",
+    )
+    null_count = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many of the column's values are null, from the parquet footer. Null until the footer was read",
+    )
 
     class Meta:
         """Meta options for the table column."""
 
         ordering = ["order"]
         constraints = [
-            models.UniqueConstraint(fields=["table", "name"], name="unique_table_column_name"),
-            models.UniqueConstraint(fields=["table", "order"], name="unique_table_column_order"),
+            models.UniqueConstraint(
+                fields=["table", "name"], name="unique_table_column_name"
+            ),
+            models.UniqueConstraint(
+                fields=["table", "order"], name="unique_table_column_order"
+            ),
         ]
 
     def as_spec(self) -> coords_logic.ColumnSpec:
@@ -286,13 +368,39 @@ class ColumnSummary(models.Model):
     the rows at that time. A parquet is immutable, so a summary never goes stale.
     """
 
-    anchor = models.ForeignKey("CoordinateAnchor", related_name="column_summaries", on_delete=models.CASCADE)
-    column = models.ForeignKey(Column, related_name="summaries", on_delete=models.CASCADE, help_text="The column summarised")
-    histogram = models.JSONField(default=list, help_text="The counts per bin (y values)")
-    bins = models.JSONField(default=list, help_text="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
-    distinct_values = models.JSONField(null=True, blank=True, help_text="The column's distinct values, as many as the client listed, most frequent first. Null when not computed")
-    distinct_count = models.BigIntegerField(null=True, blank=True, help_text="How many distinct values the column holds. Null when not computed")
-    created_at = models.DateTimeField(auto_now=True, help_text="When this summary was last pinned")
+    anchor = models.ForeignKey(
+        "CoordinateAnchor", related_name="column_summaries", on_delete=models.CASCADE
+    )
+    column = models.ForeignKey(
+        Column,
+        related_name="summaries",
+        on_delete=models.CASCADE,
+        help_text="The column summarised",
+    )
+    histogram = models.JSONField(
+        default=list, help_text="The counts per bin (y values)"
+    )
+    bins = models.JSONField(
+        default=list,
+        help_text="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts",
+    )
+    distinct_values = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="The column's distinct values, as many as the client listed, most frequent first. Null when not computed",
+    )
+    distinct_count = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many distinct values the column holds. Null when not computed",
+    )
+    created_at = models.DateTimeField(
+        auto_now=True, help_text="When this summary was last pinned"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["anchor", "column"], name="one_summary_per_anchor_column")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anchor", "column"], name="one_summary_per_anchor_column"
+            )
+        ]

@@ -16,8 +16,8 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from core.logic import coordinate_system as coordinate_system_logic
 from core import enums, models
+from core.logic import coordinate_system as coordinate_system_logic
 from mikro_server.schema import schema
 from tests import seed
 
@@ -42,11 +42,15 @@ _AFFINE_3D = [
 ]
 
 
-async def _mesh_collection(ctx: HttpContext, dataset: models.ArrayDataset) -> models.MeshCollection:
+async def _mesh_collection(
+    ctx: HttpContext, dataset: models.ArrayDataset
+) -> models.MeshCollection:
     """A collection over a dataset's meshes, through the real mutation."""
 
     system = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
-    axes = await sync_to_async(lambda: [{"name": axis.name, "type": axis.type} for axis in system.axes.all()])()
+    axes = await sync_to_async(
+        lambda: [{"name": axis.name, "type": axis.type} for axis in system.axes.all()]
+    )()
     store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in axes])
 
     result = await schema.execute(
@@ -62,14 +66,22 @@ async def _mesh_collection(ctx: HttpContext, dataset: models.ArrayDataset) -> mo
                 # source's because this fixture's meshes are expressed in that grid as-is,
                 # which is what the IDENTITY below says.
                 "axes": axes,
-                "derivedFrom": [{"kind": "COORDINATE_SYSTEM", "coordinateSystem": str(system.pk), "transform": {"kind": "IDENTITY"}}],
+                "derivedFrom": [
+                    {
+                        "kind": "COORDINATE_SYSTEM",
+                        "coordinateSystem": str(system.pk),
+                        "transform": {"kind": "IDENTITY"},
+                    }
+                ],
                 "name": "v1",
                 "store": str(store.pk),
             }
         },
     )
     assert not result.errors, result.errors
-    return await sync_to_async(models.MeshCollection.objects.get)(pk=result.data["createMeshCollection"]["id"])
+    return await sync_to_async(models.MeshCollection.objects.get)(
+        pk=result.data["createMeshCollection"]["id"]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -91,21 +103,35 @@ async def test_a_mesh_layer_reaches_world(authenticated_context: HttpContext):
         # Written through the ORM rather than `createMeshLayer`, which would run its own
         # placement gate and refuse before this query could observe the path. That gate is
         # the point of the mutation; this file is about what the *read* side computes.
-        models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, lens=coordinate_system_logic.whole_lens(collection))
+        models.Layer.objects.create(
+            kind=enums.LayerKindChoices.MESH.value,
+            scene=scene,
+            lens=coordinate_system_logic.whole_lens(collection),
+        )
 
     await sync_to_async(place)()
 
-    result = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        PLACEMENT,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
 
     path = result.data["scene"]["layers"][0]["pathToWorld"]
-    assert path is not None, "a mesh layer is placed by the dataset its meshes were extracted from"
-    assert path[-1]["transformation"]["output"]["residents"] == [], "the path ends in a space nothing lives in: a world"
+    assert path is not None, (
+        "a mesh layer is placed by the dataset its meshes were extracted from"
+    )
+    assert path[-1]["transformation"]["output"]["residents"] == [], (
+        "the path ends in a space nothing lives in: a world"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unregistered_mesh_layer_has_no_path(authenticated_context: HttpContext):
+async def test_an_unregistered_mesh_layer_has_no_path(
+    authenticated_context: HttpContext,
+):
     """The mirror image: nothing is registered, so there is nothing to inherit.
 
     Without this, a change that made every mesh layer resolve to *some* path would still
@@ -115,9 +141,19 @@ async def test_an_unregistered_mesh_layer_has_no_path(authenticated_context: Htt
     collection = await _mesh_collection(authenticated_context, dataset)
     scene = await seed.create_scene(authenticated_context, "Composition")
 
-    await sync_to_async(lambda: models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, lens=coordinate_system_logic.whole_lens(collection)))()
+    await sync_to_async(
+        lambda: models.Layer.objects.create(
+            kind=enums.LayerKindChoices.MESH.value,
+            scene=scene,
+            lens=coordinate_system_logic.whole_lens(collection),
+        )
+    )()
 
-    result = await schema.execute(PLACEMENT, context_value=authenticated_context, variable_values={"id": str(scene.pk)})
+    result = await schema.execute(
+        PLACEMENT,
+        context_value=authenticated_context,
+        variable_values={"id": str(scene.pk)},
+    )
     assert not result.errors, result.errors
 
     assert result.data["scene"]["layers"][0]["pathToWorld"] is None

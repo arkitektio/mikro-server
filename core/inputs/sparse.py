@@ -6,11 +6,9 @@ with no type (both axes of a sparse matrix enumerate, so INDEX is the only value
 could ever hold) and nothing to declare but its name and what identifies it.
 """
 
-from pydantic import BaseModel, ConfigDict
-
-import strawberry
-
 import kante
+import strawberry
+from pydantic import BaseModel, ConfigDict
 
 from core.inputs.identification import IdentificationInput, IdentificationSpec
 
@@ -43,7 +41,13 @@ class SparseAxisInput:
     """One axis of a sparse dataset."""
 
     name: str = strawberry.field(description=_AXIS_NAME_DESCRIPTION)
-    identified_by: list[IdentificationInput] = strawberry.field(description="What this axis' positions are: sources whose contents are the ids, or the table whose rows they are. At least one; more than one is fan-in, which writes an edge per source")
-    long_name: str | None = strawberry.field(default=None, description="A human-readable name for the axis")
-    description: str | None = strawberry.field(default=None, description="What this axis enumerates, for a reader of the schema")
-
+    identified_by: list[IdentificationInput] = strawberry.field(
+        description="What this axis' positions are: sources whose contents are the ids, or the table whose rows they are. At least one; more than one is fan-in, which writes an edge per source"
+    )
+    long_name: str | None = strawberry.field(
+        default=None, description="A human-readable name for the axis"
+    )
+    description: str | None = strawberry.field(
+        default=None,
+        description="What this axis enumerates, for a reader of the schema",
+    )

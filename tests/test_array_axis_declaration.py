@@ -24,7 +24,6 @@ from kante.context import HttpContext
 
 from mikro_server.schema import schema
 
-
 CREATE = """
 mutation Create($input: CreateArrayDatasetInput!) {
   createArrayDataset(input: $input) { id intrinsicSystem { axes { name order } } }
@@ -38,7 +37,9 @@ _ZYX = [
 ]
 
 
-async def _store(ctx: HttpContext, key: str, dimension_names: list | None, shape: list | None = None) -> ZarrStore:
+async def _store(
+    ctx: HttpContext, key: str, dimension_names: list | None, shape: list | None = None
+) -> ZarrStore:
     shape = shape or [8, 64, 64]
     return await ZarrStore.objects.acreate(
         organization=ctx.request.organization,
@@ -53,7 +54,13 @@ async def _store(ctx: HttpContext, key: str, dimension_names: list | None, shape
     )
 
 
-async def _create(ctx: HttpContext, key: str, dimension_names: list | None, axes: list, shape: list | None = None):
+async def _create(
+    ctx: HttpContext,
+    key: str,
+    dimension_names: list | None,
+    axes: list,
+    shape: list | None = None,
+):
     store = await _store(ctx, key, dimension_names, shape)
     # `fill_info` would overwrite `dimension_names` from an S3 the unit tests do not
     # have; the row is the point here, so it is patched out exactly as every other
@@ -62,13 +69,22 @@ async def _create(ctx: HttpContext, key: str, dimension_names: list | None, axes
         return await schema.execute(
             CREATE,
             context_value=ctx,
-            variable_values={"input": {"name": key, "data": str(store.pk), "scales": [], "axes": axes}},
+            variable_values={
+                "input": {
+                    "name": key,
+                    "data": str(store.pk),
+                    "scales": [],
+                    "axes": axes,
+                }
+            },
         )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_axes_that_name_the_stores_dimensions_are_accepted(authenticated_context: HttpContext):
+async def test_axes_that_name_the_stores_dimensions_are_accepted(
+    authenticated_context: HttpContext,
+):
     result = await _create(authenticated_context, "agrees", ["z", "y", "x"], _ZYX)
 
     assert not result.errors, result.errors
@@ -83,7 +99,9 @@ async def test_axes_that_name_the_stores_dimensions_are_accepted(authenticated_c
     [["z", "c", "y", "x"], ["c", "z", "y", "x"], ["z", "y", "c", "x"]],
     ids=["z-first", "c-first", "c-between"],
 )
-async def test_an_acquisitions_own_dimension_order_is_accepted(authenticated_context: HttpContext, dimension_names: list):
+async def test_an_acquisitions_own_dimension_order_is_accepted(
+    authenticated_context: HttpContext, dimension_names: list
+):
     """The orderings the RFC-5 type rule used to refuse, which is most real stores.
 
     A channel axis after a spatial one, or between two of them, is how acquisitions are
@@ -94,19 +112,30 @@ async def test_an_acquisitions_own_dimension_order_is_accepted(authenticated_con
     The store's own `dimension_names` still has to agree -- that is the check that means
     something, and `test_a_transposed_declaration_is_refused` covers it.
     """
-    axes = [{"name": name, "type": "CHANNEL" if name == "c" else "SPACE"} for name in dimension_names]
+    axes = [
+        {"name": name, "type": "CHANNEL" if name == "c" else "SPACE"}
+        for name in dimension_names
+    ]
     result = await _create(
         authenticated_context,
         f"acquisition-{'-'.join(dimension_names)}",
         dimension_names,
         axes,
-        shape=[8, 3, 64, 64] if dimension_names[1] == "c" else [8, 64, 3, 64] if dimension_names[2] == "c" else [3, 8, 64, 64],
+        shape=[8, 3, 64, 64]
+        if dimension_names[1] == "c"
+        else [8, 64, 3, 64]
+        if dimension_names[2] == "c"
+        else [3, 8, 64, 64],
     )
 
     assert not result.errors, str(result.errors and result.errors[0])
     stored = result.data["createArrayDataset"]["intrinsicSystem"]["axes"]
-    assert [a["name"] for a in stored] == dimension_names, "stored in the store's order, not sorted into the RFC-5 one"
-    assert [a["order"] for a in stored] == list(range(len(dimension_names))), "order is the index into the shape"
+    assert [a["name"] for a in stored] == dimension_names, (
+        "stored in the store's order, not sorted into the RFC-5 one"
+    )
+    assert [a["order"] for a in stored] == list(range(len(dimension_names))), (
+        "order is the index into the shape"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -138,7 +167,9 @@ async def test_a_transposed_declaration_is_refused(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_store_that_names_no_dimensions_is_not_refused(authenticated_context: HttpContext):
+async def test_a_store_that_names_no_dimensions_is_not_refused(
+    authenticated_context: HttpContext,
+):
     """zarr v2, or an array written before the field existed.
 
     The check is on what the bytes say, and these bytes say nothing. Refusing here
@@ -152,14 +183,18 @@ async def test_a_store_that_names_no_dimensions_is_not_refused(authenticated_con
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_null_dimension_name_is_skipped_not_compared(authenticated_context: HttpContext):
+async def test_a_null_dimension_name_is_skipped_not_compared(
+    authenticated_context: HttpContext,
+):
     """zarr v3 permits a null per dimension -- the store declining to name that one.
 
     `ZarrMetadata.dimension_names` is typed `list[str | None] | None`
     (`datalayer/base_models.py:274`) for exactly this. A null is an absence, not a
     disagreement, so the named dimensions are still checked around it.
     """
-    result = await _create(authenticated_context, "partly-named", ["z", None, "x"], _ZYX)
+    result = await _create(
+        authenticated_context, "partly-named", ["z", None, "x"], _ZYX
+    )
     assert not result.errors, result.errors
 
     wrong = await _create(
@@ -173,12 +208,16 @@ async def test_a_null_dimension_name_is_skipped_not_compared(authenticated_conte
         ],
     )
     assert wrong.errors, "the dimensions that ARE named are still compared"
-    assert "dimension 2 is 'x' in the store and was declared 'q'" in str(wrong.errors[0])
+    assert "dimension 2 is 'x' in the store and was declared 'q'" in str(
+        wrong.errors[0]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_rank_mismatch_is_prose_rather_than_an_assertion(authenticated_context: HttpContext):
+async def test_a_rank_mismatch_is_prose_rather_than_an_assertion(
+    authenticated_context: HttpContext,
+):
     """It was a bare `assert` until 2026-08-20.
 
     Which vanishes under `-O` -- so the guard was off in exactly the deployment most
@@ -202,7 +241,9 @@ async def test_a_rank_mismatch_is_prose_rather_than_an_assertion(authenticated_c
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_pyramid_level_is_checked_against_the_same_axes(authenticated_context: HttpContext):
+async def test_a_pyramid_level_is_checked_against_the_same_axes(
+    authenticated_context: HttpContext,
+):
     """A level is the same array at a coarser grid, so it has the same axes in the same order.
 
     A level whose zarr names its dimensions differently is the transposition bug one zoom
@@ -247,7 +288,9 @@ async def test_a_pyramid_level_is_checked_against_the_same_axes(authenticated_co
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_pyramid_level_that_agrees_is_accepted(authenticated_context: HttpContext):
+async def test_a_pyramid_level_that_agrees_is_accepted(
+    authenticated_context: HttpContext,
+):
     """The same shape, passing -- so the test above is failing on the names, not the pyramid."""
     base = await _store(authenticated_context, "good-base", ["z", "y", "x"])
     level = await ZarrStore.objects.acreate(

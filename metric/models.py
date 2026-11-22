@@ -14,8 +14,8 @@ process emitted (``segmenter_v2/class_3``). A person choosing a category is an a
 observation, and goes to kraph.
 """
 
-from authentikate.models import Organization
 from arkitekt_service.service.described import Described
+from authentikate.models import Organization
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
@@ -55,21 +55,67 @@ class MetricTarget(models.Model):
     """
 
     uuid = models.UUIDField(db_default=UuidV7(), unique=True, editable=False)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="metric_targets")
-    annotation = models.OneToOneField("core.Annotation", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
-    array_dataset = models.OneToOneField("core.ArrayDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
-    table_dataset = models.OneToOneField("core.TableDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
-    sparse_dataset = models.OneToOneField("core.SparseDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="metric_target")
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="metric_targets"
+    )
+    annotation = models.OneToOneField(
+        "core.Annotation",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metric_target",
+    )
+    array_dataset = models.OneToOneField(
+        "core.ArrayDataset",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metric_target",
+    )
+    table_dataset = models.OneToOneField(
+        "core.TableDataset",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metric_target",
+    )
+    sparse_dataset = models.OneToOneField(
+        "core.SparseDataset",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metric_target",
+    )
     created_at = models.DateTimeField(db_default=Now())
 
     class Meta:
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    Q(annotation__isnull=False, array_dataset__isnull=True, table_dataset__isnull=True, sparse_dataset__isnull=True)
-                    | Q(annotation__isnull=True, array_dataset__isnull=False, table_dataset__isnull=True, sparse_dataset__isnull=True)
-                    | Q(annotation__isnull=True, array_dataset__isnull=True, table_dataset__isnull=False, sparse_dataset__isnull=True)
-                    | Q(annotation__isnull=True, array_dataset__isnull=True, table_dataset__isnull=True, sparse_dataset__isnull=False)
+                    Q(
+                        annotation__isnull=False,
+                        array_dataset__isnull=True,
+                        table_dataset__isnull=True,
+                        sparse_dataset__isnull=True,
+                    )
+                    | Q(
+                        annotation__isnull=True,
+                        array_dataset__isnull=False,
+                        table_dataset__isnull=True,
+                        sparse_dataset__isnull=True,
+                    )
+                    | Q(
+                        annotation__isnull=True,
+                        array_dataset__isnull=True,
+                        table_dataset__isnull=False,
+                        sparse_dataset__isnull=True,
+                    )
+                    | Q(
+                        annotation__isnull=True,
+                        array_dataset__isnull=True,
+                        table_dataset__isnull=True,
+                        sparse_dataset__isnull=False,
+                    )
                 ),
                 name="metric_target_is_one_object",
             )
@@ -78,7 +124,11 @@ class MetricTarget(models.Model):
     @property
     def identifier(self) -> str:
         """The structure of the object: ``@mikro/annotation``."""
-        return next(identifier for identifier, field in TARGET_FIELDS.items() if getattr(self, f"{field}_id") is not None)
+        return next(
+            identifier
+            for identifier, field in TARGET_FIELDS.items()
+            if getattr(self, f"{field}_id") is not None
+        )
 
     @property
     def object(self) -> str:
@@ -92,13 +142,40 @@ class MetricTarget(models.Model):
 class Metric(Described):
     """One value recorded about one object. Immutable: corrected by a metric that supersedes it."""
 
-    uuid = models.UUIDField(db_default=UuidV7(), unique=True, editable=False, help_text="What a reader keys this metric on: stable across everything but a restore")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="metrics")
-    target = models.ForeignKey(MetricTarget, on_delete=models.PROTECT, related_name="metrics", help_text="The object this value is about")
-    key = models.CharField(max_length=500, help_text="What was measured, namespaced by who measured it: `ais_suite.measure_profile/threshold_distance`, `user:<sub>/spine_count`")
-    magnitude = models.FloatField(null=True, blank=True, help_text="(quantity) The number, in `unit`")
-    unit = models.CharField(max_length=200, null=True, blank=True, help_text="(quantity) The unit of `magnitude`, as pint reads it; `dimensionless` for a count")
-    code = models.CharField(max_length=500, null=True, blank=True, help_text="(code) An opaque category a process emitted: `segmenter_v2/class_3`")
+    uuid = models.UUIDField(
+        db_default=UuidV7(),
+        unique=True,
+        editable=False,
+        help_text="What a reader keys this metric on: stable across everything but a restore",
+    )
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="metrics"
+    )
+    target = models.ForeignKey(
+        MetricTarget,
+        on_delete=models.PROTECT,
+        related_name="metrics",
+        help_text="The object this value is about",
+    )
+    key = models.CharField(
+        max_length=500,
+        help_text="What was measured, namespaced by who measured it: `ais_suite.measure_profile/threshold_distance`, `user:<sub>/spine_count`",
+    )
+    magnitude = models.FloatField(
+        null=True, blank=True, help_text="(quantity) The number, in `unit`"
+    )
+    unit = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        help_text="(quantity) The unit of `magnitude`, as pint reads it; `dimensionless` for a count",
+    )
+    code = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="(code) An opaque category a process emitted: `segmenter_v2/class_3`",
+    )
     supersedes = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -107,10 +184,29 @@ class Metric(Described):
         related_name="superseded_by",
         help_text="The metric this one corrects. PROTECT: a corrected metric stays while its correction does",
     )
-    producer_app = models.CharField(max_length=1000, null=True, blank=True, help_text="The identifier of the app that recorded it; null when recorded by hand")
-    producer_version = models.CharField(max_length=1000, null=True, blank=True, help_text="The release of that app")
-    producer_client = models.CharField(max_length=1000, null=True, blank=True, help_text="The OAuth client it was recorded through")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="metrics", help_text="The user it was recorded as")
+    producer_app = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The identifier of the app that recorded it; null when recorded by hand",
+    )
+    producer_version = models.CharField(
+        max_length=1000, null=True, blank=True, help_text="The release of that app"
+    )
+    producer_client = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The OAuth client it was recorded through",
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="metrics",
+        help_text="The user it was recorded as",
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -133,14 +229,21 @@ class Metric(Described):
         ordering = ["-id"]
         constraints = [
             models.CheckConstraint(
-                condition=(Q(magnitude__isnull=False, unit__isnull=False, code__isnull=True) | Q(magnitude__isnull=True, unit__isnull=True, code__isnull=False)),
+                condition=(
+                    Q(magnitude__isnull=False, unit__isnull=False, code__isnull=True)
+                    | Q(magnitude__isnull=True, unit__isnull=True, code__isnull=False)
+                ),
                 name="metric_is_quantity_or_code",
             )
         ]
         indexes = [
             models.Index(fields=["target", "key"], name="metric_target_key_idx"),
             models.Index(fields=["organization", "key"], name="metric_org_key_idx"),
-            GinIndex(fields=["stored_descriptors"], name="metric_desc_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="metric_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
         ]
 
     def __str__(self) -> str:

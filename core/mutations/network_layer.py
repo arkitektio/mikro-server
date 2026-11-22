@@ -14,15 +14,16 @@ reachability walks (`network_reachable_walks`), because the unrestricted fact wa
 tables keyed by the source image's mask-instance ids, joins an object id cannot execute.
 """
 
-from kante.types import Info
-import strawberry
-
-from core import types, models, enums
 import kante
+import strawberry
+from kante.types import Info
 from pydantic import BaseModel
-from core.logic import graph as graph_logic
+
+from core import enums, models, types
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
+from core.logic import graph as graph_logic
+from core.mutations._sources import lens_of_kind
 from core.mutations.layer import (
     assert_active_color_by,
     assert_active_filter_bys,
@@ -31,7 +32,6 @@ from core.mutations.layer import (
     network_reachable_walks,
 )
 from core.render.layer import inputs as layer_inputs
-from core.mutations._sources import lens_of_kind
 from core.scoping import get_for_org
 
 _LINE_WIDTH_DESCRIPTION = (
@@ -91,7 +91,9 @@ def assert_max_level(collection, max_level: int | None) -> None:
         return
     levels = int((collection.grid or {}).get("levels", 0) or 0)
     if max_level < 0:
-        raise ValueError(f"`maxLevel` is an octree level, so it is not negative, got {max_level}.")
+        raise ValueError(
+            f"`maxLevel` is an octree level, so it is not negative, got {max_level}."
+        )
     if levels and max_level >= levels:
         raise ValueError(
             f"`maxLevel` is {max_level} but this collection's manifest declares {levels} level(s), numbered 0..{levels - 1}. A cap past the last level is a claim about a store that the store "
@@ -127,26 +129,68 @@ class CreateNetworkLayerInputModel(BaseModel):
 class CreateNetworkLayerInput:
     """Input for creating a network layer."""
 
-    scene: strawberry.ID = strawberry.field(description="The scene this layer is drawn in")
-    lens: strawberry.ID = strawberry.field(description="The network lens to draw through: which nodes and edges, in the collection's own space. A collection's whole lens is its `fullLens`")
-    material_color: list[int] | None = strawberry.field(default=None, description="The flat colour of every segment, as RGBA. Default opaque white")
-    line_width: float | None = strawberry.field(default=None, description=_LINE_WIDTH_DESCRIPTION)
-    node_size_column: str | None = strawberry.field(default=None, description=_NODE_SIZE_DESCRIPTION)
-    edge_width_column: str | None = strawberry.field(default=None, description=_EDGE_WIDTH_DESCRIPTION)
-    directed: bool | None = strawberry.field(default=None, description=_DIRECTED_DESCRIPTION)
-    show_nodes: bool | None = strawberry.field(default=None, description="Whether to draw a glyph at each node as well as the segments. Useful on a sparse graph, noise on a dense arbor")
-    max_level: int | None = strawberry.field(default=None, description=_MAX_LEVEL_DESCRIPTION)
-    color_bys: list[layer_inputs.NetworkColorByInput] | None = strawberry.field(default=None, description=_COLOR_BYS_DESCRIPTION)
-    active_color_by: int | None = strawberry.field(default=None, description=_ACTIVE_DESCRIPTION)
-    filter_bys: list[layer_inputs.NetworkFilterByInput] | None = strawberry.field(default=None, description=_FILTER_BYS_DESCRIPTION)
-    active_filter_bys: list[int] | None = strawberry.field(default=None, description=_ACTIVE_FILTERS_DESCRIPTION)
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The scene this layer is drawn in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The network lens to draw through: which nodes and edges, in the collection's own space. A collection's whole lens is its `fullLens`"
+    )
+    material_color: list[int] | None = strawberry.field(
+        default=None,
+        description="The flat colour of every segment, as RGBA. Default opaque white",
+    )
+    line_width: float | None = strawberry.field(
+        default=None, description=_LINE_WIDTH_DESCRIPTION
+    )
+    node_size_column: str | None = strawberry.field(
+        default=None, description=_NODE_SIZE_DESCRIPTION
+    )
+    edge_width_column: str | None = strawberry.field(
+        default=None, description=_EDGE_WIDTH_DESCRIPTION
+    )
+    directed: bool | None = strawberry.field(
+        default=None, description=_DIRECTED_DESCRIPTION
+    )
+    show_nodes: bool | None = strawberry.field(
+        default=None,
+        description="Whether to draw a glyph at each node as well as the segments. Useful on a sparse graph, noise on a dense arbor",
+    )
+    max_level: int | None = strawberry.field(
+        default=None, description=_MAX_LEVEL_DESCRIPTION
+    )
+    color_bys: list[layer_inputs.NetworkColorByInput] | None = strawberry.field(
+        default=None, description=_COLOR_BYS_DESCRIPTION
+    )
+    active_color_by: int | None = strawberry.field(
+        default=None, description=_ACTIVE_DESCRIPTION
+    )
+    filter_bys: list[layer_inputs.NetworkFilterByInput] | None = strawberry.field(
+        default=None, description=_FILTER_BYS_DESCRIPTION
+    )
+    active_filter_bys: list[int] | None = strawberry.field(
+        default=None, description=_ACTIVE_FILTERS_DESCRIPTION
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal', i.e. alpha-over)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
-def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.NetworkLayer:
+def create_network_layer(
+    info: Info, input: CreateNetworkLayerInput
+) -> types.NetworkLayer:
     """Draw a network collection in a scene.
 
     Placement is the collection's, not this layer's: it owns a coordinate system and
@@ -160,22 +204,36 @@ def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.Ne
     lens = lens_of_kind(info, kind=models.NetworkLens, lens=model.lens)
     collection = lens.network_collection
 
-    graph_logic.assert_placeable_in(scene.world, getattr(collection, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        getattr(collection, "coordinate_system", None),
+        destination=f"the world of scene '{scene.name}'",
+    )
     assert_max_level(collection, model.max_level)
 
     # One pair of depth-zero walks for both pickers -- two questions about the same relation,
     # and the graph does not need walking twice to answer them.
-    walks = network_reachable_walks(info, collection) if (model.color_bys is not None or model.filter_bys is not None) else None
-    color_bys = build_network_color_bys(info, collection, model.color_bys, walks=walks) or []
+    walks = (
+        network_reachable_walks(info, collection)
+        if (model.color_bys is not None or model.filter_bys is not None)
+        else None
+    )
+    color_bys = (
+        build_network_color_bys(info, collection, model.color_bys, walks=walks) or []
+    )
     assert_active_color_by(color_bys, model.active_color_by)
-    filter_bys = build_network_filter_bys(info, collection, model.filter_bys, walks=walks) or []
+    filter_bys = (
+        build_network_filter_bys(info, collection, model.filter_bys, walks=walks) or []
+    )
     assert_active_filter_bys(filter_bys, model.active_filter_bys)
 
     return models.Layer.objects.create(
         kind=enums.LayerKind.NETWORK,
         scene=scene,
         lens=lens,
-        material_color=model.material_color if model.material_color is not None else [255, 255, 255, 255],
+        material_color=model.material_color
+        if model.material_color is not None
+        else [255, 255, 255, 255],
         line_width=model.line_width,
         node_size_column=model.node_size_column,
         edge_width_column=model.edge_width_column,
@@ -199,14 +257,35 @@ def create_network_layer(info: Info, input: CreateNetworkLayerInput) -> types.Ne
 class UpdateNetworkLayerInput:
     """Input for updating a network layer's render settings."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the network layer to update")
-    material_color: list[int] | None = strawberry.field(default=None, description="The flat colour of every segment, as RGBA")
-    line_width: float | None = strawberry.field(default=strawberry.UNSET, description=f"{_LINE_WIDTH_DESCRIPTION}. An explicit `null` clears it")
-    node_size_column: str | None = strawberry.field(default=strawberry.UNSET, description=f"{_NODE_SIZE_DESCRIPTION}. An explicit `null` clears it, falling back to `edgeWidthColumn` and then to `lineWidth`")
-    edge_width_column: str | None = strawberry.field(default=strawberry.UNSET, description=f"{_EDGE_WIDTH_DESCRIPTION}. An explicit `null` clears it")
-    directed: bool | None = strawberry.field(default=None, description=_DIRECTED_DESCRIPTION)
-    show_nodes: bool | None = strawberry.field(default=None, description="Whether to draw a glyph at each node as well as the segments")
-    max_level: int | None = strawberry.field(default=strawberry.UNSET, description=f"{_MAX_LEVEL_DESCRIPTION}. An omitted field keeps the cap, an explicit `null` removes it")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the network layer to update"
+    )
+    material_color: list[int] | None = strawberry.field(
+        default=None, description="The flat colour of every segment, as RGBA"
+    )
+    line_width: float | None = strawberry.field(
+        default=strawberry.UNSET,
+        description=f"{_LINE_WIDTH_DESCRIPTION}. An explicit `null` clears it",
+    )
+    node_size_column: str | None = strawberry.field(
+        default=strawberry.UNSET,
+        description=f"{_NODE_SIZE_DESCRIPTION}. An explicit `null` clears it, falling back to `edgeWidthColumn` and then to `lineWidth`",
+    )
+    edge_width_column: str | None = strawberry.field(
+        default=strawberry.UNSET,
+        description=f"{_EDGE_WIDTH_DESCRIPTION}. An explicit `null` clears it",
+    )
+    directed: bool | None = strawberry.field(
+        default=None, description=_DIRECTED_DESCRIPTION
+    )
+    show_nodes: bool | None = strawberry.field(
+        default=None,
+        description="Whether to draw a glyph at each node as well as the segments",
+    )
+    max_level: int | None = strawberry.field(
+        default=strawberry.UNSET,
+        description=f"{_MAX_LEVEL_DESCRIPTION}. An omitted field keeps the cap, an explicit `null` removes it",
+    )
     color_bys: list[layer_inputs.NetworkColorByInput] | None = strawberry.field(
         default=None,
         description=f"{_COLOR_BYS_DESCRIPTION}. Replaces the published picker wholesale: its order is the display order, so there is nothing to merge on. Pass `[]` to remove every colouring and fall back to `materialColor`",
@@ -223,17 +302,29 @@ class UpdateNetworkLayerInput:
         default=None,
         description=f"{_ACTIVE_FILTERS_DESCRIPTION}. Re-checked against the filters being written: a new `filterBys` that no longer holds an applied rule drops it from this set rather than leaving it dangling",
     )
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha, from 0 to 1")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None, description="Layer alpha, from 0 to 1"
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
-def update_network_layer(info: Info, input: UpdateNetworkLayerInput) -> types.NetworkLayer:
+def update_network_layer(
+    info: Info, input: UpdateNetworkLayerInput
+) -> types.NetworkLayer:
     """Patch a network layer's render settings, leaving omitted fields alone."""
     layer = get_for_org(models.Layer, info, id=input.id)
     if layer.kind != enums.LayerKindChoices.NETWORK.value:
-        raise ValueError(f"Layer {layer.pk} is a {layer.kind} layer, not a network layer.")
+        raise ValueError(
+            f"Layer {layer.pk} is a {layer.kind} layer, not a network layer."
+        )
 
     if input.material_color is not None:
         layer.material_color = input.material_color
@@ -253,14 +344,32 @@ def update_network_layer(info: Info, input: UpdateNetworkLayerInput) -> types.Ne
 
     # The pickers, with `updateMeshLayer`'s exact patch semantics: replaced wholesale when
     # named, and an index left dangling by a shortened picker is dropped rather than kept.
-    color_bys_input = None if input.color_bys is None else [entry.to_pydantic() for entry in input.color_bys]
-    filter_bys_input = None if input.filter_bys is None else [entry.to_pydantic() for entry in input.filter_bys]
-    walks = network_reachable_walks(info, layer.lens.network_collection) if (color_bys_input is not None or filter_bys_input is not None) else None
+    color_bys_input = (
+        None
+        if input.color_bys is None
+        else [entry.to_pydantic() for entry in input.color_bys]
+    )
+    filter_bys_input = (
+        None
+        if input.filter_bys is None
+        else [entry.to_pydantic() for entry in input.filter_bys]
+    )
+    walks = (
+        network_reachable_walks(info, layer.lens.network_collection)
+        if (color_bys_input is not None or filter_bys_input is not None)
+        else None
+    )
 
-    color_bys = build_network_color_bys(info, layer.lens.network_collection, color_bys_input, walks=walks)
+    color_bys = build_network_color_bys(
+        info, layer.lens.network_collection, color_bys_input, walks=walks
+    )
     if color_bys is not None:
         layer.network_color_bys = color_bys
-        if input.active_color_by is strawberry.UNSET and layer.active_color_by is not None and layer.active_color_by >= len(color_bys):
+        if (
+            input.active_color_by is strawberry.UNSET
+            and layer.active_color_by is not None
+            and layer.active_color_by >= len(color_bys)
+        ):
             layer.active_color_by = None
     if input.active_color_by is not strawberry.UNSET:
         if input.active_color_by is None:
@@ -270,13 +379,21 @@ def update_network_layer(info: Info, input: UpdateNetworkLayerInput) -> types.Ne
             assert_active_color_by(layer.network_color_bys or [], input.active_color_by)
             layer.active_color_by = input.active_color_by
 
-    filter_bys = build_network_filter_bys(info, layer.lens.network_collection, filter_bys_input, walks=walks)
+    filter_bys = build_network_filter_bys(
+        info, layer.lens.network_collection, filter_bys_input, walks=walks
+    )
     if filter_bys is not None:
         layer.network_filter_bys = filter_bys
         if input.active_filter_bys is None:
-            layer.active_filter_bys = [index for index in (layer.active_filter_bys or []) if index < len(filter_bys)]
+            layer.active_filter_bys = [
+                index
+                for index in (layer.active_filter_bys or [])
+                if index < len(filter_bys)
+            ]
     if input.active_filter_bys is not None:
-        assert_active_filter_bys(layer.network_filter_bys or [], input.active_filter_bys)
+        assert_active_filter_bys(
+            layer.network_filter_bys or [], input.active_filter_bys
+        )
         layer.active_filter_bys = input.active_filter_bys
 
     if input.blending is not None:

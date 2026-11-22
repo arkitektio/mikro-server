@@ -9,14 +9,14 @@ collection creation: this is not a layer mutation fabricating placement, it is a
 creation flow stating where a brand-new space sits, once.
 """
 
+import kante
+import strawberry
+from arkitekt_service.collaborations.guests import require_in_collaboration
 from django.db import IntegrityError, transaction
 from kante.types import Info
-import strawberry
-from pydantic import BaseModel, field_validator, model_validator, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from simple_history.utils import bulk_create_with_history
 
-import kante
-from arkitekt_service.collaborations.guests import require_in_collaboration
 from core import channels, enums, models, scalars, types
 from core import descriptors as descriptors_logic
 from core.creation import CreationContext
@@ -25,8 +25,8 @@ from core.inputs.coords import AxisInputModel, CoordinateInput, CoordinateInputM
 from core.inputs.validators import assert_rgba, assert_shape_vectors
 from core.logic import annotation_lineage
 from core.logic import coordinate_system as coordinate_system_logic
-from core.logic import graph as graph_logic
 from core.logic import deletion as deletion_logic
+from core.logic import graph as graph_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import for_org, get_for_org, get_in_org_unshared
 from mikro_server.contract import ANNOTATOR, EDITOR
@@ -60,7 +60,9 @@ class _ShapeInputModel(BaseModel):
         # stored one still governs -- so the kind is read off the model only when given,
         # and the count check is skipped when it is not.
         if self.vectors is not None:
-            assert_shape_vectors(self.vectors, kind=self.kind.value if self.kind else None)
+            assert_shape_vectors(
+                self.vectors, kind=self.kind.value if self.kind else None
+            )
         return self
 
 
@@ -84,18 +86,30 @@ def _traced_on(info: Info, lens: str | None) -> "models.Lens | None":
         return None
     found = for_org(models.Lens, info).filter(pk=lens).first()
     if found is None:
-        raise ValueError(f"tracedOn names lens {lens}, which does not exist in this organization.")
+        raise ValueError(
+            f"tracedOn names lens {lens}, which does not exist in this organization."
+        )
     return found
 
 
 @prose_errors
-@kante.pydantic_input(annotation_lineage.AnnotationSourceInputModel, description="One shape a new shape was made from, and how")
+@kante.pydantic_input(
+    annotation_lineage.AnnotationSourceInputModel,
+    description="One shape a new shape was made from, and how",
+)
 class AnnotationSourceInput:
     """One source of a new shape's `derivedFrom`."""
 
-    annotation: strawberry.ID = strawberry.field(description="The shape it was made from. Any annotation you can see in this organization, in this collection or another")
-    relation: enums.AnnotationRelation = strawberry.field(description="How it was made from it. REFINED holds the kind, CONVERTED changes it, MERGED names every source")
-    reason: str | None = strawberry.field(default=None, description="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's")
+    annotation: strawberry.ID = strawberry.field(
+        description="The shape it was made from. Any annotation you can see in this organization, in this collection or another"
+    )
+    relation: enums.AnnotationRelation = strawberry.field(
+        description="How it was made from it. REFINED holds the kind, CONVERTED changes it, MERGED names every source"
+    )
+    reason: str | None = strawberry.field(
+        default=None,
+        description="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's",
+    )
 
 
 class CreateAnnotationInputModel(_ShapeInputModel):
@@ -119,27 +133,59 @@ class CreateAnnotationInputModel(_ShapeInputModel):
 class CreateAnnotationInput:
     """Input for drawing an annotation into a collection or onto a scene."""
 
-    collection: strawberry.ID | None = strawberry.field(default=None, description="The annotation collection to draw into. Exclusive with `scene`")
+    collection: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The annotation collection to draw into. Exclusive with `scene`",
+    )
     scene: strawberry.ID | None = strawberry.field(
         default=None,
         description="The scene to draw on. Its annotation collection is reused when it exists; the first annotation mints it -- a coordinate system copying the world's axes, an identity registration into the world, and one annotation layer. A layer removed since is added back. Exclusive with `collection`",
     )
-    kind: enums.AnnotationKind = strawberry.field(description="The kind of annotation to draw, e.g. 'polygon', 'path', 'point'. This determines how the vectors are interpreted and drawn")
-    name: str | None = strawberry.field(default=None, description="Optional name for the annotation. Defaults to a name derived from its collection")
-    description: str | None = strawberry.field(default=None, description="A free-form description of the annotation")
-    vectors: list[scalars.ThreeDVector] = strawberry.field(default=None, description="The annotation's vertices, in the collection's own coordinates")
-    coordinates: list[CoordinateInput] | None = strawberry.field(
-        default=None, description="The discrete coordinates this annotation is pinned to, e.g. [{name: 't', value: 0}, {name: 'c', value: 0}]. A coordinate the annotation does not pin is one it spans"
+    kind: enums.AnnotationKind = strawberry.field(
+        description="The kind of annotation to draw, e.g. 'polygon', 'path', 'point'. This determines how the vectors are interpreted and drawn"
     )
-    stroke_color: list[int] | None = strawberry.field(default=None, description="Stroke (outline) color of the geometry, as RGBA: four components, each 0..255 (default white)")
-    fill_color: list[int] | None = strawberry.field(default=None, description="Fill color of the geometry, as RGBA: four components, each 0..255, or null for no fill")
-    stroke_width: float | None = strawberry.field(default=None, description="Stroke width, in the drawing space's units (default 1.0)")
-    filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
-    derived_from: list[AnnotationSourceInput] | None = strawberry.field(default=None, description=_DERIVED_FROM_DESCRIPTION)
-    traced_on: strawberry.ID | None = strawberry.field(default=None, description=_TRACED_ON_DESCRIPTION)
+    name: str | None = strawberry.field(
+        default=None,
+        description="Optional name for the annotation. Defaults to a name derived from its collection",
+    )
+    description: str | None = strawberry.field(
+        default=None, description="A free-form description of the annotation"
+    )
+    vectors: list[scalars.ThreeDVector] = strawberry.field(
+        default=None,
+        description="The annotation's vertices, in the collection's own coordinates",
+    )
+    coordinates: list[CoordinateInput] | None = strawberry.field(
+        default=None,
+        description="The discrete coordinates this annotation is pinned to, e.g. [{name: 't', value: 0}, {name: 'c', value: 0}]. A coordinate the annotation does not pin is one it spans",
+    )
+    stroke_color: list[int] | None = strawberry.field(
+        default=None,
+        description="Stroke (outline) color of the geometry, as RGBA: four components, each 0..255 (default white)",
+    )
+    fill_color: list[int] | None = strawberry.field(
+        default=None,
+        description="Fill color of the geometry, as RGBA: four components, each 0..255, or null for no fill",
+    )
+    stroke_width: float | None = strawberry.field(
+        default=None,
+        description="Stroke width, in the drawing space's units (default 1.0)",
+    )
+    filled: bool | None = strawberry.field(
+        default=None,
+        description="Whether the geometry is filled with fill_color (default false)",
+    )
+    derived_from: list[AnnotationSourceInput] | None = strawberry.field(
+        default=None, description=_DERIVED_FROM_DESCRIPTION
+    )
+    traced_on: strawberry.ID | None = strawberry.field(
+        default=None, description=_TRACED_ON_DESCRIPTION
+    )
 
 
-def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
+def _mint_scene_collection(
+    scene: "models.Scene", ctx: CreationContext
+) -> "models.AnnotationCollection":
     """The scene's default drawing surface: collection + system + registration + layer, atomically.
 
     The world's navigable axes -- time and space -- are copied onto the collection's own
@@ -163,9 +209,15 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     world = scene.world
     if world is None:
         raise ValueError(f"Scene {scene.pk} has no world coordinate system to draw in.")
-    world_axes = [axis for axis in world.axes.all() if axis.type in coordinate_system_logic.NAVIGABLE_TYPES]
+    world_axes = [
+        axis
+        for axis in world.axes.all()
+        if axis.type in coordinate_system_logic.NAVIGABLE_TYPES
+    ]
     if not world_axes:
-        raise ValueError(f"World '{world.name}' of scene {scene.pk} has no time or space axis to draw along.")
+        raise ValueError(
+            f"World '{world.name}' of scene {scene.pk} has no time or space axis to draw along."
+        )
 
     collection = models.AnnotationCollection.objects.create(
         name=f"{scene.name}/annotations",
@@ -176,7 +228,15 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     )
     system = graph_logic.create_collection_system(
         name=f"{collection.name}/drawing",
-        axes=[AxisInputModel(name=axis.name, type=enums.AxisType(axis.type), long_name=axis.long_name, description=axis.description) for axis in world_axes],
+        axes=[
+            AxisInputModel(
+                name=axis.name,
+                type=enums.AxisType(axis.type),
+                long_name=axis.long_name,
+                description=axis.description,
+            )
+            for axis in world_axes
+        ],
         owner=collection,
         ctx=ctx,
     )
@@ -199,7 +259,9 @@ def _mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "mode
     return collection
 
 
-def _add_scene_layer(scene: "models.Scene", collection: "models.AnnotationCollection") -> None:
+def _add_scene_layer(
+    scene: "models.Scene", collection: "models.AnnotationCollection"
+) -> None:
     # Minted here like every collection: the whole lens is the collection's handle, and the
     # layer draws through it.
     models.Layer.objects.create(
@@ -213,7 +275,9 @@ def _add_scene_layer(scene: "models.Scene", collection: "models.AnnotationCollec
     )
 
 
-def _restore_scene_layer(scene: "models.Scene", collection: "models.AnnotationCollection") -> None:
+def _restore_scene_layer(
+    scene: "models.Scene", collection: "models.AnnotationCollection"
+) -> None:
     """Give a scene's collection its layer back, if the layer was removed.
 
     Removing a layer leaves the collection and its shapes standing, so the next draw finds
@@ -224,7 +288,9 @@ def _restore_scene_layer(scene: "models.Scene", collection: "models.AnnotationCo
     The lock is the race the collection's OneToOne settles for a first draw: there is no such
     constraint on a layer, and two draws at once must not add two.
     """
-    has_layer = models.Layer.objects.filter(scene=scene, lens__in=collection.lenses.all())
+    has_layer = models.Layer.objects.filter(
+        scene=scene, lens__in=collection.lenses.all()
+    )
     if has_layer.exists():
         return
     with transaction.atomic():
@@ -233,7 +299,9 @@ def _restore_scene_layer(scene: "models.Scene", collection: "models.AnnotationCo
             _add_scene_layer(scene, collection)
 
 
-def _find_or_mint_scene_collection(scene: "models.Scene", ctx: CreationContext) -> "models.AnnotationCollection":
+def _find_or_mint_scene_collection(
+    scene: "models.Scene", ctx: CreationContext
+) -> "models.AnnotationCollection":
     """The scene's annotation collection, minting it on first use, and its layer back if removed.
 
     The OneToOne on ``AnnotationCollection.scene`` is what makes this race-safe: a
@@ -276,12 +344,16 @@ def create_annotation(
     model = input.to_pydantic()
 
     if bool(model.collection) == bool(model.scene):
-        raise ValueError("Provide exactly one of `collection` or `scene`: an annotation is drawn into a collection, and a scene names the collection minted for it.")
+        raise ValueError(
+            "Provide exactly one of `collection` or `scene`: an annotation is drawn into a collection, and a scene names the collection minted for it."
+        )
 
     ctx = CreationContext.from_info(info)
 
     if model.collection:
-        collection = get_in_org_unshared(models.AnnotationCollection, info, id=model.collection)
+        collection = get_in_org_unshared(
+            models.AnnotationCollection, info, id=model.collection
+        )
         require_in_collaboration(collection, any_role_of=ANNOTATING_ROLES, info=info)
     else:
         scene = get_in_org_unshared(models.Scene, info, id=model.scene)
@@ -292,9 +364,13 @@ def create_annotation(
 
     system = collection.coordinate_system_or_none
     if system is None:
-        raise ValueError(f"Annotation collection {collection.pk} has no coordinate system to draw in.")
+        raise ValueError(
+            f"Annotation collection {collection.pk} has no coordinate system to draw in."
+        )
 
-    sources = annotation_lineage.resolve_sources(info, child_kind=model.kind.value, entries=model.derived_from or [])
+    sources = annotation_lineage.resolve_sources(
+        info, child_kind=model.kind.value, entries=model.derived_from or []
+    )
     traced_on = _traced_on(info, model.traced_on)
     vectors = model.vectors or []
 
@@ -313,12 +389,17 @@ def create_annotation(
             # Stored keyed by coordinate name -- the same shape as
             # CoordinateAnchor.coordinates, and GIN-queryable. The API keeps the
             # typed list shape.
-            coordinates={coordinate.name: coordinate.value for coordinate in (model.coordinates or [])},
+            coordinates={
+                coordinate.name: coordinate.value
+                for coordinate in (model.coordinates or [])
+            },
             intrinsic_bbox=intrinsic_bbox,
             # The same box again as a Postgres cube: the GiST-indexed search copy.
             bbox_cube=intrinsic_bbox,
             created_with_transforms=graph_logic.transform_version(system),
-            stroke_color=model.stroke_color if model.stroke_color is not None else [255, 255, 255, 255],
+            stroke_color=model.stroke_color
+            if model.stroke_color is not None
+            else [255, 255, 255, 255],
             fill_color=model.fill_color,
             stroke_width=model.stroke_width if model.stroke_width is not None else 1.0,
             filled=model.filled if model.filled is not None else False,
@@ -326,7 +407,9 @@ def create_annotation(
             creator=ctx.user,
             **ctx.provenance_kwargs(),
         )
-        annotation_lineage.write_links(annotation_lineage.build_links(annotation, sources, ctx))
+        annotation_lineage.write_links(
+            annotation_lineage.build_links(annotation, sources, ctx)
+        )
     return annotation
 
 
@@ -341,21 +424,49 @@ class UpdateAnnotationInputModel(_ShapeInputModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateAnnotationInputModel, description="Input for editing an annotation. Only the supplied fields change; new vectors re-derive the bounding box against the current transform chain")
+@kante.pydantic_input(
+    UpdateAnnotationInputModel,
+    description="Input for editing an annotation. Only the supplied fields change; new vectors re-derive the bounding box against the current transform chain",
+)
 class UpdateAnnotationInput:
     """Input for editing an annotation."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the annotation to edit")
-    name: str | None = strawberry.field(default=None, description="A new name for the annotation")
-    description: str | None = strawberry.field(default=None, description="A new description for the annotation")
-    kind: enums.AnnotationKind | None = strawberry.field(default=None, description="A new kind, changing how the vectors are interpreted")
-    vectors: list[scalars.ThreeDVector] | None = strawberry.field(default=None, description="Replacement vertices, in the collection's own coordinates. The bounding box is re-derived")
-    coordinates: list[CoordinateInput] | None = strawberry.field(default=None, description="Replacement coordinate pins. The whole set is replaced, not merged")
-    stroke_color: list[int] | None = strawberry.field(default=None, description="A new stroke (outline) color, as RGBA: four components, each 0..255")
-    fill_color: list[int] | None = strawberry.field(default=None, description="A new fill color, as RGBA: four components, each 0..255")
-    stroke_width: float | None = strawberry.field(default=None, description="A new stroke width, in the drawing space's units")
-    filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color")
-    traced_on: strawberry.ID | None = strawberry.field(default=None, description="A new lens the shape was traced on. Metadata only, see `CreateAnnotationInput.tracedOn`")
+    name: str | None = strawberry.field(
+        default=None, description="A new name for the annotation"
+    )
+    description: str | None = strawberry.field(
+        default=None, description="A new description for the annotation"
+    )
+    kind: enums.AnnotationKind | None = strawberry.field(
+        default=None, description="A new kind, changing how the vectors are interpreted"
+    )
+    vectors: list[scalars.ThreeDVector] | None = strawberry.field(
+        default=None,
+        description="Replacement vertices, in the collection's own coordinates. The bounding box is re-derived",
+    )
+    coordinates: list[CoordinateInput] | None = strawberry.field(
+        default=None,
+        description="Replacement coordinate pins. The whole set is replaced, not merged",
+    )
+    stroke_color: list[int] | None = strawberry.field(
+        default=None,
+        description="A new stroke (outline) color, as RGBA: four components, each 0..255",
+    )
+    fill_color: list[int] | None = strawberry.field(
+        default=None,
+        description="A new fill color, as RGBA: four components, each 0..255",
+    )
+    stroke_width: float | None = strawberry.field(
+        default=None, description="A new stroke width, in the drawing space's units"
+    )
+    filled: bool | None = strawberry.field(
+        default=None, description="Whether the geometry is filled with fill_color"
+    )
+    traced_on: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="A new lens the shape was traced on. Metadata only, see `CreateAnnotationInput.tracedOn`",
+    )
 
 
 def update_annotation(info: Info, input: UpdateAnnotationInput) -> types.Annotation:
@@ -371,7 +482,9 @@ def update_annotation(info: Info, input: UpdateAnnotationInput) -> types.Annotat
     if model.kind is not None:
         annotation.kind = model.kind.value
     if model.coordinates is not None:
-        annotation.coordinates = {coordinate.name: coordinate.value for coordinate in model.coordinates}
+        annotation.coordinates = {
+            coordinate.name: coordinate.value for coordinate in model.coordinates
+        }
     if model.stroke_color is not None:
         annotation.stroke_color = model.stroke_color
     if model.fill_color is not None:
@@ -386,8 +499,12 @@ def update_annotation(info: Info, input: UpdateAnnotationInput) -> types.Annotat
         annotation.vectors = model.vectors
         system = annotation.collection.coordinate_system_or_none
         if system is None:
-            raise ValueError(f"Annotation collection {annotation.collection.pk} has no coordinate system to derive a bounding box in.")
-        annotation.intrinsic_bbox = graph_logic.compute_intrinsic_bbox(system, model.vectors)
+            raise ValueError(
+                f"Annotation collection {annotation.collection.pk} has no coordinate system to derive a bounding box in."
+            )
+        annotation.intrinsic_bbox = graph_logic.compute_intrinsic_bbox(
+            system, model.vectors
+        )
         annotation.bbox_cube = annotation.intrinsic_bbox
         annotation.created_with_transforms = graph_logic.transform_version(system)
 
@@ -407,21 +524,53 @@ class AnnotationSpecInputModel(_ShapeInputModel):
 
 
 @prose_errors
-@kante.pydantic_input(AnnotationSpecInputModel, description="One shape of a bulk draw: the per-annotation subset of CreateAnnotationInput, without the collection/scene target")
+@kante.pydantic_input(
+    AnnotationSpecInputModel,
+    description="One shape of a bulk draw: the per-annotation subset of CreateAnnotationInput, without the collection/scene target",
+)
 class AnnotationSpecInput:
     """Input for one shape within a bulk annotation draw."""
 
-    kind: enums.AnnotationKind = strawberry.field(description="The kind of annotation to draw, e.g. 'polygon', 'path', 'point'. This determines how the vectors are interpreted and drawn")
-    name: str | None = strawberry.field(default=None, description="Optional name for the annotation. Defaults to a name derived from its collection")
-    description: str | None = strawberry.field(default=None, description="A free-form description of the annotation")
-    vectors: list[scalars.ThreeDVector] = strawberry.field(default=None, description="The annotation's vertices, in the collection's own coordinates")
-    coordinates: list[CoordinateInput] | None = strawberry.field(default=None, description="The discrete coordinates this annotation is pinned to. A coordinate the annotation does not pin is one it spans")
-    stroke_color: list[int] | None = strawberry.field(default=None, description="Stroke (outline) color of the geometry, as RGBA: four components, each 0..255 (default white)")
-    fill_color: list[int] | None = strawberry.field(default=None, description="Fill color of the geometry, as RGBA: four components, each 0..255, or null for no fill")
-    stroke_width: float | None = strawberry.field(default=None, description="Stroke width, in the drawing space's units (default 1.0)")
-    filled: bool | None = strawberry.field(default=None, description="Whether the geometry is filled with fill_color (default false)")
-    derived_from: list[AnnotationSourceInput] | None = strawberry.field(default=None, description=_DERIVED_FROM_DESCRIPTION)
-    traced_on: strawberry.ID | None = strawberry.field(default=None, description=_TRACED_ON_DESCRIPTION)
+    kind: enums.AnnotationKind = strawberry.field(
+        description="The kind of annotation to draw, e.g. 'polygon', 'path', 'point'. This determines how the vectors are interpreted and drawn"
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="Optional name for the annotation. Defaults to a name derived from its collection",
+    )
+    description: str | None = strawberry.field(
+        default=None, description="A free-form description of the annotation"
+    )
+    vectors: list[scalars.ThreeDVector] = strawberry.field(
+        default=None,
+        description="The annotation's vertices, in the collection's own coordinates",
+    )
+    coordinates: list[CoordinateInput] | None = strawberry.field(
+        default=None,
+        description="The discrete coordinates this annotation is pinned to. A coordinate the annotation does not pin is one it spans",
+    )
+    stroke_color: list[int] | None = strawberry.field(
+        default=None,
+        description="Stroke (outline) color of the geometry, as RGBA: four components, each 0..255 (default white)",
+    )
+    fill_color: list[int] | None = strawberry.field(
+        default=None,
+        description="Fill color of the geometry, as RGBA: four components, each 0..255, or null for no fill",
+    )
+    stroke_width: float | None = strawberry.field(
+        default=None,
+        description="Stroke width, in the drawing space's units (default 1.0)",
+    )
+    filled: bool | None = strawberry.field(
+        default=None,
+        description="Whether the geometry is filled with fill_color (default false)",
+    )
+    derived_from: list[AnnotationSourceInput] | None = strawberry.field(
+        default=None, description=_DERIVED_FROM_DESCRIPTION
+    )
+    traced_on: strawberry.ID | None = strawberry.field(
+        default=None, description=_TRACED_ON_DESCRIPTION
+    )
 
 
 class CreateAnnotationsInputModel(BaseModel):
@@ -437,9 +586,17 @@ class CreateAnnotationsInputModel(BaseModel):
 class CreateAnnotationsInput:
     """Input for drawing many annotations into one collection or onto one scene."""
 
-    collection: strawberry.ID | None = strawberry.field(default=None, description="The annotation collection to draw into. Exclusive with `scene`")
-    scene: strawberry.ID | None = strawberry.field(default=None, description="The scene to draw on; its annotation collection is reused or minted exactly as createAnnotation does. Exclusive with `collection`")
-    annotations: list[AnnotationSpecInput] = strawberry.field(description="The shapes to draw, in order")
+    collection: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The annotation collection to draw into. Exclusive with `scene`",
+    )
+    scene: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The scene to draw on; its annotation collection is reused or minted exactly as createAnnotation does. Exclusive with `collection`",
+    )
+    annotations: list[AnnotationSpecInput] = strawberry.field(
+        description="The shapes to draw, in order"
+    )
 
 
 def create_annotations(
@@ -456,12 +613,16 @@ def create_annotations(
     model = input.to_pydantic()
 
     if bool(model.collection) == bool(model.scene):
-        raise ValueError("Provide exactly one of `collection` or `scene`: an annotation is drawn into a collection, and a scene names the collection minted for it.")
+        raise ValueError(
+            "Provide exactly one of `collection` or `scene`: an annotation is drawn into a collection, and a scene names the collection minted for it."
+        )
 
     ctx = CreationContext.from_info(info)
 
     if model.collection:
-        collection = get_in_org_unshared(models.AnnotationCollection, info, id=model.collection)
+        collection = get_in_org_unshared(
+            models.AnnotationCollection, info, id=model.collection
+        )
         require_in_collaboration(collection, any_role_of=ANNOTATING_ROLES, info=info)
     else:
         scene = get_in_org_unshared(models.Scene, info, id=model.scene)
@@ -472,18 +633,29 @@ def create_annotations(
 
     system = collection.coordinate_system_or_none
     if system is None:
-        raise ValueError(f"Annotation collection {collection.pk} has no coordinate system to draw in.")
+        raise ValueError(
+            f"Annotation collection {collection.pk} has no coordinate system to draw in."
+        )
 
     chain = graph_logic.intrinsic_chain(system)
     version = graph_logic.transform_version(system)
 
     # Every shape's sources first, so a refused one leaves nothing drawn.
     sources = [
-        annotation_lineage.resolve_sources(info, child_kind=spec.kind.value, entries=spec.derived_from or [], position=f"annotations[{index}].derivedFrom")
+        annotation_lineage.resolve_sources(
+            info,
+            child_kind=spec.kind.value,
+            entries=spec.derived_from or [],
+            position=f"annotations[{index}].derivedFrom",
+        )
         for index, spec in enumerate(model.annotations)
     ]
     # One lookup per distinct lens, and all of them before the insert.
-    traced_on = {lens: _traced_on(info, lens) for lens in {spec.traced_on for spec in model.annotations} if lens is not None}
+    traced_on = {
+        lens: _traced_on(info, lens)
+        for lens in {spec.traced_on for spec in model.annotations}
+        if lens is not None
+    }
 
     rows = []
     for spec in model.annotations:
@@ -496,15 +668,24 @@ def create_annotations(
                 description=spec.description,
                 kind=spec.kind.value,
                 vectors=vectors,
-                coordinates={coordinate.name: coordinate.value for coordinate in (spec.coordinates or [])},
+                coordinates={
+                    coordinate.name: coordinate.value
+                    for coordinate in (spec.coordinates or [])
+                },
                 intrinsic_bbox=bbox,
                 bbox_cube=bbox,
                 created_with_transforms=version,
-                stroke_color=spec.stroke_color if spec.stroke_color is not None else [255, 255, 255, 255],
+                stroke_color=spec.stroke_color
+                if spec.stroke_color is not None
+                else [255, 255, 255, 255],
                 fill_color=spec.fill_color,
-                stroke_width=spec.stroke_width if spec.stroke_width is not None else 1.0,
+                stroke_width=spec.stroke_width
+                if spec.stroke_width is not None
+                else 1.0,
                 filled=spec.filled if spec.filled is not None else False,
-                traced_on=traced_on.get(spec.traced_on) if spec.traced_on is not None else None,
+                traced_on=traced_on.get(spec.traced_on)
+                if spec.traced_on is not None
+                else None,
                 creator=ctx.user,
                 **ctx.provenance_kwargs(),
             )
@@ -513,15 +694,25 @@ def create_annotations(
     with transaction.atomic():
         # Described before the insert (a shape's descriptors are its kind and its collection's
         # axes, both in hand), since no save sees a bulk write.
-        created = bulk_create_with_history(descriptors_logic.stamp(rows), models.Annotation)
+        created = bulk_create_with_history(
+            descriptors_logic.stamp(rows), models.Annotation
+        )
         # After the shapes exist: a link needs its child's row. The ids are client-side
         # UUIDs, so `created` carries them and lines up with `sources` by position.
-        annotation_lineage.write_links([link for child, child_sources in zip(created, sources) for link in annotation_lineage.build_links(child, child_sources, ctx)])
+        annotation_lineage.write_links(
+            [
+                link
+                for child, child_sources in zip(created, sources)
+                for link in annotation_lineage.build_links(child, child_sources, ctx)
+            ]
+        )
         # bulk_create fires no post_save, so the collection's subscribers are told here:
         # one message for the whole batch (see AnnotationSignal.create_many) -- and the
         # collection and its lenses, which count the shapes, are restored once.
         channels.announce_annotations(
-            channels.AnnotationSignal(create_many=[str(annotation.pk) for annotation in created]),
+            channels.AnnotationSignal(
+                create_many=[str(annotation.pk) for annotation in created]
+            ),
             collection.pk,
         )
         descriptors_logic.restore_annotation_counts([collection.pk])
@@ -533,12 +724,23 @@ class DeleteAnnotationInputModel(BaseModel):
     cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-@kante.pydantic_input(DeleteAnnotationInputModel, description="Input for deleting an annotation by ID")
+@kante.pydantic_input(
+    DeleteAnnotationInputModel, description="Input for deleting an annotation by ID"
+)
 class DeleteAnnotationInput:
     """Input for deleting an annotation by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the annotation to delete")
-    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the annotation to delete"
+    )
+    cascade: bool = strawberry.field(
+        default=False, description=deletion_logic.CASCADE_DESCRIPTION
+    )
 
 
-delete_annotation = make_delete(models.Annotation, DeleteAnnotationInput, owner=self_owner, lineage_kind="annotation")
+delete_annotation = make_delete(
+    models.Annotation,
+    DeleteAnnotationInput,
+    owner=self_owner,
+    lineage_kind="annotation",
+)

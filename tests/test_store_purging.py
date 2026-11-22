@@ -19,21 +19,20 @@ import datetime
 from io import StringIO
 from unittest.mock import patch
 
+import arkitekt_datalayer.datalayer as datalayer_module
 import pytest
+from arkitekt_datalayer import storage
+from arkitekt_datalayer.models import DatalayerStore
 from django.conf import settings
 from django.core.management import call_command
 from django.utils import timezone
+from kante.context import HttpContext
 from moto import mock_aws
 
-import arkitekt_datalayer.datalayer as datalayer_module
 from core import models
-from arkitekt_datalayer import storage
-from arkitekt_datalayer.models import DatalayerStore
-from kante.context import HttpContext
 from mikro_server.schema import schema
-
 from tests import seed
-from tests.seed import create_array_dataset, create_folder, create_file
+from tests.seed import create_array_dataset, create_file, create_folder
 
 
 @pytest.fixture()
@@ -53,7 +52,11 @@ def buckets(monkeypatch):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
-    config = {key: value for key, value in settings.DATALAYER.items() if key not in ("host", "port", "protocol")}
+    config = {
+        key: value
+        for key, value in settings.DATALAYER.items()
+        if key not in ("host", "port", "protocol")
+    }
     monkeypatch.setattr(settings, "DATALAYER", config)
 
     with mock_aws():
@@ -75,7 +78,9 @@ def keys_in(layer, bucket_key: str) -> set[str]:
 
 def put(layer, bucket_key: str, key: str) -> None:
     """Put one object into a datalayer bucket."""
-    layer._s3.put_object(Bucket=layer.get_bucket_config(bucket_key).bucket, Key=key, Body=b"bytes")
+    layer._s3.put_object(
+        Bucket=layer.get_bucket_config(bucket_key).bucket, Key=key, Body=b"bytes"
+    )
 
 
 def purge(**options) -> str:
@@ -87,7 +92,9 @@ def purge(**options) -> str:
 
 def age(store: DatalayerStore, days: int) -> None:
     """Backdate a store's orphaning so the grace period has elapsed."""
-    DatalayerStore.objects.filter(pk=store.pk).update(orphaned_at=timezone.now() - datetime.timedelta(days=days))
+    DatalayerStore.objects.filter(pk=store.pk).update(
+        orphaned_at=timezone.now() - datetime.timedelta(days=days)
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -97,9 +104,17 @@ def age(store: DatalayerStore, days: int) -> None:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_a_file_flags_its_store_and_the_sweeper_purges_it(db, authenticated_context: HttpContext, buckets):
+async def test_deleting_a_file_flags_its_store_and_the_sweeper_purges_it(
+    db, authenticated_context: HttpContext, buckets
+):
     ctx = authenticated_context
-    store = await models.BigFileStore.objects.acreate(path="s3://bigfile/scan", bucket="bigfile", key="scan", populated=True, organization=ctx.request.organization)
+    store = await models.BigFileStore.objects.acreate(
+        path="s3://bigfile/scan",
+        bucket="bigfile",
+        key="scan",
+        populated=True,
+        organization=ctx.request.organization,
+    )
     folder = await create_folder(ctx, "DS")
     file = await create_file(ctx, "scan.czi", folder, store=store)
     await sync(put)(buckets, "bigfile", "scan")
@@ -126,32 +141,47 @@ async def test_deleting_a_file_flags_its_store_and_the_sweeper_purges_it(db, aut
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_a_dataset_purges_every_pyramid_level(db, authenticated_context: HttpContext, buckets):
+async def test_deleting_a_dataset_purges_every_pyramid_level(
+    db, authenticated_context: HttpContext, buckets
+):
     """The stores hang off DataArray rows, not off the dataset -- a one-hop walk misses them.
 
     And each is a zarr, so each needs the prefix delete: `delete_object` against `level-0`
     would succeed and leave every chunk in place.
     """
     ctx = authenticated_context
-    dataset = await create_array_dataset(ctx, "Cells", shapes=[[8, 64, 64], [8, 32, 32], [8, 16, 16]])
+    dataset = await create_array_dataset(
+        ctx, "Cells", shapes=[[8, 64, 64], [8, 32, 32], [8, 16, 16]]
+    )
 
     # The seed helper builds the coordinate graph but attaches no stores, so give each level
     # one. (An earlier version of this test read `store__key` straight off the levels and got
     # `[None, None, None]` -- three of them, so a length assertion passed while checking
     # nothing. Attach them explicitly and assert the keys are real.)
-    arrays = [array async for array in models.DataArray.objects.filter(dataset=dataset).order_by("level")]
+    arrays = [
+        array
+        async for array in models.DataArray.objects.filter(dataset=dataset).order_by(
+            "level"
+        )
+    ]
     assert len(arrays) == 3, "the seed helper is expected to build three levels"
 
     store_keys = []
     for array in arrays:
         store = await models.ZarrStore.objects.acreate(
-            path=f"s3://zarr/level-{array.level}", bucket="zarr", key=f"level-{array.level}", populated=True, organization=ctx.request.organization
+            path=f"s3://zarr/level-{array.level}",
+            bucket="zarr",
+            key=f"level-{array.level}",
+            populated=True,
+            organization=ctx.request.organization,
         )
         array.store = store
         await array.asave(update_fields=["store"])
         store_keys.append(store.key)
 
-    assert all(store_keys), "every level must really have a store, or this test asserts nothing"
+    assert all(store_keys), (
+        "every level must really have a store, or this test asserts nothing"
+    )
     for key in store_keys:
         for suffix in ("zarr.json", "c/0/0", "c/0/1"):
             await sync(put)(buckets, "zarr", f"{key}/{suffix}")
@@ -165,15 +195,22 @@ async def test_deleting_a_dataset_purges_every_pyramid_level(db, authenticated_c
     )
     assert not result.errors, result.errors
 
-    flagged = [store async for store in DatalayerStore.objects.filter(orphaned_at__isnull=False)]
-    assert len(flagged) == 3, "every level's store must be flagged, not just the dataset's own"
+    flagged = [
+        store
+        async for store in DatalayerStore.objects.filter(orphaned_at__isnull=False)
+    ]
+    assert len(flagged) == 3, (
+        "every level's store must be flagged, not just the dataset's own"
+    )
 
     for store in flagged:
         await sync(age)(store, 30)
     await sync(purge)()
 
     remaining = await sync(keys_in)(buckets, "zarr")
-    assert all("untouched" in key for key in remaining), f"only the sibling prefix should remain, got {remaining}"
+    assert all("untouched" in key for key in remaining), (
+        f"only the sibling prefix should remain, got {remaining}"
+    )
     assert remaining, "the sibling prefix must not have been swept up"
 
 
@@ -184,7 +221,9 @@ async def test_deleting_a_dataset_purges_every_pyramid_level(db, authenticated_c
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_shared_store_is_never_purged(db, authenticated_context: HttpContext, buckets):
+async def test_a_shared_store_is_never_purged(
+    db, authenticated_context: HttpContext, buckets
+):
     """Two Files on one store: deleting one must not destroy the other's bytes.
 
     Nothing stops this today -- no `store` FK has a unique constraint and store ids are
@@ -192,7 +231,13 @@ async def test_a_shared_store_is_never_purged(db, authenticated_context: HttpCon
     thing between a shared store and data loss.
     """
     ctx = authenticated_context
-    store = await models.BigFileStore.objects.acreate(path="s3://bigfile/shared", bucket="bigfile", key="shared", populated=True, organization=ctx.request.organization)
+    store = await models.BigFileStore.objects.acreate(
+        path="s3://bigfile/shared",
+        bucket="bigfile",
+        key="shared",
+        populated=True,
+        organization=ctx.request.organization,
+    )
     folder = await create_folder(ctx, "DS")
     doomed = await create_file(ctx, "first.czi", folder, store=store)
     await create_file(ctx, "second.czi", folder, store=store)
@@ -211,7 +256,9 @@ async def test_a_shared_store_is_never_purged(db, authenticated_context: HttpCon
     assert "keep" in output and "still referenced" in output
     assert await sync(keys_in)(buckets, "bigfile") == {"shared"}
     refreshed = await DatalayerStore.objects.aget(pk=store.pk)
-    assert refreshed.orphaned_at is None, "a re-checked store must be un-flagged, not left as a standing candidate"
+    assert refreshed.orphaned_at is None, (
+        "a re-checked store must be un-flagged, not left as a standing candidate"
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -221,10 +268,18 @@ async def test_a_shared_store_is_never_purged(db, authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_failed_delete_flags_nothing(db, authenticated_context: HttpContext, buckets):
+async def test_a_failed_delete_flags_nothing(
+    db, authenticated_context: HttpContext, buckets
+):
     """Collection happens before the delete and flagging after it, in one transaction."""
     ctx = authenticated_context
-    store = await models.BigFileStore.objects.acreate(path="s3://bigfile/kept", bucket="bigfile", key="kept", populated=True, organization=ctx.request.organization)
+    store = await models.BigFileStore.objects.acreate(
+        path="s3://bigfile/kept",
+        bucket="bigfile",
+        key="kept",
+        populated=True,
+        organization=ctx.request.organization,
+    )
     folder = await create_folder(ctx, "DS")
     file = await create_file(ctx, "kept.czi", folder, store=store)
 
@@ -237,12 +292,16 @@ async def test_a_failed_delete_flags_nothing(db, authenticated_context: HttpCont
     assert result.errors
 
     refreshed = await DatalayerStore.objects.aget(pk=store.pk)
-    assert refreshed.orphaned_at is None, "a delete that raised must leave no store flagged"
+    assert refreshed.orphaned_at is None, (
+        "a delete that raised must leave no store flagged"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_referrers_of_sees_a_store_a_collection_points_at(db, authenticated_context: HttpContext, buckets):
+async def test_referrers_of_sees_a_store_a_collection_points_at(
+    db, authenticated_context: HttpContext, buckets
+):
     """A store something still points at is never purged, however it is pointed at.
 
     Note **no store many-to-many exists anywhere any more**, so that branch of `_store_fields`
@@ -253,7 +312,9 @@ async def test_referrers_of_sees_a_store_a_collection_points_at(db, authenticate
     ctx = authenticated_context
     store = await sync(seed._seed_fabriks_store_sync)(ctx, axes=None, populated=True)
 
-    assert await sync(storage.referrers_of)(store) == [], "a fresh store is referenced by nothing"
+    assert await sync(storage.referrers_of)(store) == [], (
+        "a fresh store is referenced by nothing"
+    )
 
     await models.MeshCollection.objects.acreate(
         name="v1",
@@ -262,12 +323,16 @@ async def test_referrers_of_sees_a_store_a_collection_points_at(db, authenticate
         organization=ctx.request.organization,
     )
 
-    assert await sync(storage.referrers_of)(store), "a referenced store is still in use -- these bytes must not be collected"
+    assert await sync(storage.referrers_of)(store), (
+        "a referenced store is still in use -- these bytes must not be collected"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_a_mesh_collection_flags_its_fabriks_store(db, authenticated_context: HttpContext, buckets):
+async def test_deleting_a_mesh_collection_flags_its_fabriks_store(
+    db, authenticated_context: HttpContext, buckets
+):
     """One collection, one store, one prefix to collect.
 
     The sweep needs no special case for it: `_store_fields` finds the foreign key by walking
@@ -292,8 +357,12 @@ async def test_deleting_a_mesh_collection_flags_its_fabriks_store(db, authentica
     assert not result.errors, result.errors
 
     refreshed = await DatalayerStore.objects.aget(pk=store.pk)
-    assert refreshed.orphaned_at is not None, "the collection was the only thing pointing at that prefix"
-    assert refreshed.get_real_instance().is_prefix, "and it is collected as a prefix, not as one object"
+    assert refreshed.orphaned_at is not None, (
+        "the collection was the only thing pointing at that prefix"
+    )
+    assert refreshed.get_real_instance().is_prefix, (
+        "and it is collected as a prefix, not as one object"
+    )
 
 
 def sync(fn):

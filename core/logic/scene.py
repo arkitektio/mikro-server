@@ -23,8 +23,8 @@ coordinate system are facts about spaces, answerable with no scene in sight, and
 :mod:`core.logic.coordinate_system`. What is left here takes a scene or makes one.
 """
 
-import datetime
 import dataclasses
+import datetime
 from collections.abc import Callable
 
 from django.db import transaction
@@ -67,7 +67,9 @@ _LAYER_BLENDING = {
 }
 
 
-def _viewer_preferences(preferred_view: "enums.PreferredView | None", background_color: list[float] | None) -> dict:
+def _viewer_preferences(
+    preferred_view: "enums.PreferredView | None", background_color: list[float] | None
+) -> dict:
     """The viewer preferences to stamp on a new scene, omitting the ones nobody stated.
 
     Omitted rather than defaulted here: the columns already carry their defaults, and
@@ -109,9 +111,15 @@ def create_scene(
     """
     if world is not None:
         if axes is not None or epoch is not None or reference is not None:
-            raise ValueError("A scene adopting an existing coordinate system takes its axes, epoch and reference from it; do not pass `axes`, `epoch` or `reference` alongside `coordinateSystem`.")
-        if not world.axes.filter(type__in=coordinate_system_logic.NAVIGABLE_TYPES).exists():
-            raise ValueError(f"World '{world.name}' has no navigable (time/space) axes, so nothing could be placed in a scene over it.")
+            raise ValueError(
+                "A scene adopting an existing coordinate system takes its axes, epoch and reference from it; do not pass `axes`, `epoch` or `reference` alongside `coordinateSystem`."
+            )
+        if not world.axes.filter(
+            type__in=coordinate_system_logic.NAVIGABLE_TYPES
+        ).exists():
+            raise ValueError(
+                f"World '{world.name}' has no navigable (time/space) axes, so nothing could be placed in a scene over it."
+            )
         return models.Scene.objects.create(
             name=name,
             world=world,
@@ -124,7 +132,9 @@ def create_scene(
     # convenience path calls the space module and then adopts what it gets back, which is
     # exactly the shape of the two-call version a client can write itself.
     with transaction.atomic():
-        world = coordinate_system_logic.create_world_space(name=f"{name}/world", axes=axes, epoch=epoch, reference=reference, ctx=ctx)
+        world = coordinate_system_logic.create_world_space(
+            name=f"{name}/world", axes=axes, epoch=epoch, reference=reference, ctx=ctx
+        )
         scene = models.Scene.objects.create(
             name=name,
             world=world,
@@ -145,7 +155,9 @@ def _is_renderable(dataset: "models.ArrayDataset") -> bool:
     gate so a picker cannot offer what this would skip -- and it swallows the too-few-spatial-axes
     ValueError this used to let through, which is what "skip instead of abort" meant all along.
     """
-    return coords_logic.is_renderable(dataset.axis_specs, dataset.axis_names, dataset.shape_list)
+    return coords_logic.is_renderable(
+        dataset.axis_specs, dataset.axis_names, dataset.shape_list
+    )
 
 
 def _bootstrap_image_layers(
@@ -220,31 +232,62 @@ def _bootstrap_image_layers(
     axis_names, shape = dataset.axis_names, lens.shape_list
 
     def size(axis: str | None) -> int:
-        return shape[axis_names.index(axis)] if axis is not None and axis in axis_names else 0
+        return (
+            shape[axis_names.index(axis)]
+            if axis is not None and axis in axis_names
+            else 0
+        )
 
     if not coords_logic.is_renderable(dataset.axis_specs, axis_names, shape):
-        subject = f"Lens {lens.pk} over dataset {dataset.pk}" if not lens.is_whole else f"Dataset {dataset.pk}"
-        raise ValueError(f"{subject} is not renderable: its x axis '{render.x}' ({size(render.x)} px) and y axis '{render.y}' ({size(render.y)} px) must both have more than one pixel")
+        subject = (
+            f"Lens {lens.pk} over dataset {dataset.pk}"
+            if not lens.is_whole
+            else f"Dataset {dataset.pk}"
+        )
+        raise ValueError(
+            f"{subject} is not renderable: its x axis '{render.x}' ({size(render.x)} px) and y axis '{render.y}' ({size(render.y)} px) must both have more than one pixel"
+        )
 
     # The channels the lens keeps, as the dataset counts them. Labels and histograms are
     # recorded against the dataset's channel positions, and the sub-lens that pins one is cut
     # from the lens, so both are keyed by the dataset's position and translated once here.
     kept = _kept_channels(dataset, lens, render.intensity)
-    recorded = _channel_labels(dataset, render.intensity) if render.intensity is not None else {}
-    labels = {local: recorded[channel] for local, channel in enumerate(kept) if channel in recorded}
+    recorded = (
+        _channel_labels(dataset, render.intensity)
+        if render.intensity is not None
+        else {}
+    )
+    labels = {
+        local: recorded[channel]
+        for local, channel in enumerate(kept)
+        if channel in recorded
+    }
 
     def channel_lens(channel: int | None) -> "models.ArrayLens":
         """The lens drawing one of the dataset's channels: the lens itself when it already pins one, else the cut from it."""
         if channel is None or len(kept) <= 1:
             return lens
         local = kept.index(channel)
-        return coordinate_system_logic.create_sub_lens(lens, [base_models.SliceInputModel(axis=render.intensity, start=local, stop=local + 1)], ctx)
+        return coordinate_system_logic.create_sub_lens(
+            lens,
+            [
+                base_models.SliceInputModel(
+                    axis=render.intensity, start=local, stop=local + 1
+                )
+            ],
+            ctx,
+        )
 
     # Values identical to data whose producer declared how to draw them are drawn the same
     # way: the declaration is copied, before anything is inferred. An explicit kind still wins.
-    inherited = None if kind is not None else _inherited_layers(dataset, kept, render.intensity)
+    inherited = (
+        None if kind is not None else _inherited_layers(dataset, kept, render.intensity)
+    )
     if inherited:
-        return [_create_inherited_layer(plan, scene, channel_lens, order + offset) for offset, plan in enumerate(inherited)]
+        return [
+            _create_inherited_layer(plan, scene, channel_lens, order + offset)
+            for offset, plan in enumerate(inherited)
+        ]
 
     resolved_kind = kind or _infer_kind(dataset, render, size, labels)
     blending = _LAYER_BLENDING[resolved_kind]
@@ -281,8 +324,15 @@ def _bootstrap_image_layers(
 
     if resolved_kind == enums.BootstrapLayerKind.RGB:
         _assert_rgb_capacity(render, size)
-        components = channels_logic.rgb_components(labels, size(render.intensity)) or {"red": 0, "green": 1, "blue": 2}
-        clim_min, clim_max = _combined_window(_value_windows(dataset, render.intensity), sorted(kept[local] for local in components.values()))
+        components = channels_logic.rgb_components(labels, size(render.intensity)) or {
+            "red": 0,
+            "green": 1,
+            "blue": 2,
+        }
+        clim_min, clim_max = _combined_window(
+            _value_windows(dataset, render.intensity),
+            sorted(kept[local] for local in components.values()),
+        )
         return [
             models.Layer.objects.create(
                 kind=enums.LayerKind.RGB,
@@ -313,11 +363,15 @@ def _bootstrap_image_layers(
             gamma=1.0,
             projection_mode=projection_mode,
         )
-        for offset, channel in enumerate(_channel_sources(dataset, render, kept, recorded))
+        for offset, channel in enumerate(
+            _channel_sources(dataset, render, kept, recorded)
+        )
     ]
 
 
-def _kept_channels(dataset: "models.ArrayDataset", lens: "models.ArrayLens", axis: str | None) -> list[int]:
+def _kept_channels(
+    dataset: "models.ArrayDataset", lens: "models.ArrayLens", axis: str | None
+) -> list[int]:
     """The dataset's channel positions the lens keeps, in the lens' order; empty when there is no channel axis.
 
     Python's own slice arithmetic, so a step or an open bound resolves exactly as
@@ -326,10 +380,14 @@ def _kept_channels(dataset: "models.ArrayDataset", lens: "models.ArrayLens", axi
     if axis is None:
         return []
     extent = dataset.shape_list[dataset.axis_names.index(axis)]
-    selection = next((slice_ for slice_ in lens.slices_list if slice_.axis == axis), None)
+    selection = next(
+        (slice_ for slice_ in lens.slices_list if slice_.axis == axis), None
+    )
     if selection is None:
         return list(range(extent))
-    return list(range(*slice(selection.start, selection.stop, selection.step).indices(extent)))
+    return list(
+        range(*slice(selection.start, selection.stop, selection.step).indices(extent))
+    )
 
 
 def bootstrap_scene_from_lens(
@@ -370,30 +428,58 @@ def bootstrap_scene_from_lens(
         dataset = lens.dataset
         target = world or dataset.intrinsic_coordinate_system
         if target is None:
-            raise ValueError(f"Dataset {dataset.pk} has no intrinsic coordinate system, so there is no space to build a scene of lens {lens.pk} over. Pass `world`.")
+            raise ValueError(
+                f"Dataset {dataset.pk} has no intrinsic coordinate system, so there is no space to build a scene of lens {lens.pk} over. Pass `world`."
+            )
         with transaction.atomic():
             # Named for the selection when it has a name: two crops of one dataset staged side by
             # side would otherwise be two scenes called the same thing.
-            default_name = f"{dataset.name} · {lens.name}" if lens.name else dataset.name
+            default_name = (
+                f"{dataset.name} · {lens.name}" if lens.name else dataset.name
+            )
             scene = create_scene(name=name or default_name, world=target, ctx=ctx)
-            graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
+            graph_logic.assert_placeable_in(
+                scene.world,
+                lens.coordinate_system,
+                destination=f"the world of scene '{scene.name}'",
+            )
             _bootstrap_image_layers(dataset, scene, ctx, kind=kind, lens=lens)
         return scene
 
     if isinstance(container, models.SparseDataset):
-        raise ValueError(f"Lens {lens.pk} over SparseDataset {container.pk} cannot be staged: a sparse dataset has no layer kind, nothing draws a matrix.")
-    label = getattr(container, "name", None) or getattr(container, "label", None) or f"{type(container).__name__} {container.pk}"
+        raise ValueError(
+            f"Lens {lens.pk} over SparseDataset {container.pk} cannot be staged: a sparse dataset has no layer kind, nothing draws a matrix."
+        )
+    label = (
+        getattr(container, "name", None)
+        or getattr(container, "label", None)
+        or f"{type(container).__name__} {container.pk}"
+    )
     with transaction.atomic():
         default_name = f"{label} · {lens.name}" if lens.name else label
-        scene = create_scene(name=name or default_name, world=world or lens.coordinate_system, ctx=ctx)
-        graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
-        layers = _materialize_layers(lens.coordinate_system, scene, ctx, ScenePolicyInputModel(transform_tables=True), lens=lens)
+        scene = create_scene(
+            name=name or default_name, world=world or lens.coordinate_system, ctx=ctx
+        )
+        graph_logic.assert_placeable_in(
+            scene.world,
+            lens.coordinate_system,
+            destination=f"the world of scene '{scene.name}'",
+        )
+        layers = _materialize_layers(
+            lens.coordinate_system,
+            scene,
+            ctx,
+            ScenePolicyInputModel(transform_tables=True),
+            lens=lens,
+        )
         if not layers:
             if isinstance(container, models.TableDataset):
                 why = "a table needs at least two SPACE coordinate columns to have a place in a scene"
             else:
                 why = f"nothing draws a {type(container).__name__} here"
-            raise ValueError(f"Lens {lens.pk} over {type(container).__name__} {container.pk} cannot be staged: {why}.")
+            raise ValueError(
+                f"Lens {lens.pk} over {type(container).__name__} {container.pk} cannot be staged: {why}."
+            )
     return scene
 
 
@@ -438,7 +524,13 @@ def bootstrap_scene_from_system(
         # nchildren -- a multi-hop reachable closure would be a larger, less obvious set.
         edges = (
             models.Transformation.objects.filter(output=system)
-            .select_related("input").prefetch_related("input__datasets", "input__table_datasets", "input__mesh_collections", "input__annotation_collections")
+            .select_related("input")
+            .prefetch_related(
+                "input__datasets",
+                "input__table_datasets",
+                "input__mesh_collections",
+                "input__annotation_collections",
+            )
             .order_by("pk")
         )
 
@@ -462,7 +554,11 @@ def bootstrap_scene_from_system(
     return scene
 
 
-def _gate_placement(source: "models.CoordinateSystem", scene: "models.Scene", policy: "ScenePolicyInputModel") -> bool:
+def _gate_placement(
+    source: "models.CoordinateSystem",
+    scene: "models.Scene",
+    policy: "ScenePolicyInputModel",
+) -> bool:
     """Whether this source may become a layer here -- refusing, or skipping, when it may not.
 
     One place for the choice `policy.skip_unplaceable` names, because every branch of
@@ -476,7 +572,9 @@ def _gate_placement(source: "models.CoordinateSystem", scene: "models.Scene", po
     """
     if policy.skip_unplaceable:
         return graph_logic.is_placeable_in(scene.world, source, require_affine=True)
-    graph_logic.assert_placeable_in(scene.world, source, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world, source, destination=f"the world of scene '{scene.name}'"
+    )
     return True
 
 
@@ -584,7 +682,9 @@ def _materialize_layers(
             return []
         # `policy.kind` reaches the render graph only here. It is deliberately not asked of
         # the mesh/table/annotation branches above: those have no recipe to choose.
-        return _bootstrap_image_layers(dataset, scene, ctx, kind=policy.kind, order=order)
+        return _bootstrap_image_layers(
+            dataset, scene, ctx, kind=policy.kind, order=order
+        )
 
     annotations = next(iter(source.annotation_collections.all()[:1]), None)
     if annotations is not None:
@@ -605,7 +705,14 @@ def _materialize_layers(
     return []
 
 
-def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "models.Scene", policy: "ScenePolicyInputModel", *, order: int = 0, lens: "models.Lens | None" = None) -> "models.Layer | None":
+def _materialize_table_layer(
+    table_dataset: "models.TableDataset",
+    scene: "models.Scene",
+    policy: "ScenePolicyInputModel",
+    *,
+    order: int = 0,
+    lens: "models.Lens | None" = None,
+) -> "models.Layer | None":
     """A registered table dataset as a track layer when it declares tracks, else a point layer.
 
     Only a table with at least two SPACE coordinate columns has a place in a scene; one
@@ -641,9 +748,34 @@ def _materialize_table_layer(table_dataset: "models.TableDataset", scene: "model
 #: The layer kinds a declaration is copied for, and the columns each one copies. The lenses
 #: are not among them: they are the target's, cut for the channels the declaration names.
 _INHERITED_FIELDS = {
-    enums.LayerKind.INTENSITY.value: ("name", "colormap", "color", "clim_min", "clim_max", "gamma", "blending", "opacity", "visible", "projection_mode"),
-    enums.LayerKind.RGB.value: ("name", "clim_min", "clim_max", "blending", "opacity", "visible", "white_balance"),
-    enums.LayerKind.LABEL.value: ("name", "label_render", "blending", "opacity", "visible"),
+    enums.LayerKind.INTENSITY.value: (
+        "name",
+        "colormap",
+        "color",
+        "clim_min",
+        "clim_max",
+        "gamma",
+        "blending",
+        "opacity",
+        "visible",
+        "projection_mode",
+    ),
+    enums.LayerKind.RGB.value: (
+        "name",
+        "clim_min",
+        "clim_max",
+        "blending",
+        "opacity",
+        "visible",
+        "white_balance",
+    ),
+    enums.LayerKind.LABEL.value: (
+        "name",
+        "label_render",
+        "blending",
+        "opacity",
+        "visible",
+    ),
 }
 
 
@@ -661,7 +793,9 @@ class _InheritedLayer:
     fields: dict
 
 
-def _channel_of(dataset: "models.ArrayDataset", lens_id: int, axis: str | None) -> "int | None | bool":
+def _channel_of(
+    dataset: "models.ArrayDataset", lens_id: int, axis: str | None
+) -> "int | None | bool":
     """The one channel position of ``dataset`` a lens pins; None without a channel axis; False when it keeps several."""
     if axis is None:
         return None
@@ -681,18 +815,32 @@ def _declared_layers(source: "models.ArrayDataset") -> "list[models.Layer]":
     first = models.Layer.objects.filter(over).order_by("pk").first()
     if first is None:
         return []
-    return list(models.Layer.objects.filter(over, scene_id=first.scene_id).order_by("order", "pk"))
+    return list(
+        models.Layer.objects.filter(over, scene_id=first.scene_id).order_by(
+            "order", "pk"
+        )
+    )
 
 
-def _declaration_through(edge: "models.Transformation", dataset: "models.ArrayDataset", axis: str | None) -> "list[_InheritedLayer] | None":
+def _declaration_through(
+    edge: "models.Transformation", dataset: "models.ArrayDataset", axis: str | None
+) -> "list[_InheritedLayer] | None":
     """The source's declaration, in the derived dataset's channel positions; None when there is none or it does not map.
 
     The derivation is IDENTICAL, so the derived dataset's channels are the ones the edge's
     source lens kept, in order. Anything else -- a different count, a layer over several
     channels at once -- maps nowhere, and nothing is inherited.
     """
-    source_lens = models.ArrayLens.objects.filter(coordinate_system=edge.output).select_related("dataset").first()
-    source = source_lens.dataset if source_lens is not None else graph_logic.system_dataset(edge.output)
+    source_lens = (
+        models.ArrayLens.objects.filter(coordinate_system=edge.output)
+        .select_related("dataset")
+        .first()
+    )
+    source = (
+        source_lens.dataset
+        if source_lens is not None
+        else graph_logic.system_dataset(edge.output)
+    )
     if source is None:
         return None
     declared = _declared_layers(source)
@@ -705,8 +853,14 @@ def _declaration_through(edge: "models.Transformation", dataset: "models.ArrayDa
     elif source_lens is not None:
         source_positions = list(_kept_channels(source, source_lens, source_axis))
     else:
-        source_positions = list(range(source.shape_list[source.axis_names.index(source_axis)]))
-    target_positions: list[int | None] = list(range(dataset.shape_list[dataset.axis_names.index(axis)])) if axis is not None else [None]
+        source_positions = list(
+            range(source.shape_list[source.axis_names.index(source_axis)])
+        )
+    target_positions: list[int | None] = (
+        list(range(dataset.shape_list[dataset.axis_names.index(axis)]))
+        if axis is not None
+        else [None]
+    )
     if len(source_positions) != len(target_positions):
         return None
     to_target = dict(zip(source_positions, target_positions, strict=True))
@@ -716,18 +870,34 @@ def _declaration_through(edge: "models.Transformation", dataset: "models.ArrayDa
         kind = str(getattr(layer.kind, "value", layer.kind))
         if kind not in _INHERITED_FIELDS:
             continue
-        lens_ids = (layer.red_lens_id, layer.green_lens_id, layer.blue_lens_id) if kind == enums.LayerKind.RGB.value else (layer.lens_id,)
+        lens_ids = (
+            (layer.red_lens_id, layer.green_lens_id, layer.blue_lens_id)
+            if kind == enums.LayerKind.RGB.value
+            else (layer.lens_id,)
+        )
         channels = []
         for lens_id in lens_ids:
-            channel = _channel_of(source, lens_id, source_axis) if lens_id is not None else False
+            channel = (
+                _channel_of(source, lens_id, source_axis)
+                if lens_id is not None
+                else False
+            )
             if channel is False or channel not in to_target:
                 return None
             channels.append(to_target[channel])
-        plans.append(_InheritedLayer(kind=kind, channels=tuple(channels), fields={name: getattr(layer, name) for name in _INHERITED_FIELDS[kind]}))
+        plans.append(
+            _InheritedLayer(
+                kind=kind,
+                channels=tuple(channels),
+                fields={name: getattr(layer, name) for name in _INHERITED_FIELDS[kind]},
+            )
+        )
     return plans or None
 
 
-def _inherited_layers(dataset: "models.ArrayDataset", kept: list[int], axis: str | None) -> "list[_InheritedLayer] | None":
+def _inherited_layers(
+    dataset: "models.ArrayDataset", kept: list[int], axis: str | None
+) -> "list[_InheritedLayer] | None":
     """The layers a dataset derived IDENTICAL from declared data inherits, or None to fall through to inference.
 
     **The rule.** How values are drawn is declared by their first producer, as the layers of
@@ -742,7 +912,10 @@ def _inherited_layers(dataset: "models.ArrayDataset", kept: list[int], axis: str
     the staged lens does not keep is left out; nothing kept, nothing inherited.
     """
     edges = graph_logic.derivation_edges(dataset)
-    if not edges or any(edge.value_relation != enums.ValueRelationChoices.IDENTICAL.value for edge in edges):
+    if not edges or any(
+        edge.value_relation != enums.ValueRelationChoices.IDENTICAL.value
+        for edge in edges
+    ):
         return None
     declarations = []
     for edge in edges:
@@ -752,7 +925,11 @@ def _inherited_layers(dataset: "models.ArrayDataset", kept: list[int], axis: str
         declarations.append(declaration)
 
     first = declarations[0]
-    if any([(plan.kind, plan.channels) for plan in other] != [(plan.kind, plan.channels) for plan in first] for other in declarations[1:]):
+    if any(
+        [(plan.kind, plan.channels) for plan in other]
+        != [(plan.kind, plan.channels) for plan in first]
+        for other in declarations[1:]
+    ):
         return None
 
     keeps = set(kept) if axis is not None else {None}
@@ -762,15 +939,28 @@ def _inherited_layers(dataset: "models.ArrayDataset", kept: list[int], axis: str
             continue
         fields = dict(plan.fields)
         if "clim_min" in fields:
-            lows = [d[index].fields["clim_min"] for d in declarations if d[index].fields["clim_min"] is not None]
-            highs = [d[index].fields["clim_max"] for d in declarations if d[index].fields["clim_max"] is not None]
+            lows = [
+                d[index].fields["clim_min"]
+                for d in declarations
+                if d[index].fields["clim_min"] is not None
+            ]
+            highs = [
+                d[index].fields["clim_max"]
+                for d in declarations
+                if d[index].fields["clim_max"] is not None
+            ]
             fields["clim_min"] = min(lows) if lows else None
             fields["clim_max"] = max(highs) if highs else None
         merged.append(dataclasses.replace(plan, fields=fields))
     return merged or None
 
 
-def _create_inherited_layer(plan: _InheritedLayer, scene: "models.Scene", channel_lens: "Callable[[int | None], models.ArrayLens]", order: int) -> "models.Layer":
+def _create_inherited_layer(
+    plan: _InheritedLayer,
+    scene: "models.Scene",
+    channel_lens: "Callable[[int | None], models.ArrayLens]",
+    order: int,
+) -> "models.Layer":
     """One inherited layer, over the derived dataset's lenses."""
     if plan.kind == enums.LayerKind.RGB.value:
         red, green, blue = plan.channels
@@ -785,10 +975,21 @@ def _create_inherited_layer(plan: _InheritedLayer, scene: "models.Scene", channe
             **plan.fields,
         )
     (channel,) = plan.channels
-    return models.Layer.objects.create(kind=plan.kind, lens=channel_lens(channel), scene=scene, order=order, **plan.fields)
+    return models.Layer.objects.create(
+        kind=plan.kind,
+        lens=channel_lens(channel),
+        scene=scene,
+        order=order,
+        **plan.fields,
+    )
 
 
-def _infer_rgb(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes, size: Callable[[str | None], int], labels: dict[int, str]) -> bool:
+def _infer_rgb(
+    dataset: "models.ArrayDataset",
+    render: coords_logic.RenderAxes,
+    size: Callable[[str | None], int],
+    labels: dict[int, str],
+) -> bool:
     """Whether something *recorded* says this dataset is a colour photograph.
 
     Two signals, and what they have in common is the whole point: each of them is a
@@ -811,7 +1012,9 @@ def _infer_rgb(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes, 
     return file_link_logic.is_photographic_source(dataset)
 
 
-def _infer_vector(render: coords_logic.RenderAxes, size: Callable[[str | None], int]) -> bool:
+def _infer_vector(
+    render: coords_logic.RenderAxes, size: Callable[[str | None], int]
+) -> bool:
     """Whether this dataset is a vector field a glyph can draw.
 
     A DISPLACEMENT value axis is authored evidence in LABEL's CATEGORIZED sense -- someone
@@ -832,7 +1035,12 @@ def _infer_vector(render: coords_logic.RenderAxes, size: Callable[[str | None], 
     return 2 <= components <= 3 and components <= spatial
 
 
-def _infer_kind(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes, size: Callable[[str | None], int], labels: dict[int, str]) -> "enums.BootstrapLayerKind":
+def _infer_kind(
+    dataset: "models.ArrayDataset",
+    render: coords_logic.RenderAxes,
+    size: Callable[[str | None], int],
+    labels: dict[int, str],
+) -> "enums.BootstrapLayerKind":
     """The default recipe: stated facts first, then structure.
 
     A CATEGORIZED primary derivation says the values became labels -- the one
@@ -858,7 +1066,10 @@ def _infer_kind(dataset: "models.ArrayDataset", render: coords_logic.RenderAxes,
     and an RGB layer's three components are not something a projection knows how to collapse.
     """
     primary = graph_logic.primary_derivation_edge(dataset)
-    if primary is not None and primary.value_relation == enums.ValueRelationChoices.CATEGORIZED.value:
+    if (
+        primary is not None
+        and primary.value_relation == enums.ValueRelationChoices.CATEGORIZED.value
+    ):
         return enums.BootstrapLayerKind.LABEL
     if _infer_vector(render, size):
         return enums.BootstrapLayerKind.VECTOR
@@ -877,7 +1088,13 @@ def _channel_labels(dataset: "models.ArrayDataset", axis: str) -> dict[int, str]
     called alike -- then, as before, the first other anchor pinning it.
     """
     labels: dict[int, str] = {}
-    query = models.CoordinateAnchor.objects.filter(dataset=dataset, coordinates__has_key=axis).select_related("position_label", "channel_label").order_by("pk")
+    query = (
+        models.CoordinateAnchor.objects.filter(
+            dataset=dataset, coordinates__has_key=axis
+        )
+        .select_related("position_label", "channel_label")
+        .order_by("pk")
+    )
     anchors = sorted(query, key=lambda anchor: len(anchor.coordinates) != 1)
     for anchor in anchors:
         index = anchor.coordinates.get(axis)
@@ -889,7 +1106,9 @@ def _channel_labels(dataset: "models.ArrayDataset", axis: str) -> dict[int, str]
     return labels
 
 
-def _value_windows(dataset: "models.ArrayDataset", axis: str | None) -> dict[int | None, tuple[float | None, float | None]]:
+def _value_windows(
+    dataset: "models.ArrayDataset", axis: str | None
+) -> dict[int | None, tuple[float | None, float | None]]:
     """The recorded intensity window per channel: what to open the contrast limits at.
 
     Ingest writes a :class:`~core.models.ValueHistogram` per anchor, and the server has been
@@ -906,7 +1125,11 @@ def _value_windows(dataset: "models.ArrayDataset", axis: str | None) -> dict[int
     read the same spokes and must not disagree about which one they mean.
     """
     windows: dict[int | None, tuple[float | None, float | None]] = {}
-    spokes = models.ValueHistogram.objects.filter(anchor__dataset=dataset).select_related("anchor").order_by("pk")
+    spokes = (
+        models.ValueHistogram.objects.filter(anchor__dataset=dataset)
+        .select_related("anchor")
+        .order_by("pk")
+    )
     for spoke in spokes:
         coordinates = spoke.anchor.coordinates or {}
         index = coordinates.get(axis) if axis is not None else None
@@ -926,7 +1149,9 @@ def _value_windows(dataset: "models.ArrayDataset", axis: str | None) -> dict[int
     return windows
 
 
-def _combined_window(windows: dict[int | None, tuple[float | None, float | None]], indices: list[int]) -> tuple[float | None, float | None]:
+def _combined_window(
+    windows: dict[int | None, tuple[float | None, float | None]], indices: list[int]
+) -> tuple[float | None, float | None]:
     """One window wide enough for several channels: what an RGB layer needs.
 
     ``Layer.clim_min``/``clim_max`` are shared across an RGB layer's three components -- they
@@ -934,8 +1159,16 @@ def _combined_window(windows: dict[int | None, tuple[float | None, float | None]
     become one. The widest of them, because clipping a component is visible as a colour cast
     across the whole image, which is worse than a slightly flat one.
     """
-    lows = [windows[index][0] for index in indices if index in windows and windows[index][0] is not None]
-    highs = [windows[index][1] for index in indices if index in windows and windows[index][1] is not None]
+    lows = [
+        windows[index][0]
+        for index in indices
+        if index in windows and windows[index][0] is not None
+    ]
+    highs = [
+        windows[index][1]
+        for index in indices
+        if index in windows and windows[index][1] is not None
+    ]
     if not lows and not highs:
         fallback = windows.get(None)
         return fallback if fallback is not None else (None, None)
@@ -1000,7 +1233,9 @@ def _channel_sources(
                 name=None,
                 clim_min=clim_min,
                 clim_max=clim_max,
-                blending=enums.Blending.NORMAL if channels_logic.is_transmitted(label) else None,
+                blending=enums.Blending.NORMAL
+                if channels_logic.is_transmitted(label)
+                else None,
                 transmitted=channels_logic.is_transmitted(label),
             )
         ]
@@ -1013,7 +1248,12 @@ def _channel_sources(
         sources.append(
             _BootstrapChannel(
                 channel=channel,
-                colormap=enums.ColorMap.GREY if transmitted else (channels_logic.colormap_for(label) or _CHANNEL_COLORMAPS[local % len(_CHANNEL_COLORMAPS)]),
+                colormap=enums.ColorMap.GREY
+                if transmitted
+                else (
+                    channels_logic.colormap_for(label)
+                    or _CHANNEL_COLORMAPS[local % len(_CHANNEL_COLORMAPS)]
+                ),
                 name=labels.get(channel, f"channel {channel}"),
                 clim_min=clim_min,
                 clim_max=clim_max,
@@ -1024,7 +1264,9 @@ def _channel_sources(
     return sorted(sources, key=lambda source: (not source.transmitted, source.channel))
 
 
-def _assert_rgb_capacity(render: coords_logic.RenderAxes, size: Callable[[str | None], int]) -> None:
+def _assert_rgb_capacity(
+    render: coords_logic.RenderAxes, size: Callable[[str | None], int]
+) -> None:
     """Refuse an RGB recipe over an axis with no three channels to be red, green and blue.
 
     The same refusal :func:`core.mutations.layer.create_rgb_layer` makes for the identical
@@ -1032,10 +1274,14 @@ def _assert_rgb_capacity(render: coords_logic.RenderAxes, size: Callable[[str | 
     the same in both.
     """
     if render.intensity is None or size(render.intensity) < 3:
-        raise ValueError(f"An RGB recipe needs a channel axis with at least three positions, but '{render.intensity}' has {size(render.intensity)}. Pass a different kind, or none for the default: one layer per channel.")
+        raise ValueError(
+            f"An RGB recipe needs a channel axis with at least three positions, but '{render.intensity}' has {size(render.intensity)}. Pass a different kind, or none for the default: one layer per channel."
+        )
 
 
-def _projection_mode(render: coords_logic.RenderAxes, kind: "enums.BootstrapLayerKind") -> "enums.ProjectionMode | None":
+def _projection_mode(
+    render: coords_logic.RenderAxes, kind: "enums.BootstrapLayerKind"
+) -> "enums.ProjectionMode | None":
     """The projection a bootstrapped intensity layer carries. None -- draw the plane -- unless the recipe is VOLUME.
 
     VOLUME is the one :class:`~core.enums.BootstrapLayerKind` with no ``LayerKind`` of its
@@ -1046,5 +1292,7 @@ def _projection_mode(render: coords_logic.RenderAxes, kind: "enums.BootstrapLaye
     if kind != enums.BootstrapLayerKind.VOLUME:
         return None
     if render.z is None:
-        raise ValueError("A VOLUME recipe projects over a z axis, and this dataset has none. Pass a different kind, or none to infer one.")
+        raise ValueError(
+            "A VOLUME recipe projects over a z axis, and this dataset has none. Pass a different kind, or none to infer one."
+        )
     return enums.ProjectionMode.MIP

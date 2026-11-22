@@ -23,7 +23,7 @@ module. It is pure -- specs, params and dicts, never the ORM -- so it is testabl
 a database, matching :mod:`core.logic.coords`.
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from core import enums
 from core.logic import coords as coords_logic
@@ -38,7 +38,9 @@ def phasor_axis(axes: Sequence[coords_logic.AxisSpec]) -> coords_logic.AxisSpec 
     return next((axis for axis in axes if coords_logic.is_phasor_axis(axis.type)), None)
 
 
-def flatten_edge(kind: str, params: dict, steps: Sequence[tuple[str, dict]] = ()) -> list[tuple[str, dict]]:
+def flatten_edge(
+    kind: str, params: dict, steps: Sequence[tuple[str, dict]] = ()
+) -> list[tuple[str, dict]]:
     """One transformation as the (kind, params) pairs :func:`core.logic.coords.compose` wants.
 
     A SEQUENCE keeps its parameters on its *steps* rather than in its own ``params``
@@ -51,7 +53,9 @@ def flatten_edge(kind: str, params: dict, steps: Sequence[tuple[str, dict]] = ()
     return [(kind, params)]
 
 
-def axis_scale(edges: Sequence[tuple[str, dict]], axis_index: int, axis_count: int) -> float | None:
+def axis_scale(
+    edges: Sequence[tuple[str, dict]], axis_index: int, axis_count: int
+) -> float | None:
     """The scale factor one calibration edge applies along one axis: the physical size of a pixel.
 
     The diagonal of the composed matrix at that axis' position. None when the edge is not

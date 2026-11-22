@@ -44,7 +44,9 @@ def format_embedding(vector: Any, model_id: str | None) -> Embedding | None:
         return None
     # `repr` of a float round-trips exactly and is shorter than a fixed format for the
     # values a unit vector holds; a client that parses this back gets the stored vector.
-    return Embedding(f"{model_id}{DESCRIPTOR_SEPARATOR}{','.join(repr(float(component)) for component in vector)}")
+    return Embedding(
+        f"{model_id}{DESCRIPTOR_SEPARATOR}{','.join(repr(float(component)) for component in vector)}"
+    )
 
 
 def embedding_of(instance: Any) -> Embedding | None:

@@ -7,7 +7,6 @@ Subtypes only reachable through the ``Lens`` interface (``lenses``, ``lens(id)``
 
 from core import types
 
-
 lens_types = [
     types.ArrayLens,
     types.TableLens,

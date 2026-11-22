@@ -19,11 +19,11 @@ store-to-SQL wiring is stubbed, because DuckDB reads S3 over its own HTTP client
 """
 
 import pytest
-
-from core.logic import tables as tables_logic
 from arkitekt_datalayer import base_models
 from arkitekt_datalayer.datalayer import Datalayer
 from arkitekt_datalayer.duck import DuckLayer
+
+from core.logic import tables as tables_logic
 
 
 def test_the_duck_layer_offers_the_query_method_its_callers_use():
@@ -47,7 +47,9 @@ def test_the_facade_runs_on_the_s3_configured_connection():
     layer = DuckLayer()
 
     assert layer.sql("SELECT 1;").fetchall() == [(1,)]
-    assert layer.connection is layer.connection, "one configured connection per layer, not one per query"
+    assert layer.connection is layer.connection, (
+        "one configured connection per layer, not one per query"
+    )
 
 
 class _FakeRelation:
@@ -72,7 +74,9 @@ def _stub_duck(monkeypatch, rows, captured):
     """Point `Datalayer.get_parquet_schema` at a fake DuckDB, wherever it imports it from."""
     import arkitekt_datalayer.duck as duck_module
 
-    monkeypatch.setattr(duck_module, "get_current_duck", lambda: _FakeDuck(rows, captured))
+    monkeypatch.setattr(
+        duck_module, "get_current_duck", lambda: _FakeDuck(rows, captured)
+    )
 
 
 def test_a_store_is_described_rather_than_read(monkeypatch):
@@ -83,26 +87,43 @@ def test_a_store_is_described_rather_than_read(monkeypatch):
     the same line `get_zarr_metadata` and `get_sparse_metadata` hold.
     """
     captured: list[str] = []
-    _stub_duck(monkeypatch, [("object_id", "BIGINT", "YES", None, None, None)], captured)
+    _stub_duck(
+        monkeypatch, [("object_id", "BIGINT", "YES", None, None, None)], captured
+    )
 
     class FakeStore:
         key = "abc123"
 
     layer = Datalayer()
-    monkeypatch.setattr(Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123")
+    monkeypatch.setattr(
+        Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123"
+    )
 
-    assert layer.get_parquet_schema(FakeStore()) == [base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=True)]
+    assert layer.get_parquet_schema(FakeStore()) == [
+        base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=True)
+    ]
 
     (query,) = captured
     # The location is a bound parameter (arkitekt-datalayer 2), never spliced into the SQL.
     assert "DESCRIBE SELECT * FROM read_parquet($location)" in query
-    assert "LIMIT" not in query.upper(), "a DESCRIBE needs no row limit -- it reads no rows"
+    assert "LIMIT" not in query.upper(), (
+        "a DESCRIBE needs no row limit -- it reads no rows"
+    )
 
 
 def test_the_nullable_flag_is_read_off_the_describe(monkeypatch):
     """DESCRIBE reports nullability as the strings YES/NO, not as a boolean."""
-    _stub_duck(monkeypatch, [("a", "BIGINT", "YES", None, None, None), ("b", "DOUBLE", "NO", None, None, None)], [])
-    monkeypatch.setattr(Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123")
+    _stub_duck(
+        monkeypatch,
+        [
+            ("a", "BIGINT", "YES", None, None, None),
+            ("b", "DOUBLE", "NO", None, None, None),
+        ],
+        [],
+    )
+    monkeypatch.setattr(
+        Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123"
+    )
 
     columns = Datalayer().get_parquet_schema(object())
 
@@ -113,9 +134,15 @@ def test_the_file_order_of_the_columns_is_kept(monkeypatch):
     """File order is the order a `Column` row's `order` will be written in, so it must survive."""
     rows = [(name, "BIGINT", "YES", None, None, None) for name in ("z", "a", "m")]
     _stub_duck(monkeypatch, rows, [])
-    monkeypatch.setattr(Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123")
+    monkeypatch.setattr(
+        Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123"
+    )
 
-    assert [column.name for column in Datalayer().get_parquet_schema(object())] == ["z", "a", "m"]
+    assert [column.name for column in Datalayer().get_parquet_schema(object())] == [
+        "z",
+        "a",
+        "m",
+    ]
 
 
 @pytest.mark.django_db
@@ -130,13 +157,21 @@ def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_con
     monkeypatch.setattr(
         Datalayer,
         "get_parquet_schema",
-        lambda self, store: [base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=False)],
+        lambda self, store: [
+            base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=False)
+        ],
     )
-    monkeypatch.setattr(Datalayer, "build_store_path", lambda self, bucket, key: f"s3://{bucket}/{key}")
+    monkeypatch.setattr(
+        Datalayer, "build_store_path", lambda self, bucket, key: f"s3://{bucket}/{key}"
+    )
     # The codec probe reads the same footer over S3; `test_parquet_codecs.py` owns it.
     monkeypatch.setattr(Datalayer, "parquet_codecs_of", lambda self, location: {"ZSTD"})
 
-    store = models.ParquetStore.objects.create(organization=authenticated_context.request.organization, key="abc123", bucket="parquet")
+    store = models.ParquetStore.objects.create(
+        organization=authenticated_context.request.organization,
+        key="abc123",
+        bucket="parquet",
+    )
     store.fill_info()
     store.refresh_from_db()
 
@@ -145,12 +180,16 @@ def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_con
 
 
 @pytest.mark.django_db
-def test_columns_for_store_reads_the_row_rather_than_the_file(monkeypatch, authenticated_context):
+def test_columns_for_store_reads_the_row_rather_than_the_file(
+    monkeypatch, authenticated_context
+):
     """A described store is never re-described; the answer is already on it."""
     from arkitekt_datalayer import models
 
     def _refuse(self, store):
-        raise AssertionError("a store that recorded its schema must not be described again")
+        raise AssertionError(
+            "a store that recorded its schema must not be described again"
+        )
 
     monkeypatch.setattr(Datalayer, "get_parquet_schema", _refuse)
 
@@ -162,23 +201,36 @@ def test_columns_for_store_reads_the_row_rather_than_the_file(monkeypatch, authe
         columns=[{"name": "object_id", "type": "BIGINT", "nullable": False}],
     )
 
-    assert tables_logic.columns_for_store(store) == [base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=False)]
+    assert tables_logic.columns_for_store(store) == [
+        base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=False)
+    ]
 
 
 @pytest.mark.django_db
-def test_a_store_written_before_the_field_existed_falls_back_to_describing(monkeypatch, authenticated_context):
+def test_a_store_written_before_the_field_existed_falls_back_to_describing(
+    monkeypatch, authenticated_context
+):
     """`columns` is null on every store finished before this field, and those still work."""
     from arkitekt_datalayer import models
 
     monkeypatch.setattr(
         Datalayer,
         "get_parquet_schema",
-        lambda self, store: [base_models.ParquetColumn(name="legacy", type="VARCHAR", nullable=True)],
+        lambda self, store: [
+            base_models.ParquetColumn(name="legacy", type="VARCHAR", nullable=True)
+        ],
     )
 
-    store = models.ParquetStore.objects.create(organization=authenticated_context.request.organization, key="old", bucket="parquet", populated=True)
+    store = models.ParquetStore.objects.create(
+        organization=authenticated_context.request.organization,
+        key="old",
+        bucket="parquet",
+        populated=True,
+    )
 
-    assert [column.name for column in tables_logic.columns_for_store(store)] == ["legacy"]
+    assert [column.name for column in tables_logic.columns_for_store(store)] == [
+        "legacy"
+    ]
 
 
 @pytest.mark.django_db
@@ -225,11 +277,19 @@ def test_the_connection_outlives_the_relation_it_returns(monkeypatch):
         def sql(self, query: str, params=None):
             # The relation deliberately does NOT reference the layer, exactly as duckdb's does
             # not keep its connection alive from Python's side.
-            return ClosingRelation(self._state, [("object_id", "BIGINT", "YES", None, None, None)])
+            return ClosingRelation(
+                self._state, [("object_id", "BIGINT", "YES", None, None, None)]
+            )
 
     import arkitekt_datalayer.duck as duck_module
 
-    monkeypatch.setattr(duck_module, "get_current_duck", lambda: ClosingDuck({"closed": False}))
-    monkeypatch.setattr(Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123")
+    monkeypatch.setattr(
+        duck_module, "get_current_duck", lambda: ClosingDuck({"closed": False})
+    )
+    monkeypatch.setattr(
+        Datalayer, "parquet_source", lambda self, store: "s3://tables/abc123"
+    )
 
-    assert Datalayer().get_parquet_schema(object()) == [base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=True)]
+    assert Datalayer().get_parquet_schema(object()) == [
+        base_models.ParquetColumn(name="object_id", type="BIGINT", nullable=True)
+    ]

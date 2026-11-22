@@ -6,17 +6,21 @@ query and the columns to select; a zarr+duckdb worker executes it with credentia
 already has (the stores' own ``accessGrant``). Anything that wants *values* runs the plan.
 """
 
-from typing import Annotated, List
-
-import strawberry
+from typing import Annotated
 
 import kante
-from arkitekt_datalayer.types import FabriksStore, KonnektionStore, ParquetStore, ZarrStore
+import strawberry
+from arkitekt_datalayer.types import (
+    FabriksStore,
+    KonnektionStore,
+    ParquetStore,
+    ZarrStore,
+)
 
 from core import enums
 from core.types.column_options import ColumnOptionJoinStep
 from core.types.coords import ByDimensionTransformation, CoordinateSystem, PlacementStep
-from core.types.table_dataset import TableDataset, Column
+from core.types.table_dataset import Column, TableDataset
 
 
 @kante.type(
@@ -25,8 +29,12 @@ from core.types.table_dataset import TableDataset, Column
 class PlanKeyColumn:
     """One key binding of a lookup step: an axis-named value bound to a parquet column."""
 
-    axis: str = strawberry.field(description="The name the worker holds the value under: a passthrough axis of the sampled array (e.g. `t`) or an axis the sample produced (e.g. `i`)")
-    column: Column = strawberry.field(description="The declared coordinate column this value binds, carrying the parquet column name and its dtype")
+    axis: str = strawberry.field(
+        description="The name the worker holds the value under: a passthrough axis of the sampled array (e.g. `t`) or an axis the sample produced (e.g. `i`)"
+    )
+    column: Column = strawberry.field(
+        description="The declared coordinate column this value binds, carrying the parquet column name and its dtype"
+    )
 
 
 @strawberry.interface(
@@ -39,10 +47,18 @@ class PlanKeyColumn:
 class SampleStep:
     """Where a plan's id comes from: which space, which axes, what the value means."""
 
-    system: CoordinateSystem = strawberry.field(description="The coordinate system whose contents are the map. Equal to the queried system when the thing's own contents are the map (a label mask, a mesh collection); a different, array-backed system when the map is a separate field. `consumes` is stated in this system's axis order")
-    consumes: List[str] = strawberry.field(description="The axes the point is resolved against, in the field system's axis order, e.g. ['y', 'x'] -- what you index an array with, or what your pick resolved for a collection")
-    produces: List[str] = strawberry.field(description="The axis names the resulting id produces, per-edge: two sibling edges off one mask may name their produced axis differently (`i`, `label_id`), so always zip the value against THIS edge's names, never a shared key set")
-    passthrough: List[str] = strawberry.field(description="The axes the edge did not consume, e.g. ['t']: their coordinates pass through by name and join the produced values as lookup keys")
+    system: CoordinateSystem = strawberry.field(
+        description="The coordinate system whose contents are the map. Equal to the queried system when the thing's own contents are the map (a label mask, a mesh collection); a different, array-backed system when the map is a separate field. `consumes` is stated in this system's axis order"
+    )
+    consumes: list[str] = strawberry.field(
+        description="The axes the point is resolved against, in the field system's axis order, e.g. ['y', 'x'] -- what you index an array with, or what your pick resolved for a collection"
+    )
+    produces: list[str] = strawberry.field(
+        description="The axis names the resulting id produces, per-edge: two sibling edges off one mask may name their produced axis differently (`i`, `label_id`), so always zip the value against THIS edge's names, never a shared key set"
+    )
+    passthrough: list[str] = strawberry.field(
+        description="The axes the edge did not consume, e.g. ['t']: their coordinates pass through by name and join the produced values as lookup keys"
+    )
 
 
 @kante.type(
@@ -51,7 +67,9 @@ class SampleStep:
 class ArraySample(SampleStep):
     """Sample the field array at the point: which array, which axes, what the value means."""
 
-    store: ZarrStore = strawberry.field(description="The zarr store holding the array (the level-0 store for an intrinsic system). Ask it for an accessGrant to actually read chunks -- credentials never appear in a plan")
+    store: ZarrStore = strawberry.field(
+        description="The zarr store holding the array (the level-0 store for an intrinsic system). Ask it for an accessGrant to actually read chunks -- credentials never appear in a plan"
+    )
 
 
 @kante.type(
@@ -64,7 +82,9 @@ class ArraySample(SampleStep):
 class MeshSample(SampleStep):
     """The collection whose geometry carries the id: which collection, which axes, what the id means."""
 
-    store: FabriksStore = strawberry.field(description="The fabriks store holding the collection -- its manifest, both catalogs and every octree level. Ask it for an accessGrant; one grant covers the whole prefix")
+    store: FabriksStore = strawberry.field(
+        description="The fabriks store holding the collection -- its manifest, both catalogs and every octree level. Ask it for an accessGrant; one grant covers the whole prefix"
+    )
 
 
 @kante.type(
@@ -77,7 +97,9 @@ class MeshSample(SampleStep):
 class NetworkSample(SampleStep):
     """The network collection whose geometry carries the id: which collection, which axes, what the id means."""
 
-    store: KonnektionStore = strawberry.field(description="The konnektion store holding the collection -- its manifest, both catalogs and every octree level. Ask it for an accessGrant; one grant covers the whole prefix")
+    store: KonnektionStore = strawberry.field(
+        description="The konnektion store holding the collection -- its manifest, both catalogs and every octree level. Ask it for an accessGrant; one grant covers the whole prefix"
+    )
 
 
 @kante.type(
@@ -106,13 +128,26 @@ class KeyMap:
 class LookupStep:
     """Read the table's rows, the matrix's slice or the array's row the held value identifies."""
 
-    kind: str = strawberry.field(description="Which shape this lookup is: `TABLE` for a row of a parquet, `SPARSE` for a slice of a matrix, `ARRAY` for one position of a dense array along `keyAxis`. The fields of the other shapes are null -- a flat discriminator rather than an interface, which over these would carry nothing in common")
+    kind: str = strawberry.field(
+        description="Which shape this lookup is: `TABLE` for a row of a parquet, `SPARSE` for a slice of a matrix, `ARRAY` for one position of a dense array along `keyAxis`. The fields of the other shapes are null -- a flat discriminator rather than an interface, which over these would carry nothing in common"
+    )
 
-    store: ParquetStore | None = strawberry.field(default=None, description="(TABLE) The parquet store holding the rows. Ask it for an accessGrant to actually read it -- credentials and locations never appear in a plan")
-    key_columns: List[PlanKeyColumn] = strawberry.field(default_factory=list, description="(TABLE) The key bindings, in bind order: each names the value the worker holds (by axis name, or by the parent hop's column or axis name) and the parquet column it binds")
-    attributes: List[Column] = strawberry.field(default_factory=list, description="(TABLE) What the statement selects -- every declared non-coordinate column, never `*`. A column whose `references` names another table holds row ids of that table; the plan's later hops say where they lead")
+    store: ParquetStore | None = strawberry.field(
+        default=None,
+        description="(TABLE) The parquet store holding the rows. Ask it for an accessGrant to actually read it -- credentials and locations never appear in a plan",
+    )
+    key_columns: list[PlanKeyColumn] = strawberry.field(
+        default_factory=list,
+        description="(TABLE) The key bindings, in bind order: each names the value the worker holds (by axis name, or by the parent hop's column or axis name) and the parquet column it binds",
+    )
+    attributes: list[Column] = strawberry.field(
+        default_factory=list,
+        description="(TABLE) What the statement selects -- every declared non-coordinate column, never `*`. A column whose `references` names another table holds row ids of that table; the plan's later hops say where they lead",
+    )
 
-    sparse_array: Annotated["SparseArray", strawberry.lazy("core.types.sparse_dataset")] | None = strawberry.field(
+    sparse_array: (
+        Annotated["SparseArray", strawberry.lazy("core.types.sparse_dataset")] | None
+    ) = strawberry.field(
         default=None,
         description="(SPARSE) The layout to read. Ask its `store` for an accessGrant, open the group at its `path` -- both layouts of a matrix live in one prefix, so the store alone does not say which -- then make two reads: `indptr[i:i+2]` at the id, and the range those two offsets name in `indices` and `data`. There is no SQL and no database in the path",
     )
@@ -124,7 +159,7 @@ class LookupStep:
         default=None,
         description="(SPARSE, ARRAY) The name the worker holds the value bound to `keyAxis` under -- what `keyColumns[].axis` is for a table. Equal to `keyAxis` on a landing, where the sample produced it under the axis' name; the parent row's column name on a hop into a matrix or an array",
     )
-    value_axes: List[str] = strawberry.field(
+    value_axes: list[str] = strawberry.field(
         default_factory=list,
         description=(
             "(SPARSE) What comes back is indexed by: every position along these axes that carries a value. **Not keys** -- the client supplies nothing for them and receives all of "
@@ -153,8 +188,14 @@ class LookupStep:
 class HopVia:
     """Which declared reference a hop follows."""
 
-    column: Column | None = strawberry.field(default=None, description="The column whose values are bound: the parent row's reference column, or its INDEX column when the hop enters a matrix or a dense array")
-    axis: str | None = strawberry.field(default=None, description="The axis crossed: the parent slice's value axis when the hop leaves a matrix, the target's indexed axis when it enters one, the array's key axis when it enters a dense array")
+    column: Column | None = strawberry.field(
+        default=None,
+        description="The column whose values are bound: the parent row's reference column, or its INDEX column when the hop enters a matrix or a dense array",
+    )
+    axis: str | None = strawberry.field(
+        default=None,
+        description="The axis crossed: the parent slice's value axis when the hop leaves a matrix, the target's indexed axis when it enters one, the array's key axis when it enters a dense array",
+    )
     direction: enums.HopDirection = strawberry.field(
         default=enums.HopDirection.FORWARD,
         description="Which way the fact is crossed: FORWARD as declared, REVERSE a `references` read backwards (the child's referencing column binds the parent's INDEX), SAME_ROWS the same row in another table",
@@ -172,18 +213,39 @@ class HopVia:
 class Hop:
     """Where a plan lands, or where it can go from there."""
 
-    index: int = strawberry.field(description="This hop's position in `hops`, what a child names as its `parent`")
-    parent: int | None = strawberry.field(description="The hop whose result this one binds from. Null only on `hops[0]`, which binds from `sample`")
-    cardinality: enums.HopCardinality = strawberry.field(description="ONE: bind each key as a scalar. MANY: bind each as a list (every position a SPARSE parent returned) and expect the keys back per row. A floor: a ONE lookup may still return several rows")
-    via: HopVia | None = strawberry.field(default=None, description="The declared reference this hop crosses. Null on `hops[0]`, whose crossing is the plan's `edge`")
-    table: TableDataset | None = strawberry.field(default=None, description="The table this hop lands in: the home of its attributes and their `references`. Exactly one of `table`, `sparseDataset` and `arrayDataset` is set")
-    sparse_dataset: Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None = strawberry.field(default=None, description="The matrix this hop lands in, when `lookup.kind` is SPARSE")
-    array_dataset: Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] | None = strawberry.field(
+    index: int = strawberry.field(
+        description="This hop's position in `hops`, what a child names as its `parent`"
+    )
+    parent: int | None = strawberry.field(
+        description="The hop whose result this one binds from. Null only on `hops[0]`, which binds from `sample`"
+    )
+    cardinality: enums.HopCardinality = strawberry.field(
+        description="ONE: bind each key as a scalar. MANY: bind each as a list (every position a SPARSE parent returned) and expect the keys back per row. A floor: a ONE lookup may still return several rows"
+    )
+    via: HopVia | None = strawberry.field(
+        default=None,
+        description="The declared reference this hop crosses. Null on `hops[0]`, whose crossing is the plan's `edge`",
+    )
+    table: TableDataset | None = strawberry.field(
+        default=None,
+        description="The table this hop lands in: the home of its attributes and their `references`. Exactly one of `table`, `sparseDataset` and `arrayDataset` is set",
+    )
+    sparse_dataset: (
+        Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None
+    ) = strawberry.field(
+        default=None,
+        description="The matrix this hop lands in, when `lookup.kind` is SPARSE",
+    )
+    array_dataset: (
+        Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] | None
+    ) = strawberry.field(
         default=None,
         description="The dense array this hop lands in, when `lookup.kind` is ARRAY. Its `dataArrays` are the levels to read from, each with its own `store`; level 0 always has one",
     )
-    lookup: LookupStep = strawberry.field(description="How to read what this hop lands in: the rows of a parquet, a slice of a matrix or one position of a dense array")
-    join_path: List[ColumnOptionJoinStep] = strawberry.field(
+    lookup: LookupStep = strawberry.field(
+        description="How to read what this hop lands in: the rows of a parquet, a slice of a matrix or one position of a dense array"
+    )
+    join_path: list[ColumnOptionJoinStep] = strawberry.field(
         default_factory=list,
         description=(
             "The picker's name for this hop: the `(table, column)` reference steps from the landing table to here, exactly what a layer's `colorBys[].joinPath` stores -- so a "
@@ -204,12 +266,16 @@ class Hop:
 class AttributePlan:
     """A coordinate-free recipe: map along the path, sample the field array, run the hops."""
 
-    edge: ByDimensionTransformation = strawberry.field(description="The key this plan was built from: the edge whose dereferencing FIELD part gives the id. The plan's cache key is this edge's (id, version) together with every `path` step's transformation (id, version): the stores and columns of a table are written once, so a deleted or version-bumped edge -- the key, or any step on the way to it -- is the only thing that can stale what a cached plan already says. What it can *reach* still grows: a matrix or a derived array created later extends the chain without touching any of these edges, so refetch when such data arrives")
-    path: List[PlacementStep] = strawberry.field(
+    edge: ByDimensionTransformation = strawberry.field(
+        description="The key this plan was built from: the edge whose dereferencing FIELD part gives the id. The plan's cache key is this edge's (id, version) together with every `path` step's transformation (id, version): the stores and columns of a table are written once, so a deleted or version-bumped edge -- the key, or any step on the way to it -- is the only thing that can stale what a cached plan already says. What it can *reach* still grows: a matrix or a derived array created later extends the chain without touching any of these edges, so refetch when such data arrives"
+    )
+    path: list[PlacementStep] = strawberry.field(
         description="The steps from the PROBED system to this plan's root (the key's input system -- equal to `sample.system` when the mask's own pixels are the map). Empty when the plan is rooted where you probed. Compose in order, inverting the flagged steps, to map a probed-space point into the space `consumes` and `passthrough` are stated in -- the same contract as `pathToWorld`. The path crosses derivations, levels, lenses and physical spaces, never a registration"
     )
-    sample: SampleStep = strawberry.field(description="Where the id comes from: an `ArraySample` to read at the (path-mapped) point, or a `MeshSample`/`NetworkSample` whose id the client already picked")
-    hops: List[Hop] = strawberry.field(
+    sample: SampleStep = strawberry.field(
+        description="Where the id comes from: an `ArraySample` to read at the (path-mapped) point, or a `MeshSample`/`NetworkSample` whose id the client already picked"
+    )
+    hops: list[Hop] = strawberry.field(
         description="The chain, in execution order. `hops[0]` is the landing: the table or matrix the key's id keys, bound from `sample`. Each later hop crosses one declared reference from a parent hop, up to the query's `maxJoinDepth`. A client that only wants the landing reads `hops[0]`"
     )
 
@@ -224,8 +290,12 @@ class AttributePlan:
 )
 class RowPlan:
     table: TableDataset = strawberry.field(description="Whose rows these are")
-    key: PlanKeyColumn = strawberry.field(description="The INDEX column a row is found by: hold the picked row's value under `key.axis`")
-    hops: List[Hop] = strawberry.field(description="The chain, in execution order. `hops[0]` is the row in its own table, bound from `key`; each later hop binds from its `parent`")
+    key: PlanKeyColumn = strawberry.field(
+        description="The INDEX column a row is found by: hold the picked row's value under `key.axis`"
+    )
+    hops: list[Hop] = strawberry.field(
+        description="The chain, in execution order. `hops[0]` is the row in its own table, bound from `key`; each later hop binds from its `parent`"
+    )
 
 
 #: The implementations of ``SampleStep``, for the schema's ``types=[...]``. Reachable only

@@ -16,20 +16,24 @@ the same frozenset the boundary enforces). A client deriving it from ``role`` wo
 copy of a rule, free to disagree the day a role is added.
 """
 
-from typing import Annotated, List
+from typing import Annotated
 
 import strawberry
 
 from core import enums
-from core.types.table_dataset import TableDataset, Column
+from core.types.table_dataset import Column, TableDataset
 
 
-@strawberry.type(description="One hop of a join path: the column whose values identify rows of the next table")
+@strawberry.type(
+    description="One hop of a join path: the column whose values identify rows of the next table"
+)
 class ColumnOptionJoinStep:
     """One reference hop on the way to an offerable column."""
 
     table: TableDataset = strawberry.field(description="The table this hop stands in")
-    column: Column = strawberry.field(description="The column of it whose `references` identifies rows of the next table")
+    column: Column = strawberry.field(
+        description="The column of it whose `references` identifies rows of the next table"
+    )
 
 
 @strawberry.type(
@@ -42,15 +46,21 @@ class ColumnOptionJoinStep:
 class ColorByOption:
     """An offerable (join path, table, column) triple."""
 
-    table: TableDataset | None = strawberry.field(description="The table the value is read from. With an empty `joinPath` this is a table the source's ids key directly")
-    column: Column | None = strawberry.field(description="The column holding the value. Its `name` is what `colorBys`/`filterBys` take, and its `role`, `unit` and `dtype` are declared on the table")
-    sparse_dataset: Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None = strawberry.field(
+    table: TableDataset | None = strawberry.field(
+        description="The table the value is read from. With an empty `joinPath` this is a table the source's ids key directly"
+    )
+    column: Column | None = strawberry.field(
+        description="The column holding the value. Its `name` is what `colorBys`/`filterBys` take, and its `role`, `unit` and `dtype` are declared on the table"
+    )
+    sparse_dataset: (
+        Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None
+    ) = strawberry.field(
         default=None,
         description=(
             "(SPARSE) The matrix one slice of which is read, instead of a table column. Present exactly when `table` and `column` are null -- an option is one or the other, never both"
         ),
     )
-    axes: List[str] = strawberry.field(
+    axes: list[str] = strawberry.field(
         default_factory=list,
         description=(
             "(SPARSE) The axes a position is named along -- the ones the matrix identifies itself, never the one the source's ids index. **Name a position along every one of them**: "
@@ -78,7 +88,7 @@ class ColorByOption:
     control: enums.ColumnControl = strawberry.field(
         description="Which control this column admits, derived from its role by the same rule the write path enforces: MEASURE takes a colormap and a `min`/`max` range, CATEGORICAL an explicit colour map and a `values` set"
     )
-    join_path: List[ColumnOptionJoinStep] = strawberry.field(
+    join_path: list[ColumnOptionJoinStep] = strawberry.field(
         description="The `references` hops from the table the source's ids land in to `table`. Empty is the direct case. Pass it back verbatim as `colorBys[].joinPath` to select this option"
     )
 
@@ -98,15 +108,21 @@ class ColorByOption:
 class FilterByOption:
     """An offerable (join path, table, column) triple, described for the filter picker."""
 
-    table: TableDataset | None = strawberry.field(description="The table the value is read from. With an empty `joinPath` this is a table the source's ids key directly")
-    column: Column | None = strawberry.field(description="The column the rule is written against. Its `name` is what `filterBys` takes, and its `unit` is the unit a `min`/`max` bound is stated in")
-    sparse_dataset: Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None = strawberry.field(
+    table: TableDataset | None = strawberry.field(
+        description="The table the value is read from. With an empty `joinPath` this is a table the source's ids key directly"
+    )
+    column: Column | None = strawberry.field(
+        description="The column the rule is written against. Its `name` is what `filterBys` takes, and its `unit` is the unit a `min`/`max` bound is stated in"
+    )
+    sparse_dataset: (
+        Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None
+    ) = strawberry.field(
         default=None,
         description=(
             "(SPARSE) The matrix one slice of which is read, instead of a table column. Present exactly when `table` and `column` are null -- an option is one or the other, never both"
         ),
     )
-    axes: List[str] = strawberry.field(
+    axes: list[str] = strawberry.field(
         default_factory=list,
         description=(
             "(SPARSE) The axes a position is named along -- the ones the matrix identifies itself, never the one the source's ids index. **Name a position along every one of them**: "
@@ -132,6 +148,6 @@ class FilterByOption:
     control: enums.ColumnControl = strawberry.field(
         description="Which rule this column admits, derived from its role by the same rule the write path enforces: MEASURE takes a `min`/`max` bound, CATEGORICAL an explicit `values` set. Passing the wrong one is refused at the boundary"
     )
-    join_path: List[ColumnOptionJoinStep] = strawberry.field(
+    join_path: list[ColumnOptionJoinStep] = strawberry.field(
         description="The `references` hops from the table the ids land in to `table`. Empty is the direct case. Pass it back verbatim as `filterBys[].joinPath` to write a rule against this column"
     )

@@ -38,8 +38,14 @@ query Counts($parent: ID!, $filters: FolderChildrenFilter) {
 """
 
 
-async def _children(ctx: HttpContext, folder: models.Folder, **variables: Any) -> list[dict[str, Any]]:
-    result = await schema.execute(CHILDREN, context_value=ctx, variable_values={"parent": str(folder.pk), **variables})
+async def _children(
+    ctx: HttpContext, folder: models.Folder, **variables: Any
+) -> list[dict[str, Any]]:
+    result = await schema.execute(
+        CHILDREN,
+        context_value=ctx,
+        variable_values={"parent": str(folder.pk), **variables},
+    )
     assert not result.errors, result.errors
     assert result.data
     return result.data["children"]
@@ -51,7 +57,9 @@ def _name(child: dict[str, Any]) -> str:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_order_by_name_interleaves_the_kinds(authenticated_context: HttpContext):
+async def test_an_order_by_name_interleaves_the_kinds(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Mixed")
     await seed.create_folder(ctx, "charlie", parent=folder)
@@ -59,35 +67,54 @@ async def test_an_order_by_name_interleaves_the_kinds(authenticated_context: Htt
     await _create_array_dataset(ctx, "bravo", folder=folder)
     await _create_table(ctx, "delta", folder=folder)
 
-    ascending = await _children(ctx, folder, order={"field": "NAME", "direction": "ASC"})
+    ascending = await _children(
+        ctx, folder, order={"field": "NAME", "direction": "ASC"}
+    )
     assert [_name(c) for c in ascending] == ["alpha.txt", "bravo", "charlie", "delta"]
 
-    descending = await _children(ctx, folder, order={"field": "NAME", "direction": "DESC"})
+    descending = await _children(
+        ctx, folder, order={"field": "NAME", "direction": "DESC"}
+    )
     assert [_name(c) for c in descending] == ["delta", "charlie", "bravo", "alpha.txt"]
 
-    second_page = await _children(ctx, folder, order={"field": "NAME", "direction": "ASC"}, pagination={"limit": 2, "offset": 2})
-    assert [_name(c) for c in second_page] == ["charlie", "delta"], "a page is a slice of the one ordered list"
+    second_page = await _children(
+        ctx,
+        folder,
+        order={"field": "NAME", "direction": "ASC"},
+        pagination={"limit": 2, "offset": 2},
+    )
+    assert [_name(c) for c in second_page] == ["charlie", "delta"], (
+        "a page is a slice of the one ordered list"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_size_orders_files_and_datasets_together_with_the_unsized_last(authenticated_context: HttpContext):
+async def test_size_orders_files_and_datasets_together_with_the_unsized_last(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Sized")
     await seed.create_file(ctx, "big.bin", folder, size=5000)
     await seed.create_file(ctx, "small.bin", folder, size=10)
     await seed.create_folder(ctx, "unsized", parent=folder)
 
-    largest_first = await _children(ctx, folder, order={"field": "SIZE", "direction": "DESC"})
+    largest_first = await _children(
+        ctx, folder, order={"field": "SIZE", "direction": "DESC"}
+    )
     assert [_name(c) for c in largest_first] == ["big.bin", "small.bin", "unsized"]
 
-    smallest_first = await _children(ctx, folder, order={"field": "SIZE", "direction": "ASC"})
+    smallest_first = await _children(
+        ctx, folder, order={"field": "SIZE", "direction": "ASC"}
+    )
     assert [_name(c) for c in smallest_first] == ["small.bin", "big.bin", "unsized"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_kind_filter_pages_through_that_kind_only(authenticated_context: HttpContext):
+async def test_a_kind_filter_pages_through_that_kind_only(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Tables among folders")
     for index in range(3):
@@ -95,35 +122,67 @@ async def test_a_kind_filter_pages_through_that_kind_only(authenticated_context:
     await _create_table(ctx, "t1", folder=folder)
     await _create_table(ctx, "t2", folder=folder)
 
-    tables = await _children(ctx, folder, filters={"kinds": ["TABLE_DATASET"]}, pagination={"limit": 1, "offset": 1})
-    assert [c["__typename"] for c in tables] == ["TableDataset"], "the first page of tables is a table, not a sub-folder"
+    tables = await _children(
+        ctx,
+        folder,
+        filters={"kinds": ["TABLE_DATASET"]},
+        pagination={"limit": 1, "offset": 1},
+    )
+    assert [c["__typename"] for c in tables] == ["TableDataset"], (
+        "the first page of tables is a table, not a sub-folder"
+    )
 
-    counts = await schema.execute(COUNTS, context_value=ctx, variable_values={"parent": str(folder.pk), "filters": {"kinds": ["TABLE_DATASET", "FOLDER"]}})
+    counts = await schema.execute(
+        COUNTS,
+        context_value=ctx,
+        variable_values={
+            "parent": str(folder.pk),
+            "filters": {"kinds": ["TABLE_DATASET", "FOLDER"]},
+        },
+    )
     assert not counts.errors, counts.errors
     assert counts.data
     answer = counts.data["childrenCounts"]
     assert answer["total"] == 5
-    assert {entry["kind"]: entry["count"] for entry in answer["kinds"]} == {"FOLDER": 3, "TABLE_DATASET": 2}
+    assert {entry["kind"]: entry["count"] for entry in answer["kinds"]} == {
+        "FOLDER": 3,
+        "TABLE_DATASET": 2,
+    }
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_counts_cover_every_kind_and_follow_the_search(authenticated_context: HttpContext):
+async def test_counts_cover_every_kind_and_follow_the_search(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Counted")
     await seed.create_file(ctx, "notes.txt", folder)
     await _create_array_dataset(ctx, "Kidney", folder=folder)
     await _create_array_dataset(ctx, "Liver", folder=folder)
 
-    everything = await schema.execute(COUNTS, context_value=ctx, variable_values={"parent": str(folder.pk)})
+    everything = await schema.execute(
+        COUNTS, context_value=ctx, variable_values={"parent": str(folder.pk)}
+    )
     assert not everything.errors, everything.errors
     assert everything.data
-    by_kind = {entry["kind"]: entry["count"] for entry in everything.data["childrenCounts"]["kinds"]}
+    by_kind = {
+        entry["kind"]: entry["count"]
+        for entry in everything.data["childrenCounts"]["kinds"]
+    }
     assert everything.data["childrenCounts"]["total"] == 3
-    assert by_kind["ARRAY_DATASET"] == 2 and by_kind["FILE"] == 1 and by_kind["FOLDER"] == 0
+    assert (
+        by_kind["ARRAY_DATASET"] == 2
+        and by_kind["FILE"] == 1
+        and by_kind["FOLDER"] == 0
+    )
     assert len(by_kind) == 9, "every kind is answered, zeros included"
 
-    searched = await schema.execute(COUNTS, context_value=ctx, variable_values={"parent": str(folder.pk), "filters": {"search": "Kidney"}})
+    searched = await schema.execute(
+        COUNTS,
+        context_value=ctx,
+        variable_values={"parent": str(folder.pk), "filters": {"search": "Kidney"}},
+    )
     assert not searched.errors, searched.errors
     assert searched.data
     assert searched.data["childrenCounts"]["total"] == 1
@@ -131,7 +190,9 @@ async def test_counts_cover_every_kind_and_follow_the_search(authenticated_conte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_sparse_datasets_and_network_collections_are_listed(authenticated_context: HttpContext):
+async def test_sparse_datasets_and_network_collections_are_listed(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Newer containers")
     store = await seed.create_konnektion_store(ctx, axes=["x", "y", "z"])
@@ -150,9 +211,17 @@ async def test_sparse_datasets_and_network_collections_are_listed(authenticated_
     assert not created.errors, created.errors
 
     def file_a_matrix() -> None:
-        models.SparseDataset.objects.create(name="expression", folder=folder, organization=ctx.request.organization, creator=ctx.request.user)
+        models.SparseDataset.objects.create(
+            name="expression",
+            folder=folder,
+            organization=ctx.request.organization,
+            creator=ctx.request.user,
+        )
 
     await sync_to_async(file_a_matrix)()
 
     listed = await _children(ctx, folder, order={"field": "NAME", "direction": "ASC"})
-    assert [(c["__typename"], _name(c)) for c in listed] == [("NetworkCollection", "arbor"), ("SparseDataset", "expression")]
+    assert [(c["__typename"], _name(c)) for c in listed] == [
+        ("NetworkCollection", "arbor"),
+        ("SparseDataset", "expression"),
+    ]

@@ -47,7 +47,9 @@ if TYPE_CHECKING:
 #: Lives here rather than in ``core.mutations.layer`` because the options query publishes it (as
 #: each option's control) and the mutations enforce it. Two copies of this frozenset would be a
 #: picker offering a colormap the write path then refuses.
-MEASURE_ROLES = frozenset({enums.ColumnRoleChoices.COORDINATE.value, enums.ColumnRoleChoices.ATTRIBUTE.value})
+MEASURE_ROLES = frozenset(
+    {enums.ColumnRoleChoices.COORDINATE.value, enums.ColumnRoleChoices.ATTRIBUTE.value}
+)
 
 #: How many ``references`` hops a path may take -- one bound for the picker's `joinPath` and for a
 #: plan's hops alike, defined where the walk that generalises this one lives.
@@ -63,7 +65,9 @@ def mesh_collection_system(collection) -> "models.CoordinateSystem":
     """
     system = getattr(collection, "coordinate_system", None)
     if system is None:
-        raise ValueError(f"Mesh collection {collection.pk} has no coordinate system, so there is no FIELD edge out of it and nothing to colour by or filter on.")
+        raise ValueError(
+            f"Mesh collection {collection.pk} has no coordinate system, so there is no FIELD edge out of it and nothing to colour by or filter on."
+        )
     return system
 
 
@@ -76,7 +80,9 @@ def network_collection_system(collection) -> "models.CoordinateSystem":
     """
     system = getattr(collection, "coordinate_system", None)
     if system is None:
-        raise ValueError(f"Network collection {collection.pk} has no coordinate system, so there is no FIELD edge out of it and nothing to colour by or filter on.")
+        raise ValueError(
+            f"Network collection {collection.pk} has no coordinate system, so there is no FIELD edge out of it and nothing to colour by or filter on."
+        )
     return system
 
 
@@ -166,7 +172,9 @@ class ColumnOptionSpec:
         return True if (self.is_sparse or self.is_graph) else is_measure(self.column)
 
 
-def _tables_with_columns(table_ids: "set[int]", organization: "Organization") -> "dict[int, models.TableDataset]":
+def _tables_with_columns(
+    table_ids: "set[int]", organization: "Organization"
+) -> "dict[int, models.TableDataset]":
     """One query for a whole level of the walk, columns and their reference targets attached.
 
     Prefetched here rather than by widening ``field_edges_from``: that walk is shared with
@@ -205,17 +213,23 @@ def build_column_options(
     that guard and ``MAX_JOIN_DEPTH`` are defence in depth against a schema this server does not
     currently let anyone write, not against one it has seen.
     """
-    reachable = attribute_plans_logic.field_reachable_tables(system, organization, max_depth=max_depth)
+    reachable = attribute_plans_logic.field_reachable_tables(
+        system, organization, max_depth=max_depth
+    )
 
     options: list[ColumnOptionSpec] = []
     # (path so far, the table to expand, the tables this branch has already stood in)
-    frontier = [((), int(pk), frozenset({int(pk)})) for pk in sorted(reachable, key=int)]
+    frontier = [
+        ((), int(pk), frozenset({int(pk)})) for pk in sorted(reachable, key=int)
+    ]
 
     for depth in range(max_join_depth + 1):
         if not frontier:
             break
 
-        tables = _tables_with_columns({table_id for _, table_id, _ in frontier}, organization)
+        tables = _tables_with_columns(
+            {table_id for _, table_id, _ in frontier}, organization
+        )
         next_frontier: list[tuple[tuple, int, frozenset]] = []
 
         for path, table_id, visited in frontier:
@@ -223,35 +237,54 @@ def build_column_options(
             if table is None:
                 continue
             for column in table.columns.all():
-                options.append(ColumnOptionSpec(join_path=path, table=table, column=column))
+                options.append(
+                    ColumnOptionSpec(join_path=path, table=table, column=column)
+                )
 
                 target = column.references
                 if target is None or depth >= max_join_depth or target.pk in visited:
                     continue
-                next_frontier.append((path + ((table, column),), target.pk, visited | {target.pk}))
+                next_frontier.append(
+                    (path + ((table, column),), target.pk, visited | {target.pk})
+                )
 
         # Sorted by the path already taken, then by table: the walk's own order is dict order,
         # which is not an order anyone can page through twice.
-        frontier = sorted(next_frontier, key=lambda entry: ([(step[0].pk, step[1].order) for step in entry[0]], entry[1]))
-
+        frontier = sorted(
+            next_frontier,
+            key=lambda entry: (
+                [(step[0].pk, step[1].order) for step in entry[0]],
+                entry[1],
+            ),
+        )
 
     # The sparse half, after the column half so a picker shows tables first -- the common case
     # stays where it was. No BFS: a matrix is not hopped through *here*, because a colouring
     # names a position along its axis, and what such a position identifies is the plan's
     # business -- `attributePlans` walks into and out of matrices (`core.logic.join_walk`),
     # a picker entry only ever names one slice.
-    matrices = attribute_plans_logic.field_reachable_sparse_datasets(system, organization, max_depth=max_depth)
+    matrices = attribute_plans_logic.field_reachable_sparse_datasets(
+        system, organization, max_depth=max_depth
+    )
     for _, dataset in sorted(matrices.items(), key=lambda entry: int(entry[0])):
         names = dataset.axis_names
-        indexed = {names[array.indexed_axis] for array in dataset.arrays.all() if 0 <= array.indexed_axis < len(names)}
-        identified = tuple(sorted(reference.axis for reference in dataset.axis_references.all()))
+        indexed = {
+            names[array.indexed_axis]
+            for array in dataset.arrays.all()
+            if 0 <= array.indexed_axis < len(names)
+        }
+        identified = tuple(
+            sorted(reference.axis for reference in dataset.axis_references.all())
+        )
         # Offered when **at least one** of those axes has a layout, which is exactly the rule the
         # mutation applies: the read is one contiguous slice along an indexed named axis, then a
         # filter by the other named positions. Requiring all of them would hide legal colourings;
         # requiring none would offer a scan. Either way the picker and the write path would
         # disagree, which is the one thing this module must not allow.
         if identified and any(axis in indexed for axis in identified):
-            options.append(ColumnOptionSpec(join_path=(), sparse_dataset=dataset, axes=identified))
+            options.append(
+                ColumnOptionSpec(join_path=(), sparse_dataset=dataset, axes=identified)
+            )
 
     return options
 
@@ -275,12 +308,13 @@ def network_node_tables(
         role=enums.ColumnRoleChoices.COORDINATE.value,
         axis_type=enums.AxisTypeChoices.INDEX.value,
     ).select_related("table")
-    per_table: dict[str, tuple["models.TableDataset", int]] = {}
+    per_table: dict[str, tuple[models.TableDataset, int]] = {}
     for column in columns:
         table, count = per_table.get(str(column.table.pk), (column.table, 0))
         per_table[str(column.table.pk)] = (table, count + 1)
     return {
-        pk: (table, "NODE" if count == 1 else "EDGE") for pk, (table, count) in per_table.items()
+        pk: (table, "NODE" if count == 1 else "EDGE")
+        for pk, (table, count) in per_table.items()
     }
 
 
@@ -310,11 +344,16 @@ def build_network_column_options(
         for name in collection.store.attribute_vocabulary()
     ]
     reached = build_column_options(
-        network_collection_system(collection), organization, max_join_depth=max_join_depth, max_depth=0
+        network_collection_system(collection),
+        organization,
+        max_join_depth=max_join_depth,
+        max_depth=0,
     )
     node_table_options = [
         ColumnOptionSpec(join_path=(), table=table, column=column, target=granularity)
-        for _, (table, granularity) in sorted(network_node_tables(collection).items(), key=lambda item: int(item[0]))
+        for _, (table, granularity) in sorted(
+            network_node_tables(collection).items(), key=lambda item: int(item[0])
+        )
         for column in table.columns.all()
         if column.role != enums.ColumnRoleChoices.COORDINATE.value
     ]

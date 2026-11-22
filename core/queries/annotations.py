@@ -35,6 +35,10 @@ def nearest_annotations(
     return list(
         models.Annotation.objects.filter(collection=resolved, bbox_cube__isnull=False)
         .select_related("collection__coordinate_system")
-        .annotate(distance=RawSQL("bbox_cube <-> %s::cube", (probe,), output_field=FloatField()))
+        .annotate(
+            distance=RawSQL(
+                "bbox_cube <-> %s::cube", (probe,), output_field=FloatField()
+            )
+        )
         .order_by("distance")[: max(1, limit)]
     )

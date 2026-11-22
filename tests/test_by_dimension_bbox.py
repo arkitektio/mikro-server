@@ -26,7 +26,6 @@ from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
 
-
 CREATE_COLLECTION = """
 mutation M($input: CreateAnnotationCollectionInput!) {
   createAnnotationCollection(input: $input) { id coordinateSystem { id } }
@@ -54,14 +53,26 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str) -> str:
         variable_values={
             "input": {
                 "name": name,
-                "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
+                "axes": [
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "x", "type": "SPACE"},
+                ],
                 "derivedFrom": [
                     {
                         "kind": "DATASET",
                         "dataset": str(dataset.pk),
                         # The ordinary shape of a rank-changing derivation: the shapes were
                         # drawn on the y/x plane and say nothing about which channel.
-                        "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]},
+                        "transform": {
+                            "kind": "BY_DIMENSION",
+                            "parts": [
+                                {
+                                    "kind": "IDENTITY",
+                                    "inputAxes": ["y", "x"],
+                                    "outputAxes": ["y", "x"],
+                                }
+                            ],
+                        },
                     }
                 ],
             }
@@ -73,7 +84,9 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str) -> str:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_drawing_behind_a_by_dimension_edge_succeeds(db, authenticated_context: HttpContext):
+async def test_drawing_behind_a_by_dimension_edge_succeeds(
+    db, authenticated_context: HttpContext
+):
     """The draw goes through, and the box comes back in the frame it was drawn in."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Volume")
@@ -82,7 +95,13 @@ async def test_drawing_behind_a_by_dimension_edge_succeeds(db, authenticated_con
     result = await schema.execute(
         CREATE,
         context_value=ctx,
-        variable_values={"input": {"collection": collection_id, "kind": "POINT", "vectors": [[10.0, 20.0]]}},
+        variable_values={
+            "input": {
+                "collection": collection_id,
+                "kind": "POINT",
+                "vectors": [[10.0, 20.0]],
+            }
+        },
     )
     assert not result.errors, result.errors
 
@@ -94,7 +113,9 @@ async def test_drawing_behind_a_by_dimension_edge_succeeds(db, authenticated_con
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_frame_named_is_the_frame_the_box_is_in(db, authenticated_context: HttpContext):
+async def test_the_frame_named_is_the_frame_the_box_is_in(
+    db, authenticated_context: HttpContext
+):
     """`bbox_system` and the chain must stop at the same system, or the numbers are mislabelled.
 
     Two halves of one fact: `effective_bbox_system` is what `nearestAnnotations` and
@@ -108,17 +129,26 @@ async def test_the_frame_named_is_the_frame_the_box_is_in(db, authenticated_cont
     def frames():
         collection = models.AnnotationCollection.objects.get(pk=collection_id)
         system = collection.coordinate_system
-        return collection.effective_bbox_system.pk, graph_logic.intrinsic_frame(system).pk, system.pk, len(graph_logic.intrinsic_chain(system))
+        return (
+            collection.effective_bbox_system.pk,
+            graph_logic.intrinsic_frame(system).pk,
+            system.pk,
+            len(graph_logic.intrinsic_chain(system)),
+        )
 
     named, walked, own, hops = await sync_to_async(frames)()
-    assert hops == 0, "a BY_DIMENSION edge is not composable at fixed rank, so the walk stops before it"
+    assert hops == 0, (
+        "a BY_DIMENSION edge is not composable at fixed rank, so the walk stops before it"
+    )
     assert walked == own, "the walk stops where the box stops"
     assert named == own, "and the collection says so"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_composable_derivation_is_still_crossed_and_still_labelled(db, authenticated_context: HttpContext):
+async def test_a_composable_derivation_is_still_crossed_and_still_labelled(
+    db, authenticated_context: HttpContext
+):
     """The truncation is about composability, not about being a collection.
 
     A SCALE derivation has a matrix, so the box *is* pushed into the dataset's pixel grid --
@@ -135,8 +165,18 @@ async def test_a_composable_derivation_is_still_crossed_and_still_labelled(db, a
         variable_values={
             "input": {
                 "name": "Halved",
-                "axes": [{"name": "c", "type": "CHANNEL"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                "derivedFrom": [{"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "SCALE", "scale": [1.0, 2.0, 2.0]}}],
+                "axes": [
+                    {"name": "c", "type": "CHANNEL"},
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "x", "type": "SPACE"},
+                ],
+                "derivedFrom": [
+                    {
+                        "kind": "DATASET",
+                        "dataset": str(dataset.pk),
+                        "transform": {"kind": "SCALE", "scale": [1.0, 2.0, 2.0]},
+                    }
+                ],
             }
         },
     )
@@ -146,7 +186,13 @@ async def test_a_composable_derivation_is_still_crossed_and_still_labelled(db, a
     drawn = await schema.execute(
         CREATE,
         context_value=ctx,
-        variable_values={"input": {"collection": collection_id, "kind": "POINT", "vectors": [[0.0, 10.0, 20.0]]}},
+        variable_values={
+            "input": {
+                "collection": collection_id,
+                "kind": "POINT",
+                "vectors": [[0.0, 10.0, 20.0]],
+            }
+        },
     )
     assert not drawn.errors, drawn.errors
     box = drawn.data["createAnnotation"]["intrinsicBbox"]
@@ -154,15 +200,23 @@ async def test_a_composable_derivation_is_still_crossed_and_still_labelled(db, a
 
     def frame():
         collection = models.AnnotationCollection.objects.get(pk=collection_id)
-        return collection.effective_bbox_system.pk, dataset.coordinate_system.pk, collection.coordinate_system.pk
+        return (
+            collection.effective_bbox_system.pk,
+            dataset.coordinate_system.pk,
+            collection.coordinate_system.pk,
+        )
 
     named, intrinsic, own = await sync_to_async(frame)()
-    assert named == intrinsic and named != own, "the boxes are in the dataset's pixels, and the collection must name it"
+    assert named == intrinsic and named != own, (
+        "the boxes are in the dataset's pixels, and the collection must name it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_bulk_draw_agrees_with_the_single_draw(db, authenticated_context: HttpContext):
+async def test_the_bulk_draw_agrees_with_the_single_draw(
+    db, authenticated_context: HttpContext
+):
     """`createAnnotations` resolves the chain separately, so it can disagree separately."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Volume")
@@ -171,17 +225,31 @@ async def test_the_bulk_draw_agrees_with_the_single_draw(db, authenticated_conte
     one = await schema.execute(
         CREATE,
         context_value=ctx,
-        variable_values={"input": {"collection": collection_id, "kind": "POINT", "vectors": [[10.0, 20.0]]}},
+        variable_values={
+            "input": {
+                "collection": collection_id,
+                "kind": "POINT",
+                "vectors": [[10.0, 20.0]],
+            }
+        },
     )
     assert not one.errors, one.errors
 
     many = await schema.execute(
         CREATE_MANY,
         context_value=ctx,
-        variable_values={"input": {"collection": collection_id, "annotations": [{"kind": "POINT", "vectors": [[10.0, 20.0]]}]}},
+        variable_values={
+            "input": {
+                "collection": collection_id,
+                "annotations": [{"kind": "POINT", "vectors": [[10.0, 20.0]]}],
+            }
+        },
     )
     assert not many.errors, many.errors
-    assert many.data["createAnnotations"][0]["intrinsicBbox"] == one.data["createAnnotation"]["intrinsicBbox"]
+    assert (
+        many.data["createAnnotations"][0]["intrinsicBbox"]
+        == one.data["createAnnotation"]["intrinsicBbox"]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -195,14 +263,25 @@ async def test_an_edit_agrees_with_the_draw(db, authenticated_context: HttpConte
     drawn = await schema.execute(
         CREATE,
         context_value=ctx,
-        variable_values={"input": {"collection": collection_id, "kind": "POINT", "vectors": [[1.0, 1.0]]}},
+        variable_values={
+            "input": {
+                "collection": collection_id,
+                "kind": "POINT",
+                "vectors": [[1.0, 1.0]],
+            }
+        },
     )
     assert not drawn.errors, drawn.errors
 
     edited = await schema.execute(
         "mutation U($input: UpdateAnnotationInput!) { updateAnnotation(input: $input) { id intrinsicBbox { min max } } }",
         context_value=ctx,
-        variable_values={"input": {"id": drawn.data["createAnnotation"]["id"], "vectors": [[10.0, 20.0]]}},
+        variable_values={
+            "input": {
+                "id": drawn.data["createAnnotation"]["id"],
+                "vectors": [[10.0, 20.0]],
+            }
+        },
     )
     assert not edited.errors, edited.errors
     box = edited.data["updateAnnotation"]["intrinsicBbox"]
@@ -216,10 +295,19 @@ _PARAMS_FOR_KIND = {
     enums.TransformKindChoices.IDENTITY.value: {},
     enums.TransformKindChoices.SCALE.value: {"scale": [2.0, 2.0]},
     enums.TransformKindChoices.TRANSLATION.value: {"translation": [1.0, 1.0]},
-    enums.TransformKindChoices.MAP_AXIS.value: {"affine": [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]},
-    enums.TransformKindChoices.AFFINE.value: {"affine": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]},
-    enums.TransformKindChoices.ROTATION.value: {"affine": [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]]},
-    enums.TransformKindChoices.SEQUENCE.value: {"scale": [2.0, 2.0], "translation": [1.0, 1.0]},
+    enums.TransformKindChoices.MAP_AXIS.value: {
+        "affine": [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]
+    },
+    enums.TransformKindChoices.AFFINE.value: {
+        "affine": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+    },
+    enums.TransformKindChoices.ROTATION.value: {
+        "affine": [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]]
+    },
+    enums.TransformKindChoices.SEQUENCE.value: {
+        "scale": [2.0, 2.0],
+        "translation": [1.0, 1.0],
+    },
     enums.TransformKindChoices.BY_DIMENSION.value: {},
     enums.TransformKindChoices.UNMAPPABLE.value: {},
 }
@@ -232,7 +320,9 @@ def test_has_matrix_answers_for_every_kind_what_to_matrix_does():
     commits is a walk that crosses an edge it cannot compose -- which is this whole bug. The
     kinds are enumerated from the enum, so a kind added without a decision fails here.
     """
-    assert set(_PARAMS_FOR_KIND) == {kind.value for kind in enums.TransformKindChoices}, "every kind needs a verdict"
+    assert set(_PARAMS_FOR_KIND) == {
+        kind.value for kind in enums.TransformKindChoices
+    }, "every kind needs a verdict"
 
     for kind, params in _PARAMS_FOR_KIND.items():
         try:
@@ -241,12 +331,16 @@ def test_has_matrix_answers_for_every_kind_what_to_matrix_does():
             composable = False
         else:
             composable = True
-        assert coords_logic.has_matrix(kind) is composable, f"{kind}: has_matrix says {coords_logic.has_matrix(kind)}, to_matrix says {composable}"
+        assert coords_logic.has_matrix(kind) is composable, (
+            f"{kind}: has_matrix says {coords_logic.has_matrix(kind)}, to_matrix says {composable}"
+        )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scene_collections_walk_does_not_cross_its_registration(db, authenticated_context: HttpContext):
+async def test_a_scene_collections_walk_does_not_cross_its_registration(
+    db, authenticated_context: HttpContext
+):
     """A drawing space belongs to no dataset, and that must not mean "any edge will do".
 
     The scene-minted collection's only edge is its registration into the world. The walk used
@@ -260,7 +354,13 @@ async def test_a_scene_collections_walk_does_not_cross_its_registration(db, auth
     drawn = await schema.execute(
         CREATE,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "kind": "POINT",
+                "vectors": [[1.0, 2.0, 3.0]],
+            }
+        },
     )
     assert not drawn.errors, drawn.errors
 
@@ -268,10 +368,22 @@ async def test_a_scene_collections_walk_does_not_cross_its_registration(db, auth
         collection = models.AnnotationCollection.objects.get(scene=scene)
         system = collection.coordinate_system
         registration = models.Transformation.objects.get(input=system)
-        return graph_logic.intrinsic_chain(system), graph_logic.intrinsic_frame(system).pk, system.pk, registration.kind, graph_logic.transform_version(system)
+        return (
+            graph_logic.intrinsic_chain(system),
+            graph_logic.intrinsic_frame(system).pk,
+            system.pk,
+            registration.kind,
+            graph_logic.transform_version(system),
+        )
 
     chain, walked, own, kind, version = await sync_to_async(walk)()
-    assert kind == enums.TransformKindChoices.BY_DIMENSION.value, "the registration is the edge in question"
-    assert chain == [], "a registration is a fact about a scene, not about the dataset's pixel geometry"
+    assert kind == enums.TransformKindChoices.BY_DIMENSION.value, (
+        "the registration is the edge in question"
+    )
+    assert chain == [], (
+        "a registration is a fact about a scene, not about the dataset's pixel geometry"
+    )
     assert walked == own, "so the frame is the drawing space itself"
-    assert version == 0, "and nothing on the chain has a version to sum, because the chain is empty"
+    assert version == 0, (
+        "and nothing on the chain has a version to sum, because the chain is empty"
+    )

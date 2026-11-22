@@ -1,16 +1,22 @@
-from kante.types import Info
-import strawberry
-
-from core import types, models, enums
 import kante
+import strawberry
+from kante.types import Info
 from pydantic import BaseModel
-from core.logic import graph as graph_logic
-from core.logic.layer_preview import persist_layer
+
+from core import enums, models, types
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
-from core.mutations.layer import assert_active_color_by, assert_active_filter_bys, build_mesh_color_bys, build_mesh_filter_bys, mesh_reachable_tables
-from core.render.layer import inputs as layer_inputs
+from core.logic import graph as graph_logic
+from core.logic.layer_preview import persist_layer
 from core.mutations._sources import lens_of_kind
+from core.mutations.layer import (
+    assert_active_color_by,
+    assert_active_filter_bys,
+    build_mesh_color_bys,
+    build_mesh_filter_bys,
+    mesh_reachable_tables,
+)
+from core.render.layer import inputs as layer_inputs
 from core.scoping import get_for_org
 
 
@@ -71,26 +77,66 @@ def assert_max_level(collection, max_level: int | None) -> None:
         return
     levels = int(levels)
     if max_level >= levels:
-        raise ValueError(f"Mesh collection {collection.pk} declares {levels} octree level(s), indexed 0..{levels - 1}, so `maxLevel` cannot be {max_level}.")
+        raise ValueError(
+            f"Mesh collection {collection.pk} declares {levels} octree level(s), indexed 0..{levels - 1}, so `maxLevel` cannot be {max_level}."
+        )
 
 
 @prose_errors
-@kante.pydantic_input(CreateMeshLayerInputModel, description="Create a layer that renders a mesh collection (surface reconstructions / isosurfaces) in a scene. The collection's own coordinate system is the layer's space, so it must already have a path to the scene's world")
+@kante.pydantic_input(
+    CreateMeshLayerInputModel,
+    description="Create a layer that renders a mesh collection (surface reconstructions / isosurfaces) in a scene. The collection's own coordinate system is the layer's space, so it must already have a path to the scene's world",
+)
 class CreateMeshLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The mesh lens to draw through: which meshes, in the collection's own space. A collection's whole lens is its `fullLens`")
-    material_color: list[int] | None = strawberry.field(default=None, description="Material (surface) color of the mesh, as RGBA (default white)")
-    wireframe: bool | None = strawberry.field(default=None, description="Whether to render the mesh as a wireframe (default false)")
-    shading: enums.MeshShading | None = strawberry.field(default=None, description="How the surface is lit (default SMOOTH)")
-    max_level: int | None = strawberry.field(default=None, description=_MAX_LEVEL_DESCRIPTION)
-    color_bys: list[layer_inputs.MeshColorByInput] | None = strawberry.field(default=None, description=_COLOR_BYS_DESCRIPTION)
-    active_color_by: int | None = strawberry.field(default=strawberry.UNSET, description=f"{_ACTIVE_DESCRIPTION}. Pass `null` to publish the picker and draw none of it; omit to leave the choice alone")
-    filter_bys: list[layer_inputs.MeshFilterByInput] | None = strawberry.field(default=None, description=_FILTER_BYS_DESCRIPTION)
-    active_filter_bys: list[int] | None = strawberry.field(default=None, description=_ACTIVE_FILTERS_DESCRIPTION)
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The mesh lens to draw through: which meshes, in the collection's own space. A collection's whole lens is its `fullLens`"
+    )
+    material_color: list[int] | None = strawberry.field(
+        default=None,
+        description="Material (surface) color of the mesh, as RGBA (default white)",
+    )
+    wireframe: bool | None = strawberry.field(
+        default=None,
+        description="Whether to render the mesh as a wireframe (default false)",
+    )
+    shading: enums.MeshShading | None = strawberry.field(
+        default=None, description="How the surface is lit (default SMOOTH)"
+    )
+    max_level: int | None = strawberry.field(
+        default=None, description=_MAX_LEVEL_DESCRIPTION
+    )
+    color_bys: list[layer_inputs.MeshColorByInput] | None = strawberry.field(
+        default=None, description=_COLOR_BYS_DESCRIPTION
+    )
+    active_color_by: int | None = strawberry.field(
+        default=strawberry.UNSET,
+        description=f"{_ACTIVE_DESCRIPTION}. Pass `null` to publish the picker and draw none of it; omit to leave the choice alone",
+    )
+    filter_bys: list[layer_inputs.MeshFilterByInput] | None = strawberry.field(
+        default=None, description=_FILTER_BYS_DESCRIPTION
+    )
+    active_filter_bys: list[int] | None = strawberry.field(
+        default=None, description=_ACTIVE_FILTERS_DESCRIPTION
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal', i.e. alpha-over)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
 def create_mesh_layer(info: Info, input: CreateMeshLayerInput) -> types.MeshLayer:
@@ -100,22 +146,38 @@ def create_mesh_layer(info: Info, input: CreateMeshLayerInput) -> types.MeshLaye
     lens = lens_of_kind(info, kind=models.MeshLens, lens=model.lens)
     collection = lens.mesh_collection
 
-    graph_logic.assert_placeable_in(scene.world, getattr(collection, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        getattr(collection, "coordinate_system", None),
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     assert_max_level(collection, model.max_level)
     # One walk of the FIELD edges for both pickers: they are two questions about the same
     # relation, and the coordinate graph does not need traversing twice to answer them.
-    reachable = mesh_reachable_tables(info, collection) if (model.color_bys is not None or model.filter_bys is not None) else None
-    color_bys = build_mesh_color_bys(info, collection, model.color_bys, reachable=reachable) or []
+    reachable = (
+        mesh_reachable_tables(info, collection)
+        if (model.color_bys is not None or model.filter_bys is not None)
+        else None
+    )
+    color_bys = (
+        build_mesh_color_bys(info, collection, model.color_bys, reachable=reachable)
+        or []
+    )
     assert_active_color_by(color_bys, model.active_color_by)
-    filter_bys = build_mesh_filter_bys(info, collection, model.filter_bys, reachable=reachable) or []
+    filter_bys = (
+        build_mesh_filter_bys(info, collection, model.filter_bys, reachable=reachable)
+        or []
+    )
     assert_active_filter_bys(filter_bys, model.active_filter_bys)
 
     return persist_layer(
         kind=enums.LayerKind.MESH,
         scene=scene,
         lens=lens,
-        material_color=model.material_color if model.material_color is not None else [255, 255, 255, 255],
+        material_color=model.material_color
+        if model.material_color is not None
+        else [255, 255, 255, 255],
         wireframe=model.wireframe if model.wireframe is not None else False,
         shading=model.shading or enums.MeshShading.SMOOTH,
         max_level=model.max_level,
@@ -160,10 +222,18 @@ class UpdateMeshLayerInput:
     be decorative. This is the convention `_MAX_LEVEL_DESCRIPTION` asked for rather than
     inventing one for a single field."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the mesh layer to update")
-    material_color: list[int] | None = strawberry.field(default=None, description="Material (surface) color of the mesh, as RGBA")
-    wireframe: bool | None = strawberry.field(default=None, description="Whether to render the mesh as a wireframe")
-    shading: enums.MeshShading | None = strawberry.field(default=None, description="How the surface is lit")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the mesh layer to update"
+    )
+    material_color: list[int] | None = strawberry.field(
+        default=None, description="Material (surface) color of the mesh, as RGBA"
+    )
+    wireframe: bool | None = strawberry.field(
+        default=None, description="Whether to render the mesh as a wireframe"
+    )
+    shading: enums.MeshShading | None = strawberry.field(
+        default=None, description="How the surface is lit"
+    )
     max_level: int | None = strawberry.field(
         default=strawberry.UNSET,
         description=f"{_MAX_LEVEL_DESCRIPTION}. Raising, lowering AND removing all work now: an omitted field keeps the cap, an explicit `null` removes it. That distinction used to be unavailable to a scalar -- the pickers escaped it by being lists, where `[]` is a value that says 'none'",
@@ -188,10 +258,19 @@ class UpdateMeshLayerInput:
         default=None,
         description=f"{_ACTIVE_FILTERS_DESCRIPTION}. Re-checked against the filters being written: a new `filterBys` that no longer holds an applied rule drops it from this set rather than leaving it dangling",
     )
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
     def to_pydantic(self) -> UpdateMeshLayerInputModel:
         """Drop what the caller did not name, so `model_fields_set` records what it did."""
@@ -210,7 +289,11 @@ class UpdateMeshLayerInput:
             "visible": self.visible,
             "order": self.order,
         }
-        data = {name: value for name, value in supplied.items() if value is not strawberry.UNSET}
+        data = {
+            name: value
+            for name, value in supplied.items()
+            if value is not strawberry.UNSET
+        }
         for name in ("color_bys", "filter_bys"):
             entries = data.get(name)
             if entries:
@@ -223,7 +306,9 @@ def update_mesh_layer(info: Info, input: UpdateMeshLayerInput) -> types.MeshLaye
     model = input.to_pydantic()
     layer = get_for_org(models.Layer, info, id=model.id)
     if layer.kind != enums.LayerKind.MESH.value:
-        raise ValueError(f"Layer {layer.pk} is a {layer.kind} layer, not a mesh layer, so it has no material, wireframe or object colouring to set.")
+        raise ValueError(
+            f"Layer {layer.pk} is a {layer.kind} layer, not a mesh layer, so it has no material, wireframe or object colouring to set."
+        )
 
     named = model.model_fields_set
     if "max_level" in named:
@@ -232,14 +317,24 @@ def update_mesh_layer(info: Info, input: UpdateMeshLayerInput) -> types.MeshLaye
         assert_max_level(layer.lens.mesh_collection, model.max_level)
         layer.max_level = model.max_level
 
-    reachable = mesh_reachable_tables(info, layer.lens.mesh_collection) if (model.color_bys is not None or model.filter_bys is not None) else None
+    reachable = (
+        mesh_reachable_tables(info, layer.lens.mesh_collection)
+        if (model.color_bys is not None or model.filter_bys is not None)
+        else None
+    )
 
-    color_bys = build_mesh_color_bys(info, layer.lens.mesh_collection, model.color_bys, reachable=reachable)
+    color_bys = build_mesh_color_bys(
+        info, layer.lens.mesh_collection, model.color_bys, reachable=reachable
+    )
     if color_bys is not None:
         layer.mesh_color_bys = color_bys
         # A shorter picker cannot leave the old index dangling, and clearing it entirely means
         # there is nothing to draw but the material color.
-        if "active_color_by" not in named and layer.active_color_by is not None and layer.active_color_by >= len(color_bys):
+        if (
+            "active_color_by" not in named
+            and layer.active_color_by is not None
+            and layer.active_color_by >= len(color_bys)
+        ):
             layer.active_color_by = None
     if "active_color_by" in named and model.active_color_by is None:
         # Named, and null: publish the picker and draw none of it.
@@ -248,7 +343,9 @@ def update_mesh_layer(info: Info, input: UpdateMeshLayerInput) -> types.MeshLaye
         assert_active_color_by(layer.mesh_color_bys or [], model.active_color_by)
         layer.active_color_by = model.active_color_by
 
-    filter_bys = build_mesh_filter_bys(info, layer.lens.mesh_collection, model.filter_bys, reachable=reachable)
+    filter_bys = build_mesh_filter_bys(
+        info, layer.lens.mesh_collection, model.filter_bys, reachable=reachable
+    )
     if filter_bys is not None:
         layer.mesh_filter_bys = filter_bys
         # The same fallback the colour picker takes, for the same reason: a patch cannot say
@@ -256,7 +353,11 @@ def update_mesh_layer(info: Info, input: UpdateMeshLayerInput) -> types.MeshLaye
         # applied. The indices that survive keep pointing at what they pointed at, because the
         # list is replaced wholesale and never reordered under a caller.
         if model.active_filter_bys is None:
-            layer.active_filter_bys = [index for index in (layer.active_filter_bys or []) if index < len(filter_bys)]
+            layer.active_filter_bys = [
+                index
+                for index in (layer.active_filter_bys or [])
+                if index < len(filter_bys)
+            ]
     if model.active_filter_bys is not None:
         assert_active_filter_bys(layer.mesh_filter_bys or [], model.active_filter_bys)
         layer.active_filter_bys = model.active_filter_bys

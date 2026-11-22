@@ -8,22 +8,27 @@ deliberately no mutation here that writes meshes one by one, and no field that r
 them back that way.
 """
 
+import kante
+import strawberry
 from django.db import transaction
 from kante.types import Info
-import strawberry
 from pydantic import BaseModel, Field
 
-import kante
 from core import models, scalars, types
 from core.creation import CreationContext
 from core.input_unions import prose_errors
+from core.inputs.coords import (
+    AxisInput,
+    AxisInputModel,
+    DerivedFromInput,
+    DerivedFromSpec,
+)
 from core.inputs.file_link import SourceFileInput, SourceFileInputModel
-from core.inputs.coords import AxisInput, AxisInputModel, DerivedFromInput, DerivedFromSpec
 from core.logic import coordinate_system as coordinate_system_logic
+from core.logic import deletion as deletion_logic
 from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
-from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 from core.scoping import get_for_org
 
@@ -38,13 +43,18 @@ class CreateMeshCollectionInputModel(BaseModel):
     provenance_metadata: dict | None = None
 
 
-
 @prose_errors
-@kante.pydantic_input(CreateMeshCollectionInputModel, description="Input for registering an immutable mesh collection. The collection gets a coordinate system of its own, and an edge relates it to the space the meshes were extracted from")
+@kante.pydantic_input(
+    CreateMeshCollectionInputModel,
+    description="Input for registering an immutable mesh collection. The collection gets a coordinate system of its own, and an edge relates it to the space the meshes were extracted from",
+)
 class CreateMeshCollectionInput:
     """Input for registering a mesh collection."""
 
-    name: str | None = strawberry.field(default=None, description="What to call this collection. Optional: it is identified by its store and labelled by this or, failing that, by the store's key. A refined extraction is a new collection over a new store, never an edit to an old one")
+    name: str | None = strawberry.field(
+        default=None,
+        description="What to call this collection. Optional: it is identified by its store and labelled by this or, failing that, by the store's key. A refined extraction is a new collection over a new store, never an edit to an old one",
+    )
     store: scalars.FabriksLike = strawberry.field(
         description=(
             "The uploaded **fabriks store** holding this collection: one prefix with `fabriks.json`, both catalogs and every octree level. Request it with `requestFabriksUpload`, write the "
@@ -74,10 +84,15 @@ class CreateMeshCollectionInput:
         default=None,
         description="Optional statement of which files these meshes were loaded from -- the STL or OBJ a converter read. **Not a `derivedFrom` entry, deliberately**: a derivation is an edge of the coordinate graph and relates two spaces, while a file has no space. This records lineage between bytes and data and leaves the graph untouched",
     )
-    provenance_metadata: scalars.Any | None = strawberry.field(default=None, description="How this collection was produced: the extraction run, its parameters and its inputs")
+    provenance_metadata: scalars.Any | None = strawberry.field(
+        default=None,
+        description="How this collection was produced: the extraction run, its parameters and its inputs",
+    )
 
 
-def _resolve_fabriks_store(info: Info, model: CreateMeshCollectionInputModel) -> "models.FabriksStore":
+def _resolve_fabriks_store(
+    info: Info, model: CreateMeshCollectionInputModel
+) -> "models.FabriksStore":
     """The store this collection is, refusing one whose manifest was never read.
 
     `finishFabriksUpload` is the step that fetches `fabriks.json` and refuses a prefix without
@@ -141,7 +156,9 @@ def _write_collection(
             grid=grid,
             encoding=encoding,
             provenance_metadata=model.provenance_metadata or {},
-            folder=folder_logic.folder_for_new_container(info, ctx, model.folder, model.derived_from),
+            folder=folder_logic.folder_for_new_container(
+                info, ctx, model.folder, model.derived_from
+            ),
             creator=ctx.user,
             organization=ctx.organization,
         )
@@ -154,15 +171,25 @@ def _write_collection(
         )
 
         # Optional on purpose: a mesh in some absolute space is derived from nothing.
-        coordinate_system_logic.write_derivation_edges(info, name=collection.label, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
-        file_link_logic.write_file_links(info, container=collection, source_files=model.source_files or [], ctx=ctx)
+        coordinate_system_logic.write_derivation_edges(
+            info,
+            name=collection.label,
+            own_system=system,
+            derived_from=model.derived_from or [],
+            ctx=ctx,
+        )
+        file_link_logic.write_file_links(
+            info, container=collection, source_files=model.source_files or [], ctx=ctx
+        )
         # The lens selecting all of it, from the start: the handle an action is handed for the collection.
         coordinate_system_logic.whole_lens(collection)
 
     return collection
 
 
-def create_mesh_collection(info: Info, input: CreateMeshCollectionInput) -> types.MeshCollection:
+def create_mesh_collection(
+    info: Info, input: CreateMeshCollectionInput
+) -> types.MeshCollection:
     """Register an immutable mesh collection, in a coordinate system of its own.
 
     The bytes arrive the way every other store's do: the client requests an upload grant,
@@ -207,12 +234,24 @@ class DeleteMeshCollectionInputModel(BaseModel):
     cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-@kante.pydantic_input(DeleteMeshCollectionInputModel, description="Input for deleting a mesh collection by ID")
+@kante.pydantic_input(
+    DeleteMeshCollectionInputModel,
+    description="Input for deleting a mesh collection by ID",
+)
 class DeleteMeshCollectionInput:
     """Input for deleting a mesh collection by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the mesh collection to delete")
-    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the mesh collection to delete"
+    )
+    cascade: bool = strawberry.field(
+        default=False, description=deletion_logic.CASCADE_DESCRIPTION
+    )
 
 
-delete_mesh_collection = make_delete(models.MeshCollection, DeleteMeshCollectionInput, owner=self_owner, lineage_kind="meshcollection")
+delete_mesh_collection = make_delete(
+    models.MeshCollection,
+    DeleteMeshCollectionInput,
+    owner=self_owner,
+    lineage_kind="meshcollection",
+)

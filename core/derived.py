@@ -42,7 +42,6 @@ from typing import Any
 from django.apps import apps
 from django.db import models
 
-
 # --- verdicts -----------------------------------------------------------------------
 
 
@@ -80,7 +79,9 @@ UNSTATED = Unstated()
 
 def project[T, U](derivation: Derivation[T], read: Callable[[T], U]) -> Derivation[U]:
     """Read one part of a stated value; any other verdict passes through unchanged."""
-    return Stated(read(derivation.value)) if isinstance(derivation, Stated) else derivation
+    return (
+        Stated(read(derivation.value)) if isinstance(derivation, Stated) else derivation
+    )
 
 
 # --- what the anchors say -----------------------------------------------------------
@@ -101,10 +102,16 @@ def covers(outer: dict[str, Any], inner: dict[str, Any]) -> bool:
 
 
 def _where(coordinates: dict[str, Any]) -> str:
-    return "the whole container" if not coordinates else ", ".join(f"{axis}={value}" for axis, value in sorted(coordinates.items()))
+    return (
+        "the whole container"
+        if not coordinates
+        else ", ".join(f"{axis}={value}" for axis, value in sorted(coordinates.items()))
+    )
 
 
-def _covering_pairs[T](statements: list[Statement[T]]) -> Iterable[tuple[Statement[T], Statement[T]]]:
+def _covering_pairs[T](
+    statements: list[Statement[T]],
+) -> Iterable[tuple[Statement[T], Statement[T]]]:
     for outer in statements:
         for inner in statements:
             if covers(outer.coordinates, inner.coordinates):
@@ -112,11 +119,15 @@ def _covering_pairs[T](statements: list[Statement[T]]) -> Iterable[tuple[Stateme
 
 
 def _conflict(found: list[tuple[str, Statement[Any], Statement[Any]]]) -> Conflict:
-    anchors = sorted({statement.anchor for _, outer, inner in found for statement in (outer, inner)})
+    anchors = sorted(
+        {statement.anchor for _, outer, inner in found for statement in (outer, inner)}
+    )
     return Conflict("; ".join(reason for reason, _, _ in found), tuple(anchors))
 
 
-def envelope[T: (datetime.datetime, float, int)](statements: list[Statement[tuple[T, T]]]) -> Derivation[tuple[T, T]]:
+def envelope[T: (datetime.datetime, float, int)](
+    statements: list[Statement[tuple[T, T]]],
+) -> Derivation[tuple[T, T]]:
     """The span every ``(low, high)`` statement falls in.
 
     True of the container whenever the statements are, so siblings never make it ambiguous. A
@@ -125,13 +136,22 @@ def envelope[T: (datetime.datetime, float, int)](statements: list[Statement[tupl
     if not statements:
         return UNSTATED
     found = [
-        (f"{_where(inner.coordinates)} states {inner.value[0]}..{inner.value[1]}, outside {outer.value[0]}..{outer.value[1]} stated for {_where(outer.coordinates)}", outer, inner)
+        (
+            f"{_where(inner.coordinates)} states {inner.value[0]}..{inner.value[1]}, outside {outer.value[0]}..{outer.value[1]} stated for {_where(outer.coordinates)}",
+            outer,
+            inner,
+        )
         for outer, inner in _covering_pairs(statements)
         if inner.value[0] < outer.value[0] or inner.value[1] > outer.value[1]
     ]
     if found:
         return _conflict(found)
-    return Stated((min(statement.value[0] for statement in statements), max(statement.value[1] for statement in statements)))
+    return Stated(
+        (
+            min(statement.value[0] for statement in statements),
+            max(statement.value[1] for statement in statements),
+        )
+    )
 
 
 def agreement[T: Hashable](statements: list[Statement[T]]) -> Derivation[T]:
@@ -143,7 +163,11 @@ def agreement[T: Hashable](statements: list[Statement[T]]) -> Derivation[T]:
     if not statements:
         return UNSTATED
     found = [
-        (f"{_where(inner.coordinates)} states {inner.value!r}, {_where(outer.coordinates)} states {outer.value!r}", outer, inner)
+        (
+            f"{_where(inner.coordinates)} states {inner.value!r}, {_where(outer.coordinates)} states {outer.value!r}",
+            outer,
+            inner,
+        )
         for outer, inner in _covering_pairs(statements)
         if inner.value != outer.value
     ]
@@ -151,7 +175,9 @@ def agreement[T: Hashable](statements: list[Statement[T]]) -> Derivation[T]:
         return _conflict(found)
     values = {statement.value for statement in statements}
     if len(values) > 1:
-        return Ambiguous(f"{len(values)} different values: {', '.join(sorted(repr(value) for value in values))}")
+        return Ambiguous(
+            f"{len(values)} different values: {', '.join(sorted(repr(value) for value in values))}"
+        )
     return Stated(values.pop())
 
 
@@ -168,16 +194,24 @@ class AnchorSet:
         if label not in self._spokes:
             field = container_field(type(self.container))
             model = apps.get_model(label)
-            self._spokes[label] = list(model.objects.filter(**{f"anchor__{field}": self.container.pk}).select_related("anchor").order_by("anchor_id"))
+            self._spokes[label] = list(
+                model.objects.filter(**{f"anchor__{field}": self.container.pk})
+                .select_related("anchor")
+                .order_by("anchor_id")
+            )
         return self._spokes[label]
 
-    def statements[T](self, label: str, read: Callable[[Any], T | None]) -> list[Statement[T]]:
+    def statements[T](
+        self, label: str, read: Callable[[Any], T | None]
+    ) -> list[Statement[T]]:
         """What each anchor states through a spoke of ``label``; a spoke ``read`` returns None for states nothing."""
         statements = []
         for spoke in self.spokes(label):
             value = read(spoke)
             if value is not None:
-                statements.append(Statement(spoke.anchor_id, spoke.anchor.coordinates, value))
+                statements.append(
+                    Statement(spoke.anchor_id, spoke.anchor.coordinates, value)
+                )
         return statements
 
     def memo[T](self, key: Hashable, compute: Callable[[], T]) -> T:
@@ -202,7 +236,9 @@ def container_field(model: type[models.Model]) -> str:
 class Deriver[T]:
     """A function computing a column from a container's anchors, and the spoke models it reads."""
 
-    def __init__(self, function: Callable[[AnchorSet], Derivation[T]], sources: tuple[str, ...]) -> None:
+    def __init__(
+        self, function: Callable[[AnchorSet], Derivation[T]], sources: tuple[str, ...]
+    ) -> None:
         self.function = function
         self.sources = sources
         self.path = f"{function.__module__}.{function.__qualname__}"
@@ -219,7 +255,9 @@ class Deriver[T]:
 SOURCES: set[str] = set()
 
 
-def deriver[T](*, sources: tuple[str, ...]) -> Callable[[Callable[[AnchorSet], Derivation[T]]], Deriver[T]]:
+def deriver[T](
+    *, sources: tuple[str, ...]
+) -> Callable[[Callable[[AnchorSet], Derivation[T]]], Deriver[T]]:
     """Declare a deriver, and the spoke models (``app.Model`` labels) whose writes change what it returns."""
 
     def wrap(function: Callable[[AnchorSet], Derivation[T]]) -> Deriver[T]:
@@ -244,7 +282,10 @@ class DerivedField:
 
     def __init__(self, *args: Any, deriver: Deriver[Any], **kwargs: Any) -> None:
         self.deriver = deriver
-        kwargs.setdefault("help_text", f"Derived from the coordinate anchors by {deriver.path}: {deriver.summary} Null when no anchor states it, or when they disagree")
+        kwargs.setdefault(
+            "help_text",
+            f"Derived from the coordinate anchors by {deriver.path}: {deriver.summary} Null when no anchor states it, or when they disagree",
+        )
         kwargs.update(null=True, blank=True, editable=False)
         super().__init__(*args, **kwargs)
 
@@ -273,7 +314,11 @@ class DerivedFloatField(DerivedField, models.FloatField):
 
 def derived_fields(model: type[models.Model]) -> list[DerivedField]:
     """The derived columns of a model, in declaration order."""
-    return [field for field in model._meta.concrete_fields if isinstance(field, DerivedField)]
+    return [
+        field
+        for field in model._meta.concrete_fields
+        if isinstance(field, DerivedField)
+    ]
 
 
 def rederive(container: models.Model) -> None:
@@ -295,7 +340,14 @@ def rederive(container: models.Model) -> None:
         verdict = field.deriver(anchors)
         values[field.attname] = verdict.value if isinstance(verdict, Stated) else None
         if isinstance(verdict, Conflict):
-            conflicts.append(record.model(field=field.name, reason=verdict.reason, anchors=list(verdict.anchors), **{record.field.name: container}))
+            conflicts.append(
+                record.model(
+                    field=field.name,
+                    reason=verdict.reason,
+                    anchors=list(verdict.anchors),
+                    **{record.field.name: container},
+                )
+            )
     type(container).objects.filter(pk=container.pk).update(**values)
     for attname, value in values.items():
         setattr(container, attname, value)

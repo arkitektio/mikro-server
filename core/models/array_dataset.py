@@ -1,27 +1,32 @@
-
-from arkitekt_service.service.described import Described
-from django.db import models
-from django.contrib.auth import get_user_model
-from core import enums
-from koherent.fields import ProvenanceField
-from django_choices_field import TextChoicesField
-from authentikate.models import Organization
-from django.db.models import Q
-from arkitekt_datalayer.models import MediaStore, ZarrStore
+from collections.abc import Iterable
 from enum import Enum
+from typing import TYPE_CHECKING
 
+from arkitekt_datalayer.models import MediaStore, ZarrStore
+from arkitekt_service.service.described import Described
+from authentikate.models import Organization
+from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
-from embeddings.models import EmbeddedDescriptionMixin
-from core import base_models
-from core.logic import acquisition
-from core.logic import coords as coords_logic
-from core.derived import DerivedDateTimeField
-from core.models.coords import CoordinateSystem, Transformation, MeshCollection, NetworkCollection, Fixture  # noqa: F401  (re-exported via core.models)
+from django.db import models
+from django.db.models import Q
+from django_choices_field import TextChoicesField
+from koherent.fields import ProvenanceField
 from polymorphic.managers import PolymorphicManager
 from polymorphic.models import PolymorphicModel
 from polymorphic.query import PolymorphicQuerySet
-from typing import TYPE_CHECKING
-from collections.abc import Iterable
+
+from core import base_models, enums
+from core.derived import DerivedDateTimeField
+from core.logic import acquisition
+from core.logic import coords as coords_logic
+from core.models.coords import (  # noqa: F401  (re-exported via core.models)
+    CoordinateSystem,
+    Fixture,
+    MeshCollection,
+    NetworkCollection,
+    Transformation,
+)
+from embeddings.models import EmbeddedDescriptionMixin
 
 if TYPE_CHECKING:
     from core.models.sparse_dataset import SparseDataset
@@ -66,7 +71,9 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
     """
 
     name = models.CharField(max_length=1000, help_text="The name of the data source")
-    description = models.CharField(max_length=1000, help_text="The description of the data source", null=True)
+    description = models.CharField(
+        max_length=1000, help_text="The description of the data source", null=True
+    )
 
     # Residence, not ownership (RFC-9). The dataset lives in a space; the space does not
     # belong to the dataset. A plain FK rather than a one-to-one because several datasets
@@ -100,9 +107,21 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         related_name="array_datasets",
         help_text="The folder this dataset is filed in. Organisational only -- it says nothing about where the data sits in space",
     )
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the data source was created")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created the data source")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization the data source belongs to")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the data source was created"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that created the data source",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization the data source belongs to",
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -120,7 +139,9 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         help_text="The assigner of the creating task, denormalized for fast filtering",
     )
     # The embedding column is storage, not an edit: keep it out of the history rows.
-    provenance = ProvenanceField(excluded_fields=["embedding", "acquisition_start", "acquisition_end"])
+    provenance = ProvenanceField(
+        excluded_fields=["embedding", "acquisition_start", "acquisition_end"]
+    )
 
     # What the anchors say about all of it, cached for lists and filters (core.derived).
     acquisition_start = DerivedDateTimeField(deriver=acquisition.start, db_index=True)
@@ -141,9 +162,16 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
     class Meta:
         indexes = [
             GinIndex(fields=["stored_spec"], name="array_dataset_spec_gin"),
-            GinIndex(fields=["stored_descriptors"], name="array_dataset_descriptors_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="array_dataset_descriptors_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
             # Newest first per organization: the `roots` walk reads it in order and stops early.
-            models.Index(fields=["organization", "-created_at"], name="array_dataset_org_newest_idx"),
+            models.Index(
+                fields=["organization", "-created_at"],
+                name="array_dataset_org_newest_idx",
+            ),
         ]
 
     @property
@@ -174,7 +202,9 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
     @property
     def axis_specs(self) -> list[coords_logic.AxisSpec]:
         """The dataset's axes, coerced for :mod:`core.logic.coords`."""
-        return [coords_logic.AxisSpec(name=axis.name, type=axis.type) for axis in self.axes]
+        return [
+            coords_logic.AxisSpec(name=axis.name, type=axis.type) for axis in self.axes
+        ]
 
     @property
     def axis_names(self) -> list:
@@ -184,7 +214,11 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
     @property
     def nominated_scene_id(self) -> int | None:
         """The scene this dataset nominates to open: the nomination its whole lens holds. One query; the GraphQL type prefetches it."""
-        return ArrayLens.objects.filter(dataset_id=self.pk, slices=[]).values_list("default_scene_id", flat=True).first()
+        return (
+            ArrayLens.objects.filter(dataset_id=self.pk, slices=[])
+            .values_list("default_scene_id", flat=True)
+            .first()
+        )
 
     @property
     def spec(self) -> list:
@@ -204,7 +238,11 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         the enum grows, and a rolled-back release is started on rows a newer one wrote.
         """
         known = {member.value for member in enums.ArrayDatasetSpec}
-        return [enums.ArrayDatasetSpec(value) for value in self.stored_spec if value in known]
+        return [
+            enums.ArrayDatasetSpec(value)
+            for value in self.stored_spec
+            if value in known
+        ]
 
     @property
     def shape_list(self) -> list:
@@ -214,18 +252,24 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         that prefetched the arrays (a page of layers reading every lens' shape) pays no query
         here; the lowest level is picked in Python either way.
         """
-        arrays = [array for array in self.data_arrays.all() if isinstance(array.shape, list)]
+        arrays = [
+            array for array in self.data_arrays.all() if isinstance(array.shape, list)
+        ]
         if not arrays:
             return []
         return min(arrays, key=lambda array: array.level).shape
 
     def phasor_histogram_at(self, axis: str, harmonic: int):
         """The persisted phasor distribution over an axis at a harmonic, across all this dataset's anchors."""
-        return PhasorHistogram.objects.filter(anchor__dataset=self, axis=axis, harmonic=harmonic).first()
+        return PhasorHistogram.objects.filter(
+            anchor__dataset=self, axis=axis, harmonic=harmonic
+        ).first()
 
     def phasor_calibrations_at(self, axis: str, harmonic: int):
         """The instrument-response correction for an axis at a harmonic, across all this dataset's anchors."""
-        return PhasorCalibration.objects.filter(anchor__dataset=self, axis=axis, harmonic=harmonic).first()
+        return PhasorCalibration.objects.filter(
+            anchor__dataset=self, axis=axis, harmonic=harmonic
+        ).first()
 
 
 class DataArray(models.Model):
@@ -259,8 +303,12 @@ class DataArray(models.Model):
     shape = models.JSONField(help_text="The shape of the data array")
     chunk_shape = models.JSONField(help_text="The chunk shape of the data array")
 
-    dataset = models.ForeignKey(ArrayDataset, on_delete=models.CASCADE, related_name="data_arrays")
-    level = models.IntegerField(help_text="The level of the data array in the resolution pyramid, 0 being the highest resolution")
+    dataset = models.ForeignKey(
+        ArrayDataset, on_delete=models.CASCADE, related_name="data_arrays"
+    )
+    level = models.IntegerField(
+        help_text="The level of the data array in the resolution pyramid, 0 being the highest resolution"
+    )
 
     # A fact of the level, not of the dataset -- the same reason `shape` lives here: a
     # pyramid may well have been built one level at a time by different code. Null on level
@@ -297,7 +345,9 @@ class DataArray(models.Model):
         # derivation -- keys off "the level-0 array". Two arrays claiming the
         # same level would make all of it silently ambiguous.
         constraints = [
-            models.UniqueConstraint(fields=["dataset", "level"], name="one_data_array_per_level"),
+            models.UniqueConstraint(
+                fields=["dataset", "level"], name="one_data_array_per_level"
+            ),
         ]
 
     @property
@@ -308,7 +358,9 @@ class DataArray(models.Model):
         grid, by definition, so this resolves to it. Higher levels own an ARRAY system
         and a stored edge into intrinsic.
         """
-        return getattr(self, "coordinate_system", None) or (self.dataset.intrinsic_coordinate_system if self.level == 0 else None)
+        return getattr(self, "coordinate_system", None) or (
+            self.dataset.intrinsic_coordinate_system if self.level == 0 else None
+        )
 
     @property
     def to_parent(self):
@@ -394,7 +446,14 @@ class CoordinateAnchor(Described):
     )
 
     class Meta:
-        indexes = [GinIndex(fields=["coordinates"], name="anchor_coords_gin"), GinIndex(fields=["stored_descriptors"], name="anchor_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(fields=["coordinates"], name="anchor_coords_gin"),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="anchor_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
+        ]
         constraints = [
             models.CheckConstraint(
                 condition=(
@@ -425,27 +484,45 @@ class CoordinateAnchor(Described):
 class OptikitState(models.Model):
     """1:1 Spoke (Hardware Truth)"""
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="microscope", on_delete=models.CASCADE)
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="microscope", on_delete=models.CASCADE
+    )
     state = models.JSONField(default=dict)
 
 
 class OmeMetadata(models.Model):
     """N:1 Spoke (Image Truth)"""
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="ome_metadata", on_delete=models.CASCADE)
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="ome_metadata", on_delete=models.CASCADE
+    )
     metadata = models.JSONField(default=dict)
 
 
 class ValueHistogram(models.Model):
     """N:1 Spoke (Pixel Value Distribution)"""
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="value_histogram", on_delete=models.CASCADE)
-    histogram = models.JSONField(default=list, help_text="The histogram of the pixel values (y values)")
-    bins = models.JSONField(default=list, help_text="The bin indices of the histogram (x values)")
-    min = models.FloatField(help_text="The minimum pixel value of the histogram", null=True, blank=True)
-    max = models.FloatField(help_text="The maximum pixel value of the histogram", null=True, blank=True)
-    p1 = models.FloatField(help_text="The first percentile of the pixel values", null=True, blank=True)
-    p99 = models.FloatField(help_text="The 99th percentile of the pixel values", null=True, blank=True)
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="value_histogram", on_delete=models.CASCADE
+    )
+    histogram = models.JSONField(
+        default=list, help_text="The histogram of the pixel values (y values)"
+    )
+    bins = models.JSONField(
+        default=list, help_text="The bin indices of the histogram (x values)"
+    )
+    min = models.FloatField(
+        help_text="The minimum pixel value of the histogram", null=True, blank=True
+    )
+    max = models.FloatField(
+        help_text="The maximum pixel value of the histogram", null=True, blank=True
+    )
+    p1 = models.FloatField(
+        help_text="The first percentile of the pixel values", null=True, blank=True
+    )
+    p99 = models.FloatField(
+        help_text="The 99th percentile of the pixel values", null=True, blank=True
+    )
 
 
 class AcquisitionWindow(models.Model):
@@ -456,12 +533,23 @@ class AcquisitionWindow(models.Model):
     and ``acquisition_end`` are derived from.
     """
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="acquisition_window", on_delete=models.CASCADE)
-    start = models.DateTimeField(help_text="When the first of the data at these coordinates was acquired")
-    end = models.DateTimeField(help_text="When the last of the data at these coordinates was acquired. Equal to start for one instant")
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="acquisition_window", on_delete=models.CASCADE
+    )
+    start = models.DateTimeField(
+        help_text="When the first of the data at these coordinates was acquired"
+    )
+    end = models.DateTimeField(
+        help_text="When the last of the data at these coordinates was acquired. Equal to start for one instant"
+    )
 
     class Meta:
-        constraints = [models.CheckConstraint(condition=Q(start__lte=models.F("end")), name="acquisition_window_starts_before_it_ends")]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(start__lte=models.F("end")),
+                name="acquisition_window_starts_before_it_ends",
+            )
+        ]
 
 
 class DerivationConflict(models.Model):
@@ -472,18 +560,29 @@ class DerivationConflict(models.Model):
     Replaced every time the dataset is derived again, so it disappears with the contradiction.
     """
 
-    dataset = models.ForeignKey(ArrayDataset, related_name="derivation_conflicts", on_delete=models.CASCADE)
-    field = models.CharField(max_length=100, help_text="The derived column the conflict left null, e.g. 'acquisition_start'")
+    dataset = models.ForeignKey(
+        ArrayDataset, related_name="derivation_conflicts", on_delete=models.CASCADE
+    )
+    field = models.CharField(
+        max_length=100,
+        help_text="The derived column the conflict left null, e.g. 'acquisition_start'",
+    )
     reason = models.TextField(help_text="What the anchors say that cannot all be true")
-    anchors = models.JSONField(default=list, help_text="The IDs of the anchors that contradict each other")
+    anchors = models.JSONField(
+        default=list, help_text="The IDs of the anchors that contradict each other"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
 
 class ChannelLabel(models.Model):
     """N:1 Spoke (Channel Truth)"""
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="channel_label", on_delete=models.CASCADE)
-    label = models.CharField(max_length=1000, help_text="The label of the channel", null=True, blank=True)
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="channel_label", on_delete=models.CASCADE
+    )
+    label = models.CharField(
+        max_length=1000, help_text="The label of the channel", null=True, blank=True
+    )
 
 
 class PositionLabel(models.Model):
@@ -497,16 +596,31 @@ class PositionLabel(models.Model):
     them reads it (:mod:`core.logic.lens_names`, cached on ``Lens.name``).
     """
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="position_label", on_delete=models.CASCADE)
-    label = models.TextField(help_text="What someone calls the data at these coordinates, e.g. 'GFP' or 'after washout'")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="position_labels", help_text="Who gave the name")
-    created_at = models.DateTimeField(auto_now=True, help_text="When the name was last given")
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="position_label", on_delete=models.CASCADE
+    )
+    label = models.TextField(
+        help_text="What someone calls the data at these coordinates, e.g. 'GFP' or 'after washout'"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="position_labels",
+        help_text="Who gave the name",
+    )
+    created_at = models.DateTimeField(
+        auto_now=True, help_text="When the name was last given"
+    )
 
 
 class LightPath(models.Model):
     """N:1 Spoke (Light Path Truth)"""
 
-    anchor = models.OneToOneField(CoordinateAnchor, related_name="light_graph", on_delete=models.CASCADE)
+    anchor = models.OneToOneField(
+        CoordinateAnchor, related_name="light_graph", on_delete=models.CASCADE
+    )
     graph = models.JSONField(default=dict)
 
 
@@ -524,21 +638,55 @@ class PhasorHistogram(models.Model):
     would silently replace the first rather than sit beside it.
     """
 
-    anchor = models.ForeignKey(CoordinateAnchor, related_name="phasor_histograms", on_delete=models.CASCADE)
-    axis = models.CharField(max_length=32, help_text="The axis the phasor was taken over, e.g. 'tau'")
-    harmonic = models.PositiveSmallIntegerField(default=1, help_text="The harmonic the phasor was taken at")
-    bins = models.PositiveIntegerField(default=256, help_text="The resolution of the square (g, s) density grid")
-    g_min = models.FloatField(default=0.0, help_text="The lower g bound of the density grid")
-    g_max = models.FloatField(default=1.0, help_text="The upper g bound of the density grid")
-    s_min = models.FloatField(default=0.0, help_text="The lower s bound of the density grid")
-    s_max = models.FloatField(default=0.6, help_text="The upper s bound of the density grid")
-    counts = models.JSONField(default=list, help_text="The flattened bins x bins density, row-major with s outermost")
-    total = models.BigIntegerField(null=True, blank=True, help_text="The number of pixels that contributed, so counts can be normalized")
-    calibrated = models.BooleanField(default=False, help_text="Whether the g/s were reference-corrected when computed. An uncalibrated density is still a valid distribution, it is just not traceable to an absolute lifetime")
-    profile = models.JSONField(default=list, blank=True, help_text="The summed profile along the phasor axis (a decay for a MICROTIME axis, a spectrum for a SPECTRUM one), one value per bin. Calibration-free, so a client can sanity-check or recompute the transform")
+    anchor = models.ForeignKey(
+        CoordinateAnchor, related_name="phasor_histograms", on_delete=models.CASCADE
+    )
+    axis = models.CharField(
+        max_length=32, help_text="The axis the phasor was taken over, e.g. 'tau'"
+    )
+    harmonic = models.PositiveSmallIntegerField(
+        default=1, help_text="The harmonic the phasor was taken at"
+    )
+    bins = models.PositiveIntegerField(
+        default=256, help_text="The resolution of the square (g, s) density grid"
+    )
+    g_min = models.FloatField(
+        default=0.0, help_text="The lower g bound of the density grid"
+    )
+    g_max = models.FloatField(
+        default=1.0, help_text="The upper g bound of the density grid"
+    )
+    s_min = models.FloatField(
+        default=0.0, help_text="The lower s bound of the density grid"
+    )
+    s_max = models.FloatField(
+        default=0.6, help_text="The upper s bound of the density grid"
+    )
+    counts = models.JSONField(
+        default=list,
+        help_text="The flattened bins x bins density, row-major with s outermost",
+    )
+    total = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The number of pixels that contributed, so counts can be normalized",
+    )
+    calibrated = models.BooleanField(
+        default=False,
+        help_text="Whether the g/s were reference-corrected when computed. An uncalibrated density is still a valid distribution, it is just not traceable to an absolute lifetime",
+    )
+    profile = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="The summed profile along the phasor axis (a decay for a MICROTIME axis, a spectrum for a SPECTRUM one), one value per bin. Calibration-free, so a client can sanity-check or recompute the transform",
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["anchor", "axis", "harmonic"], name="unique_phasor_histogram")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anchor", "axis", "harmonic"], name="unique_phasor_histogram"
+            )
+        ]
 
 
 class PhasorCalibration(models.Model):
@@ -558,15 +706,38 @@ class PhasorCalibration(models.Model):
     still renders, its hue just is not traceable to an absolute lifetime.
     """
 
-    anchor = models.ForeignKey(CoordinateAnchor, related_name="phasor_calibrations", on_delete=models.CASCADE)
-    axis = models.CharField(max_length=32, help_text="The axis the correction applies to, e.g. 'tau'")
-    harmonic = models.PositiveSmallIntegerField(default=1, help_text="The harmonic the correction applies at")
-    phase_offset = models.FloatField(null=True, blank=True, help_text="The phase correction in radians, added to each pixel's phase")
-    modulation_factor = models.FloatField(null=True, blank=True, help_text="The modulation correction, multiplied into each pixel's modulus")
-    reference = models.CharField(max_length=255, null=True, blank=True, help_text="What the correction was measured against, e.g. 'Rhodamine 6G, 4.1 ns'")
+    anchor = models.ForeignKey(
+        CoordinateAnchor, related_name="phasor_calibrations", on_delete=models.CASCADE
+    )
+    axis = models.CharField(
+        max_length=32, help_text="The axis the correction applies to, e.g. 'tau'"
+    )
+    harmonic = models.PositiveSmallIntegerField(
+        default=1, help_text="The harmonic the correction applies at"
+    )
+    phase_offset = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The phase correction in radians, added to each pixel's phase",
+    )
+    modulation_factor = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The modulation correction, multiplied into each pixel's modulus",
+    )
+    reference = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="What the correction was measured against, e.g. 'Rhodamine 6G, 4.1 ns'",
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["anchor", "axis", "harmonic"], name="unique_phasor_calibration")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anchor", "axis", "harmonic"], name="unique_phasor_calibration"
+            )
+        ]
 
 
 #: What each lens kind's readers walk in Python, per kind: the container, its system and that
@@ -603,10 +774,18 @@ def load_lens_sources(lenses: "Iterable[Lens]") -> None:
         by_kind.setdefault(type(lens), {})[lens.pk] = lens
     for kind, held in by_kind.items():
         select, prefetch = _source_relations(kind)
-        for loaded in kind.objects.non_polymorphic().filter(pk__in=held).select_related(*select).prefetch_related(*prefetch):
+        for loaded in (
+            kind.objects.non_polymorphic()
+            .filter(pk__in=held)
+            .select_related(*select)
+            .prefetch_related(*prefetch)
+        ):
             target = held[loaded.pk]
             target._state.fields_cache.update(loaded._state.fields_cache)
-            target._prefetched_objects_cache = {**getattr(target, "_prefetched_objects_cache", {}), **getattr(loaded, "_prefetched_objects_cache", {})}
+            target._prefetched_objects_cache = {
+                **getattr(target, "_prefetched_objects_cache", {}),
+                **getattr(loaded, "_prefetched_objects_cache", {}),
+            }
 
 
 def selection_label(selection: list) -> str:
@@ -618,10 +797,14 @@ def selection_label(selection: list) -> str:
     parts = []
     for entry in selection:
         if "min" in entry or "max" in entry:
-            parts.append(f"{entry.get('axis')}[{entry.get('min', '')}..{entry.get('max', '')}]")
+            parts.append(
+                f"{entry.get('axis')}[{entry.get('min', '')}..{entry.get('max', '')}]"
+            )
         else:
             start, stop = entry.get("start"), entry.get("stop")
-            parts.append(f"{entry.get('axis')}[{'' if start is None else start}:{'' if stop is None else stop}]")
+            parts.append(
+                f"{entry.get('axis')}[{'' if start is None else start}:{'' if stop is None else stop}]"
+            )
     return ", ".join(parts)
 
 
@@ -684,7 +867,12 @@ class Lens(PolymorphicModel, Described):
     objects = PolymorphicManager.from_queryset(LensQuerySet)()
 
     # Denormalized from the container, so a list across every kind scopes in one hop.
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="lenses", help_text="The organization of the container this lens selects over")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="lenses",
+        help_text="The organization of the container this lens selects over",
+    )
 
     # Who made the selection, when, and under which task -- the same four facts every
     # container carries. The first to ask for a selection is its creator: asking again hands
@@ -694,7 +882,9 @@ class Lens(PolymorphicModel, Described):
     # empty other people's scenes. No history table: the only edits are the name and the
     # nomination, and `HistoricalLens` was dropped with the kinds for that reason. (The name is
     # no longer one of them: it is a cache the server writes, below.)
-    created_at = models.DateTimeField(auto_now_add=True, help_text="When this selection was first asked for")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="When this selection was first asked for"
+    )
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
@@ -779,9 +969,15 @@ class Lens(PolymorphicModel, Described):
         indexes = [
             GinIndex(fields=["stored_spec"], name="lens_spec_gin"),
             # `jsonb_path_ops`: containment is the only operator a `requires` equality compiles to.
-            GinIndex(fields=["stored_descriptors"], name="lens_descriptors_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="lens_descriptors_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
             # Where every lens picker starts: one organization's lenses of one kind.
-            models.Index(fields=["organization", "polymorphic_ctype"], name="lens_org_kind_idx"),
+            models.Index(
+                fields=["organization", "polymorphic_ctype"], name="lens_org_kind_idx"
+            ),
         ]
 
     #: The concrete kinds, by the container model each selects over. Filled in as each
@@ -862,7 +1058,9 @@ class Lens(PolymorphicModel, Described):
     def origin(self) -> str:
         """The name of the container this lens selects over. Never empty: a container nobody named is called by its lens' kind and id."""
         real = self._real()
-        return (getattr(real.container, "name", None) or "").strip() or f"{type(real).__name__} {self.pk}"
+        return (
+            getattr(real.container, "name", None) or ""
+        ).strip() or f"{type(real).__name__} {self.pk}"
 
     @property
     def title(self) -> str:
@@ -886,7 +1084,9 @@ class Lens(PolymorphicModel, Described):
 
         real = self._real()
         named = lens_names.named_axes(real)
-        return selection_label([entry for entry in real.selection if entry.get("axis") not in named])
+        return selection_label(
+            [entry for entry in real.selection if entry.get("axis") not in named]
+        )
 
     @property
     def label(self) -> str:
@@ -920,7 +1120,13 @@ class Lens(PolymorphicModel, Described):
         real = self._real()
         kind = type(real)
         column = "slices" if kind is ArrayLens else "windows"
-        return kind.objects.filter(**{f"{kind.CONTAINER_FIELD}_id": real.container_id, column: []}).values_list("default_scene_id", flat=True).first()
+        return (
+            kind.objects.filter(
+                **{f"{kind.CONTAINER_FIELD}_id": real.container_id, column: []}
+            )
+            .values_list("default_scene_id", flat=True)
+            .first()
+        )
 
 
 def anchors_in_windows(anchors, windows: "list[base_models.WindowModel]"):
@@ -943,7 +1149,10 @@ def anchors_in_windows(anchors, windows: "list[base_models.WindowModel]"):
 class WindowedLens(models.Model):
     """What the five value-windowed kinds share: the windows column, in each kind's own table."""
 
-    windows = models.JSONField(help_text="The selection this lens makes, as a list of per-axis value windows in the container's own axes, in the one normalized spelling", default=list)
+    windows = models.JSONField(
+        help_text="The selection this lens makes, as a list of per-axis value windows in the container's own axes, in the one normalized spelling",
+        default=list,
+    )
 
     class Meta:
         abstract = True
@@ -951,7 +1160,11 @@ class WindowedLens(models.Model):
     @property
     def windows_list(self) -> list[base_models.WindowModel]:
         """The windows of the lens as models."""
-        return [base_models.WindowModel(**window) for window in self.windows] if isinstance(self.windows, list) else []
+        return (
+            [base_models.WindowModel(**window) for window in self.windows]
+            if isinstance(self.windows, list)
+            else []
+        )
 
     @property
     def selection(self) -> list:
@@ -960,7 +1173,11 @@ class WindowedLens(models.Model):
 
     def _anchors_in_windows(self, anchors):
         """Narrow a container's anchors to the ones inside every window: global along an axis, or in its range."""
-        return anchors_in_windows(anchors, self.windows_list).select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
+        return (
+            anchors_in_windows(anchors, self.windows_list)
+            .select_related("microscope")
+            .prefetch_related("ome_metadata", "value_histogram")
+        )
 
 
 class ArrayLens(Lens):
@@ -982,14 +1199,21 @@ class ArrayLens(Lens):
     CONTAINER_FIELD = "dataset"
     KIND = "ARRAY"
 
-    dataset = models.ForeignKey(ArrayDataset, on_delete=models.CASCADE, related_name="lenses")
-    slices = models.JSONField(help_text="The selection this lens makes over its dataset, as a list of per-dimension slices in the one normalized spelling", default=list)
+    dataset = models.ForeignKey(
+        ArrayDataset, on_delete=models.CASCADE, related_name="lenses"
+    )
+    slices = models.JSONField(
+        help_text="The selection this lens makes over its dataset, as a list of per-dimension slices in the one normalized spelling",
+        default=list,
+    )
 
     class Meta:
         constraints = [
             # One row per selection. The slices are always written normalized, so JSONB
             # equality is the selection's equality.
-            models.UniqueConstraint(fields=["dataset", "slices"], name="one_array_lens_per_selection"),
+            models.UniqueConstraint(
+                fields=["dataset", "slices"], name="one_array_lens_per_selection"
+            ),
         ]
 
     @property
@@ -1000,7 +1224,11 @@ class ArrayLens(Lens):
     @property
     def slices_list(self) -> list[base_models.SliceModel]:
         """Return the slices of the lens as a list."""
-        return [base_models.SliceModel(**slice_dict) for slice_dict in self.slices] if isinstance(self.slices, list) else []
+        return (
+            [base_models.SliceModel(**slice_dict) for slice_dict in self.slices]
+            if isinstance(self.slices, list)
+            else []
+        )
 
     @property
     def axis_names(self) -> list:
@@ -1015,7 +1243,9 @@ class ArrayLens(Lens):
     @property
     def shape_list(self) -> list:
         """The shape this lens' slices cut out of its dataset."""
-        return coords_logic.lens_shape(self.dataset.shape_list, self.dataset.axis_names, self.slices_list)
+        return coords_logic.lens_shape(
+            self.dataset.shape_list, self.dataset.axis_names, self.slices_list
+        )
 
     SPEC_ENUM = enums.ArrayDatasetSpec
 
@@ -1053,7 +1283,9 @@ class ArrayLens(Lens):
         try:
             return shape[axis_names.index(axis_name)]
         except ValueError as error:
-            raise ValueError(f"Axis {axis_name} not found in lens axes {axis_names}.") from error
+            raise ValueError(
+                f"Axis {axis_name} not found in lens axes {axis_names}."
+            ) from error
 
     @property
     def active_anchors(self):
@@ -1069,25 +1301,38 @@ class ArrayLens(Lens):
         # spelling to fall back on: each one narrows the query.
         for slc in self.slices_list:
             axis = slc.axis
-            start, stop, step = int(slc.start or 0), int(slc.stop or 0), int(slc.step or 1)
+            start, stop, step = (
+                int(slc.start or 0),
+                int(slc.stop or 0),
+                int(slc.step or 1),
+            )
 
             # Condition A: The anchor is global for this axis (key doesn't exist)
             axis_is_global = ~Q(coordinates__has_key=axis)
 
             if step == 1:
-                axis_in_range = Q(**{f"coordinates__{axis}__gte": start, f"coordinates__{axis}__lt": stop})
+                axis_in_range = Q(
+                    **{
+                        f"coordinates__{axis}__gte": start,
+                        f"coordinates__{axis}__lt": stop,
+                    }
+                )
             else:
                 # A stepped lens keeps every k-th index and nothing between: an anchor on a
                 # skipped row is not in this lens, however far inside the range it sits. The
                 # indices are enumerated rather than tested by congruence, so a pin spelled
                 # `2.0` in the JSON still matches as a number.
-                axis_in_range = Q(**{f"coordinates__{axis}__in": list(range(start, stop, step))})
+                axis_in_range = Q(
+                    **{f"coordinates__{axis}__in": list(range(start, stop, step))}
+                )
 
             # The anchor must either be global for this axis, OR fall inside the slice limits
             qs = qs.filter(axis_is_global | axis_in_range)
 
         # OPTIMIZATION: prefetch/select the spokes to prevent N+1 database death
-        return qs.select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
+        return qs.select_related("microscope").prefetch_related(
+            "ome_metadata", "value_histogram"
+        )
 
 
 class LensCut(models.Model):
@@ -1109,20 +1354,55 @@ class LensCut(models.Model):
     no derivation edge to say it on.
     """
 
-    annotation = models.ForeignKey("Annotation", on_delete=models.CASCADE, related_name="lens_cuts", help_text="The shape the lens was cut to")
-    lens = models.ForeignKey(ArrayLens, on_delete=models.CASCADE, related_name="cuts", help_text="The lens the cut gave: the dataset's row for the voxels under the shape's box at the time")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="When this lens was first cut to this shape")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="lens_cuts", help_text="Who first cut this lens to this shape")
-    created_through = models.ForeignKey("koherent.Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="lens_cuts", help_text="The task the cut was made under, if any")
+    annotation = models.ForeignKey(
+        "Annotation",
+        on_delete=models.CASCADE,
+        related_name="lens_cuts",
+        help_text="The shape the lens was cut to",
+    )
+    lens = models.ForeignKey(
+        ArrayLens,
+        on_delete=models.CASCADE,
+        related_name="cuts",
+        help_text="The lens the cut gave: the dataset's row for the voxels under the shape's box at the time",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="When this lens was first cut to this shape"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lens_cuts",
+        help_text="Who first cut this lens to this shape",
+    )
+    created_through = models.ForeignKey(
+        "koherent.Task",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lens_cuts",
+        help_text="The task the cut was made under, if any",
+    )
     created_through_by = models.ForeignKey(
-        get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_lens_cuts", help_text="The assigner of the cutting task, denormalized for fast filtering"
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_lens_cuts",
+        help_text="The assigner of the cutting task, denormalized for fast filtering",
     )
 
     class Meta:
         """One row per (shape, lens): cutting twice is the same cut."""
 
         ordering = ["created_at", "id"]
-        constraints = [models.UniqueConstraint(fields=["annotation", "lens"], name="lens_cut_once_per_shape")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["annotation", "lens"], name="lens_cut_once_per_shape"
+            )
+        ]
 
     def __str__(self) -> str:
         """The lens and the shape it was cut to."""
@@ -1135,21 +1415,31 @@ class TableLens(WindowedLens, Lens):
     CONTAINER_FIELD = "table_dataset"
     KIND = "TABLE"
 
-    table_dataset = models.ForeignKey("TableDataset", on_delete=models.CASCADE, related_name="lenses")
+    table_dataset = models.ForeignKey(
+        "TableDataset", on_delete=models.CASCADE, related_name="lenses"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["table_dataset", "windows"], name="one_table_lens_per_selection")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["table_dataset", "windows"], name="one_table_lens_per_selection"
+            )
+        ]
 
     SPEC_ENUM = enums.TableDatasetSpec
 
     def derive_spec(self) -> list:
         """Its table's columns, less the coordinates its windows pin to one value."""
-        return coords_logic.specs_for_columns(self.table_dataset.column_specs, coords_logic.pinned_axes(self.windows_list))
+        return coords_logic.specs_for_columns(
+            self.table_dataset.column_specs, coords_logic.pinned_axes(self.windows_list)
+        )
 
     @property
     def active_anchors(self):
         """The table's anchors inside the windows."""
-        return self._anchors_in_windows(CoordinateAnchor.objects.filter(table=self.table_dataset))
+        return self._anchors_in_windows(
+            CoordinateAnchor.objects.filter(table=self.table_dataset)
+        )
 
 
 class SparseLens(WindowedLens, Lens):
@@ -1158,10 +1448,17 @@ class SparseLens(WindowedLens, Lens):
     CONTAINER_FIELD = "sparse_dataset"
     KIND = "SPARSE"
 
-    sparse_dataset = models.ForeignKey("SparseDataset", on_delete=models.CASCADE, related_name="lenses")
+    sparse_dataset = models.ForeignKey(
+        "SparseDataset", on_delete=models.CASCADE, related_name="lenses"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["sparse_dataset", "windows"], name="one_sparse_lens_per_selection")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sparse_dataset", "windows"],
+                name="one_sparse_lens_per_selection",
+            )
+        ]
 
     SPEC_ENUM = enums.SparseDatasetSpec
 
@@ -1172,7 +1469,9 @@ class SparseLens(WindowedLens, Lens):
     @property
     def active_anchors(self):
         """The sparse dataset's anchors inside the windows."""
-        return self._anchors_in_windows(CoordinateAnchor.objects.filter(sparse=self.sparse_dataset))
+        return self._anchors_in_windows(
+            CoordinateAnchor.objects.filter(sparse=self.sparse_dataset)
+        )
 
 
 class MeshLens(WindowedLens, Lens):
@@ -1181,10 +1480,17 @@ class MeshLens(WindowedLens, Lens):
     CONTAINER_FIELD = "mesh_collection"
     KIND = "MESH"
 
-    mesh_collection = models.ForeignKey(MeshCollection, on_delete=models.CASCADE, related_name="lenses")
+    mesh_collection = models.ForeignKey(
+        MeshCollection, on_delete=models.CASCADE, related_name="lenses"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["mesh_collection", "windows"], name="one_mesh_lens_per_selection")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mesh_collection", "windows"],
+                name="one_mesh_lens_per_selection",
+            )
+        ]
 
 
 class NetworkLens(WindowedLens, Lens):
@@ -1193,10 +1499,17 @@ class NetworkLens(WindowedLens, Lens):
     CONTAINER_FIELD = "network_collection"
     KIND = "NETWORK"
 
-    network_collection = models.ForeignKey("NetworkCollection", on_delete=models.CASCADE, related_name="lenses")
+    network_collection = models.ForeignKey(
+        "NetworkCollection", on_delete=models.CASCADE, related_name="lenses"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["network_collection", "windows"], name="one_network_lens_per_selection")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network_collection", "windows"],
+                name="one_network_lens_per_selection",
+            )
+        ]
 
 
 class FixtureLens(WindowedLens, Lens):
@@ -1205,10 +1518,16 @@ class FixtureLens(WindowedLens, Lens):
     CONTAINER_FIELD = "fixture"
     KIND = "FIXTURE"
 
-    fixture = models.ForeignKey(Fixture, on_delete=models.CASCADE, related_name="lenses")
+    fixture = models.ForeignKey(
+        Fixture, on_delete=models.CASCADE, related_name="lenses"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["fixture", "windows"], name="one_fixture_lens_per_selection")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fixture", "windows"], name="one_fixture_lens_per_selection"
+            )
+        ]
 
 
 class AnnotationLens(WindowedLens, Lens):
@@ -1217,10 +1536,17 @@ class AnnotationLens(WindowedLens, Lens):
     CONTAINER_FIELD = "annotation_collection"
     KIND = "ANNOTATION"
 
-    annotation_collection = models.ForeignKey("AnnotationCollection", on_delete=models.CASCADE, related_name="lenses")
+    annotation_collection = models.ForeignKey(
+        "AnnotationCollection", on_delete=models.CASCADE, related_name="lenses"
+    )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["annotation_collection", "windows"], name="one_annotation_lens_per_selection")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["annotation_collection", "windows"],
+                name="one_annotation_lens_per_selection",
+            )
+        ]
 
 
 #: Which lens kind selects over which container, by the container model.
@@ -1291,7 +1617,12 @@ class Scene(Described):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     # Nullable: a scene made before the column existed has the time its first history row
     # records (migration 0014), and none when it has no such row -- never the migration's.
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, help_text="The time this scene was created")
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True,
+        help_text="The time this scene was created",
+    )
 
     provenance = ProvenanceField()
 
@@ -1310,13 +1641,34 @@ class Animation(models.Model):
     ``AnimationWaypoint.order`` trustworthy -- see the mutation.
     """
 
-    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="animations", help_text="The scene this tour flies through")
-    name = models.TextField(help_text="The name of the tour, e.g. 'overview' or 'dive to the mitochondria'")
-    description = models.CharField(max_length=1000, null=True, blank=True, help_text="What the tour shows")
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="animations",
+        help_text="The scene this tour flies through",
+    )
+    name = models.TextField(
+        help_text="The name of the tour, e.g. 'overview' or 'dive to the mitochondria'"
+    )
+    description = models.CharField(
+        max_length=1000, null=True, blank=True, help_text="What the tour shows"
+    )
 
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the tour was created")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that created the tour")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization the tour belongs to")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the tour was created"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that created the tour",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization the tour belongs to",
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -1345,11 +1697,25 @@ class AnimationWaypoint(models.Model):
     on; a waypoint is never independently owned.
     """
 
-    animation = models.ForeignKey(Animation, on_delete=models.CASCADE, related_name="waypoints", help_text="The tour this pose belongs to")
-    order = models.PositiveSmallIntegerField(help_text="The pose's index in the tour. Written by enumeration from the authored list, never supplied by a caller")
-    name = models.TextField(blank=True, default="", help_text="What this stop shows, e.g. 'the nucleus'")
-    camera = models.JSONField(help_text="Where the camera is, as a CameraState: a position keyed by the world's axis names, plus the flat and volumetric views of it")
-    duration_ms = models.PositiveIntegerField(default=1000, help_text="How long the viewer takes to travel TO this pose, in milliseconds. Ignored for the first pose, which is where the tour starts")
+    animation = models.ForeignKey(
+        Animation,
+        on_delete=models.CASCADE,
+        related_name="waypoints",
+        help_text="The tour this pose belongs to",
+    )
+    order = models.PositiveSmallIntegerField(
+        help_text="The pose's index in the tour. Written by enumeration from the authored list, never supplied by a caller"
+    )
+    name = models.TextField(
+        blank=True, default="", help_text="What this stop shows, e.g. 'the nucleus'"
+    )
+    camera = models.JSONField(
+        help_text="Where the camera is, as a CameraState: a position keyed by the world's axis names, plus the flat and volumetric views of it"
+    )
+    duration_ms = models.PositiveIntegerField(
+        default=1000,
+        help_text="How long the viewer takes to travel TO this pose, in milliseconds. Ignored for the first pose, which is where the tour starts",
+    )
     easing = TextChoicesField(
         choices_enum=enums.EasingChoices,
         default=enums.EasingChoices.EASE_IN_OUT.value,
@@ -1364,7 +1730,9 @@ class AnimationWaypoint(models.Model):
             # Safe precisely because `order` is written by enumeration over the whole
             # authored list: two waypoints are never swapped in place, so this can never
             # be transiently violated and needs no deferral.
-            models.UniqueConstraint(fields=["animation", "order"], name="unique_animation_waypoint_order"),
+            models.UniqueConstraint(
+                fields=["animation", "order"], name="unique_animation_waypoint_order"
+            ),
         ]
 
     def __str__(self) -> str:
@@ -1390,13 +1758,37 @@ class SceneSnapshot(models.Model):
     staged in the same scene.
     """
 
-    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="snapshots", help_text="The composition this is a picture of")
-    store = models.ForeignKey(MediaStore, on_delete=models.CASCADE, related_name="scene_snapshots", help_text="The media store holding the rendered image")
-    name = models.CharField(max_length=1000, default="", help_text="The name of the snapshot")
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="snapshots",
+        help_text="The composition this is a picture of",
+    )
+    store = models.ForeignKey(
+        MediaStore,
+        on_delete=models.CASCADE,
+        related_name="scene_snapshots",
+        help_text="The media store holding the rendered image",
+    )
+    name = models.CharField(
+        max_length=1000, default="", help_text="The name of the snapshot"
+    )
 
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the snapshot was taken")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The user that took the snapshot")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization the snapshot belongs to")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the snapshot was taken"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The user that took the snapshot",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization the snapshot belongs to",
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -1423,7 +1815,9 @@ class SceneSnapshot(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["scene", "-created_at"], name="scene_snapshot_latest_idx"),
+            models.Index(
+                fields=["scene", "-created_at"], name="scene_snapshot_latest_idx"
+            ),
         ]
 
 
@@ -1510,9 +1904,16 @@ class Layer(models.Model):
         default=enums.BlendingChoices.ADDITIVE.value,
         help_text="The blending mode used to composite this layer over the layers below it",
     )
-    opacity = models.FloatField(default=1.0, help_text="Layer alpha for alpha-over compositing (0..1)")
-    visible = models.BooleanField(default=True, help_text="Whether the layer participates in compositing")
-    order = models.IntegerField(default=0, help_text="Explicit z-index for deterministic back-to-front compositing")
+    opacity = models.FloatField(
+        default=1.0, help_text="Layer alpha for alpha-over compositing (0..1)"
+    )
+    visible = models.BooleanField(
+        default=True, help_text="Whether the layer participates in compositing"
+    )
+    order = models.IntegerField(
+        default=0,
+        help_text="Explicit z-index for deterministic back-to-front compositing",
+    )
     # What a layer is *called*, which until now it had no way to be. The channel name a
     # bootstrapped scene knows ("DAPI", from a `ChannelLabel` spoke) was written into the
     # render graph's root node `label`, because that was the only string on the row -- a
@@ -1520,15 +1921,29 @@ class Layer(models.Model):
     # so the workaround had nowhere left to stand, and the honest field is this one. On the
     # interface rather than per kind: a heterogeneous `Scene.layers` list wants one name
     # field, not a fragment per kind to read the same string.
-    name = models.TextField(null=True, blank=True, help_text="A human-readable name for the layer, e.g. the channel it draws ('DAPI'). Null when nobody has named it")
+    name = models.TextField(
+        null=True,
+        blank=True,
+        help_text="A human-readable name for the layer, e.g. the channel it draws ('DAPI'). Null when nobody has named it",
+    )
 
     # --- the source: one lens, whatever the kind ---
     # Every layer draws through a lens: an array lens for the six array kinds, a table lens
     # for a point or track layer, a mesh, network or annotation lens for the collection kinds.
     # The lens is the selection and the space; the layer carries how it is drawn.
-    lens = models.ForeignKey(Lens, on_delete=models.CASCADE, related_name="layers", help_text="The lens this layer draws through: the selection over its container, and the space the data is placed from. An array lens for the array kinds, a table lens for point and track layers, a mesh, network or annotation lens for the collection kinds")
+    lens = models.ForeignKey(
+        Lens,
+        on_delete=models.CASCADE,
+        related_name="layers",
+        help_text="The lens this layer draws through: the selection over its container, and the space the data is placed from. An array lens for the array kinds, a table lens for point and track layers, a mesh, network or annotation lens for the collection kinds",
+    )
     # --- image render settings ---
-    render_graph = models.JSONField(null=True, blank=True, default=None, help_text="(image) The composable render recipe (channels + transfer functions + in-layer blend) that is the single source of truth for how the image layer is rendered.")
+    render_graph = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="(image) The composable render recipe (channels + transfer functions + in-layer blend) that is the single source of truth for how the image layer is rendered.",
+    )
 
     # --- intensity / rgb render settings ---
     # Columns, not a graph, because these kinds have a fixed shape -- see the class docstring.
@@ -1536,9 +1951,21 @@ class Layer(models.Model):
     # every array-sourced kind: one fact, one column, whoever asks it. Which channel a layer
     # draws is not a column at all: it is its lens' selection (a single-channel lens, or for
     # RGB the three component lenses below).
-    clim_min = models.FloatField(null=True, blank=True, help_text="(intensity/rgb/vector) Lower contrast limit, in the data's own units -- not a normalized fraction. For intensity and RGB that means intensity units (RGB shares one pair across all three channels, because they are components of one picture rather than three signals); for a vector layer it means vector MAGNITUDE, in the component axis's unit -- the two readings share this column, so both are stated here rather than left to collide")
-    clim_max = models.FloatField(null=True, blank=True, help_text="(intensity/rgb/vector) Upper contrast limit, in the data's own units -- not a normalized fraction. For a vector layer: vector magnitude, in the component axis's unit")
-    gamma = models.FloatField(null=True, blank=True, help_text="(intensity) Gamma correction applied to the normalized intensities")
+    clim_min = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(intensity/rgb/vector) Lower contrast limit, in the data's own units -- not a normalized fraction. For intensity and RGB that means intensity units (RGB shares one pair across all three channels, because they are components of one picture rather than three signals); for a vector layer it means vector MAGNITUDE, in the component axis's unit -- the two readings share this column, so both are stated here rather than left to collide",
+    )
+    clim_max = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(intensity/rgb/vector) Upper contrast limit, in the data's own units -- not a normalized fraction. For a vector layer: vector magnitude, in the component axis's unit",
+    )
+    gamma = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(intensity) Gamma correction applied to the normalized intensities",
+    )
     # A solid tint, and the one member of the transfer function's vocabulary that crossed
     # over. It is here because it is not a curve: `stops` and `invert` reshape the mapping
     # from intensity to colour and need a tree to say so, where a tint only says which hue
@@ -1572,13 +1999,39 @@ class Layer(models.Model):
     # component is a single-channel lens cut from `lens`, the extent all three share. Three
     # columns rather than three indices into an axis, so the layer reads its lenses and nothing
     # narrower -- the one rule every array layer follows.
-    red_lens = models.ForeignKey("ArrayLens", on_delete=models.CASCADE, null=True, blank=True, related_name="red_layers", help_text="(rgb) The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position")
-    green_lens = models.ForeignKey("ArrayLens", on_delete=models.CASCADE, null=True, blank=True, related_name="green_layers", help_text="(rgb) The single-channel lens drawn as green")
-    blue_lens = models.ForeignKey("ArrayLens", on_delete=models.CASCADE, null=True, blank=True, related_name="blue_layers", help_text="(rgb) The single-channel lens drawn as blue")
+    red_lens = models.ForeignKey(
+        "ArrayLens",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="red_layers",
+        help_text="(rgb) The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position",
+    )
+    green_lens = models.ForeignKey(
+        "ArrayLens",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="green_layers",
+        help_text="(rgb) The single-channel lens drawn as green",
+    )
+    blue_lens = models.ForeignKey(
+        "ArrayLens",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="blue_layers",
+        help_text="(rgb) The single-channel lens drawn as blue",
+    )
     # The single-channel lenses an image layer's render graph samples: an index of what the JSON
     # recipe names, kept so a lens a graph draws through is PROTECTed like one a layer draws
     # through (`assert_lens_deletable`). Written with the graph, never by hand.
-    channel_lenses = models.ManyToManyField("ArrayLens", related_name="channel_layers", blank=True, help_text="(image) The single-channel lenses the render graph's channel and phasor nodes sample, each a crop of `lens`")
+    channel_lenses = models.ManyToManyField(
+        "ArrayLens",
+        related_name="channel_layers",
+        blank=True,
+        help_text="(image) The single-channel lenses the render graph's channel and phasor nodes sample, each a crop of `lens`",
+    )
     # Gains, not a colour temperature: a temperature is one camera model's opinion of what the
     # three multipliers should be, and the multipliers are what a renderer applies. Applied to
     # each component before the shared contrast window, so a colour cast is corrected without
@@ -1596,14 +2049,24 @@ class Layer(models.Model):
     # cursors, so it is a nested document rather than a handful of scalars. The same models
     # `core.render.layer.models` already declares for the phasor render *node*, which is what
     # composites a phasor inside an IMAGE layer's graph.
-    phasor_render = models.JSONField(null=True, blank=True, default=None, help_text="(phasor) Which axis is reduced to a phasor, at which harmonic, and how the resulting (g, s) becomes color. The single source of truth for how the phasor layer is rendered.")
+    phasor_render = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="(phasor) Which axis is reduced to a phasor, at which harmonic, and how the resulting (g, s) becomes color. The single source of truth for how the phasor layer is rendered.",
+    )
 
     # --- label render settings ---
     # A second column rather than a second schema inside `render_graph`: that column's
     # invariant is "the root is a blend node", and a label map has no compositing tree to
     # put under one. Keeping them apart is what makes "a label source additively blended
     # with a fluorescence channel" unrepresentable rather than merely unbuilt.
-    label_render = models.JSONField(null=True, blank=True, default=None, help_text="(label) How discrete object ids become color: the hashing seed, the transparent background id, contour-or-fill, the selection, and an optional `colorBy` naming a column of the table this mask's FIELD edge keys into. The single source of truth for how the label layer is rendered.")
+    label_render = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="(label) How discrete object ids become color: the hashing seed, the transparent background id, contour-or-fill, the selection, and an optional `colorBy` naming a column of the table this mask's FIELD edge keys into. The single source of truth for how the label layer is rendered.",
+    )
     # Shared by INTENSITY with point and track, the way `lens` and `table_dataset` are shared:
     # one column for one fact, whichever kind is asking. `default=None` and not VIRIDIS,
     # because the kinds disagree about what a sensible default *is* -- a fluorescence channel
@@ -1611,22 +2074,58 @@ class Layer(models.Model):
     # can only be one of them. Every writer names its own: `createIntensityLayer` grey,
     # `createPointLayer` and `_materialize_table_layer` viridis. A column default here would
     # be a fourth answer, silently right for two kinds and wrong for the third.
-    colormap = TextChoicesField(choices_enum=enums.ColorMapChoices, default=None, help_text="(intensity/point/track/vector) The applying color map. A vector layer applies it over glyph magnitude", null=True, blank=True)
+    colormap = TextChoicesField(
+        choices_enum=enums.ColorMapChoices,
+        default=None,
+        help_text="(intensity/point/track/vector) The applying color map. A vector layer applies it over glyph magnitude",
+        null=True,
+        blank=True,
+    )
 
     # --- point/track render choices. Which columns provide the COORDINATES (and the
     # track/point identity) is never stored here: the table dataset declares them by
     # role, and a second per-layer copy could disagree with the dataset's own schema.
     # These pick among the remaining measure columns for display, which is honestly
     # per-layer view state.
-    size_column = models.CharField(max_length=100, null=True, blank=True, help_text="(point) The table column mapped to per-point size")
-    point_size = models.FloatField(null=True, blank=True, help_text="(point) The default point size, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
-    color_by_column = models.CharField(max_length=100, null=True, blank=True, help_text="(track) The table column used to color tracks (used with colormap)")
-    line_width = models.FloatField(null=True, blank=True, help_text="(track) The width of the track lines, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)")
-    tail_window = models.PositiveIntegerField(null=True, blank=True, help_text="(track) How many timepoints of each track's past are drawn behind the current one; 0 draws the whole track. Null lets the viewer choose")
+    size_column = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="(point) The table column mapped to per-point size",
+    )
+    point_size = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(point) The default point size, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)",
+    )
+    color_by_column = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="(track) The table column used to color tracks (used with colormap)",
+    )
+    line_width = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(track) The width of the track lines, in scene units -- the world's spatial-axis unit, which is a well-defined length for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)",
+    )
+    tail_window = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="(track) How many timepoints of each track's past are drawn behind the current one; 0 draws the whole track. Null lets the viewer choose",
+    )
 
     # --- mesh render settings (and a fixture's, which takes the same two) ---
-    material_color = models.JSONField(default=None, null=True, blank=True, help_text="(mesh/cad model) The material (surface) color, RGBA. For a fixture null keeps the model's own materials, and a colour overrides all of them")
-    wireframe = models.BooleanField(default=False, help_text="(mesh/cad model) Whether the surface is rendered as a wireframe instead of a solid")
+    material_color = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text="(mesh/cad model) The material (surface) color, RGBA. For a fixture null keeps the model's own materials, and a colour overrides all of them",
+    )
+    wireframe = models.BooleanField(
+        default=False,
+        help_text="(mesh/cad model) Whether the surface is rendered as a wireframe instead of a solid",
+    )
     shading = TextChoicesField(
         choices_enum=enums.MeshShadingChoices,
         default=enums.MeshShadingChoices.SMOOTH.value,
@@ -1693,7 +2192,11 @@ class Layer(models.Model):
     # the same functions (`core.mutations.layer.build_color_bys` / `build_filter_bys`). They sit
     # in a JSON blob there rather than in columns here only because a label layer already had
     # one -- not because the two say anything different.
-    mesh_color_bys = models.JSONField(default=list, blank=True, help_text="(mesh) The colourings this layer offers, in the order a picker should show them. Each colours objects by a column of a table this collection's FIELD edge keys into. Empty means the flat material color is the only rendering")
+    mesh_color_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(mesh) The colourings this layer offers, in the order a picker should show them. Each colours objects by a column of a table this collection's FIELD edge keys into. Empty means the flat material color is the only rendering",
+    )
     # An index into that list rather than a copy of the chosen entry, or a flag on it: a
     # duplicate is free to disagree with the entry it duplicates, and a per-entry `active`
     # boolean makes "two active at once" representable when only one can be drawn.
@@ -1711,12 +2214,20 @@ class Layer(models.Model):
     # refuses a repeat because two entries with the same column, colormap and window are
     # one colouring wearing two names; there is no such thing as two identical *rules* that
     # differ in what they select.
-    mesh_filter_bys = models.JSONField(default=list, blank=True, help_text="(mesh) The filters this layer offers, in the order a picker should show them. Each keeps or drops objects by a column of a table this collection's FIELD edge keys into. Empty means nothing is offered and every object draws")
+    mesh_filter_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(mesh) The filters this layer offers, in the order a picker should show them. Each keeps or drops objects by a column of a table this collection's FIELD edge keys into. Empty means nothing is offered and every object draws",
+    )
     # A list of indices, not one: filters *compose*, and several being on at once is the normal
     # case rather than a contradiction -- which is the whole reason this is a list where
     # `active_color_by` is a single index. Applied conjunctively; an object draws when every
     # active rule keeps it.
-    active_filter_bys = models.JSONField(default=list, blank=True, help_text="(mesh) Which entries of `meshFilterBys` are currently applied, as indices into it. Combined with AND -- an object is drawn when every active rule keeps it. Empty applies none of them, so everything draws")
+    active_filter_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(mesh) Which entries of `meshFilterBys` are currently applied, as indices into it. Combined with AND -- an object is drawn when every active rule keeps it. Empty applies none of them, so everything draws",
+    )
 
     # The same two pickers again, for a point layer.
     #
@@ -1730,8 +2241,16 @@ class Layer(models.Model):
     # have positions and nothing else, so a colouring is the only thing that makes one point
     # differ from another. A picker names tables and sparse slices alike, which is most of what
     # there is to colour a point cloud by; the flat colour column that predated it is gone.
-    point_color_bys = models.JSONField(default=list, blank=True, help_text="(point) The colourings this layer offers, in the order a picker should show them. Each colours points by a column of a table this layer's ids key into, or by one slice of a sparse matrix they index. Empty means every point takes the flat colour")
-    point_filter_bys = models.JSONField(default=list, blank=True, help_text="(point) The filters this layer offers, in the order a picker should show them. Each keeps or drops points by a column of a table this layer's ids key into. Empty means nothing is offered and every point draws")
+    point_color_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(point) The colourings this layer offers, in the order a picker should show them. Each colours points by a column of a table this layer's ids key into, or by one slice of a sparse matrix they index. Empty means every point takes the flat colour",
+    )
+    point_filter_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(point) The filters this layer offers, in the order a picker should show them. Each keeps or drops points by a column of a table this layer's ids key into. Empty means nothing is offered and every point draws",
+    )
 
     # The same two pickers a fourth time, for a network layer -- columns named for the kind,
     # `active_color_by`/`active_filter_bys` shared, exactly per the rule stated above the point
@@ -1740,8 +2259,16 @@ class Layer(models.Model):
     # the collection itself carries -- Strahler order, degree, depth, component, a stored
     # radius, a writer's own column -- validated against the collection's manifest rather than
     # against a table, and aimed at nodes or edges by its `target`.
-    network_color_bys = models.JSONField(default=list, blank=True, help_text="(network) The colourings this layer offers, in the order a picker should show them. Each colours objects by a table column or sparse slice their ids reach, or nodes by a per-node attribute the collection itself carries. Empty means the flat material color is the only rendering")
-    network_filter_bys = models.JSONField(default=list, blank=True, help_text="(network) The filters this layer offers, in the order a picker should show them. Each keeps or drops objects by a reachable table column or sparse slice, or nodes and segments by a per-node attribute the collection carries. Empty means nothing is offered and everything draws")
+    network_color_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(network) The colourings this layer offers, in the order a picker should show them. Each colours objects by a table column or sparse slice their ids reach, or nodes by a per-node attribute the collection itself carries. Empty means the flat material color is the only rendering",
+    )
+    network_filter_bys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="(network) The filters this layer offers, in the order a picker should show them. Each keeps or drops objects by a reachable table column or sparse slice, or nodes and segments by a per-node attribute the collection carries. Empty means nothing is offered and everything draws",
+    )
 
     # --- vector render settings ---
     #
@@ -1767,4 +2294,3 @@ class Layer(models.Model):
         blank=True,
         help_text="(vector) How a magnitude becomes a drawn length: scene units per unit of the component axis. Null auto-normalizes to the sampled maximum. In scene units, so like `point_size` it is well defined for a layer only when its `placementInvariance` is SIMILARITY or better (RFC-8)",
     )
-

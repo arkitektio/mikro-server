@@ -143,20 +143,32 @@ class ColorByModel(BaseModel):
             )
 
         if self.kind == "COLUMN":
-            missing = [name for name in ("table", "column") if getattr(self, name) is None]
+            missing = [
+                name for name in ("table", "column") if getattr(self, name) is None
+            ]
             if missing:
-                raise ValueError(f"a column colouring reads a column of a table, so it requires {missing}")
+                raise ValueError(
+                    f"a column colouring reads a column of a table, so it requires {missing}"
+                )
             if self.lens is not None:
-                raise ValueError("a column colouring does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
+                raise ValueError(
+                    "a column colouring does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it"
+                )
             return self
 
         if self.kind == "GRAPH":
             if self.attribute is None:
-                raise ValueError("a graph colouring reads a per-node value the collection carries, so it requires `attribute`")
+                raise ValueError(
+                    "a graph colouring reads a per-node value the collection carries, so it requires `attribute`"
+                )
             if self.table is not None or self.column is not None or self.join_path:
-                raise ValueError("a graph colouring does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
+                raise ValueError(
+                    "a graph colouring does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them"
+                )
             if self.lens is not None:
-                raise ValueError("a graph colouring does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it")
+                raise ValueError(
+                    "a graph colouring does not read `lens`; that names a slice of a sparse matrix. Set `kind: SPARSE` to use it"
+                )
             if self.target is None:
                 # NODE is what an omitted target has always meant -- there was nothing else to
                 # target before edges could be addressed -- so old dumps rehydrate unchanged.
@@ -164,10 +176,15 @@ class ColorByModel(BaseModel):
             return self
 
         if self.lens is None:
-            raise ValueError("a sparse colouring reads one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by")
+            raise ValueError(
+                "a sparse colouring reads one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by"
+            )
         if self.table is not None or self.column is not None or self.join_path:
-            raise ValueError("a sparse colouring does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them")
+            raise ValueError(
+                "a sparse colouring does not read `table`, `column` or `joinPath`; those name a column of a table. Set `kind: COLUMN` to use them"
+            )
         return self
+
 
 class PickerColorByModel(ColorByModel):
     """One entry of a layer's colour picker: a joined column, and what to call it in the UI.

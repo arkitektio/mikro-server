@@ -41,9 +41,13 @@ def kind_for(system: models.CoordinateSystem) -> Kind:
         chart_logic.chart_axis(system)
     except ValueError as not_a_chart:
         axes = list(system.axes.all())
-        if len(axes) == 2 and all(axis.type in grid_logic.ENUMERATING_AXIS_TYPES for axis in axes):
+        if len(axes) == 2 and all(
+            axis.type in grid_logic.ENUMERATING_AXIS_TYPES for axis in axes
+        ):
             return "GRID"
-        if system.axes.filter(type__in=coordinate_system_logic.NAVIGABLE_TYPES).exists():
+        if system.axes.filter(
+            type__in=coordinate_system_logic.NAVIGABLE_TYPES
+        ).exists():
             return "SCENE"
         raise ValueError(
             f"Coordinate system '{system.name}' can be shown as neither a chart, a grid nor a scene. {not_a_chart} "
@@ -52,7 +56,9 @@ def kind_for(system: models.CoordinateSystem) -> Kind:
     return "CHART"
 
 
-def auto_visualize(system: models.CoordinateSystem, *, name: str | None, ctx: CreationContext) -> "models.Scene | chart_models.Chart | grid_models.Grid":
+def auto_visualize(
+    system: models.CoordinateSystem, *, name: str | None, ctx: CreationContext
+) -> "models.Scene | chart_models.Chart | grid_models.Grid":
     """A scene or a chart over an existing space, drawn from what already resides in it.
 
     Each bootstrap keeps its own defaults and its own reading of what resides in a space. The
@@ -62,10 +68,16 @@ def auto_visualize(system: models.CoordinateSystem, *, name: str | None, ctx: Cr
     """
     shown_as = kind_for(system)
     if shown_as == "CHART":
-        return chart_logic.bootstrap_chart_from_system(system, name=name, policy=chart_logic.Policy(), ctx=ctx)
+        return chart_logic.bootstrap_chart_from_system(
+            system, name=name, policy=chart_logic.Policy(), ctx=ctx
+        )
     if shown_as == "GRID":
-        return grid_logic.bootstrap_grid_from_system(system, name=name, policy=grid_logic.Policy(), ctx=ctx)
-    return scene_logic.bootstrap_scene_from_system(system, ScenePolicyInputModel(skip_unplaceable=True), ctx, name=name)
+        return grid_logic.bootstrap_grid_from_system(
+            system, name=name, policy=grid_logic.Policy(), ctx=ctx
+        )
+    return scene_logic.bootstrap_scene_from_system(
+        system, ScenePolicyInputModel(skip_unplaceable=True), ctx, name=name
+    )
 
 
 #: The chart layer a lens of each kind is drawn as. A kind that is not here has none.
@@ -76,23 +88,47 @@ _CHART_LAYER_KIND: dict[type, str] = {
 }
 
 
-def _chart_of_values(lens: models.TableLens, *, name: str | None, ctx: CreationContext) -> chart_models.Chart | None:
+def _chart_of_values(
+    lens: models.TableLens, *, name: str | None, ctx: CreationContext
+) -> chart_models.Chart | None:
     """A chart of a table lens' values, over its table's space: a scatter of its first two numeric attribute columns, or a histogram of its only one. None when it has none."""
     table = lens.table_dataset
-    measured = [column.name for column in table.columns.all() if column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value and chart_logic.is_numeric(column)]
+    measured = [
+        column.name
+        for column in table.columns.all()
+        if column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value
+        and chart_logic.is_numeric(column)
+    ]
     if not measured:
         return None
     label = table.name if not lens.name else f"{table.name} · {lens.name}"
     with transaction.atomic():
-        chart = chart_logic.create_chart(name=name or label, world=table.coordinate_system, ctx=ctx)
+        chart = chart_logic.create_chart(
+            name=name or label, world=table.coordinate_system, ctx=ctx
+        )
         if len(measured) > 1:
-            chart_logic.create_layer(chart, kind=chart_enums.ChartLayerKindChoices.POINTS.value, source=lens, x_column=measured[0], y_column=measured[1], name=lens.name or table.name)
+            chart_logic.create_layer(
+                chart,
+                kind=chart_enums.ChartLayerKindChoices.POINTS.value,
+                source=lens,
+                x_column=measured[0],
+                y_column=measured[1],
+                name=lens.name or table.name,
+            )
         else:
-            chart_logic.create_layer(chart, kind=chart_enums.ChartLayerKindChoices.DISTRIBUTION.value, source=lens, value_column=measured[0], name=lens.name or table.name)
+            chart_logic.create_layer(
+                chart,
+                kind=chart_enums.ChartLayerKindChoices.DISTRIBUTION.value,
+                source=lens,
+                value_column=measured[0],
+                name=lens.name or table.name,
+            )
     return chart
 
 
-def auto_visualize_lens(lens: models.Lens, *, name: str | None, ctx: CreationContext) -> "models.Scene | chart_models.Chart | grid_models.Grid":
+def auto_visualize_lens(
+    lens: models.Lens, *, name: str | None, ctx: CreationContext
+) -> "models.Scene | chart_models.Chart | grid_models.Grid":
     """A scene or a chart of one lens: its selection, and nothing else of its container.
 
     The lens-first twin of :func:`auto_visualize`, for the reason ``bootstrap_scene_from_lens``
@@ -120,19 +156,46 @@ def auto_visualize_lens(lens: models.Lens, *, name: str | None, ctx: CreationCon
         # Members against members: a sparse matrix or an array as a heatmap of its values, a
         # long-form table as cells coloured by its one numeric column.
         container = lens.container
-        label = getattr(container, "name", None) or getattr(container, "label", None) or f"{type(container).__name__} {container.pk}"
-        kind = grid_enums.GridLayerKindChoices.CELLS.value if isinstance(lens, models.TableLens) else grid_enums.GridLayerKindChoices.HEATMAP.value
+        label = (
+            getattr(container, "name", None)
+            or getattr(container, "label", None)
+            or f"{type(container).__name__} {container.pk}"
+        )
+        kind = (
+            grid_enums.GridLayerKindChoices.CELLS.value
+            if isinstance(lens, models.TableLens)
+            else grid_enums.GridLayerKindChoices.HEATMAP.value
+        )
         with transaction.atomic():
-            grid = grid_logic.create_grid(name=name or (f"{label} · {lens.name}" if lens.name else label), world=system, ctx=ctx)
-            grid_logic.create_layer(grid, kind=kind, source=lens, name=lens.name or label)
+            grid = grid_logic.create_grid(
+                name=name or (f"{label} · {lens.name}" if lens.name else label),
+                world=system,
+                ctx=ctx,
+            )
+            grid_logic.create_layer(
+                grid, kind=kind, source=lens, name=lens.name or label
+            )
         return grid
 
-    kind = next((kind for model, kind in _CHART_LAYER_KIND.items() if isinstance(lens, model)), None)
+    kind = next(
+        (kind for model, kind in _CHART_LAYER_KIND.items() if isinstance(lens, model)),
+        None,
+    )
     if kind is None:
-        raise ValueError(f"Lens {lens.pk} over {type(lens.container).__name__} {lens.container.pk} cannot be charted: no chart layer reads a {type(lens).__name__}.")
+        raise ValueError(
+            f"Lens {lens.pk} over {type(lens.container).__name__} {lens.container.pk} cannot be charted: no chart layer reads a {type(lens).__name__}."
+        )
     container = lens.container
-    label = getattr(container, "name", None) or getattr(container, "label", None) or f"{type(container).__name__} {container.pk}"
+    label = (
+        getattr(container, "name", None)
+        or getattr(container, "label", None)
+        or f"{type(container).__name__} {container.pk}"
+    )
     with transaction.atomic():
-        chart = chart_logic.create_chart(name=name or (f"{label} · {lens.name}" if lens.name else label), world=system, ctx=ctx)
+        chart = chart_logic.create_chart(
+            name=name or (f"{label} · {lens.name}" if lens.name else label),
+            world=system,
+            ctx=ctx,
+        )
         chart_logic.create_layer(chart, kind=kind, source=lens, name=lens.name or label)
     return chart

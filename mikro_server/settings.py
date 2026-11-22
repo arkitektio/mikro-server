@@ -10,9 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
-from pathlib import Path
-from django.core.exceptions import ImproperlyConfigured
 import os
+from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+
 from .configuration import Settings
 from .logs import build_logging
 
@@ -35,7 +37,9 @@ SECRET_KEY = conf.django.secret_key
 DEBUG = conf.django.debug
 
 if not DEBUG and SECRET_KEY in ("", "changeme"):
-    raise ImproperlyConfigured("django.secret_key must be set in config.yaml when django.debug is false")
+    raise ImproperlyConfigured(
+        "django.secret_key must be set in config.yaml when django.debug is false"
+    )
 
 ALLOWED_HOSTS: list[str] = list(conf.django.hosts)
 
@@ -86,13 +90,15 @@ CHANNEL_LAYERS = {
     "default": {
         # This example app uses the Redis channel layer implementation channels_redis
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [(conf.redis.host, conf.redis.port)], "prefix": conf.redis.channel_prefix},
+        "CONFIG": {
+            "hosts": [(conf.redis.host, conf.redis.port)],
+            "prefix": conf.redis.channel_prefix,
+        },
     },
 }
 
 
 DATALAYER = conf.datalayer.model_dump(exclude_none=True) if conf.datalayer else {}
-
 
 
 CSRF_TRUSTED_ORIGINS = conf.django.csrf_trusted_origins
@@ -117,19 +123,31 @@ EMBEDDINGS = {
 # service (what exists here: ``rekuest_service``) and the hook agent (what can be done here:
 # ``rekuest_hook``). Both read where rekuest is from the same ``rekuest_hook`` config block.
 REKUEST_SERVICE = (
-    {"REKUEST_URL": conf.rekuest_hook.rekuest_url, "SERVICE": conf.rekuest_hook.service, "MAX_SKEW": conf.rekuest_hook.max_skew}
+    {
+        "REKUEST_URL": conf.rekuest_hook.rekuest_url,
+        "SERVICE": conf.rekuest_hook.service,
+        "MAX_SKEW": conf.rekuest_hook.max_skew,
+    }
     if conf.rekuest_hook
     else None
 )
 REKUEST_HOOK = (
-    {"REKUEST_URL": conf.rekuest_hook.rekuest_url, "AGENT": conf.rekuest_hook.service, "MAX_SKEW": conf.rekuest_hook.max_skew}
+    {
+        "REKUEST_URL": conf.rekuest_hook.rekuest_url,
+        "AGENT": conf.rekuest_hook.service,
+        "MAX_SKEW": conf.rekuest_hook.max_skew,
+    }
     if conf.rekuest_hook
     else None
 )
 # This instance's key and the hub trust bundle (``arkitekt_service.trust``): requests to and from
 # rekuest are signed with instance keys the coord vouches for — no shared secrets.
 INSTANCE = (
-    {"PRIVATE_KEY": conf.instance.private_key, "TRUST_JWKS_URI": conf.instance.trust.jwks_uri, "TRUST_JWKS": conf.instance.trust.jwks}
+    {
+        "PRIVATE_KEY": conf.instance.private_key,
+        "TRUST_JWKS_URI": conf.instance.trust.jwks_uri,
+        "TRUST_JWKS": conf.instance.trust.jwks,
+    }
     if conf.instance
     else None
 )
@@ -240,8 +258,6 @@ WHITENOISE_USE_FINDERS = True
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-
 
 
 # Console logging: one plain line per record on root; see logs.py. ``LOG_LEVEL=DEBUG``

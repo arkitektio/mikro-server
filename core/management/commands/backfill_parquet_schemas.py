@@ -17,10 +17,9 @@ described. The count of what remains is printed on every run, so the finish line
 rather than a memory.
 """
 
-from django.core.management.base import BaseCommand
-
 from arkitekt_datalayer.datalayer import Datalayer
 from arkitekt_datalayer.models import ParquetStore
+from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
@@ -37,10 +36,16 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         datalayer = Datalayer()
 
-        pending = ParquetStore.objects.filter(populated=True, columns__isnull=True).order_by("pk")
+        pending = ParquetStore.objects.filter(
+            populated=True, columns__isnull=True
+        ).order_by("pk")
         total = pending.count()
         if not total:
-            self.stdout.write(self.style.SUCCESS("Every finished parquet store already records its schema."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Every finished parquet store already records its schema."
+                )
+            )
             return
 
         self.stdout.write(f"{total} finished parquet store(s) with no recorded schema.")
@@ -54,19 +59,27 @@ class Command(BaseCommand):
                 columns = datalayer.get_parquet_schema(store)
             except Exception as error:  # noqa: BLE001 - one unreadable store must not stop the rest
                 failed += 1
-                self.stderr.write(self.style.WARNING(f"  store {store.pk} ({store.key}): could not describe -- {error}"))
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"  store {store.pk} ({store.key}): could not describe -- {error}"
+                    )
+                )
                 continue
 
             described += 1
             if dry_run:
-                self.stdout.write(f"  store {store.pk} ({store.key}): {len(columns)} column(s) -- {', '.join(column.name for column in columns)}")
+                self.stdout.write(
+                    f"  store {store.pk} ({store.key}): {len(columns)} column(s) -- {', '.join(column.name for column in columns)}"
+                )
                 continue
 
             store.columns = [column.model_dump() for column in columns]
             store.save(update_fields=["columns"])
 
         verb = "would record" if dry_run else "recorded"
-        self.stdout.write(self.style.SUCCESS(f"{verb} the schema of {described} store(s)."))
+        self.stdout.write(
+            self.style.SUCCESS(f"{verb} the schema of {described} store(s).")
+        )
         if failed:
             self.stdout.write(
                 self.style.WARNING(

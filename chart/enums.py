@@ -18,21 +18,36 @@ class ChartKindChoices(TextChoices):
     """
 
     AXIS = "axis", "Axis (laid along its world's one measured axis)"
-    VALUES = "values", "Values (rows drawn at the values of their columns; the world is whose rows)"
+    VALUES = (
+        "values",
+        "Values (rows drawn at the values of their columns; the world is whose rows)",
+    )
 
 
 class ChartLayoutChoices(TextChoices):
     STACKED = "stacked", "Stacked (one row or panel per layer, each on its own scale)"
-    SHARED = "shared", "Shared (layers measuring the same thing overlaid on one scale; the rest beside them)"
-    OVERLAY = "overlay", "Overlay (every along-axis layer in one plot, each on its own scale; value layers lay out as shared)"
+    SHARED = (
+        "shared",
+        "Shared (layers measuring the same thing overlaid on one scale; the rest beside them)",
+    )
+    OVERLAY = (
+        "overlay",
+        "Overlay (every along-axis layer in one plot, each on its own scale; value layers lay out as shared)",
+    )
 
 
 class ChartLayerKindChoices(TextChoices):
     TRACE = "trace", "Trace (an array read along one axis)"
     SERIES = "series", "Series (a table's value column against a coordinate column)"
     ANNOTATION = "annotation", "Annotation (drawn marks)"
-    POINTS = "points", "Points (a table's rows at the values of two or three of its columns)"
-    DISTRIBUTION = "distribution", "Distribution (a table's rows summarised by the values of one of its columns)"
+    POINTS = (
+        "points",
+        "Points (a table's rows at the values of two or three of its columns)",
+    )
+    DISTRIBUTION = (
+        "distribution",
+        "Distribution (a table's rows summarised by the values of one of its columns)",
+    )
 
 
 class ChartMarkerShapeChoices(TextChoices):
@@ -44,7 +59,9 @@ class ChartMarkerShapeChoices(TextChoices):
     PLUS = "plus", "Plus"
 
 
-@strawberry.enum(description="The symbol each marker is drawn as. A look: it changes nothing about what the layer reads")
+@strawberry.enum(
+    description="The symbol each marker is drawn as. A look: it changes nothing about what the layer reads"
+)
 class ChartMarkerShape(str, Enum):
     """The symbol a marker is drawn as."""
 
@@ -127,15 +144,39 @@ SOURCE_FIELD: dict[str, str] = {
 }
 
 #: The layer kinds laid along the chart's world axis: they need a world of one measured axis.
-PLACED_KINDS: frozenset[str] = frozenset({ChartLayerKindChoices.TRACE.value, ChartLayerKindChoices.SERIES.value, ChartLayerKindChoices.ANNOTATION.value})
+PLACED_KINDS: frozenset[str] = frozenset(
+    {
+        ChartLayerKindChoices.TRACE.value,
+        ChartLayerKindChoices.SERIES.value,
+        ChartLayerKindChoices.ANNOTATION.value,
+    }
+)
 
 #: The layer kinds drawn by their values: rows placed in the chart's world, drawn at their columns' values.
-VALUE_KINDS: frozenset[str] = frozenset({ChartLayerKindChoices.POINTS.value, ChartLayerKindChoices.DISTRIBUTION.value})
+VALUE_KINDS: frozenset[str] = frozenset(
+    {ChartLayerKindChoices.POINTS.value, ChartLayerKindChoices.DISTRIBUTION.value}
+)
 
 #: The looks each kind may take, the first its default. ANNOTATION draws marks, which have no look here.
 MARKS: dict[str, tuple[str, ...]] = {
-    ChartLayerKindChoices.TRACE.value: (ChartMarkChoices.LINE.value, ChartMarkChoices.MARKERS.value, ChartMarkChoices.LINE_MARKERS.value, ChartMarkChoices.STEPS.value),
-    ChartLayerKindChoices.SERIES.value: (ChartMarkChoices.LINE.value, ChartMarkChoices.MARKERS.value, ChartMarkChoices.LINE_MARKERS.value, ChartMarkChoices.STEPS.value),
-    ChartLayerKindChoices.POINTS.value: (ChartMarkChoices.MARKERS.value, ChartMarkChoices.LINE.value),
-    ChartLayerKindChoices.DISTRIBUTION.value: (ChartMarkChoices.HISTOGRAM.value, ChartMarkChoices.BOX.value),
+    ChartLayerKindChoices.TRACE.value: (
+        ChartMarkChoices.LINE.value,
+        ChartMarkChoices.MARKERS.value,
+        ChartMarkChoices.LINE_MARKERS.value,
+        ChartMarkChoices.STEPS.value,
+    ),
+    ChartLayerKindChoices.SERIES.value: (
+        ChartMarkChoices.LINE.value,
+        ChartMarkChoices.MARKERS.value,
+        ChartMarkChoices.LINE_MARKERS.value,
+        ChartMarkChoices.STEPS.value,
+    ),
+    ChartLayerKindChoices.POINTS.value: (
+        ChartMarkChoices.MARKERS.value,
+        ChartMarkChoices.LINE.value,
+    ),
+    ChartLayerKindChoices.DISTRIBUTION.value: (
+        ChartMarkChoices.HISTOGRAM.value,
+        ChartMarkChoices.BOX.value,
+    ),
 }

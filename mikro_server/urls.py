@@ -15,18 +15,21 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from django.contrib import admin
-from kante.path import dynamicpath
-from health_check.views import MainView
-from django.views.decorators.csrf import csrf_exempt
 from arkitekt_service.service.views import answers_challenge
+from django.contrib import admin
+from django.views.decorators.csrf import csrf_exempt
+from health_check.views import MainView
+from kante.path import dynamicpath
+
+from metric.feed import publisher as metric_feed
 from mikro_server.hook_agent import agent as hook_agent
 from mikro_server.service import service as rekuest_service
-from metric.feed import publisher as metric_feed
 
 urlpatterns = [
     dynamicpath("admin/", admin.site.urls),
-    dynamicpath("ht",  answers_challenge(csrf_exempt(MainView.as_view())), name="health_check"),
+    dynamicpath(
+        "ht", answers_challenge(csrf_exempt(MainView.as_view())), name="health_check"
+    ),
     # What this service hosts and emits, read by the hub's rekuest (internal network only).
     *rekuest_service.urls,
     # This process's hook agent: the hub's rekuest POSTs it Assigns (internal network only). Not the service's.

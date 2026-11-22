@@ -9,34 +9,37 @@ single INDEX axis whose only honest edge is UNMAPPABLE -- the measurement-table 
 the old FeatureCollection served.
 """
 
-
+import kante
 import strawberry
+from arkitekt_datalayer.datalayer import get_current_datalayer
 from django.db import transaction
 from kante.types import Info
 from pydantic import BaseModel, ConfigDict, Field
 
-import kante
-from arkitekt_datalayer.datalayer import get_current_datalayer
-from kanne_server import scalars as kanne_scalars
-
-from core import enums, models, scalars, types
-from core import derived
+from core import derived, enums, models, scalars, types
 from core.creation import CreationContext
-from core.inputs.file_link import SourceFileInput, SourceFileInputModel
 from core.inputs.coords import AxisInputModel, DerivedFromInput, DerivedFromSpec
+from core.inputs.file_link import SourceFileInput, SourceFileInputModel
 from core.inputs.identification import IdentificationInput, IdentificationSpec
-from core.logic import table_stats
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
+from core.logic import deletion as deletion_logic
 from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
 from core.logic import identification as identification_logic
+from core.logic import table_stats
 from core.logic import tables as tables_logic
-from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
-from core.mutations.array_dataset import CoordinateAnchorInput, CoordinateAnchorInputModel, _get_or_create_anchor, _write_anchor_spokes, assert_anchors_name_axes
+from core.mutations.array_dataset import (
+    CoordinateAnchorInput,
+    CoordinateAnchorInputModel,
+    _get_or_create_anchor,
+    _write_anchor_spokes,
+    assert_anchors_name_axes,
+)
 from core.scoping import get_for_org
+from kanne_server import scalars as kanne_scalars
 
 #: The degenerate space of a table with no coordinate columns: one axis enumerating the
 #: rows. No unit (nothing to measure between object 3 and object 4), no second axis (the
@@ -57,7 +60,12 @@ _INDEX_AXES = [AxisInputModel(name="object", type=enums.AxisType.INDEX)]
 #: its coordinates -- that rule is what makes this consistent rather than an exception. The
 #: rendering rationale that holds MICROTIME back does not reach it, and it cannot leak into a
 #: layer: both layer paths filter coordinate columns to SPACE.
-_COORDINATE_AXIS_TYPES = {enums.AxisType.SPACE, enums.AxisType.TIME, enums.AxisType.INDEX, enums.AxisType.CHANNEL}
+_COORDINATE_AXIS_TYPES = {
+    enums.AxisType.SPACE,
+    enums.AxisType.TIME,
+    enums.AxisType.INDEX,
+    enums.AxisType.CHANNEL,
+}
 
 #: The coordinate types that enumerate and so carry no unit.
 _UNITLESS_COORDINATE_TYPES = {enums.AxisType.INDEX, enums.AxisType.CHANNEL}
@@ -101,7 +109,9 @@ class ColumnInputModel(BaseModel):
 class ColumnInput:
     """One declared column of a table dataset."""
 
-    name: str = strawberry.field(description="The column name, matching the Parquet column at this position")
+    name: str = strawberry.field(
+        description="The column name, matching the Parquet column at this position"
+    )
     dtype: str | None = strawberry.field(
         default=None,
         description=(
@@ -130,8 +140,13 @@ class ColumnInput:
             "(a table's spatial axes must be all calibrated or all pixel-index), and forbidden on an INDEX axis, which enumerates and has no metric"
         ),
     )
-    long_name: str | None = strawberry.field(default=None, description="A human-readable name for the column")
-    description: str | None = strawberry.field(default=None, description="A free-form description of what the column holds, e.g. 'mean GFP intensity within the segmented object'")
+    long_name: str | None = strawberry.field(
+        default=None, description="A human-readable name for the column"
+    )
+    description: str | None = strawberry.field(
+        default=None,
+        description="A free-form description of what the column holds, e.g. 'mean GFP intensity within the segmented object'",
+    )
     identified_by: list[IdentificationInput] = strawberry.field(
         default_factory=list,
         description=(
@@ -148,7 +163,7 @@ class ColumnInput:
         default=None,
         description=(
             "For a long-form table: the CHANNEL coordinate columns this data column's value changes along. In a `(cell, c, volume, mean)` table a per-cell `volume` varies over "
-            "nothing (`[]`) and is read once per cell, a per-channel `mean` over `[\"c\"]`. Omit it to read the column as varying over every CHANNEL coordinate. Refused on a "
+            'nothing (`[]`) and is read once per cell, a per-channel `mean` over `["c"]`. Omit it to read the column as varying over every CHANNEL coordinate. Refused on a '
             "coordinate column and on a name that is not a CHANNEL coordinate of this table"
         ),
     )
@@ -178,7 +193,9 @@ class CreateTableDatasetInput:
     """Input for creating a table dataset."""
 
     name: str = strawberry.field(description="The name of the table dataset")
-    data: scalars.ParquetLike = strawberry.field(description="The uploaded Parquet store holding the rows. Upload it through the normal parquet path (requestParquetUpload) and pass the store id here")
+    data: scalars.ParquetLike = strawberry.field(
+        description="The uploaded Parquet store holding the rows. Upload it through the normal parquet path (requestParquetUpload) and pass the store id here"
+    )
     columns: list[ColumnInput] = strawberry.field(
         default_factory=list,
         description=(
@@ -187,7 +204,9 @@ class CreateTableDatasetInput:
             "space"
         ),
     )
-    description: str | None = strawberry.field(default=None, description="An optional description")
+    description: str | None = strawberry.field(
+        default=None, description="An optional description"
+    )
     folder: strawberry.ID | None = strawberry.field(
         default=None,
         description="The folder to file this table dataset in. Organisational only -- it says nothing about where the rows sit in space. Defaults to the user's default folder",
@@ -296,9 +315,13 @@ def _validate_declaration(
         raise ValueError(_too_wide(len(file_columns), name))
 
     declared_names = [column.name for column in columns]
-    duplicates = sorted({column for column in declared_names if declared_names.count(column) > 1})
+    duplicates = sorted(
+        {column for column in declared_names if declared_names.count(column) > 1}
+    )
     if duplicates:
-        raise ValueError(f"'{name}' declares the column {duplicates} more than once. Each column of the file is declared once.")
+        raise ValueError(
+            f"'{name}' declares the column {duplicates} more than once. Each column of the file is declared once."
+        )
 
     file_names = [column.name for column in file_columns]
     if declared_names != file_names:
@@ -310,7 +333,9 @@ def _validate_declaration(
         if extra:
             detail.append(f"the declaration has {extra} and the file does not")
         if not detail:
-            detail.append(f"they are the same columns in a different order -- the file runs {file_names} and the declaration runs {declared_names}")
+            detail.append(
+                f"they are the same columns in a different order -- the file runs {file_names} and the declaration runs {declared_names}"
+            )
         raise ValueError(
             f"'{name}' does not describe its Parquet: {'; '.join(detail)}. Every column of the file is declared, in the file's order, because the declaration is a statement "
             "about *these* bytes -- and a declaration that has drifted from the data is worth less than none, since everything downstream reads it as true."
@@ -324,7 +349,10 @@ def _validate_declaration(
         if declared.dtype is not None and declared.dtype != recorded.type
     ]
     if wrong:
-        detail = "; ".join(f"'{column}' is declared {given} and the file records {recorded}" for column, given, recorded in wrong)
+        detail = "; ".join(
+            f"'{column}' is declared {given} and the file records {recorded}"
+            for column, given, recorded in wrong
+        )
         raise ValueError(
             f"'{name}' declares types the Parquet does not have: {detail}. `dtype` is a **DuckDB** type name, which is what the file is read back as -- a pandas float64 is a "
             "`DOUBLE` and a float32 is a `FLOAT`, and the pandas spellings are not these."
@@ -344,12 +372,19 @@ def _validate_declaration(
                 f"Column '{column.name}' of '{name}' is declared COORDINATE, but a coordinate column is an axis: say so with `axisType` (SPACE, TIME, INDEX or CHANNEL), which is what "
                 "makes it one -- its role follows from that."
             )
-        if column.axis_type is None and column.unit is not None and (column.role or enums.ColumnRole.ATTRIBUTE) not in _UNIT_BEARING_ROLES:
+        if (
+            column.axis_type is None
+            and column.unit is not None
+            and (column.role or enums.ColumnRole.ATTRIBUTE) not in _UNIT_BEARING_ROLES
+        ):
             raise ValueError(
                 f"Column '{column.name}' of '{name}' declares a unit but has role {column.role.value}, which is not measured -- a unit on it would name a metric that does not "
                 "exist. Only an ATTRIBUTE column (or an axis) carries one."
             )
-        if column.axis_type is not None and column.axis_type not in _COORDINATE_AXIS_TYPES:
+        if (
+            column.axis_type is not None
+            and column.axis_type not in _COORDINATE_AXIS_TYPES
+        ):
             raise ValueError(
                 f"Column '{column.name}' of '{name}' has axisType {column.axis_type.value}, but a table's axes are SPACE, TIME, INDEX or CHANNEL -- a row is placed by a "
                 "position, an instant, an enumeration or a channel, and nothing else is one of those."
@@ -367,17 +402,32 @@ def _validate_declaration(
     # A long-form column says which channel axes its value changes along, so a reader counts a
     # per-cell value once per cell rather than once per channel. Named among the CHANNEL
     # coordinates this table declares -- the only axes a row repeats along.
-    channels = {column.name for column in columns if column.axis_type == enums.AxisType.CHANNEL}
+    channels = {
+        column.name for column in columns if column.axis_type == enums.AxisType.CHANNEL
+    }
     for column in columns:
         if column.varies_over is None:
             continue
         if column.axis_type is not None:
-            raise ValueError(f"Column '{column.name}' of '{name}' is a coordinate column and declares `variesOver`. A coordinate is part of the row's key, not a value that varies along it -- drop `variesOver`.")
-        if column.role not in (None, enums.ColumnRole.ATTRIBUTE, enums.ColumnRole.LABEL, enums.ColumnRole.GROUP_ID):
-            raise ValueError(f"Column '{column.name}' of '{name}' has role {column.role.value} and declares `variesOver`, which only a value a row carries -- an ATTRIBUTE, LABEL or GROUP_ID -- can.")
-        repeated = sorted({axis for axis in column.varies_over if column.varies_over.count(axis) > 1})
+            raise ValueError(
+                f"Column '{column.name}' of '{name}' is a coordinate column and declares `variesOver`. A coordinate is part of the row's key, not a value that varies along it -- drop `variesOver`."
+            )
+        if column.role not in (
+            None,
+            enums.ColumnRole.ATTRIBUTE,
+            enums.ColumnRole.LABEL,
+            enums.ColumnRole.GROUP_ID,
+        ):
+            raise ValueError(
+                f"Column '{column.name}' of '{name}' has role {column.role.value} and declares `variesOver`, which only a value a row carries -- an ATTRIBUTE, LABEL or GROUP_ID -- can."
+            )
+        repeated = sorted(
+            {axis for axis in column.varies_over if column.varies_over.count(axis) > 1}
+        )
         if repeated:
-            raise ValueError(f"Column '{column.name}' of '{name}' names {repeated} more than once in `variesOver`.")
+            raise ValueError(
+                f"Column '{column.name}' of '{name}' names {repeated} more than once in `variesOver`."
+            )
         unknown = [axis for axis in column.varies_over if axis not in channels]
         if unknown:
             raise ValueError(
@@ -385,13 +435,20 @@ def _validate_declaration(
                 f"({sorted(channels) or 'it declares none'}). `variesOver` names the channel axes a long-form row repeats along."
             )
 
-    for role, label in ((enums.ColumnRole.TRACK_ID, "TRACK_ID"), (enums.ColumnRole.ID, "ID")):
+    for role, label in (
+        (enums.ColumnRole.TRACK_ID, "TRACK_ID"),
+        (enums.ColumnRole.ID, "ID"),
+    ):
         count = sum(1 for column in columns if column.role == role)
         if count > 1:
-            raise ValueError(f"'{name}' declares {count} {label} columns, but a table has at most one.")
+            raise ValueError(
+                f"'{name}' declares {count} {label} columns, but a table has at most one."
+            )
 
 
-def resolve_reference_target(info: Info, target_id: str, label: str) -> models.TableDataset:
+def resolve_reference_target(
+    info: Info, target_id: str, label: str
+) -> models.TableDataset:
     """The table ``target_id`` names, refusing one a single value cannot identify a row of.
 
     Extracted so the sparse path uses the same rule rather than a second copy of it: a sparse
@@ -405,9 +462,15 @@ def resolve_reference_target(info: Info, target_id: str, label: str) -> models.T
     axes = target.axes
     if len(axes) != 1 or axes[0].type != enums.AxisType.INDEX.value:
         described = ", ".join(f"{axis.name}:{axis.type}" for axis in axes) or "none"
-        raise ValueError(f"{label} references table '{target.name}', but a reference target must be keyed by exactly one INDEX axis (its axes are [{described}]). A composite-keyed table cannot be identified by a single value.")
-    if not target.columns.filter(role=enums.ColumnRole.COORDINATE.value, name=axes[0].name).exists():
-        raise ValueError(f"{label} references table '{target.name}', whose INDEX axis '{axes[0].name}' is synthetic row enumeration (the table declares no coordinate columns). There is no column to look a value up in, so it cannot be a reference target.")
+        raise ValueError(
+            f"{label} references table '{target.name}', but a reference target must be keyed by exactly one INDEX axis (its axes are [{described}]). A composite-keyed table cannot be identified by a single value."
+        )
+    if not target.columns.filter(
+        role=enums.ColumnRole.COORDINATE.value, name=axes[0].name
+    ).exists():
+        raise ValueError(
+            f"{label} references table '{target.name}', whose INDEX axis '{axes[0].name}' is synthetic row enumeration (the table declares no coordinate columns). There is no column to look a value up in, so it cannot be a reference target."
+        )
     return target
 
 
@@ -448,7 +511,9 @@ def _assert_node_axes_are_scoped(
             )
 
 
-def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.TableDataset:
+def create_table_dataset(
+    info: Info, input: CreateTableDatasetInput
+) -> types.TableDataset:
     """Create a table dataset, its owned coordinate system, and (optionally) its lineage edge."""
     model = input.to_pydantic()
     ctx = CreationContext.from_info(info)
@@ -464,7 +529,11 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
     # An anchor is keyed by the coordinate columns' names and read back by name, so one that
     # pins a column the table does not have would silently label nothing. Checked before
     # anything is written.
-    assert_anchors_name_axes(model.anchors or [], [column.name for column in model.columns if column.axis_type is not None], what="table")
+    assert_anchors_name_axes(
+        model.anchors or [],
+        [column.name for column in model.columns if column.axis_type is not None],
+        what="table",
+    )
 
     # The axis-typed columns, in declaration (= file) order, ARE the space. There is no
     # separate axes list to reorder them with, deliberately: a table has no byte order, its
@@ -478,11 +547,13 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
     # two masks appears twice. Shared with the sparse create. One door for every column:
     # this is where the old `ColumnInput.references` lives now, as a TABLE identification on
     # a data column.
-    reference_targets, node_reference_targets, keyed = identification_logic.split_identifications(
-        info,
-        name=model.name,
-        entries=[(column.name, column.identified_by) for column in model.columns],
-        axis_types={column.name: column.axis_type for column in model.columns},
+    reference_targets, node_reference_targets, keyed = (
+        identification_logic.split_identifications(
+            info,
+            name=model.name,
+            entries=[(column.name, column.identified_by) for column in model.columns],
+            axis_types={column.name: column.axis_type for column in model.columns},
+        )
     )
     _assert_node_axes_are_scoped(model.name, node_reference_targets, keyed)
 
@@ -494,7 +565,9 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             name=column.name,
             # The declared type where one was declared, the file's where not. They agree by
             # the check above, so this is the same value by either route.
-            dtype=column.dtype if column.dtype is not None else file_columns[index].type,
+            dtype=column.dtype
+            if column.dtype is not None
+            else file_columns[index].type,
             # An axis-typed column is a COORDINATE by that fact rather than by saying so twice.
             role=(
                 enums.ColumnRole.COORDINATE.value
@@ -522,7 +595,9 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
             name=model.name,
             description=model.description,
             store=store,
-            folder=folder_logic.folder_for_new_container(info, ctx, model.folder, model.derived_from),
+            folder=folder_logic.folder_for_new_container(
+                info, ctx, model.folder, model.derived_from
+            ),
             stored_spec=[member.value for member in spec],
             creator=ctx.user,
             organization=ctx.organization,
@@ -547,8 +622,16 @@ def create_table_dataset(info: Info, input: CreateTableDatasetInput) -> types.Ta
         else:
             graph_logic.create_pixel_axes(system, _INDEX_AXES)
 
-        coordinate_system_logic.write_derivation_edges(info, name=dataset.name, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
-        file_link_logic.write_file_links(info, container=dataset, source_files=model.source_files or [], ctx=ctx)
+        coordinate_system_logic.write_derivation_edges(
+            info,
+            name=dataset.name,
+            own_system=system,
+            derived_from=model.derived_from or [],
+            ctx=ctx,
+        )
+        file_link_logic.write_file_links(
+            info, container=dataset, source_files=model.source_files or [], ctx=ctx
+        )
         # `produces` is stated now rather than derived: every entry names the axis it keys,
         # so a source that supplies a different one is refused naming both halves instead of
         # "one place holds one id".
@@ -581,16 +664,25 @@ class UpdateTableDatasetInputModel(BaseModel):
     description: str | None = None
 
 
-@kante.pydantic_input(UpdateTableDatasetInputModel, description="Input for renaming or redescribing a table dataset. These two fields are the whole of what is editable: the store, the declared columns and the coordinate system derived from them are fixed at creation, and a recomputation is a new table")
+@kante.pydantic_input(
+    UpdateTableDatasetInputModel,
+    description="Input for renaming or redescribing a table dataset. These two fields are the whole of what is editable: the store, the declared columns and the coordinate system derived from them are fixed at creation, and a recomputation is a new table",
+)
 class UpdateTableDatasetInput:
     """Input for updating a table dataset."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the table dataset to update")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the table dataset to update"
+    )
     name: str | None = strawberry.field(default=None, description="A new name")
-    description: str | None = strawberry.field(default=None, description="A new description")
+    description: str | None = strawberry.field(
+        default=None, description="A new description"
+    )
 
 
-def update_table_dataset(info: Info, input: UpdateTableDatasetInput) -> types.TableDataset:
+def update_table_dataset(
+    info: Info, input: UpdateTableDatasetInput
+) -> types.TableDataset:
     """Rename a table dataset, or redescribe it. Those two fields are the whole of what is editable.
 
     Deliberately not here: the store, the declared columns, and the coordinate system derived
@@ -614,15 +706,26 @@ class DeleteTableDatasetInputModel(BaseModel):
     cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-@kante.pydantic_input(DeleteTableDatasetInputModel, description="Input for deleting a table dataset by ID")
+@kante.pydantic_input(
+    DeleteTableDatasetInputModel, description="Input for deleting a table dataset by ID"
+)
 class DeleteTableDatasetInput:
     """Input for deleting a table dataset by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the table dataset to delete")
-    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the table dataset to delete"
+    )
+    cascade: bool = strawberry.field(
+        default=False, description=deletion_logic.CASCADE_DESCRIPTION
+    )
 
 
 #: PROTECT: a layer's colour or filter picker names its table by id, inside JSON, so there is no
 #: foreign key to cascade and a deleted table leaves a join nothing can execute. See
 #: :func:`core.logic.pickers.assert_table_not_in_a_picker` for why refusing beats orphaning.
-delete_table_dataset = make_delete(models.TableDataset, DeleteTableDatasetInput, owner=self_owner, lineage_kind="tabledataset")
+delete_table_dataset = make_delete(
+    models.TableDataset,
+    DeleteTableDatasetInput,
+    owner=self_owner,
+    lineage_kind="tabledataset",
+)

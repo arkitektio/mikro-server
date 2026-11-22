@@ -31,7 +31,6 @@ from core import enums, models
 from mikro_server.schema import schema
 from tests import seed
 
-
 PLACEMENT = """
 query Placement($id: ID!) {
   scene(id: $id) {
@@ -80,14 +79,26 @@ def _fresh_request(ctx: HttpContext) -> HttpContext:
         _organization=ctx.request._organization,
     )
     request.set_membership(ctx.request._membership)  # type: ignore[arg-type]
-    return HttpContext(request=request, response=TemporalResponse(), headers=ctx.headers, type="http")
+    return HttpContext(
+        request=request, response=TemporalResponse(), headers=ctx.headers, type="http"
+    )
 
 
-async def _register(ctx: HttpContext, input_id, output_id, transform: dict, validity: str | None = None) -> str:
-    payload: dict = {"input": str(input_id), "output": str(output_id), "transform": transform}
+async def _register(
+    ctx: HttpContext, input_id, output_id, transform: dict, validity: str | None = None
+) -> str:
+    payload: dict = {
+        "input": str(input_id),
+        "output": str(output_id),
+        "transform": transform,
+    }
     if validity is not None:
         payload["validity"] = validity
-    result = await schema.execute(CREATE_TRANSFORM, context_value=_fresh_request(ctx), variable_values={"input": payload})
+    result = await schema.execute(
+        CREATE_TRANSFORM,
+        context_value=_fresh_request(ctx),
+        variable_values={"input": payload},
+    )
     assert not result.errors, result.errors
     return str(result.data["createTransformation"]["id"])
 
@@ -101,7 +112,11 @@ async def _make_layer(ctx: HttpContext, scene_id, lens: models.Lens):
 
 
 async def _layers(ctx: HttpContext, scene_id) -> list[dict]:
-    result = await schema.execute(PLACEMENT, context_value=_fresh_request(ctx), variable_values={"id": str(scene_id)})
+    result = await schema.execute(
+        PLACEMENT,
+        context_value=_fresh_request(ctx),
+        variable_values={"id": str(scene_id)},
+    )
     assert not result.errors, result.errors
     return result.data["scene"]["layers"]
 
@@ -113,18 +128,44 @@ async def _mask_field_into(ctx: HttpContext, world, validity: str | None = None)
     -- one number per object -- comes out. Nothing about that composes into a matrix, but the
     route to world exists, which is exactly the case the old gate waved through.
     """
-    mask = await seed.create_array_dataset(ctx, "Mask", axes=seed.YX_AXES, shapes=[[64, 64]])
-    objects = await seed.create_array_dataset(ctx, "Objects", axes=[seed.axis("i", enums.AxisType.INDEX)], shapes=[[128]])
-    mask_system, object_system = await sync_to_async(lambda: (mask.intrinsic_coordinate_system, objects.intrinsic_coordinate_system))()
+    mask = await seed.create_array_dataset(
+        ctx, "Mask", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
+    objects = await seed.create_array_dataset(
+        ctx, "Objects", axes=[seed.axis("i", enums.AxisType.INDEX)], shapes=[[128]]
+    )
+    mask_system, object_system = await sync_to_async(
+        lambda: (mask.intrinsic_coordinate_system, objects.intrinsic_coordinate_system)
+    )()
 
-    field_id = await _register(ctx, mask_system.pk, object_system.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "FIELD", "inputAxes": ["y", "x"], "outputAxes": ["i"], "field": {"system": str(mask_system.pk)}}]}, validity=validity)
-    await seed.index_registration(ctx, object_system, world, index_axis="i", onto="z", validity=validity)
+    field_id = await _register(
+        ctx,
+        mask_system.pk,
+        object_system.pk,
+        {
+            "kind": "BY_DIMENSION",
+            "parts": [
+                {
+                    "kind": "FIELD",
+                    "inputAxes": ["y", "x"],
+                    "outputAxes": ["i"],
+                    "field": {"system": str(mask_system.pk)},
+                }
+            ],
+        },
+        validity=validity,
+    )
+    await seed.index_registration(
+        ctx, object_system, world, index_axis="i", onto="z", validity=validity
+    )
     return mask, mask_system, field_id
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_layer_reachable_only_through_a_field_is_refused(authenticated_context: HttpContext):
+async def test_a_layer_reachable_only_through_a_field_is_refused(
+    authenticated_context: HttpContext,
+):
     """A route exists, it runs through a key (a mask's ids), it composes into nothing, and creation says exactly that.
 
     ABLATION: drop `require_affine=True` from `assert_placeable_in` and this layer is created,
@@ -141,16 +182,27 @@ async def test_a_layer_reachable_only_through_a_field_is_refused(authenticated_c
 
     message = str(made.errors[0])
     assert "composably" in message and "A key from pixels" in message, message
-    assert f"{field_id} (BY_DIMENSION)" in message, ("the blocking edge is named, or the reader has nothing to go and fix", message)
+    assert f"{field_id} (BY_DIMENSION)" in message, (
+        "the blocking edge is named, or the reader has nothing to go and fix",
+        message,
+    )
     # The two older verdicts are both wrong here, and saying either would send the reader
     # somewhere there is nothing to do.
-    assert "Author the registration" not in message, ("the registration exists", message)
-    assert "UNMAPPABLE" not in message, ("a key asserts a correspondence; it just places nothing", message)
+    assert "Author the registration" not in message, (
+        "the registration exists",
+        message,
+    )
+    assert "UNMAPPABLE" not in message, (
+        "a key asserts a correspondence; it just places nothing",
+        message,
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_same_source_is_accepted_once_an_affine_route_exists(authenticated_context: HttpContext):
+async def test_the_same_source_is_accepted_once_an_affine_route_exists(
+    authenticated_context: HttpContext,
+):
     """The refusal is about the route, not about the data: author one that condenses and it draws."""
     scene = await seed.create_scene(authenticated_context, "Composition")
     world = await sync_to_async(lambda: scene.world)()
@@ -160,19 +212,38 @@ async def test_the_same_source_is_accepted_once_an_affine_route_exists(authentic
     refused = await _make_layer(authenticated_context, scene.pk, lens)
     assert refused.errors
 
-    await _register(authenticated_context, mask_system.pk, world.pk, {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]}]})
+    await _register(
+        authenticated_context,
+        mask_system.pk,
+        world.pk,
+        {
+            "kind": "BY_DIMENSION",
+            "parts": [
+                {
+                    "kind": "SCALE",
+                    "inputAxes": ["y", "x"],
+                    "outputAxes": ["y", "x"],
+                    "scale": [2.0, 2.0],
+                }
+            ],
+        },
+    )
 
     made = await _make_layer(authenticated_context, scene.pk, lens)
     assert not made.errors, made.errors
 
     (layer,) = await _layers(authenticated_context, scene.pk)
-    assert layer["asAffine"] is not None, "the gate accepted it, so the matrix must exist"
+    assert layer["asAffine"] is not None, (
+        "the gate accepted it, so the matrix must exist"
+    )
     assert layer["asAffine"]["matrix"], layer
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(authenticated_context: HttpContext):
+async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(
+    authenticated_context: HttpContext,
+):
     """The field route is VALIDATED; the affine route is one hop shorter and only INFERRED.
 
     Which is the whole point: `_bfs_tree` maximises bottleneck validity *first* and only then
@@ -188,7 +259,9 @@ async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(authen
 
     # Two hops, VALIDATED throughout: the mask's pixels dereference into an object space,
     # which someone checked against the world.
-    mask, mask_system, field_id = await _mask_field_into(authenticated_context, world, validity="VALIDATED")
+    mask, mask_system, field_id = await _mask_field_into(
+        authenticated_context, world, validity="VALIDATED"
+    )
     lens = await seed.create_lens(authenticated_context, mask, slices=[])
 
     # One hop, INFERRED: nobody checked this one, and it is the only one that composes.
@@ -196,7 +269,17 @@ async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(authen
         authenticated_context,
         mask_system.pk,
         world.pk,
-        {"kind": "BY_DIMENSION", "parts": [{"kind": "SCALE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "scale": [2.0, 2.0]}]},
+        {
+            "kind": "BY_DIMENSION",
+            "parts": [
+                {
+                    "kind": "SCALE",
+                    "inputAxes": ["y", "x"],
+                    "outputAxes": ["y", "x"],
+                    "scale": [2.0, 2.0],
+                }
+            ],
+        },
         validity="INFERRED",
     )
 
@@ -205,15 +288,22 @@ async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(authen
 
     (layer,) = await _layers(authenticated_context, scene.pk)
     reported = [step["transformation"]["id"] for step in layer["pathToWorld"]]
-    assert field_id not in reported, ("the better-known route does not condense, so it is not the one reported", layer["pathToWorld"])
+    assert field_id not in reported, (
+        "the better-known route does not condense, so it is not the one reported",
+        layer["pathToWorld"],
+    )
     assert reported == [affine_id], layer["pathToWorld"]
-    assert layer["asAffine"]["matrix"], "the reported route condenses, which is the whole guarantee"
+    assert layer["asAffine"]["matrix"], (
+        "the reported route condenses, which is the whole guarantee"
+    )
     assert layer["placementInvariance"] != "DIFFEOMORPHIC", layer
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_field_only_placement_still_reports_its_route(authenticated_context: HttpContext):
+async def test_a_field_only_placement_still_reports_its_route(
+    authenticated_context: HttpContext,
+):
     """A preference, not a filter. Rows the gate never saw keep the answer they had.
 
     Written through the ORM, which is how a layer predating the gate -- or one whose affine
@@ -227,21 +317,37 @@ async def test_a_field_only_placement_still_reports_its_route(authenticated_cont
     mask, _mask_system, field_id = await _mask_field_into(authenticated_context, world)
     lens = await seed.create_lens(authenticated_context, mask, slices=[])
 
-    await sync_to_async(models.Layer.objects.create)(kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens)
+    await sync_to_async(models.Layer.objects.create)(
+        kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens
+    )
 
-    result = await schema.execute(PLACEMENT, context_value=_fresh_request(authenticated_context), variable_values={"id": str(scene.pk)})
-    assert result.errors, "asAffine has no matrix to give and says so rather than returning null"
-    assert f"transformation {field_id} (BY_DIMENSION)" in str(result.errors[0]), result.errors[0]
+    result = await schema.execute(
+        PLACEMENT,
+        context_value=_fresh_request(authenticated_context),
+        variable_values={"id": str(scene.pk)},
+    )
+    assert result.errors, (
+        "asAffine has no matrix to give and says so rather than returning null"
+    )
+    assert f"transformation {field_id} (BY_DIMENSION)" in str(result.errors[0]), (
+        result.errors[0]
+    )
 
     (layer,) = result.data["scene"]["layers"]
-    assert layer["placement"] == "PLACED", "it is placed -- by a map that is not a matrix"
+    assert layer["placement"] == "PLACED", (
+        "it is placed -- by a map that is not a matrix"
+    )
     assert layer["placementInvariance"] == "DIFFEOMORPHIC", layer
-    assert field_id in [step["transformation"]["id"] for step in layer["pathToWorld"]], layer["pathToWorld"]
+    assert field_id in [
+        step["transformation"]["id"] for step in layer["pathToWorld"]
+    ], layer["pathToWorld"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_scene_builder_refuses_by_default_and_skips_when_asked(authenticated_context: HttpContext):
+async def test_the_scene_builder_refuses_by_default_and_skips_when_asked(
+    authenticated_context: HttpContext,
+):
     """One source the world does not place: the build fails, unless the caller has said to skip it.
 
     Fail is the default because a scene silently missing a layer is harder to notice than a
@@ -252,26 +358,56 @@ async def test_the_scene_builder_refuses_by_default_and_skips_when_asked(authent
     hub = await schema.execute(
         CREATE_SYSTEM,
         context_value=_fresh_request(authenticated_context),
-        variable_values={"input": {"name": "Atlas", "axes": [{"name": "z", "type": "SPACE", "unit": "micrometer"}, {"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}]}},
+        variable_values={
+            "input": {
+                "name": "Atlas",
+                "axes": [
+                    {"name": "z", "type": "SPACE", "unit": "micrometer"},
+                    {"name": "y", "type": "SPACE", "unit": "micrometer"},
+                    {"name": "x", "type": "SPACE", "unit": "micrometer"},
+                ],
+            }
+        },
     )
     assert not hub.errors, hub.errors
     hub_id = hub.data["createCoordinateSystem"]["id"]
 
-    drawable = await seed.create_array_dataset(authenticated_context, "Drawable", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    drawable_system = await sync_to_async(lambda: drawable.intrinsic_coordinate_system)()
-    await _register(authenticated_context, drawable_system.pk, hub_id, {"kind": "SCALE", "scale": [1.0, 1.0, 1.0]})
+    drawable = await seed.create_array_dataset(
+        authenticated_context, "Drawable", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    drawable_system = await sync_to_async(
+        lambda: drawable.intrinsic_coordinate_system
+    )()
+    await _register(
+        authenticated_context,
+        drawable_system.pk,
+        hub_id,
+        {"kind": "SCALE", "scale": [1.0, 1.0, 1.0]},
+    )
 
     # Registered here, and the registration declares that no point of it corresponds: the data
     # is a candidate the builder will look at and nothing places.
-    lost = await seed.create_array_dataset(authenticated_context, "Lost", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    lost = await seed.create_array_dataset(
+        authenticated_context, "Lost", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     lost_system = await sync_to_async(lambda: lost.intrinsic_coordinate_system)()
-    await _register(authenticated_context, lost_system.pk, hub_id, {"kind": "UNMAPPABLE", "reason": "the stage position was never recorded"})
+    await _register(
+        authenticated_context,
+        lost_system.pk,
+        hub_id,
+        {"kind": "UNMAPPABLE", "reason": "the stage position was never recorded"},
+    )
 
     async def _build(skip: bool):
         return await schema.execute(
             SCENE_FROM_SYSTEM,
             context_value=_fresh_request(authenticated_context),
-            variable_values={"input": {"coordinateSystem": hub_id, "policy": {"skipUnplaceable": skip}}},
+            variable_values={
+                "input": {
+                    "coordinateSystem": hub_id,
+                    "policy": {"skipUnplaceable": skip},
+                }
+            },
         )
 
     refused = await _build(False)
@@ -279,7 +415,13 @@ async def test_the_scene_builder_refuses_by_default_and_skips_when_asked(authent
 
     built = await _build(True)
     assert not built.errors, built.errors
-    assert built.data["createSceneFromCoordinateSystem"]["layers"], "the drawable source still becomes a layer"
+    assert built.data["createSceneFromCoordinateSystem"]["layers"], (
+        "the drawable source still becomes a layer"
+    )
 
-    layers = await _layers(authenticated_context, built.data["createSceneFromCoordinateSystem"]["id"])
-    assert all(layer["asAffine"] is not None for layer in layers), "every layer the builder made condenses"
+    layers = await _layers(
+        authenticated_context, built.data["createSceneFromCoordinateSystem"]["id"]
+    )
+    assert all(layer["asAffine"] is not None for layer in layers), (
+        "every layer the builder made condenses"
+    )

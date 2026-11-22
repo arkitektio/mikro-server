@@ -20,40 +20,60 @@ are registered in :data:`transformation_types` and threaded into the schema's
 """
 
 import datetime
-from typing import TYPE_CHECKING, Annotated, List, Optional, Union
-
-import strawberry
-from asgiref.sync import sync_to_async
-from django.db.models import Q
-from strawberry import auto
+from typing import TYPE_CHECKING, Annotated, Union
 
 import kante
-from strawberry.scalars import JSON
+import strawberry
+from arkitekt_datalayer.types import (
+    FabriksStore,
+    KonnektionStore,
+    KulisseStore,
+)
+from asgiref.sync import sync_to_async
+from django.db.models import Q
 from kante.types import Info
-
-from kanne_server import scalars as kanne_scalars
-from arkitekt_datalayer.types import FabriksStore, KonnektionStore, KulisseStore, MediaStore
+from strawberry import auto
+from strawberry.scalars import JSON
 
 from core import enums, filters, models, order, scalars
 from core.inputs.coords import BoundingBoxInput, CoordinateInput, at_map
-from core.logic import compositions
+from core.logic import compositions, space_graph
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
-from core.logic import space_graph
+from core.types._shared import (
+    DESCRIPTORS_DESCRIPTION,
+    OrgScoped,
+    apply_link_filters,
+    build_prescoped_queryset,
+    resolve_descriptors,
+)
 from core.types.auth import ProvenanceEntry, User
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
-
+from kanne_server import scalars as kanne_scalars
 
 if TYPE_CHECKING:
     # Only for the lazy annotations below (`scenes`, and the owner union's members):
     # importing them at runtime would be a cycle, since both of these modules import
     # this one's CoordinateSystem.
-    from core.types.array_dataset import AnnotationLens, ArrayDataset, ArrayLens, Annotation, AnnotationCollection, FixtureLens, CoordinateAnchor, DataArray, MeshLens, NetworkLens, Scene, SparseLens, TableLens
+    from core.types.array_dataset import (
+        Annotation,
+        AnnotationCollection,
+        AnnotationLens,
+        ArrayDataset,
+        ArrayLens,
+        CoordinateAnchor,
+        DataArray,
+        FixtureLens,
+        MeshLens,
+        NetworkLens,
+        Scene,
+        SparseLens,
+        TableLens,
+    )
     from core.types.file_link import FileLink
     from core.types.folder import Folder
-    from core.types.table_dataset import TableDataset
     from core.types.sparse_dataset import SparseDataset
+    from core.types.table_dataset import TableDataset
     from core.types.visualization import Visualization
 
 
@@ -80,7 +100,9 @@ class Axis:
     long_name: str | None
     description: str | None
 
-    @strawberry.field(description="The metric group this axis is in: the axes that share one distance with it. What it declared, else 'space' for a SPACE axis, else null -- an axis that shares a distance with nothing. A rotation, a distance and a scene's render axes need one group; a per-axis scale, an offset and an affine map do not")
+    @strawberry.field(
+        description="The metric group this axis is in: the axes that share one distance with it. What it declared, else 'space' for a SPACE axis, else null -- an axis that shares a distance with nothing. A rotation, a distance and a scene's render axes need one group; a per-axis scale, an offset and an affine map do not"
+    )
     def metric_group(self) -> str | None:
         return coords_logic.effective_metric_group(self.type, self.metric_group)
 
@@ -92,24 +114,25 @@ class Axis:
 # The arms mirror `core.logic.graph.CONTAINERS`, which is the list; adding a member there
 # without adding it here is how a resident becomes unreturnable.
 Resident = Annotated[
-    Union[
-        Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")],
-        Annotated["DataArray", strawberry.lazy("core.types.array_dataset")],
-        Annotated["ArrayLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["TableLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["AnnotationLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")],
-        Annotated["MeshCollection", strawberry.lazy("core.types.coords")],
-        Annotated["NetworkCollection", strawberry.lazy("core.types.coords")],
-        Annotated["Fixture", strawberry.lazy("core.types.coords")],
-        Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")],
-        Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")],
-        Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")],
-    ],
-    strawberry.union("Resident", description="A piece of data living in a coordinate system. Data belongs to a space; the space belongs to nobody"),
+    Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["DataArray", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["ArrayLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["AnnotationLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["MeshCollection", strawberry.lazy("core.types.coords")]
+    | Annotated["NetworkCollection", strawberry.lazy("core.types.coords")]
+    | Annotated["Fixture", strawberry.lazy("core.types.coords")]
+    | Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]
+    | Annotated["AnnotationCollection", strawberry.lazy("core.types.array_dataset")]
+    | Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")],
+    strawberry.union(
+        "Resident",
+        description="A piece of data living in a coordinate system. Data belongs to a space; the space belongs to nobody",
+    ),
 ]
 
 
@@ -120,7 +143,9 @@ def _placeable_ids(info: Info, system) -> set[int]:
     candidate space -- far more than this needs. Shared with the `placeableIn` filters, so a
     picker asking `placedSystems` beside its candidate lists walks the space once.
     """
-    return graph_logic.placeable_system_ids_memo(getattr(info.context, "_loaders", None), system)
+    return graph_logic.placeable_system_ids_memo(
+        getattr(info.context, "_loaders", None), system
+    )
 
 
 @kante.django_type(
@@ -135,7 +160,9 @@ class CoordinateSystem(OrgScoped):
 
     id: auto
     name: auto
-    axes: List[Axis] = kante.django_field(description="The system's axes, in the order the data has them: for a system backed by an array, its store's dimension order; for a table, its coordinate columns as declared. No ordering by type is imposed on either. What matters downstream is that the *spatial* axes are in array order, which is what the render axes are derived from")
+    axes: list[Axis] = kante.django_field(
+        description="The system's axes, in the order the data has them: for a system backed by an array, its store's dimension order; for a table, its coordinate columns as declared. No ordering by type is imposed on either. What matters downstream is that the *spatial* axes are in array order, which is what the render axes are derived from"
+    )
     epoch: datetime.datetime | None = kante.django_field(
         description="The wall-clock instant this system's time axis has its origin at: `wall_clock = epoch + t * unit`. A property of the space, not of any composition over it. Meaningful only for a unit-carrying system with a TIME axis (a shared world space); null when the clock is unanchored -- the time axis is still a perfectly composable relative coordinate"
     )
@@ -145,29 +172,38 @@ class CoordinateSystem(OrgScoped):
     reference_app: str | None = kante.django_field(
         description="The identifier of the app an app-scoped `reference` belongs to; null for a URI reference, which belongs to nobody"
     )
-    scenes: List[Annotated["Scene", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(
-        filters=filters.SceneFilter,
-        ordering=order.SceneOrder,
-        pagination=True,
-        description="The scenes that compose over this system as their world. A SHARED space lists every scene sharing it and outlives each of them: a scene adopts a space, never owns it, and deleting a scene never deletes the space. The inverse of `Scene.worldCoordinateSystem`",
+    scenes: list[Annotated["Scene", strawberry.lazy("core.types.array_dataset")]] = (
+        kante.django_field(
+            filters=filters.SceneFilter,
+            ordering=order.SceneOrder,
+            pagination=True,
+            description="The scenes that compose over this system as their world. A SHARED space lists every scene sharing it and outlives each of them: a scene adopts a space, never owns it, and deleting a scene never deletes the space. The inverse of `Scene.worldCoordinateSystem`",
+        )
     )
+
     @kante.django_field(
         description=(
             "Everything laid out over this system as its world, of every kind: its scenes, then its charts. The inverse of `Visualization.worldCoordinateSystem`. "
             "Unpaginated -- for a filtered or paged list of one kind, ask `scenes` here or the top-level `charts`"
         )
     )
-    def visualizations(self, info: Info) -> List[Annotated["Visualization", strawberry.lazy("core.types.visualization")]]:
+    def visualizations(
+        self, info: Info
+    ) -> list[Annotated["Visualization", strawberry.lazy("core.types.visualization")]]:
         """The compositions over this space, kind by kind in registration order, oldest first within a kind."""
         # Read off the registry, so a composition from another app is listed without this
         # module naming it -- the way the delete refusal and the orphan sweep learn of it.
         return [
             row
             for composition in compositions.compositions()
-            for row in build_prescoped_queryset(info, getattr(self, composition.world_relation).all()).order_by("pk")
+            for row in build_prescoped_queryset(
+                info, getattr(self, composition.world_relation).all()
+            ).order_by("pk")
         ]
 
-    provenance_entries: List[ProvenanceEntry] = kante.django_field(description="Provenance entries for this coordinate system: who created it, and every subsequent change")
+    provenance_entries: list[ProvenanceEntry] = kante.django_field(
+        description="Provenance entries for this coordinate system: who created it, and every subsequent change"
+    )
     created_at: datetime.datetime
 
     @kante.django_field(
@@ -175,7 +211,7 @@ class CoordinateSystem(OrgScoped):
         description=(
             "Whether this is a physical space: every axis carries a unit (a calibration, a stage frame, a world). False for a unitless index space -- a pixel grid, a pyramid "
             "level, a lens grid -- and for a space with no axes. `a.u.` counts as a unit. The same rule `CoordinateSystemFilter.physical` filters by"
-        )
+        ),
     )
     def physical(self, info: Info) -> bool:
         """Every axis has a unit."""
@@ -189,7 +225,7 @@ class CoordinateSystem(OrgScoped):
             "space that is itself physical, or that reaches none"
         )
     )
-    def voxel_sizes(self, info: Info) -> List["VoxelSize"]:
+    def voxel_sizes(self, info: Info) -> list["VoxelSize"]:
         """One entry per physical space reached."""
         return [
             VoxelSize(
@@ -203,6 +239,7 @@ class CoordinateSystem(OrgScoped):
             )
             for calibration in graph_logic.system_calibrations(self)
         ]
+
     # Nullable: the creator FK is SET_NULL, so a system outlives the user who made it.
     creator: User | None
 
@@ -219,9 +256,14 @@ class CoordinateSystem(OrgScoped):
             "something are listed beside it"
         ),
     )
-    def residents(self, info: Info) -> List[Resident]:
+    def residents(self, info: Info) -> list[Resident]:
         """Everything whose `coordinateSystem` is this one, outermost container first; a whole lens is its container and is not listed twice."""
-        return [resident for relation in graph_logic.RESIDENT_RELATIONS for resident in getattr(self, relation).all() if not (isinstance(resident, models.Lens) and resident.is_whole)]
+        return [
+            resident
+            for relation in graph_logic.RESIDENT_RELATIONS
+            for resident in getattr(self, relation).all()
+            if not (isinstance(resident, models.Lens) and resident.is_whole)
+        ]
 
     # This used to hang off `Scene`, where its own description conceded it was a property of
     # the space rather than of the scene. Unprefetchable: `Transformation.input`/`output` are
@@ -236,7 +278,7 @@ class CoordinateSystem(OrgScoped):
             "inverse, so no path walks it backwards); it is a dereference, and `attributePlans` is what reads it"
         ),
     )
-    def registrations(self, info: Info) -> List["Transformation"]:
+    def registrations(self, info: Info) -> list["Transformation"]:
         """The edges into this space."""
         return list(models.Transformation.objects.filter(output=self.pk).order_by("pk"))
 
@@ -252,11 +294,15 @@ class CoordinateSystem(OrgScoped):
             "directed, and asks who can get in"
         ),
     )
-    def placed_systems(self, info: Info) -> List["CoordinateSystem"]:
+    def placed_systems(self, info: Info) -> list["CoordinateSystem"]:
         """The spaces with an affinely composable path into this one; see `graph_logic.placeable_system_ids_in`."""
         # The residents come along: a plain list is opaque to the optimizer, so a client
         # selecting `residents` would otherwise pay six reverse queries per space.
-        return list(models.CoordinateSystem.objects.filter(pk__in=_placeable_ids(info, self)).prefetch_related(*graph_logic.RESIDENT_RELATIONS))
+        return list(
+            models.CoordinateSystem.objects.filter(
+                pk__in=_placeable_ids(info, self)
+            ).prefetch_related(*graph_logic.RESIDENT_RELATIONS)
+        )
 
     @kante.django_field(
         description=(
@@ -265,21 +311,26 @@ class CoordinateSystem(OrgScoped):
             "`worldCoordinateSystem { annotations }`"
         ),
     )
-    def annotations(self, info: Info) -> List[Annotated["Annotation", strawberry.lazy("core.types.array_dataset")]]:
+    def annotations(
+        self, info: Info
+    ) -> list[Annotated["Annotation", strawberry.lazy("core.types.array_dataset")]]:
         """The annotations whose collection's system can reach this space."""
         # A collection's own system hangs one edge off whatever it is drawn over, and that
         # edge lands *in* the placeable set rather than being part of it -- so a collection
         # also counts when any of its (non-UNMAPPABLE) edges lands in a placeable space.
         placeable = _placeable_ids(info, self)
         anchored = (
-            models.Transformation.objects.filter(input__annotation_collections__isnull=False, output__in=placeable)
+            models.Transformation.objects.filter(
+                input__annotation_collections__isnull=False, output__in=placeable
+            )
             .exclude(kind=enums.TransformKind.UNMAPPABLE.value)
             .values_list("input_id", flat=True)
         )
         return list(
-            models.Annotation.objects.filter(Q(collection__coordinate_system__in=placeable) | Q(collection__coordinate_system__in=anchored)).select_related(
-                "collection__coordinate_system"
-            )
+            models.Annotation.objects.filter(
+                Q(collection__coordinate_system__in=placeable)
+                | Q(collection__coordinate_system__in=anchored)
+            ).select_related("collection__coordinate_system")
         )
 
     @kante.django_field(
@@ -297,26 +348,50 @@ class CoordinateSystem(OrgScoped):
             "scope; selecting those needs the region pulled back into their frame, and this server composes forward only"
         ),
     )
-    def in_view(self, info: Info, region: BoundingBoxInput, at: List[CoordinateInput] | None = None) -> List["SourcePlacement"]:
+    def in_view(
+        self,
+        info: Info,
+        region: BoundingBoxInput,
+        at: list[CoordinateInput] | None = None,
+    ) -> list["SourcePlacement"]:
         """The sources whose extent meets a region asked in this system; see `core.logic.space_graph`."""
         graph = space_graph.for_request(info, self)
         keyed = space_graph.region_from_bounds(self, region.min, region.max)
         # Anchors are thousands of rows on a long timelapse, so they are resolved only when
         # the selection set actually names them.
-        wants_anchors = any(field.name == "anchors" for selection in info.selected_fields for field in selection.selections if hasattr(field, "name"))
+        wants_anchors = any(
+            field.name == "anchors"
+            for selection in info.selected_fields
+            for field in selection.selections
+            if hasattr(field, "name")
+        )
 
         placements = []
         for hit in graph.in_view(keyed, with_anchors=wants_anchors, at=at_map(at)):
-            path = [PlacementStep(transformation=edge, inverted=inverted) for edge, inverted in hit.path]
-            extent = [AxisExtent(axis=axis, min=bounds[0], max=bounds[1]) for axis, bounds in (hit.extent or {}).items()]
+            path = [
+                PlacementStep(transformation=edge, inverted=inverted)
+                for edge, inverted in hit.path
+            ]
+            extent = [
+                AxisExtent(axis=axis, min=bounds[0], max=bounds[1])
+                for axis, bounds in (hit.extent or {}).items()
+            ]
             placements.append(
                 SourcePlacement(
                     source=hit.source.container,
                     system=hit.source.system,
                     extent=extent,
                     extent_state=enums.ExtentState(hit.extent_state),
-                    invariance=enums.TransformInvariance(graph_logic.weakest_invariance(graph_logic.invariance_of(edge) for edge, _ in hit.path)),
-                    validity=enums.PlacementValidity(graph_logic.weakest_validity(edge.validity for edge, _ in hit.path)),
+                    invariance=enums.TransformInvariance(
+                        graph_logic.weakest_invariance(
+                            graph_logic.invariance_of(edge) for edge, _ in hit.path
+                        )
+                    ),
+                    validity=enums.PlacementValidity(
+                        graph_logic.weakest_validity(
+                            edge.validity for edge, _ in hit.path
+                        )
+                    ),
                     path=path,
                     anchors=hit.anchors,
                 )
@@ -347,9 +422,12 @@ class CoordinateSystem(OrgScoped):
 class Selector:
     """One axis name and one discrete index on it."""
 
-    axis: str = strawberry.field(description="The axis of the input system this edge is scoped to")
-    index: int = strawberry.field(description="The position along that axis at which this map holds")
-
+    axis: str = strawberry.field(
+        description="The axis of the input system this edge is scoped to"
+    )
+    index: int = strawberry.field(
+        description="The position along that axis at which this map holds"
+    )
 
 
 @kante.django_interface(
@@ -411,15 +489,16 @@ class Transformation(OrgScoped):
         # `getattr`, because the annotation above declares the *GraphQL* field's type while
         # `self` here is the Django row, where the same name is the history manager. Reading
         # it through the manager is what lets the prefetch hint above serve this.
-        return len(getattr(self, "provenance_entries").all())
+        return len(self.provenance_entries.all())
 
     validity: enums.PlacementValidity = kante.django_field(
         description="How much this map is actually known: VALIDATED for a map the server derived (or one someone checked), INFERRED for numbers read from metadata, MANUAL for an authored registration, UNKNOWN for one its author marked as a guess. A layer's validity is the weakest edge on its path to world"
     )
+
     @kante.field(
         description=(
             "Where along one axis this edge applies, or null for an edge that holds everywhere -- which is almost every edge. "
-            "A per-channel correction is scoped to {axis: \"c\", index: 2}; several such edges over one axis are one piecewise map. "
+            'A per-channel correction is scoped to {axis: "c", index: 2}; several such edges over one axis are one piecewise map. '
             "A path query crosses a scoped edge only when it fixes that coordinate with `at`"
         )
     )
@@ -431,6 +510,7 @@ class Transformation(OrgScoped):
     value_relation: enums.ValueRelation | None = kante.django_field(
         description="(derivation edges) What the operation this edge records did to the *values*, orthogonal to `kind`: IDENTICAL (a crop -- statistics transfer), TRANSFORMED (a deconvolution -- same quantity, new numbers), CATEGORIZED (a threshold -- values became labels, and a bootstrapped scene renders the data as a label map). Null when unstated, and never present on a registration -- values do not cross a claim between spaces"
     )
+
     # Resolved and joined, for the reason `input` is: `Annotation` is org-scoped, and a
     # plain FK to such a type becomes a scoped prefetch per edge.
     @kante.django_field(
@@ -441,7 +521,9 @@ class Transformation(OrgScoped):
             "and null on every other edge, and once that shape is deleted: the edge then still says which collection"
         ),
     )
-    def annotation(self, info: Info) -> Optional[Annotated["Annotation", strawberry.lazy("core.types.array_dataset")]]:
+    def annotation(
+        self, info: Info
+    ) -> Annotated["Annotation", strawberry.lazy("core.types.array_dataset")] | None:
         """The shape an ANNOTATION derivation named."""
         return self.annotation
 
@@ -449,7 +531,9 @@ class Transformation(OrgScoped):
     # (`updateTransformation`), which makes this the *only* place the previous states of a
     # placement exist. It is also what `CoordinateSystem.transformVersion` counts, so the
     # audit trail and the staleness token are one record rather than two that can disagree.
-    provenance_entries: List[ProvenanceEntry] = kante.django_field(description="Provenance entries for this edge: who authored it, and every refinement since. A refinement rewrites the edge in place, so this audit trail is where the placement's earlier states live -- and counting these rows along a chain is what `CoordinateSystem.transformVersion` reports")
+    provenance_entries: list[ProvenanceEntry] = kante.django_field(
+        description="Provenance entries for this edge: who authored it, and every refinement since. A refinement rewrites the edge in place, so this audit trail is where the placement's earlier states live -- and counting these rows along a chain is what `CoordinateSystem.transformVersion` reports"
+    )
     created_at: datetime.datetime
     creator: User | None
 
@@ -464,7 +548,7 @@ class Transformation(OrgScoped):
         prefetch_related=["input__axes", "output__axes"],
         description="The names of the input axes this edge's parameters are ordered by. `scale`, `translation` and the columns of `affine` follow this order -- which is the input system's axis order, NOT the reading layer's axis names, and the two differ often enough that indexing the arrays against them silently misplaces them. A BY_DIMENSION's are its parts' input axes, in part order; an axis it does not name is one it says nothing about",
     )
-    def input_axes(self, info: Info) -> List[str]:
+    def input_axes(self, info: Info) -> list[str]:
         """The axis order this edge's parameters are written in, on the input side."""
         return graph_logic.edge_axis_names(self, "input")
 
@@ -472,7 +556,7 @@ class Transformation(OrgScoped):
         prefetch_related=["input__axes", "output__axes"],
         description="The names of the output axes this edge produces. A BY_DIMENSION's are its parts' output axes, in part order: placing a (c,y,x) dataset into a (t,z,y,x) world names y and x, and says nothing about t and z",
     )
-    def output_axes(self, info: Info) -> List[str]:
+    def output_axes(self, info: Info) -> list[str]:
         """The axis order this edge's parameters are written in, on the output side."""
         return graph_logic.edge_axis_names(self, "output")
 
@@ -493,7 +577,12 @@ class Transformation(OrgScoped):
         return enums.TransformInvariance(graph_logic.invariance_of(self))
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="The identity map: input and output coordinates are the same")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="The identity map: input and output coordinates are the same",
+)
 class IdentityTransformation(Transformation):
     """The identity map: input and output coordinates are the same."""
 
@@ -505,10 +594,18 @@ class IdentityTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.IDENTITY.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.IDENTITY.value
+        )
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A per-axis multiplication, with one entry per input axis")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="A per-axis multiplication, with one entry per input axis",
+)
 class ScaleTransformation(Transformation):
     """A per-axis multiplication, with one entry per input axis."""
 
@@ -520,17 +617,25 @@ class ScaleTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.SCALE.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.SCALE.value
+        )
 
     @kante.django_field(
         description="The per-axis scale factors, in the axis order of the input system, expressed in the units of the output system's axes (dimensionless between pixel systems, e.g. within a pyramid). Absolute, not relative to another level"
     )
-    def scale(self, info: Info) -> List[float]:
+    def scale(self, info: Info) -> list[float]:
         """The per-axis scale factors."""
         return self.params.get("scale", [])
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A per-axis offset, with one entry per input axis")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="A per-axis offset, with one entry per input axis",
+)
 class TranslationTransformation(Transformation):
     """A per-axis offset, with one entry per input axis."""
 
@@ -542,15 +647,25 @@ class TranslationTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.TRANSLATION.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.TRANSLATION.value
+        )
 
-    @kante.django_field(description="The per-axis offsets, in the axis order of the input system")
-    def translation(self, info: Info) -> List[float]:
+    @kante.django_field(
+        description="The per-axis offsets, in the axis order of the input system"
+    )
+    def translation(self, info: Info) -> list[float]:
         """The per-axis offsets."""
         return self.params.get("translation", [])
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A general affine map, given as an M x (N+1) matrix with rows outermost")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="A general affine map, given as an M x (N+1) matrix with rows outermost",
+)
 class AffineTransformation(Transformation):
     """A general affine map, given as an M x (N+1) matrix with rows outermost."""
 
@@ -562,15 +677,25 @@ class AffineTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.AFFINE.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.AFFINE.value
+        )
 
-    @kante.django_field(description="The affine matrix, M x (N+1), rows outermost. The last column is the translation")
-    def affine(self, info: Info) -> List[List[float]]:
+    @kante.django_field(
+        description="The affine matrix, M x (N+1), rows outermost. The last column is the translation"
+    )
+    def affine(self, info: Info) -> list[list[float]]:
         """The affine matrix."""
         return self.params.get("affine", [])
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A rotation, given as an orthonormal matrix")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="A rotation, given as an orthonormal matrix",
+)
 class RotationTransformation(Transformation):
     """A rotation, given as an orthonormal matrix."""
 
@@ -582,15 +707,23 @@ class RotationTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.ROTATION.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.ROTATION.value
+        )
 
     @kante.django_field(description="The rotation matrix")
-    def affine(self, info: Info) -> List[List[float]]:
+    def affine(self, info: Info) -> list[list[float]]:
         """The rotation matrix."""
         return self.params.get("affine", [])
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="A permutation of axes, mapping each input axis to an output axis by name")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="A permutation of axes, mapping each input axis to an output axis by name",
+)
 class MapAxisTransformation(Transformation):
     """A permutation of axes, mapping each input axis to an output axis by name."""
 
@@ -602,15 +735,22 @@ class MapAxisTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.MAP_AXIS.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.MAP_AXIS.value
+        )
 
-    @kante.django_field(description="The names of the input axes, positionally matched to `outputAxes`")
-    def input_axes(self, info: Info) -> List[str]:
+    @kante.django_field(
+        description="The names of the input axes, positionally matched to `outputAxes`"
+    )
+    def input_axes(self, info: Info) -> list[str]:
         """The input axis names."""
         return self.input_axes or []
 
-    @kante.django_field(description="The names of the output axes, positionally matched to `inputAxes`")
-    def output_axes(self, info: Info) -> List[str]:
+    @kante.django_field(
+        description="The names of the output axes, positionally matched to `inputAxes`"
+    )
+    def output_axes(self, info: Info) -> list[str]:
         """The output axis names."""
         return self.output_axes or []
 
@@ -624,11 +764,21 @@ class MapAxisTransformation(Transformation):
 class TransformationStep:
     """One step of a sequence: a kind and the parameters that kind reads."""
 
-    kind: enums.TransformKind = strawberry.field(description="The kind of this step, which fixes which of the parameters below is read")
-    scale: List[float] = strawberry.field(description="(SCALE) The per-axis factors, in the axis order of the sequence's input; empty on any other kind")
-    translation: List[float] = strawberry.field(description="(TRANSLATION) The per-axis offsets, in the axis order of the sequence's input; empty on any other kind")
-    affine: List[List[float]] = strawberry.field(description="(AFFINE / ROTATION) The matrix, M x (N+1), rows outermost; empty on any other kind")
-    reason: str | None = strawberry.field(description="(UNMAPPABLE) Why nothing corresponds, if the author said")
+    kind: enums.TransformKind = strawberry.field(
+        description="The kind of this step, which fixes which of the parameters below is read"
+    )
+    scale: list[float] = strawberry.field(
+        description="(SCALE) The per-axis factors, in the axis order of the sequence's input; empty on any other kind"
+    )
+    translation: list[float] = strawberry.field(
+        description="(TRANSLATION) The per-axis offsets, in the axis order of the sequence's input; empty on any other kind"
+    )
+    affine: list[list[float]] = strawberry.field(
+        description="(AFFINE / ROTATION) The matrix, M x (N+1), rows outermost; empty on any other kind"
+    )
+    reason: str | None = strawberry.field(
+        description="(UNMAPPABLE) Why nothing corresponds, if the author said"
+    )
 
     @classmethod
     def from_steps(cls, steps: list[dict], info: Info) -> list["TransformationStep"]:
@@ -645,7 +795,12 @@ class TransformationStep:
         ]
 
 
-@kante.django_type(models.Transformation, filters=filters.TransformationFilter, pagination=True, description="An ordered composition of steps, applied first to last: one edge, carrying its map as `steps`. The ingest writes one for a stepped lens and for a downsampled pyramid level (a scale, then the half-voxel translation)")
+@kante.django_type(
+    models.Transformation,
+    filters=filters.TransformationFilter,
+    pagination=True,
+    description="An ordered composition of steps, applied first to last: one edge, carrying its map as `steps`. The ingest writes one for a stepped lens and for a downsampled pyramid level (a scale, then the half-voxel translation)",
+)
 class SequenceTransformation(Transformation):
     """An ordered composition of steps, applied first to last: one edge carrying its map."""
 
@@ -657,10 +812,15 @@ class SequenceTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.SEQUENCE.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.SEQUENCE.value
+        )
 
-    @kante.django_field(description="The steps, applied first to last, each in the axis order of this edge's input. Composing them is composing the edge")
-    def steps(self, info: Info) -> List[TransformationStep]:
+    @kante.django_field(
+        description="The steps, applied first to last, each in the axis order of this edge's input. Composing them is composing the edge"
+    )
+    def steps(self, info: Info) -> list[TransformationStep]:
         """The sequence's steps, read off the row."""
         return TransformationStep.from_steps(self.steps or [], info)
 
@@ -675,38 +835,83 @@ class SequenceTransformation(Transformation):
 class FieldPart:
     """A FIELD part's array and what its values are."""
 
-    field: "CoordinateSystem" = strawberry.field(description="The coordinate system of the array whose values are the map. Equal to the edge's `input` when the array's own pixels are the map, as for a label mask")
-    unit: str | None = strawberry.field(description="The unit of the values, when stated; they are converted into the output axes' unit when read")
-    min: float | None = strawberry.field(description="The smallest value, as declared by the writer")
-    max: float | None = strawberry.field(description="The largest value, as declared by the writer")
-    values: str = strawberry.field(description="What the numbers are: SCALAR, COORDINATE or DISPLACEMENT")
-    spatial: bool = strawberry.field(description="Whether it gives a SPACE axis: no matrix states such a map")
-    dereference: bool = strawberry.field(description="Whether its values are ids keying the rows of a table, so it places nothing")
+    field: "CoordinateSystem" = strawberry.field(
+        description="The coordinate system of the array whose values are the map. Equal to the edge's `input` when the array's own pixels are the map, as for a label mask"
+    )
+    unit: str | None = strawberry.field(
+        description="The unit of the values, when stated; they are converted into the output axes' unit when read"
+    )
+    min: float | None = strawberry.field(
+        description="The smallest value, as declared by the writer"
+    )
+    max: float | None = strawberry.field(
+        description="The largest value, as declared by the writer"
+    )
+    values: str = strawberry.field(
+        description="What the numbers are: SCALAR, COORDINATE or DISPLACEMENT"
+    )
+    spatial: bool = strawberry.field(
+        description="Whether it gives a SPACE axis: no matrix states such a map"
+    )
+    dereference: bool = strawberry.field(
+        description="Whether its values are ids keying the rows of a table, so it places nothing"
+    )
 
 
-@strawberry.type(description="One part of a BY_DIMENSION: its own input axes onto its own output axes, by one kind. Each kind fills only its own field: `scale`, `translation`, `affine`, or `field` for a FIELD")
+@strawberry.type(
+    description="One part of a BY_DIMENSION: its own input axes onto its own output axes, by one kind. Each kind fills only its own field: `scale`, `translation`, `affine`, or `field` for a FIELD"
+)
 class TransformationPart:
     """One BY_DIMENSION part, as stored."""
 
     kind: enums.PartKind = strawberry.field(description="How this part maps its axes")
-    input_axes: List[str] = strawberry.field(description="The input axes this part maps; for a FIELD, the axes its array is read along, in the array's own order")
-    output_axes: List[str] = strawberry.field(description="The output axes they map onto; for a FIELD, the axes its values give, in value-axis order")
-    scale: List[float] = strawberry.field(description="(SCALE) One factor per input axis of the part; empty on any other kind")
-    translation: List[float] = strawberry.field(description="(TRANSLATION) One offset per input axis of the part; empty on any other kind")
-    affine: List[List[float]] = strawberry.field(description="(AFFINE, ROTATION) One row per output axis, one column per input axis plus the offset; empty on any other kind")
-    field: FieldPart | None = strawberry.field(description="(FIELD) The array whose values are the map; null on any other kind")
+    input_axes: list[str] = strawberry.field(
+        description="The input axes this part maps; for a FIELD, the axes its array is read along, in the array's own order"
+    )
+    output_axes: list[str] = strawberry.field(
+        description="The output axes they map onto; for a FIELD, the axes its values give, in value-axis order"
+    )
+    scale: list[float] = strawberry.field(
+        description="(SCALE) One factor per input axis of the part; empty on any other kind"
+    )
+    translation: list[float] = strawberry.field(
+        description="(TRANSLATION) One offset per input axis of the part; empty on any other kind"
+    )
+    affine: list[list[float]] = strawberry.field(
+        description="(AFFINE, ROTATION) One row per output axis, one column per input axis plus the offset; empty on any other kind"
+    )
+    field: FieldPart | None = strawberry.field(
+        description="(FIELD) The array whose values are the map; null on any other kind"
+    )
 
     @classmethod
-    def from_edge(cls, edge, info: Info) -> List["TransformationPart"]:  # noqa: ANN001 - models.Transformation
+    def from_edge(cls, edge, info: Info) -> list["TransformationPart"]:  # noqa: ANN001 - models.Transformation
         """The stored parts as this type, their arrays read once and scoped as any system read is."""
-        ids = [part["field"] for part in edge.parts or [] if part.get("field") not in (None, "self")]
-        systems = {system.pk: system for system in build_prescoped_queryset(info, models.CoordinateSystem.objects.filter(pk__in=ids))} if ids else {}
+        ids = [
+            part["field"]
+            for part in edge.parts or []
+            if part.get("field") not in (None, "self")
+        ]
+        systems = (
+            {
+                system.pk: system
+                for system in build_prescoped_queryset(
+                    info, models.CoordinateSystem.objects.filter(pk__in=ids)
+                )
+            }
+            if ids
+            else {}
+        )
         parts = []
         for part in edge.parts or []:
             params = part.get("params") or {}
             field = None
             if part.get("kind") == enums.PartKind.FIELD.value:
-                system = edge.input if part.get("field") == "self" else systems.get(part.get("field"))
+                system = (
+                    edge.input
+                    if part.get("field") == "self"
+                    else systems.get(part.get("field"))
+                )
                 if system is not None:
                     field = FieldPart(
                         field=system,
@@ -753,10 +958,16 @@ class ByDimensionTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.BY_DIMENSION.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.BY_DIMENSION.value
+        )
 
-    @kante.django_field(only=["parts", "input"], description="The parts, in order: each maps its own axes by one kind")
-    def parts(self, info: Info) -> List[TransformationPart]:
+    @kante.django_field(
+        only=["parts", "input"],
+        description="The parts, in order: each maps its own axes by one kind",
+    )
+    def parts(self, info: Info) -> list[TransformationPart]:
         """The edge's parts."""
         return TransformationPart.from_edge(self, info)
 
@@ -778,27 +989,48 @@ class UnmappableTransformation(Transformation):
 
         The model check comes first: `_entities` resolves the `_Entity` union by
         asking every member, so this also sees rows of other models."""
-        return isinstance(obj, models.Transformation) and obj.kind == enums.TransformKind.UNMAPPABLE.value
+        return (
+            isinstance(obj, models.Transformation)
+            and obj.kind == enums.TransformKind.UNMAPPABLE.value
+        )
 
-    @kante.django_field(description="Why the geometry does not survive, if the author said. Purely descriptive: the kind is what the graph acts on, and an absent reason does not make the edge any less of a statement")
+    @kante.django_field(
+        description="Why the geometry does not survive, if the author said. Purely descriptive: the kind is what the graph acts on, and an absent reason does not make the edge any less of a statement"
+    )
     def reason(self, info: Info) -> str | None:
         """Why nothing corresponds."""
         return self.params.get("reason")
 
 
-@strawberry.type(description="How far one step along a lens axis reaches in a physical space: the voxel size along that axis")
+@strawberry.type(
+    description="How far one step along a lens axis reaches in a physical space: the voxel size along that axis"
+)
 class AxisVoxelSize:
     """One lens axis' voxel size in one physical space."""
 
     axis: str = strawberry.field(description="The lens axis")
-    size: float = strawberry.field(description="How far one step along it reaches, in `unit`. A stepped lens' step is its own: `step: 2` reaches twice its dataset's voxel")
-    unit: str = strawberry.field(description="The unit of `size`: the unit of the physical axis it mostly lands on")
-    type: enums.AxisType = strawberry.field(description="That physical axis' kind. A calibration scales a time step or a spectral bin as well; a voxel's spatial size is the SPACE entries")
-    physical_axis: str = strawberry.field(description="The physical axis it mostly lands on")
+    size: float = strawberry.field(
+        description="How far one step along it reaches, in `unit`. A stepped lens' step is its own: `step: 2` reaches twice its dataset's voxel"
+    )
+    unit: str = strawberry.field(
+        description="The unit of `size`: the unit of the physical axis it mostly lands on"
+    )
+    type: enums.AxisType = strawberry.field(
+        description="That physical axis' kind. A calibration scales a time step or a spectral bin as well; a voxel's spatial size is the SPACE entries"
+    )
+    physical_axis: str = strawberry.field(
+        description="The physical axis it mostly lands on"
+    )
 
     @classmethod
     def of(cls, size: "graph_logic.AxisVoxelSize") -> "AxisVoxelSize":
-        return cls(axis=size.axis, size=size.size, unit=size.unit, type=enums.AxisType(size.type), physical_axis=size.physical_axis)
+        return cls(
+            axis=size.axis,
+            size=size.size,
+            unit=size.unit,
+            type=enums.AxisType(size.type),
+            physical_axis=size.physical_axis,
+        )
 
 
 @strawberry.type(
@@ -814,12 +1046,24 @@ class VoxelSize:
 
     # Resolved by the caller, inside its own (thread-wrapped) resolver, like `PlacementField.field`.
     system: CoordinateSystem = strawberry.field(description="The physical space")
-    axes: List[AxisVoxelSize] = strawberry.field(description="One entry per lens axis the route scales, in the lens' axis order. An axis in `a.u.` is not listed: it measures nothing")
-    canonical: bool = strawberry.field(description="Whether this is the lens' one voxel size, the one `ArrayLens.voxelSize` answers")
-    validity: enums.PlacementValidity = strawberry.field(description="The weakest validity on the route: the first thing the ranking compares")
-    hops: int = strawberry.field(description="How many edges the route takes, from the lens' own space")
-    problem: str | None = strawberry.field(description="Why this route cannot be a calibration -- it relates a SPACE axis to another kind of axis, measures space in arbitrary units, or does not compose -- or null. A route with a problem is never canonical")
-    route: List[Transformation] = strawberry.field(description="The edges of the route, from the lens' own space to this one")
+    axes: list[AxisVoxelSize] = strawberry.field(
+        description="One entry per lens axis the route scales, in the lens' axis order. An axis in `a.u.` is not listed: it measures nothing"
+    )
+    canonical: bool = strawberry.field(
+        description="Whether this is the lens' one voxel size, the one `ArrayLens.voxelSize` answers"
+    )
+    validity: enums.PlacementValidity = strawberry.field(
+        description="The weakest validity on the route: the first thing the ranking compares"
+    )
+    hops: int = strawberry.field(
+        description="How many edges the route takes, from the lens' own space"
+    )
+    problem: str | None = strawberry.field(
+        description="Why this route cannot be a calibration -- it relates a SPACE axis to another kind of axis, measures space in arbitrary units, or does not compose -- or null. A route with a problem is never canonical"
+    )
+    route: list[Transformation] = strawberry.field(
+        description="The edges of the route, from the lens' own space to this one"
+    )
 
 
 @kante.type(
@@ -828,8 +1072,12 @@ class VoxelSize:
 class PlacementStep:
     """One step of a placement path: an edge, and the direction it is walked in."""
 
-    transformation: Transformation = strawberry.field(description="The transformation edge this step walks along")
-    inverted: bool = strawberry.field(description="True when the edge is traversed output-to-input, so its map must be inverted before composing. Only ever set on a step that has an inverse -- a rank-changing edge and a warp field are never offered backwards")
+    transformation: Transformation = strawberry.field(
+        description="The transformation edge this step walks along"
+    )
+    inverted: bool = strawberry.field(
+        description="True when the edge is traversed output-to-input, so its map must be inverted before composing. Only ever set on a step that has an inverse -- a rank-changing edge and a warp field are never offered backwards"
+    )
 
 
 @kante.type(
@@ -843,11 +1091,19 @@ class PlacementStep:
 class AffinePlacement:
     """One placement path condensed into a single affine map, over named axes."""
 
-    matrix: List[List[float]] = strawberry.field(description="The composed map, M x (N+1), rows outermost. One row per axis in `outputAxes`, one column per axis in `inputAxes`, plus a final translation column")
-    input_axes: List[str] = strawberry.field(description="The axes the matrix's columns are in, which is the layer's own source coordinate system's axis order")
-    output_axes: List[str] = strawberry.field(description="The destination axes the matrix's rows are in, in the world's own axis order. An axis the path says nothing about has no row at all")
-    total: bool = strawberry.field(description="Whether `outputAxes` and `fields` together cover every axis of the destination space. False for a partial registration -- an honest map over the axes it names, and silence about the rest")
-    fields: List["PlacementField"] = strawberry.field(
+    matrix: list[list[float]] = strawberry.field(
+        description="The composed map, M x (N+1), rows outermost. One row per axis in `outputAxes`, one column per axis in `inputAxes`, plus a final translation column"
+    )
+    input_axes: list[str] = strawberry.field(
+        description="The axes the matrix's columns are in, which is the layer's own source coordinate system's axis order"
+    )
+    output_axes: list[str] = strawberry.field(
+        description="The destination axes the matrix's rows are in, in the world's own axis order. An axis the path says nothing about has no row at all"
+    )
+    total: bool = strawberry.field(
+        description="Whether `outputAxes` and `fields` together cover every axis of the destination space. False for a partial registration -- an honest map over the axes it names, and silence about the rest"
+    )
+    fields: list["PlacementField"] = strawberry.field(
         default_factory=list,
         description="The destination axes given by an array's values rather than by a row of `matrix`: the time of each frame of an event-triggered movie, the positions a warp field gives. An axis is in `outputAxes` or here, never both",
     )
@@ -867,22 +1123,46 @@ class AffinePlacement:
 class PlacementField:
     """One destination axis of a composed placement given by a field."""
 
-    output_axis: str = strawberry.field(description="The destination axis this field gives")
-    inner: List[List[float]] = strawberry.field(description="Source position to array position: one row per axis the array is indexed by, one coefficient per source axis plus a constant")
-    base: List[float] = strawberry.field(description="The affine part added to the scaled value: one coefficient per source axis plus a constant. Zero coefficients unless the field holds DISPLACEMENT offsets")
-    component: int | None = strawberry.field(description="The value-axis position of a vector field (COORDINATE or DISPLACEMENT) this axis reads; null for a scalar field")
-    scale: float = strawberry.field(description="Array value to destination coordinate: the factor, including the unit conversion from the array's values")
-    offset: float = strawberry.field(description="Array value to destination coordinate: the constant, `base`'s last entry")
-    input_axis: str | None = strawberry.field(description="For a field read along one source axis -- a lookup: that axis. Null otherwise")
-    inner_scale: float | None = strawberry.field(description="For a lookup: source index to array index, the factor")
-    inner_offset: float | None = strawberry.field(description="For a lookup: source index to array index, the offset")
+    output_axis: str = strawberry.field(
+        description="The destination axis this field gives"
+    )
+    inner: list[list[float]] = strawberry.field(
+        description="Source position to array position: one row per axis the array is indexed by, one coefficient per source axis plus a constant"
+    )
+    base: list[float] = strawberry.field(
+        description="The affine part added to the scaled value: one coefficient per source axis plus a constant. Zero coefficients unless the field holds DISPLACEMENT offsets"
+    )
+    component: int | None = strawberry.field(
+        description="The value-axis position of a vector field (COORDINATE or DISPLACEMENT) this axis reads; null for a scalar field"
+    )
+    scale: float = strawberry.field(
+        description="Array value to destination coordinate: the factor, including the unit conversion from the array's values"
+    )
+    offset: float = strawberry.field(
+        description="Array value to destination coordinate: the constant, `base`'s last entry"
+    )
+    input_axis: str | None = strawberry.field(
+        description="For a field read along one source axis -- a lookup: that axis. Null otherwise"
+    )
+    inner_scale: float | None = strawberry.field(
+        description="For a lookup: source index to array index, the factor"
+    )
+    inner_offset: float | None = strawberry.field(
+        description="For a lookup: source index to array index, the offset"
+    )
     # Resolved by the caller, inside its own (thread-wrapped) resolver: a plain strawberry
     # resolver here runs in the async loop and may not touch the ORM.
-    field: CoordinateSystem = strawberry.field(description="The coordinate system of the array whose values are the map")
-    dataset: Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] | None = strawberry.field(description="The dataset whose values are the map. Read its level-0 store to evaluate the field")
+    field: CoordinateSystem = strawberry.field(
+        description="The coordinate system of the array whose values are the map"
+    )
+    dataset: (
+        Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")] | None
+    ) = strawberry.field(
+        description="The dataset whose values are the map. Read its level-0 store to evaluate the field"
+    )
 
     @classmethod
-    def from_form(cls, axis: str, form, source_axes: List[str]) -> "PlacementField":  # noqa: ANN001 - coords_logic.FieldForm
+    def from_form(cls, axis: str, form, source_axes: list[str]) -> "PlacementField":  # noqa: ANN001 - coords_logic.FieldForm
         """One composed field as the wire type. Queries: call it from a sync resolver."""
         field = models.CoordinateSystem.objects.get(pk=form.field)
         single = form.single_term()
@@ -901,13 +1181,21 @@ class PlacementField:
         )
 
 
-@kante.type(description="One axis of a source's extent: the range it occupies along a single named axis of the queried coordinate system")
+@kante.type(
+    description="One axis of a source's extent: the range it occupies along a single named axis of the queried coordinate system"
+)
 class AxisExtent:
     """One axis of an extent. An axis a source does not constrain has no entry at all."""
 
-    axis: str = strawberry.field(description="The name of the axis, as it is named on the queried coordinate system")
-    min: float = strawberry.field(description="The lower bound along this axis, inclusive")
-    max: float = strawberry.field(description="The upper bound along this axis, inclusive")
+    axis: str = strawberry.field(
+        description="The name of the axis, as it is named on the queried coordinate system"
+    )
+    min: float = strawberry.field(
+        description="The lower bound along this axis, inclusive"
+    )
+    max: float = strawberry.field(
+        description="The upper bound along this axis, inclusive"
+    )
 
 
 InViewSource = Annotated[
@@ -929,18 +1217,22 @@ InViewSource = Annotated[
 ]
 
 
-@kante.type(description="One source in view of a region: where it sits in the queried coordinate system, how it got there, and which of its coordinate anchors are in view")
+@kante.type(
+    description="One source in view of a region: where it sits in the queried coordinate system, how it got there, and which of its coordinate anchors are in view"
+)
 class SourcePlacement:
     """One container in view of a region asked in a coordinate system."""
 
-    source: InViewSource = strawberry.field(description="The container in view: an array dataset, a mesh collection, a table dataset or an annotation collection")
+    source: InViewSource = strawberry.field(
+        description="The container in view: an array dataset, a mesh collection, a table dataset or an annotation collection"
+    )
     system: CoordinateSystem = strawberry.field(
         description=(
             "The source's own coordinate system that `extent` is anchored at and `path` starts from -- its pixel grid, its lens crop, or its collection's space. Which one it "
             "is follows from where the registration into the queried system actually attaches, which is what keeps the walk running forward"
         )
     )
-    extent: List[AxisExtent] = strawberry.field(
+    extent: list[AxisExtent] = strawberry.field(
         description=(
             "The source's axis-aligned extent in the queried system's coordinates, one entry per axis it constrains -- and only those. Usually a proper subset: a (c,y,x) "
             "dataset registered onto the (y,x) of a (t,z,y,x) world is a slab, extended along t and z, and an entry there would be a number nothing measured. Empty when "
@@ -956,10 +1248,12 @@ class SourcePlacement:
     validity: enums.PlacementValidity = strawberry.field(
         description="How much this placement is actually known: the weakest edge on `path`. VALIDATED for a source that already IS the queried system, a placement exact by construction"
     )
-    path: List[PlacementStep] = strawberry.field(
+    path: list[PlacementStep] = strawberry.field(
         description="The ordered edges from `system` into the queried system, in stored direction with the inversions flagged. Empty when the source's own system IS the queried system. The server returns the steps; composing them stays the client's job, exactly as for `Layer.pathToWorld`"
     )
-    anchors: List[Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]] = strawberry.field(
+    anchors: list[
+        Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]
+    ] = strawberry.field(
         description=(
             "The source's coordinate anchors whose slab overlaps the region. An anchor pins some axes and is global along every axis it omits. For an array dataset the slab is one voxel "
             "wide where it pins and the container's full extent where it does not; for a table or a sparse dataset a pin is one position of a coordinate column, and an omitted axis is "
@@ -974,9 +1268,15 @@ class SourcePlacement:
 class CoordinateGraph:
     """The subgraph reachable from one coordinate system, edges included."""
 
-    root: CoordinateSystem = strawberry.field(description="The coordinate system the walk started from")
-    systems: List[CoordinateSystem] = strawberry.field(description="Every coordinate system reachable from the root, the root included, ordered by ID")
-    transformations: List[Transformation] = strawberry.field(description="Every edge with both endpoints in `systems`, ordered by ID. A SEQUENCE's steps are part of their edge, not edges of their own")
+    root: CoordinateSystem = strawberry.field(
+        description="The coordinate system the walk started from"
+    )
+    systems: list[CoordinateSystem] = strawberry.field(
+        description="Every coordinate system reachable from the root, the root included, ordered by ID"
+    )
+    transformations: list[Transformation] = strawberry.field(
+        description="Every edge with both endpoints in `systems`, ordered by ID. A SEQUENCE's steps are part of their edge, not edges of their own"
+    )
 
 
 @kante.type(
@@ -990,15 +1290,17 @@ class CoordinateGraph:
 class LineageGraph:
     """The derivation component around one container: its ancestors, its descendants, and the edges."""
 
-    root: CoordinateSystem = strawberry.field(description="The coordinate system the walk started from. Its container is the node the graph is centred on")
-    nodes: List[Resident] = strawberry.field(
+    root: CoordinateSystem = strawberry.field(
+        description="The coordinate system the walk started from. Its container is the node the graph is centred on"
+    )
+    nodes: list[Resident] = strawberry.field(
         description=(
             "Every container in the component, the root's own included, ordered by kind and then by ID. Containers rather than spaces: a lineage is a story about data, and a "
             "dataset's pixel grid, its pyramid levels and its lenses are one node in it rather than three. Empty when the root space belongs to no container -- a world was "
             "computed from nothing and nothing was computed from it"
         )
     )
-    edges: List[Transformation] = strawberry.field(
+    edges: list[Transformation] = strawberry.field(
         description=(
             "Every derivation edge with both containers in `nodes`, ordered by ID. Stored direction throughout -- child to source -- so the arrow points the way provenance "
             "reads. **Kind-blind**: an UNMAPPABLE edge is here, and is the point of the kind existing, since 'this came from that and the geometry did not survive' is exactly "
@@ -1016,23 +1318,39 @@ class LineageGraph:
 class MeshCollection(OrgScoped):
     """An immutable collection of meshes, backed by Parquet stores rather than rows."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
-    @kante.django_field(description="The lenses over this mesh collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lenses over this mesh collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`"
+    )
+    def lenses(
+        self, info: Info, windowed: bool | None = None
+    ) -> list[Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]]:
         """The container's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
             return list(lenses)
-        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+        return list(
+            lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[])
+        )
 
-    @kante.django_field(description="The lens that selects this whole mesh collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every mesh collection is created with one")
-    def full_lens(self, info: Info) -> Optional[Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lens that selects this whole mesh collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every mesh collection is created with one"
+    )
+    def full_lens(
+        self, info: Info
+    ) -> Annotated["MeshLens", strawberry.lazy("core.types.array_dataset")] | None:
         """The whole lens over this container."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
-        description="The folder this mesh collection is filed in. Organisational only: it says where a user keeps this collection, never where the meshes sit in space -- that is `coordinateSystem` and the edges out of it"
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(
+            description="The folder this mesh collection is filed in. Organisational only: it says where a user keeps this collection, never where the meshes sit in space -- that is `coordinateSystem` and the edges out of it"
+        )
     )
 
     @kante.django_field(
@@ -1043,34 +1361,55 @@ class MeshCollection(OrgScoped):
         ),
         prefetch_related=["file_links__file"],
     )
-    def source_files(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def source_files(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file this mesh collection was produced from."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
+            filters,
+            info,
+        )
 
     @kante.django_field(
         description="The files written out of this mesh collection: an OME-TIFF export, a rendered snapshot registered as a file. The mirror of `sourceFiles`",
         prefetch_related=["file_links__file"],
     )
-    def exports(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def exports(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file written out of this mesh collection."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION),
+            filters,
+            info,
+        )
 
     id: auto
     name: str | None
 
-    @kante.django_field(select_related=["store"], description="What to call this collection: its name, or its store's key when it has none")
+    @kante.django_field(
+        select_related=["store"],
+        description="What to call this collection: its name, or its store's key when it has none",
+    )
     def label(self, info: Info) -> str:
         """The collection's label."""
         return self.label
 
-    @kante.django_field(select_related=["store"], description="The format version this collection's store conforms to, read off the store's manifest and namespaced (`fabriks/1`). Null while the store has not been read")
+    @kante.django_field(
+        select_related=["store"],
+        description="The format version this collection's store conforms to, read off the store's manifest and namespaced (`fabriks/1`). Null while the store has not been read",
+    )
     def spec_version(self, info: Info) -> str | None:
         """The store's format version, namespaced."""
         return self.spec_version
+
     # The collection's OWN system, not the dataset's. It used to borrow the source's,
     # which forced the vertices to be exactly in that pixel grid; `derivedFrom` is where
     # the relation now lives, and it can say something a borrowed system could not.
-    coordinate_system: CoordinateSystem = kante.django_field(description="The coordinate system the collection's vertices are expressed in. The collection owns it; `derivedFrom` relates it to the data the meshes were extracted from")
+    coordinate_system: CoordinateSystem = kante.django_field(
+        description="The coordinate system the collection's vertices are expressed in. The collection owns it; `derivedFrom` relates it to the data the meshes were extracted from"
+    )
     # A store, not a URL: it carries the datalayer access grant the client needs to read it, and
     # it is organization-scoped. A bare URL would sit outside the datalayer entirely -- nothing
     # would sign it and nothing would own it.
@@ -1082,12 +1421,16 @@ class MeshCollection(OrgScoped):
         )
     )
 
-    @kante.django_field(description="The octree grid, as read from the store's manifest. Its `cellSize` is in voxels, one size per vertex component -- the same order the catalog's bbox columns use, which is not necessarily the coordinate system's axis order")
+    @kante.django_field(
+        description="The octree grid, as read from the store's manifest. Its `cellSize` is in voxels, one size per vertex component -- the same order the catalog's bbox columns use, which is not necessarily the coordinate system's axis order"
+    )
     def grid(self, info: Info) -> scalars.Any:
         """The octree grid."""
         return self.grid
 
-    @kante.django_field(description="The geometry encoding: how positions, normals and indices are quantized and compressed")
+    @kante.django_field(
+        description="The geometry encoding: how positions, normals and indices are quantized and compressed"
+    )
     def encoding(self, info: Info) -> scalars.Any:
         """The geometry encoding."""
         return self.encoding
@@ -1099,16 +1442,20 @@ class MeshCollection(OrgScoped):
             "collection, so read it on a collection, not across a page of them"
         )
     )
-    def color_by_options(self, info: Info, max_join_depth: int = 1) -> List[Annotated["ColorByOption", strawberry.lazy("core.types.column_options")]]:
+    def color_by_options(
+        self, info: Info, max_join_depth: int = 1
+    ) -> list[Annotated["ColorByOption", strawberry.lazy("core.types.column_options")]]:
         """The picker's candidates, built by the one function the write path validates against."""
         from core.queries.column_options import color_by_options as resolve_options
 
-        return resolve_options(info, strawberry.ID(str(self.pk)), max_join_depth=max_join_depth)
+        return resolve_options(
+            info, strawberry.ID(str(self.pk)), max_join_depth=max_join_depth
+        )
 
     @kante.django_field(
         description="Every edge from this collection's space back into data the meshes were extracted from, in declared order -- the first is the primary parent, the one that places it. An identity when the meshes are in that grid as-is, a scale when they came off a downsampled one, UNMAPPABLE where the lineage is recorded but no geometry is claimed. Empty for a mesh derived from no data at all. The same relation a derived dataset's `derivedFrom` records"
     )
-    def derived_from(self, info: Info) -> List["Transformation"]:
+    def derived_from(self, info: Info) -> list["Transformation"]:
         """The edges relating this collection's space to the ones it came from."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
@@ -1123,10 +1470,14 @@ class MeshCollection(OrgScoped):
 class MeshObject:
     """One object of a mesh collection, by its catalog id."""
 
-    object_id: int = strawberry.field(description="The object's id in the collection's object catalog: what a picked mesh reports")
+    object_id: int = strawberry.field(
+        description="The object's id in the collection's object catalog: what a picked mesh reports"
+    )
     _collection: strawberry.Private["models.MeshCollection"]
 
-    @strawberry.field(description="`<collection>:<object>`: a stable handle, unique across collections")
+    @strawberry.field(
+        description="`<collection>:<object>`: a stable handle, unique across collections"
+    )
     def id(self) -> strawberry.ID:
         """The collection and the object, together."""
         return strawberry.ID(f"{self._collection.pk}:{self.object_id}")
@@ -1142,15 +1493,23 @@ class MeshObject:
             "`Annotation.derivedResidents`, kind-blind like it. These are listed on the collection's own lineage too: an object is part of its collection"
         )
     )
-    async def derived_residents(self, info: Info) -> List[Resident]:
+    async def derived_residents(self, info: Info) -> list[Resident]:
         """Every container with a derivation edge naming this object."""
         # A plain strawberry type, not a django one: its ORM read leaves the event loop itself.
-        return await sync_to_async(graph_logic.mesh_object_derived_containers)(self._collection, self.object_id)
+        return await sync_to_async(graph_logic.mesh_object_derived_containers)(
+            self._collection, self.object_id
+        )
 
-    @strawberry.field(description="How many containers `derivedResidents` lists: a count for a card, without loading what they are")
+    @strawberry.field(
+        description="How many containers `derivedResidents` lists: a count for a card, without loading what they are"
+    )
     async def derived_residents_count(self, info: Info) -> int:
         """The number of containers derived from this object."""
-        return len(await sync_to_async(graph_logic.mesh_object_derived_containers)(self._collection, self.object_id))
+        return len(
+            await sync_to_async(graph_logic.mesh_object_derived_containers)(
+                self._collection, self.object_id
+            )
+        )
 
 
 @kante.django_type(
@@ -1162,23 +1521,39 @@ class MeshObject:
 class NetworkCollection(OrgScoped):
     """An immutable collection of node/edge networks, backed by Parquet stores rather than rows."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
-    @kante.django_field(description="The lenses over this network collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lenses over this network collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`"
+    )
+    def lenses(
+        self, info: Info, windowed: bool | None = None
+    ) -> list[Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]]:
         """The container's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
             return list(lenses)
-        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+        return list(
+            lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[])
+        )
 
-    @kante.django_field(description="The lens that selects this whole network collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every network collection is created with one")
-    def full_lens(self, info: Info) -> Optional[Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lens that selects this whole network collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every network collection is created with one"
+    )
+    def full_lens(
+        self, info: Info
+    ) -> Annotated["NetworkLens", strawberry.lazy("core.types.array_dataset")] | None:
         """The whole lens over this container."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
-        description="The folder this network collection is filed in. Organisational only: it says where a user keeps this collection, never where the networks sit in space -- that is `coordinateSystem` and the edges out of it"
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(
+            description="The folder this network collection is filed in. Organisational only: it says where a user keeps this collection, never where the networks sit in space -- that is `coordinateSystem` and the edges out of it"
+        )
     )
 
     @kante.django_field(
@@ -1189,34 +1564,55 @@ class NetworkCollection(OrgScoped):
         ),
         prefetch_related=["file_links__file"],
     )
-    def source_files(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def source_files(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file this network collection was produced from."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
+            filters,
+            info,
+        )
 
     @kante.django_field(
         description="The files written out of this network collection: an OME-TIFF export, a rendered snapshot registered as a file. The mirror of `sourceFiles`",
         prefetch_related=["file_links__file"],
     )
-    def exports(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def exports(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file written out of this network collection."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION),
+            filters,
+            info,
+        )
 
     id: auto
     name: str | None
 
-    @kante.django_field(select_related=["store"], description="What to call this collection: its name, or its store's key when it has none")
+    @kante.django_field(
+        select_related=["store"],
+        description="What to call this collection: its name, or its store's key when it has none",
+    )
     def label(self, info: Info) -> str:
         """The collection's label."""
         return self.label
 
-    @kante.django_field(select_related=["store"], description="The format version this collection's store conforms to, read off the store's manifest and namespaced (`konnektion/1`). Null while the store has not been read")
+    @kante.django_field(
+        select_related=["store"],
+        description="The format version this collection's store conforms to, read off the store's manifest and namespaced (`konnektion/1`). Null while the store has not been read",
+    )
     def spec_version(self, info: Info) -> str | None:
         """The store's format version, namespaced."""
         return self.spec_version
+
     # The collection's OWN system, not the dataset's. It used to borrow the source's,
     # which forced the node positions to be exactly in that pixel grid; `derivedFrom` is where
     # the relation now lives, and it can say something a borrowed system could not.
-    coordinate_system: CoordinateSystem = kante.django_field(description="The coordinate system the collection's node positions are expressed in. The collection owns it; `derivedFrom` relates it to the data the network was traced in")
+    coordinate_system: CoordinateSystem = kante.django_field(
+        description="The coordinate system the collection's node positions are expressed in. The collection owns it; `derivedFrom` relates it to the data the network was traced in"
+    )
     # A store, not a URL: it carries the datalayer access grant the client needs to read it, and
     # it is organization-scoped. A bare URL would sit outside the datalayer entirely -- nothing
     # would sign it and nothing would own it.
@@ -1228,12 +1624,16 @@ class NetworkCollection(OrgScoped):
         )
     )
 
-    @kante.django_field(description="The octree grid, as read from the store's manifest. Its `cellSize` is in voxels, one size per position component -- the same order the catalog's bbox columns use, which is not necessarily the coordinate system's axis order")
+    @kante.django_field(
+        description="The octree grid, as read from the store's manifest. Its `cellSize` is in voxels, one size per position component -- the same order the catalog's bbox columns use, which is not necessarily the coordinate system's axis order"
+    )
     def grid(self, info: Info) -> scalars.Any:
         """The octree grid."""
         return self.grid
 
-    @kante.django_field(description="The geometry encoding: how positions, edges, node ids, radii and ghosts are quantized and compressed, and which coarsening operations each level ran")
+    @kante.django_field(
+        description="The geometry encoding: how positions, edges, node ids, radii and ghosts are quantized and compressed, and which coarsening operations each level ran"
+    )
     def encoding(self, info: Info) -> scalars.Any:
         """The geometry encoding."""
         return self.encoding
@@ -1246,21 +1646,27 @@ class NetworkCollection(OrgScoped):
             "graph once per collection, so read it on a collection, not across a page of them"
         )
     )
-    def color_by_options(self, info: Info, max_join_depth: int = 1) -> List[Annotated["ColorByOption", strawberry.lazy("core.types.column_options")]]:
+    def color_by_options(
+        self, info: Info, max_join_depth: int = 1
+    ) -> list[Annotated["ColorByOption", strawberry.lazy("core.types.column_options")]]:
         """The picker's candidates, built by the one function the write path validates against.
 
         Through the *network* resolver, emphatically: this used to delegate to the mesh-rooted
         root query with a network pk, which looked the id up in the wrong table -- DoesNotExist
         when no mesh row shared it, and silently another collection's options when one did.
         """
-        from core.queries.column_options import network_color_by_options as resolve_options
+        from core.queries.column_options import (
+            network_color_by_options as resolve_options,
+        )
 
-        return resolve_options(info, strawberry.ID(str(self.pk)), max_join_depth=max_join_depth)
+        return resolve_options(
+            info, strawberry.ID(str(self.pk)), max_join_depth=max_join_depth
+        )
 
     @kante.django_field(
         description="Every edge from this collection's space back into data the network was traced in, in declared order -- the first is the primary parent, the one that places it. An identity when the network is in that grid as-is, a scale when it was traced on a downsampled one, UNMAPPABLE where the lineage is recorded but no geometry is claimed. Empty for a network derived from no data at all. The same relation a derived dataset's `derivedFrom` records"
     )
-    def derived_from(self, info: Info) -> List["Transformation"]:
+    def derived_from(self, info: Info) -> list["Transformation"]:
         """The edges relating this collection's space to the ones it came from."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
@@ -1275,30 +1681,51 @@ class NetworkCollection(OrgScoped):
 class Fixture(OrgScoped):
     """A fixture, backed by one glTF file rather than rows."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
-    @kante.django_field(description="The lenses over this model, oldest first: its whole lens and every clip box someone has cut. `windowed: true` keeps the clip boxes, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lenses over this model, oldest first: its whole lens and every clip box someone has cut. `windowed: true` keeps the clip boxes, `windowed: false` the whole lens, which is also `fullLens`"
+    )
+    def lenses(
+        self, info: Info, windowed: bool | None = None
+    ) -> list[Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")]]:
         """The model's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
             return list(lenses)
-        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+        return list(
+            lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[])
+        )
 
-    @kante.django_field(description="The lens that selects this whole model: what a layer draws through, and the handle to pass wherever a `Lens` is asked for. Every model is created with one")
-    def full_lens(self, info: Info) -> Optional[Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lens that selects this whole model: what a layer draws through, and the handle to pass wherever a `Lens` is asked for. Every model is created with one"
+    )
+    def full_lens(
+        self, info: Info
+    ) -> Annotated["FixtureLens", strawberry.lazy("core.types.array_dataset")] | None:
         """The whole lens over this model."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
-        description="The folder this model is filed in. Organisational only: it says where a user keeps the model, never where it sits in space -- that is `coordinateSystem` and the edges out of it"
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(
+            description="The folder this model is filed in. Organisational only: it says where a user keeps the model, never where it sits in space -- that is `coordinateSystem` and the edges out of it"
+        )
     )
 
     id: auto
     name: str | None
-    created_at: datetime.datetime = kante.django_field(description="When the model was registered")
+    created_at: datetime.datetime = kante.django_field(
+        description="When the model was registered"
+    )
 
-    @kante.django_field(select_related=["store"], description="What to call this model: its name, or its file's original name when it has none")
+    @kante.django_field(
+        select_related=["store"],
+        description="What to call this model: its name, or its file's original name when it has none",
+    )
     def label(self, info: Info) -> str:
         """The model's label."""
         return self.label
@@ -1306,15 +1733,21 @@ class Fixture(OrgScoped):
     coordinate_system: CoordinateSystem = kante.django_field(
         description="The unit-carrying coordinate system the model's vertices are expressed in. Its axes carry the unit the exporter wrote, so an IDENTITY registration into a micrometre world converts by the units"
     )
-    store: KulisseStore = kante.django_field(description="The kulisse store holding the model: one self-contained binary glTF and what it says about itself (nodes, joints, bounds). Ask it for an `accessGrant` and fetch the file whole: a viewer loads a model in one request")
+    store: KulisseStore = kante.django_field(
+        description="The kulisse store holding the model: one self-contained binary glTF and what it says about itself (nodes, joints, bounds). Ask it for an `accessGrant` and fetch the file whole: a viewer loads a model in one request"
+    )
 
-    @kante.django_field(description="The model's axis-aligned bounding box in its own space, as `{min: [x, y, z], max: [x, y, z]}` in the axes' order and unit, read from the file's accessor bounds at registration. Null when the file declares none")
+    @kante.django_field(
+        description="The model's axis-aligned bounding box in its own space, as `{min: [x, y, z], max: [x, y, z]}` in the axes' order and unit, read from the file's accessor bounds at registration. Null when the file declares none"
+    )
     def bounds(self, info: Info) -> scalars.Any | None:
         """The stored box."""
         return self.bounds
 
-    @kante.django_field(description="Every edge from this model's space back into data it was made from, in declared order. Usually empty: a model of hardware derives from nothing and is placed by a registration instead")
-    def derived_from(self, info: Info) -> List["Transformation"]:
+    @kante.django_field(
+        description="Every edge from this model's space back into data it was made from, in declared order. Usually empty: a model of hardware derives from nothing and is placed by a registration instead"
+    )
+    def derived_from(self, info: Info) -> list["Transformation"]:
         """The edges relating this model's space to the ones it came from."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []

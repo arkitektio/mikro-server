@@ -77,33 +77,51 @@ CROP = [{"axis": "y", "start": 8, "stop": 40}, {"axis": "x", "start": 8, "stop":
 
 
 async def _from_lens(ctx: HttpContext, lens: models.Lens, **extra) -> dict:
-    result = await schema.execute(FROM_LENS, context_value=ctx, variable_values={"input": {"lens": str(lens.pk), **extra}})
+    result = await schema.execute(
+        FROM_LENS,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(lens.pk), **extra}},
+    )
     assert not result.errors, result.errors
     return result.data["createSceneFromLens"]
 
 
 async def _stage_dataset(ctx: HttpContext, dataset: models.ArrayDataset) -> str:
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
-    result = await schema.execute(FROM_SYSTEM, context_value=ctx, variable_values={"input": {"coordinateSystem": str(intrinsic.pk), "policy": {}}})
+    result = await schema.execute(
+        FROM_SYSTEM,
+        context_value=ctx,
+        variable_values={
+            "input": {"coordinateSystem": str(intrinsic.pk), "policy": {}}
+        },
+    )
     assert not result.errors, result.errors
     return result.data["createSceneFromCoordinateSystem"]["id"]
 
 
 async def _lens(ctx: HttpContext, lens: models.Lens) -> dict:
-    result = await schema.execute(LENS, context_value=ctx, variable_values={"id": str(lens.pk)})
+    result = await schema.execute(
+        LENS, context_value=ctx, variable_values={"id": str(lens.pk)}
+    )
     assert not result.errors, result.errors
     return result.data["lens"]
 
 
 async def _dataset(ctx: HttpContext, dataset: models.ArrayDataset) -> dict:
-    result = await schema.execute(DATASET, context_value=ctx, variable_values={"id": str(dataset.pk)})
+    result = await schema.execute(
+        DATASET, context_value=ctx, variable_values={"id": str(dataset.pk)}
+    )
     assert not result.errors, result.errors
     return result.data["arrayDataset"]
 
 
 def _layers_over(lens: models.Lens) -> list[models.Layer]:
     """The layers a scene from this lens drew: each over a single-channel lens cut from it, so they are found by the dataset."""
-    return list(models.Layer.objects.filter(lens__arraylens__dataset_id=lens.dataset_id).order_by("order"))
+    return list(
+        models.Layer.objects.filter(
+            lens__arraylens__dataset_id=lens.dataset_id
+        ).order_by("order")
+    )
 
 
 def _channel_of(layer: models.Layer) -> int:
@@ -126,22 +144,50 @@ async def test_a_scene_from_a_lens_draws_that_lens(authenticated_context: HttpCo
 
     scene = await _from_lens(ctx, crop)
 
-    assert scene["name"] == "Tissue", "a lens has no name of its own; the scene takes its dataset's"
-    assert len(scene["layers"]) == 3, "one layer per channel, exactly as a whole dataset is drawn"
-    drawn = await sync_to_async(lambda: [models.ArrayLens.objects.get(pk=layer["lens"]["id"]) for layer in scene["layers"]])()
-    assert {lens.dataset_id for lens in drawn} == {dataset.pk} and all(lens.pk != crop.pk for lens in drawn), "every layer reads a lens cut from the crop, not the crop itself: a layer draws one channel"
-    assert {tuple((s.axis, s.start, s.stop) for s in lens.slices_list if s.axis != "c") for lens in drawn} == {tuple((s["axis"], s["start"], s["stop"]) for s in CROP)}, "each keeps exactly the crop's window"
-    assert sorted(next(s.start for s in lens.slices_list if s.axis == "c") for lens in drawn) == [0, 1, 2], "and pins one channel each"
-    assert {layer["placement"] for layer in scene["layers"]} == {"PLACED"}, "the lens' own edge into the grid places it; nothing was authored"
+    assert scene["name"] == "Tissue", (
+        "a lens has no name of its own; the scene takes its dataset's"
+    )
+    assert len(scene["layers"]) == 3, (
+        "one layer per channel, exactly as a whole dataset is drawn"
+    )
+    drawn = await sync_to_async(
+        lambda: [
+            models.ArrayLens.objects.get(pk=layer["lens"]["id"])
+            for layer in scene["layers"]
+        ]
+    )()
+    assert {lens.dataset_id for lens in drawn} == {dataset.pk} and all(
+        lens.pk != crop.pk for lens in drawn
+    ), (
+        "every layer reads a lens cut from the crop, not the crop itself: a layer draws one channel"
+    )
+    assert {
+        tuple((s.axis, s.start, s.stop) for s in lens.slices_list if s.axis != "c")
+        for lens in drawn
+    } == {tuple((s["axis"], s["start"], s["stop"]) for s in CROP)}, (
+        "each keeps exactly the crop's window"
+    )
+    assert sorted(
+        next(s.start for s in lens.slices_list if s.axis == "c") for lens in drawn
+    ) == [0, 1, 2], "and pins one channel each"
+    assert {layer["placement"] for layer in scene["layers"]} == {"PLACED"}, (
+        "the lens' own edge into the grid places it; nothing was authored"
+    )
 
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
-    assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk), "the crop sits where it was cut from"
-    assert await models.ArrayLens.objects.filter(dataset=dataset).acount() == 5, "the whole lens the dataset was born with, the crop, and the crop's three channels -- one lens per selection drawn"
+    assert scene["worldCoordinateSystem"]["id"] == str(intrinsic.pk), (
+        "the crop sits where it was cut from"
+    )
+    assert await models.ArrayLens.objects.filter(dataset=dataset).acount() == 5, (
+        "the whole lens the dataset was born with, the crop, and the crop's three channels -- one lens per selection drawn"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(authenticated_context: HttpContext):
+async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(
+    authenticated_context: HttpContext,
+):
     """Over ``c[1:3]``, layer index 0 is the dataset's channel 1 -- and must be drawn as channel 1.
 
     A layer draws through a lens pinning one of the dataset's channels; labels and histograms are recorded
@@ -152,10 +198,26 @@ async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(authe
     dataset = await seed.create_array_dataset(ctx, "Threeplex")
 
     def record() -> None:
-        for index, (label, window) in enumerate([("DAPI", (10.0, 100.0)), ("GFP", (20.0, 200.0)), ("mCherry", (30.0, 300.0))]):
-            anchor = models.CoordinateAnchor.objects.create(dataset=dataset, coordinates={"c": index})
+        for index, (label, window) in enumerate(
+            [
+                ("DAPI", (10.0, 100.0)),
+                ("GFP", (20.0, 200.0)),
+                ("mCherry", (30.0, 300.0)),
+            ]
+        ):
+            anchor = models.CoordinateAnchor.objects.create(
+                dataset=dataset, coordinates={"c": index}
+            )
             models.ChannelLabel.objects.create(anchor=anchor, label=label)
-            models.ValueHistogram.objects.create(anchor=anchor, histogram=[], bins=[], min=0.0, max=65535.0, p1=window[0], p99=window[1])
+            models.ValueHistogram.objects.create(
+                anchor=anchor,
+                histogram=[],
+                bins=[],
+                min=0.0,
+                max=65535.0,
+                p1=window[0],
+                p99=window[1],
+            )
 
     await sync_to_async(record)()
     lens = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 3}])
@@ -163,9 +225,17 @@ async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(authe
     await _from_lens(ctx, lens)
 
     layers = await sync_to_async(_layers_over)(lens)
-    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [1, 2], "two single-channel lenses, cut from the crop: the dataset's channels 1 and 2"
-    assert [layer.name for layer in layers] == ["GFP", "mCherry"], "named for the channels the lens actually selects"
-    assert [(layer.clim_min, layer.clim_max) for layer in layers] == [(20.0, 200.0), (30.0, 300.0)], "and opened at their recorded windows, not at DAPI's"
+    assert await sync_to_async(lambda: [_channel_of(layer) for layer in layers])() == [
+        1,
+        2,
+    ], "two single-channel lenses, cut from the crop: the dataset's channels 1 and 2"
+    assert [layer.name for layer in layers] == ["GFP", "mCherry"], (
+        "named for the channels the lens actually selects"
+    )
+    assert [(layer.clim_min, layer.clim_max) for layer in layers] == [
+        (20.0, 200.0),
+        (30.0, 300.0),
+    ], "and opened at their recorded windows, not at DAPI's"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -174,17 +244,27 @@ async def test_a_crop_too_thin_to_draw_is_refused(authenticated_context: HttpCon
     """Renderability is a fact of the selection: a dataset that draws can have a lens that does not."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
-    column = await seed.create_lens(ctx, dataset, [{"axis": "x", "start": 5, "stop": 6}])
+    column = await seed.create_lens(
+        ctx, dataset, [{"axis": "x", "start": 5, "stop": 6}]
+    )
 
-    result = await schema.execute(FROM_LENS, context_value=ctx, variable_values={"input": {"lens": str(column.pk)}})
+    result = await schema.execute(
+        FROM_LENS,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(column.pk)}},
+    )
 
     assert result.errors and "not renderable" in str(result.errors[0])
-    assert not await models.Scene.objects.aexists(), "the refusal leaves no empty scene behind"
+    assert not await models.Scene.objects.aexists(), (
+        "the refusal leaves no empty scene behind"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_sliced_lens_has_its_own_scenes_and_nomination(authenticated_context: HttpContext):
+async def test_a_sliced_lens_has_its_own_scenes_and_nomination(
+    authenticated_context: HttpContext,
+):
     """What a crop is shown in, and which of those to open, are the crop's own answers."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -193,19 +273,27 @@ async def test_a_sliced_lens_has_its_own_scenes_and_nomination(authenticated_con
 
     before = await _lens(ctx, crop)
     assert before["scenes"] == [], "a scene of the whole dataset does not show the crop"
-    assert before["defaultScene"] is None, f"nothing nominated yet, though scene {whole} shows the dataset"
+    assert before["defaultScene"] is None, (
+        f"nothing nominated yet, though scene {whole} shows the dataset"
+    )
 
     staged = await _from_lens(ctx, crop)
 
     after = await _lens(ctx, crop)
     assert [scene["id"] for scene in after["scenes"]] == [staged["id"]]
-    assert after["defaultScene"]["id"] == staged["id"], "the first scene staged from a lens becomes the one to open for it"
-    assert (await _dataset(ctx, dataset))["defaultScene"] is None, "and the dataset's own nomination is not the crop's to write"
+    assert after["defaultScene"]["id"] == staged["id"], (
+        "the first scene staged from a lens becomes the one to open for it"
+    )
+    assert (await _dataset(ctx, dataset))["defaultScene"] is None, (
+        "and the dataset's own nomination is not the crop's to write"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_crop_borrows_its_datasets_picture_until_it_has_one(authenticated_context: HttpContext):
+async def test_a_crop_borrows_its_datasets_picture_until_it_has_one(
+    authenticated_context: HttpContext,
+):
     """A crop nobody has staged still gets a tile -- its dataset's -- and its own once it nominates."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -222,21 +310,35 @@ async def test_a_crop_borrows_its_datasets_picture_until_it_has_one(authenticate
     assert borrowed["latestSnapshot"]["name"] == "overview"
     assert borrowed["defaultScene"]["id"] == str(overview.pk)
 
-    result = await schema.execute(SET_LENS_DEFAULT, context_value=ctx, variable_values={"input": {"lens": str(crop.pk), "scene": str(close_up.pk)}})
+    result = await schema.execute(
+        SET_LENS_DEFAULT,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(crop.pk), "scene": str(close_up.pk)}},
+    )
     assert not result.errors, result.errors
 
     own = await _lens(ctx, crop)
     assert own["latestSnapshot"]["name"] == "close-up"
-    assert (await _dataset(ctx, dataset))["defaultScene"]["id"] == str(overview.pk), "the dataset still opens its overview"
+    assert (await _dataset(ctx, dataset))["defaultScene"]["id"] == str(overview.pk), (
+        "the dataset still opens its overview"
+    )
 
-    cleared = await schema.execute(SET_LENS_DEFAULT, context_value=ctx, variable_values={"input": {"lens": str(crop.pk), "scene": None}})
+    cleared = await schema.execute(
+        SET_LENS_DEFAULT,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(crop.pk), "scene": None}},
+    )
     assert not cleared.errors, cleared.errors
-    assert (await _lens(ctx, crop))["latestSnapshot"]["name"] == "overview", "clearing falls back rather than going blank"
+    assert (await _lens(ctx, crop))["latestSnapshot"]["name"] == "overview", (
+        "clearing falls back rather than going blank"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unsliced_lens_answers_as_its_dataset(authenticated_context: HttpContext):
+async def test_an_unsliced_lens_answers_as_its_dataset(
+    authenticated_context: HttpContext,
+):
     """Nominating through a whole-array lens is nominating the dataset: one column, whichever door."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -244,23 +346,37 @@ async def test_an_unsliced_lens_answers_as_its_dataset(authenticated_context: Ht
     second = await seed.create_lens(ctx, dataset)
     scene = await seed.create_scene(ctx, "Composition")
 
-    result = await schema.execute(SET_LENS_DEFAULT, context_value=ctx, variable_values={"input": {"lens": str(first.pk), "scene": str(scene.pk)}})
+    result = await schema.execute(
+        SET_LENS_DEFAULT,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(first.pk), "scene": str(scene.pk)}},
+    )
     assert not result.errors, result.errors
 
     assert (await _dataset(ctx, dataset))["defaultScene"]["id"] == str(scene.pk)
-    assert (await models.Lens.objects.aget(pk=first.pk)).default_scene_id == scene.pk, "the whole lens is where the dataset's nomination lives"
-    assert (await _lens(ctx, second))["defaultScene"]["id"] == str(scene.pk), "so its interchangeable sibling answers alike"
+    assert (await models.Lens.objects.aget(pk=first.pk)).default_scene_id == scene.pk, (
+        "the whole lens is where the dataset's nomination lives"
+    )
+    assert (await _lens(ctx, second))["defaultScene"]["id"] == str(scene.pk), (
+        "so its interchangeable sibling answers alike"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_lists_its_lenses_whole_and_sliced_apart(authenticated_context: HttpContext):
+async def test_a_dataset_lists_its_lenses_whole_and_sliced_apart(
+    authenticated_context: HttpContext,
+):
     """`fullLens` and the `sliced` switch tell the handle for the whole array from the crops people work on."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
 
     async def create(slices: list) -> str:
-        result = await schema.execute(CREATE_LENS, context_value=ctx, variable_values={"input": {"dataset": str(dataset.pk), "slices": slices}})
+        result = await schema.execute(
+            CREATE_LENS,
+            context_value=ctx,
+            variable_values={"input": {"dataset": str(dataset.pk), "slices": slices}},
+        )
         assert not result.errors, result.errors
         return result.data["createLens"]["id"]
 
@@ -271,23 +387,35 @@ async def test_a_dataset_lists_its_lenses_whole_and_sliced_apart(authenticated_c
     listed = await _dataset(ctx, dataset)
     assert listed["fullLens"]["id"] == whole
     assert [lens["id"] for lens in listed["whole"]] == [whole]
-    assert crop in [lens["id"] for lens in listed["sliced"]] and whole not in [lens["id"] for lens in listed["sliced"]]
+    assert crop in [lens["id"] for lens in listed["sliced"]] and whole not in [
+        lens["id"] for lens in listed["sliced"]
+    ]
     assert len(listed["all"]) == 2
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_only_the_datasets_owner_nominates_for_its_lens(authenticated_context: HttpContext, bot_context: HttpContext):
+async def test_only_the_datasets_owner_nominates_for_its_lens(
+    authenticated_context: HttpContext, bot_context: HttpContext
+):
     """A lens has no creator of its own, and it is the dataset's cards a nomination changes."""
     dataset = await seed.create_array_dataset(authenticated_context, "Tissue")
     crop = await seed.create_lens(authenticated_context, dataset, CROP)
     scene = await seed.create_scene(authenticated_context, "Composition")
 
-    refused = await schema.execute(SET_LENS_DEFAULT, context_value=bot_context, variable_values={"input": {"lens": str(crop.pk), "scene": str(scene.pk)}})
+    refused = await schema.execute(
+        SET_LENS_DEFAULT,
+        context_value=bot_context,
+        variable_values={"input": {"lens": str(crop.pk), "scene": str(scene.pk)}},
+    )
     assert refused.errors
 
     # Staging is not an edit of the data, so it goes through -- only the nomination is skipped.
-    staged = await schema.execute(FROM_LENS, context_value=bot_context, variable_values={"input": {"lens": str(crop.pk)}})
+    staged = await schema.execute(
+        FROM_LENS,
+        context_value=bot_context,
+        variable_values={"input": {"lens": str(crop.pk)}},
+    )
     assert not staged.errors, staged.errors
     assert (await models.Lens.objects.aget(pk=crop.pk)).default_scene_id is None
 
@@ -320,24 +448,36 @@ query Datasets { arrayDatasets { id fullLens { id } } }
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_is_created_with_its_whole_array_lens(authenticated_context: HttpContext):
+async def test_a_dataset_is_created_with_its_whole_array_lens(
+    authenticated_context: HttpContext,
+):
     from tests.test_array_axis_declaration import _ZYX, _create
 
     result = await _create(authenticated_context, "born-whole", ["z", "y", "x"], _ZYX)
     assert not result.errors, result.errors
     dataset_id = result.data["createArrayDataset"]["id"]
 
-    read = await schema.execute(NAMED, context_value=authenticated_context, variable_values={"id": dataset_id, "filters": {"dataset": dataset_id}})
+    read = await schema.execute(
+        NAMED,
+        context_value=authenticated_context,
+        variable_values={"id": dataset_id, "filters": {"dataset": dataset_id}},
+    )
     assert not read.errors, read.errors
     whole = read.data["arrayDataset"]["fullLens"]
-    assert whole is not None, "the lens a viewer opens for it exists before any scene does"
+    assert whole is not None, (
+        "the lens a viewer opens for it exists before any scene does"
+    )
     assert whole["slices"] == [] and whole["name"] is None
-    assert [lens["id"] for lens in read.data["lenses"]] == [whole["id"]], "one, and staging it later will reuse it"
+    assert [lens["id"] for lens in read.data["lenses"]] == [whole["id"]], (
+        "one, and staging it later will reuse it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_page_of_datasets_names_each_ones_whole_array_lens(authenticated_context: HttpContext):
+async def test_a_page_of_datasets_names_each_ones_whole_array_lens(
+    authenticated_context: HttpContext,
+):
     """`fullLens` is on every tile, so it answers for a whole page -- and for each row its own."""
     ctx = authenticated_context
     first = await seed.create_array_dataset(ctx, "First")
@@ -352,50 +492,100 @@ async def test_a_page_of_datasets_names_each_ones_whole_array_lens(authenticated
     assert not result.errors, result.errors
     by_dataset = {row["id"]: row["fullLens"] for row in result.data["arrayDatasets"]}
 
-    assert by_dataset[str(first.pk)]["id"] == str(first_whole.pk), "the whole lens, never the crop"
+    assert by_dataset[str(first.pk)]["id"] == str(first_whole.pk), (
+        "the whole lens, never the crop"
+    )
     assert by_dataset[str(second.pk)]["id"] == str(second_whole.pk)
-    assert by_dataset[str(bare.pk)] is not None, "a dataset nobody touched was still born with one"
+    assert by_dataset[str(bare.pk)] is not None, (
+        "a dataset nobody touched was still born with one"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_is_named_by_the_positions_it_pins(authenticated_context: HttpContext):
+async def test_a_lens_is_named_by_the_positions_it_pins(
+    authenticated_context: HttpContext,
+):
     """Naming channel 1 names every lens through it -- the crop of it too -- and the name is found, staged and cleared like one."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
-    channel = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}])
-    crop_of_it = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}, *CROP])
+    channel = await seed.create_lens(
+        ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}]
+    )
+    crop_of_it = await seed.create_lens(
+        ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}, *CROP]
+    )
 
-    renamed = await schema.execute(SET_POSITION_LABEL, context_value=ctx, variable_values={"input": {"lens": str(channel.pk), "label": "  GFP "}})
+    renamed = await schema.execute(
+        SET_POSITION_LABEL,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(channel.pk), "label": "  GFP "}},
+    )
     assert not renamed.errors, renamed.errors
     assert renamed.data["setPositionLabel"]["name"] == "GFP"
-    assert (await models.Lens.objects.aget(pk=crop_of_it.pk)).name == "GFP", "the crop pins channel 1 too, and is called by it"
+    assert (await models.Lens.objects.aget(pk=crop_of_it.pk)).name == "GFP", (
+        "the crop pins channel 1 too, and is called by it"
+    )
 
-    later = await seed.create_lens(ctx, dataset, [{"axis": "c", "start": 1, "stop": 2}, {"axis": "y", "start": 0, "stop": 4}])
+    later = await seed.create_lens(
+        ctx,
+        dataset,
+        [{"axis": "c", "start": 1, "stop": 2}, {"axis": "y", "start": 0, "stop": 4}],
+    )
     assert later.name == "GFP", "a lens through the channel is born named"
 
-    found = await schema.execute(NAMED, context_value=ctx, variable_values={"id": str(dataset.pk), "filters": {"search": "gfp"}})
-    assert sorted(lens["id"] for lens in found.data["lenses"]) == sorted(str(lens.pk) for lens in (channel, crop_of_it, later))
-    by_dataset = await schema.execute(NAMED, context_value=ctx, variable_values={"id": str(dataset.pk), "filters": {"search": "tiss"}})
-    assert len(by_dataset.data["lenses"]) == 4, "a lens is also found by the dataset it borrows its label from -- the whole lens too"
+    found = await schema.execute(
+        NAMED,
+        context_value=ctx,
+        variable_values={"id": str(dataset.pk), "filters": {"search": "gfp"}},
+    )
+    assert sorted(lens["id"] for lens in found.data["lenses"]) == sorted(
+        str(lens.pk) for lens in (channel, crop_of_it, later)
+    )
+    by_dataset = await schema.execute(
+        NAMED,
+        context_value=ctx,
+        variable_values={"id": str(dataset.pk), "filters": {"search": "tiss"}},
+    )
+    assert len(by_dataset.data["lenses"]) == 4, (
+        "a lens is also found by the dataset it borrows its label from -- the whole lens too"
+    )
 
-    staged = await schema.execute(FROM_LENS, context_value=ctx, variable_values={"input": {"lens": str(channel.pk)}})
-    assert staged.data["createSceneFromLens"]["name"] == "Tissue · GFP", "two channels staged side by side are not two scenes called the same"
+    staged = await schema.execute(
+        FROM_LENS,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(channel.pk)}},
+    )
+    assert staged.data["createSceneFromLens"]["name"] == "Tissue · GFP", (
+        "two channels staged side by side are not two scenes called the same"
+    )
 
-    cleared = await schema.execute(SET_POSITION_LABEL, context_value=ctx, variable_values={"input": {"lens": str(crop_of_it.pk), "label": " "}})
-    assert cleared.data["setPositionLabel"]["name"] is None, "blank clears: every lens through the channel reads as its selection again"
+    cleared = await schema.execute(
+        SET_POSITION_LABEL,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(crop_of_it.pk), "label": " "}},
+    )
+    assert cleared.data["setPositionLabel"]["name"] is None, (
+        "blank clears: every lens through the channel reads as its selection again"
+    )
     assert (await models.Lens.objects.aget(pk=channel.pk)).name is None
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_that_pins_nothing_has_no_positions_to_name(authenticated_context: HttpContext):
+async def test_a_lens_that_pins_nothing_has_no_positions_to_name(
+    authenticated_context: HttpContext,
+):
     """A crop by ranges is named by the shape it was cut to, the whole dataset by its own name."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
     crop = await seed.create_lens(ctx, dataset, CROP)
 
-    refused = await schema.execute(SET_POSITION_LABEL, context_value=ctx, variable_values={"input": {"lens": str(crop.pk), "label": "nucleus 3"}})
+    refused = await schema.execute(
+        SET_POSITION_LABEL,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(crop.pk), "label": "nucleus 3"}},
+    )
 
     assert refused.errors and "annotation" in refused.errors[0].message
     assert (await models.Lens.objects.aget(pk=crop.pk)).name is None
@@ -403,13 +593,19 @@ async def test_a_lens_that_pins_nothing_has_no_positions_to_name(authenticated_c
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_only_the_datasets_owner_names_its_positions(authenticated_context: HttpContext, bot_context: HttpContext):
+async def test_only_the_datasets_owner_names_its_positions(
+    authenticated_context: HttpContext, bot_context: HttpContext
+):
     dataset = await seed.create_array_dataset(authenticated_context, "Tissue")
-    channel = await seed.create_lens(authenticated_context, dataset, [{"axis": "c", "start": 0, "stop": 1}])
+    channel = await seed.create_lens(
+        authenticated_context, dataset, [{"axis": "c", "start": 0, "stop": 1}]
+    )
 
-    refused = await schema.execute(SET_POSITION_LABEL, context_value=bot_context, variable_values={"input": {"lens": str(channel.pk), "label": "mine now"}})
+    refused = await schema.execute(
+        SET_POSITION_LABEL,
+        context_value=bot_context,
+        variable_values={"input": {"lens": str(channel.pk), "label": "mine now"}},
+    )
 
     assert refused.errors
     assert (await models.Lens.objects.aget(pk=channel.pk)).name is None
-
-

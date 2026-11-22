@@ -1,0 +1,12 @@
+# This repo's ruff settings: the arkitekt standard (ruff.shared.toml, synced
+# from arkitektio/.github) plus what is this repo's own. Add excludes for
+# vendored code and per-file ignores here; never edit ruff.shared.toml.
+extend = "ruff.shared.toml"
+target-version = "py312"
+extend-exclude = [
+  "**/migrations",
+]
+
+[lint.per-file-ignores]
+# Package __init__ files re-export their submodules' resolvers.
+"**/__init__.py" = ["F401", "F403", "F405"]

@@ -54,19 +54,29 @@ mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }
 LONG_FORM = [
     {"name": "cell", "dtype": "BIGINT", "axisType": "INDEX"},
     {"name": "c", "dtype": "BIGINT", "axisType": "CHANNEL"},
-    {"name": "mean", "dtype": "DOUBLE", "role": "ATTRIBUTE", "unit": "a.u.", "variesOver": ["c"]},
+    {
+        "name": "mean",
+        "dtype": "DOUBLE",
+        "role": "ATTRIBUTE",
+        "unit": "a.u.",
+        "variesOver": ["c"],
+    },
     {"name": "label", "dtype": "VARCHAR", "role": "LABEL"},
 ]
 
 
 async def _ok(ctx: HttpContext, document: str, variables: dict) -> dict:
-    result = await schema.execute(document, context_value=ctx, variable_values=variables)
+    result = await schema.execute(
+        document, context_value=ctx, variable_values=variables
+    )
     assert not result.errors, result.errors
     return result.data
 
 
 async def _refused(ctx: HttpContext, document: str, variables: dict) -> str:
-    result = await schema.execute(document, context_value=ctx, variable_values=variables)
+    result = await schema.execute(
+        document, context_value=ctx, variable_values=variables
+    )
     assert result.errors, result.data
     return str(result.errors[0])
 
@@ -78,17 +88,48 @@ async def _long_form(ctx: HttpContext, name: str = "per channel") -> dict:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_long_form_table_is_a_grid_of_cells_against_channels(authenticated_context: HttpContext):
+async def test_a_long_form_table_is_a_grid_of_cells_against_channels(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     table = await _long_form(ctx)
-    grid = (await _ok(ctx, GRID, {"input": {"name": "means", "coordinateSystem": table["coordinateSystem"]["id"]}}))["createGrid"]
-    assert (grid["rowAxis"], grid["columnAxis"]) == ({"name": "cell", "type": "INDEX"}, {"name": "c", "type": "CHANNEL"})
-    assert grid["descriptors"] == {**grid["descriptors"], "@mikro/row_axis_type": "INDEX", "@mikro/column_axis_type": "CHANNEL"}
+    grid = (
+        await _ok(
+            ctx,
+            GRID,
+            {
+                "input": {
+                    "name": "means",
+                    "coordinateSystem": table["coordinateSystem"]["id"],
+                }
+            },
+        )
+    )["createGrid"]
+    assert (grid["rowAxis"], grid["columnAxis"]) == (
+        {"name": "cell", "type": "INDEX"},
+        {"name": "c", "type": "CHANNEL"},
+    )
+    assert grid["descriptors"] == {
+        **grid["descriptors"],
+        "@mikro/row_axis_type": "INDEX",
+        "@mikro/column_axis_type": "CHANNEL",
+    }
 
-    cells = (await _ok(ctx, CELLS, {"input": {"grid": grid["id"], "lens": table["fullLens"]["id"]}}))["createCellsGridLayer"]
-    assert (cells["kind"], cells["valueColumn"], cells["valueUnit"], cells["placement"]) == ("CELLS", "mean", "a.u.", "PLACED"), "the one numeric column, inferred"
+    cells = (
+        await _ok(
+            ctx, CELLS, {"input": {"grid": grid["id"], "lens": table["fullLens"]["id"]}}
+        )
+    )["createCellsGridLayer"]
+    assert (
+        cells["kind"],
+        cells["valueColumn"],
+        cells["valueUnit"],
+        cells["placement"],
+    ) == ("CELLS", "mean", "a.u.", "PLACED"), "the one numeric column, inferred"
 
-    shown = (await _ok(ctx, TABLE, {"id": table["id"]}))["tableDataset"]["visualizations"]
+    shown = (await _ok(ctx, TABLE, {"id": table["id"]}))["tableDataset"][
+        "visualizations"
+    ]
     assert shown == [{"__typename": "Grid", "id": grid["id"]}]
 
 
@@ -100,9 +141,36 @@ async def test_a_sparse_matrix_is_a_heatmap(authenticated_context: HttpContext):
     dataset_id = await _expression(ctx, mask)
     sparse = (await _ok(ctx, SPARSE, {"id": dataset_id}))["sparseDataset"]
 
-    grid = (await _ok(ctx, GRID, {"input": {"name": "expression", "coordinateSystem": sparse["coordinateSystem"]["id"]}}))["createGrid"]
-    heatmap = (await _ok(ctx, HEATMAP, {"input": {"grid": grid["id"], "lens": sparse["fullLens"]["id"], "colormap": "MAGMA"}}))["createHeatmapGridLayer"]
-    assert (heatmap["kind"], heatmap["colormap"], heatmap["placement"]) == ("HEATMAP", "MAGMA", "PLACED")
+    grid = (
+        await _ok(
+            ctx,
+            GRID,
+            {
+                "input": {
+                    "name": "expression",
+                    "coordinateSystem": sparse["coordinateSystem"]["id"],
+                }
+            },
+        )
+    )["createGrid"]
+    heatmap = (
+        await _ok(
+            ctx,
+            HEATMAP,
+            {
+                "input": {
+                    "grid": grid["id"],
+                    "lens": sparse["fullLens"]["id"],
+                    "colormap": "MAGMA",
+                }
+            },
+        )
+    )["createHeatmapGridLayer"]
+    assert (heatmap["kind"], heatmap["colormap"], heatmap["placement"]) == (
+        "HEATMAP",
+        "MAGMA",
+        "PLACED",
+    )
     assert heatmap["asAffine"]["total"] is True, "every position is a cell"
 
 
@@ -111,12 +179,44 @@ async def test_a_sparse_matrix_is_a_heatmap(authenticated_context: HttpContext):
 async def test_a_grid_lays_out_members(authenticated_context: HttpContext):
     """A measured axis is a scene's or a chart's; three axes are more than rows and columns."""
     ctx = authenticated_context
-    stage = (await _ok(ctx, CREATE_CS, {"input": {"name": "stage", "axes": [{"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}]}}))["createCoordinateSystem"]["id"]
-    message = await _refused(ctx, GRID, {"input": {"name": "g", "coordinateSystem": stage}})
+    stage = (
+        await _ok(
+            ctx,
+            CREATE_CS,
+            {
+                "input": {
+                    "name": "stage",
+                    "axes": [
+                        {"name": "y", "type": "SPACE", "unit": "micrometer"},
+                        {"name": "x", "type": "SPACE", "unit": "micrometer"},
+                    ],
+                }
+            },
+        )
+    )["createCoordinateSystem"]["id"]
+    message = await _refused(
+        ctx, GRID, {"input": {"name": "g", "coordinateSystem": stage}}
+    )
     assert "measured axis" in message and "scene" in message
 
-    cube = (await _ok(ctx, CREATE_CS, {"input": {"name": "cube", "axes": [{"name": name, "type": "INDEX", "unit": "a.u."} for name in ("a", "b", "c")]}}))["createCoordinateSystem"]["id"]
-    assert "one or two" in await _refused(ctx, GRID, {"input": {"name": "g", "coordinateSystem": cube}})
+    cube = (
+        await _ok(
+            ctx,
+            CREATE_CS,
+            {
+                "input": {
+                    "name": "cube",
+                    "axes": [
+                        {"name": name, "type": "INDEX", "unit": "a.u."}
+                        for name in ("a", "b", "c")
+                    ],
+                }
+            },
+        )
+    )["createCoordinateSystem"]["id"]
+    assert "one or two" in await _refused(
+        ctx, GRID, {"input": {"name": "g", "coordinateSystem": cube}}
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -124,13 +224,38 @@ async def test_a_grid_lays_out_members(authenticated_context: HttpContext):
 async def test_each_kind_reads_its_own(authenticated_context: HttpContext):
     ctx = authenticated_context
     table = await _long_form(ctx)
-    grid = (await _ok(ctx, GRID, {"input": {"name": "means", "coordinateSystem": table["coordinateSystem"]["id"]}}))["createGrid"]
+    grid = (
+        await _ok(
+            ctx,
+            GRID,
+            {
+                "input": {
+                    "name": "means",
+                    "coordinateSystem": table["coordinateSystem"]["id"],
+                }
+            },
+        )
+    )["createGrid"]
 
-    assert "drawn as CELLS" in await _refused(ctx, HEATMAP, {"input": {"grid": grid["id"], "lens": table["fullLens"]["id"]}})
-    assert "not a numeric attribute" in await _refused(ctx, CELLS, {"input": {"grid": grid["id"], "lens": table["fullLens"]["id"], "valueColumn": "label"}})
+    assert "drawn as CELLS" in await _refused(
+        ctx, HEATMAP, {"input": {"grid": grid["id"], "lens": table["fullLens"]["id"]}}
+    )
+    assert "not a numeric attribute" in await _refused(
+        ctx,
+        CELLS,
+        {
+            "input": {
+                "grid": grid["id"],
+                "lens": table["fullLens"]["id"],
+                "valueColumn": "label",
+            }
+        },
+    )
 
     other = await _long_form(ctx, "other table")
-    assert "the world of grid" in await _refused(ctx, CELLS, {"input": {"grid": grid["id"], "lens": other["fullLens"]["id"]}}), "another table's rows are not this world's members"
+    assert "the world of grid" in await _refused(
+        ctx, CELLS, {"input": {"grid": grid["id"], "lens": other["fullLens"]["id"]}}
+    ), "another table's rows are not this world's members"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -138,8 +263,23 @@ async def test_each_kind_reads_its_own(authenticated_context: HttpContext):
 async def test_a_lens_a_grid_draws_through_is_kept(authenticated_context: HttpContext):
     ctx = authenticated_context
     table = await _long_form(ctx)
-    gate = await seed.create_windowed_lens(ctx, await models.TableDataset.objects.aget(pk=table["id"]), [{"axis": "cell", "min": 0, "max": 10}])
-    grid = (await _ok(ctx, GRID, {"input": {"name": "means", "coordinateSystem": table["coordinateSystem"]["id"]}}))["createGrid"]
+    gate = await seed.create_windowed_lens(
+        ctx,
+        await models.TableDataset.objects.aget(pk=table["id"]),
+        [{"axis": "cell", "min": 0, "max": 10}],
+    )
+    grid = (
+        await _ok(
+            ctx,
+            GRID,
+            {
+                "input": {
+                    "name": "means",
+                    "coordinateSystem": table["coordinateSystem"]["id"],
+                }
+            },
+        )
+    )["createGrid"]
     await _ok(ctx, CELLS, {"input": {"grid": grid["id"], "lens": str(gate.pk)}})
 
     message = await _refused(ctx, DELETE_LENS, {"input": {"id": str(gate.pk)}})
@@ -156,8 +296,15 @@ mutation Auto($input: AutoVisualizeInput!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_long_form_table_lens_is_shown_as_a_grid(authenticated_context: HttpContext):
+async def test_a_long_form_table_lens_is_shown_as_a_grid(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     table = await _long_form(ctx)
-    shown = (await _ok(ctx, AUTO, {"input": {"lens": table["fullLens"]["id"]}}))["autoVisualize"]
-    assert shown == {"__typename": "Grid", "layers": [{"__typename": "CellsGridLayer", "valueColumn": "mean"}]}
+    shown = (await _ok(ctx, AUTO, {"input": {"lens": table["fullLens"]["id"]}}))[
+        "autoVisualize"
+    ]
+    assert shown == {
+        "__typename": "Grid",
+        "layers": [{"__typename": "CellsGridLayer", "valueColumn": "mean"}],
+    }

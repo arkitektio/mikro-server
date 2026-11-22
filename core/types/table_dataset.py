@@ -1,38 +1,40 @@
 """GraphQL types for the parquet-backed table dataset and its declared columns."""
 
 import datetime
-
-from typing import TYPE_CHECKING, Annotated, List, Optional
-
-import strawberry
-from strawberry import auto
+from typing import TYPE_CHECKING, Annotated, Optional
 
 import kante
-from strawberry.scalars import JSON
-from kante.types import Info
-from kanne_server import scalars as kanne_scalars
-
+import strawberry
 from arkitekt_datalayer.types import ParquetStore
+from kante.types import Info
+from strawberry import auto
+from strawberry.scalars import JSON
 
 from core import enums, filters, models, order, scalars
+from core.logic import compositions
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
+from core.types._shared import (
+    DESCRIPTORS_DESCRIPTION,
+    OrgScoped,
+    apply_link_filters,
+    build_prescoped_queryset,
+    resolve_descriptors,
+)
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped, build_prescoped_queryset
-from core.logic import compositions
 from embeddings.strawberry import Embedding, embedding_of
+from kanne_server import scalars as kanne_scalars
 
 if TYPE_CHECKING:
     # Only for the lazy annotation on the file-link fields below; importing it at runtime
     # would be a cycle, since `core.types.file_link` references this module in return.
+    # And again: `core.types.array_dataset` is imported after this module.
+    from core.types.array_dataset import CoordinateAnchor
     from core.types.file_link import FileLink
 
     # Same reason: `core.types.folder` imports this module for the layer types.
     from core.types.folder import Folder
-
-    # And again: `core.types.array_dataset` is imported after this module.
-    from core.types.array_dataset import CoordinateAnchor
 
 
 @kante.django_type(
@@ -54,7 +56,7 @@ class Column:
     unit: kanne_scalars.Unit | None
     long_name: str | None
     description: str | None
-    varies_over: List[str] | None = kante.django_field(
+    varies_over: list[str] | None = kante.django_field(
         description=(
             "For a long-form table, the CHANNEL coordinate columns this column's value changes along, as declared. In a `(cell, c, volume, mean)` table a per-cell `volume` "
             "varies over nothing and is read once per cell; a per-channel `mean` varies over `c`. Null when undeclared: read as varying over every CHANNEL coordinate, which "
@@ -67,7 +69,9 @@ class Column:
     references: Optional["TableDataset"] = kante.django_field(
         description="The table whose rows this column's values identify -- a declared foreign key, e.g. an `instance_id` column referencing a table of tracks. The target is keyed by its single INDEX coordinate column; look a value up there. Null for a column that identifies nothing"
     )
-    node_references: Optional[Annotated["NetworkCollection", strawberry.lazy("core.types.coords")]] = kante.django_field(
+    node_references: (
+        Annotated["NetworkCollection", strawberry.lazy("core.types.coords")] | None
+    ) = kante.django_field(
         description=(
             "The network collection whose NODE ids this INDEX coordinate column's values are, scoped by the sibling INDEX axis keyed by the same collection's object ids. One such "
             "column makes the table per-node, two make it per-edge -- (source, target), in axis declaration order -- which is what a client resolving a per-node picker entry reads "
@@ -81,9 +85,15 @@ class Column:
     )
     def stats(self, info: Info) -> Optional["ColumnStats"]:
         """The footer's facts, when they were read."""
-        if self.value_min is None and self.value_max is None and self.null_count is None:
+        if (
+            self.value_min is None
+            and self.value_max is None
+            and self.null_count is None
+        ):
             return None
-        return ColumnStats(min=self.value_min, max=self.value_max, null_count=self.null_count)
+        return ColumnStats(
+            min=self.value_min, max=self.value_max, null_count=self.null_count
+        )
 
     @kante.django_field(
         description=(
@@ -93,14 +103,24 @@ class Column:
     )
     def summary(self, info: Info) -> Optional["ColumnSummary"]:
         """The summary on the table's global anchor."""
-        return models.ColumnSummary.objects.filter(column=self, anchor__table_id=self.table_id, anchor__coordinates={}).first()
+        return models.ColumnSummary.objects.filter(
+            column=self, anchor__table_id=self.table_id, anchor__coordinates={}
+        ).first()
 
 
-@strawberry.type(description="What a parquet footer says of one column, read without scanning a row")
+@strawberry.type(
+    description="What a parquet footer says of one column, read without scanning a row"
+)
 class ColumnStats:
-    min: float | None = strawberry.field(description="The smallest value. Null for a column whose statistics are not numbers, or that a row group states none for")
-    max: float | None = strawberry.field(description="The largest value. Null for a column whose statistics are not numbers, or that a row group states none for")
-    null_count: scalars.RowCount | None = strawberry.field(description="How many values are null. Null where a row group does not say")
+    min: float | None = strawberry.field(
+        description="The smallest value. Null for a column whose statistics are not numbers, or that a row group states none for"
+    )
+    max: float | None = strawberry.field(
+        description="The largest value. Null for a column whose statistics are not numbers, or that a row group states none for"
+    )
+    null_count: scalars.RowCount | None = strawberry.field(
+        description="How many values are null. Null where a row group does not say"
+    )
 
 
 @kante.django_type(
@@ -110,24 +130,42 @@ class ColumnStats:
 class ColumnSummary:
     id: auto
     column: Column = kante.django_field(description="The column summarised")
-    histogram: list[float] = kante.django_field(description="The counts per bin (y values)")
-    bins: list[float] = kante.django_field(description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts")
-    distinct_values: JSON | None = kante.django_field(description="The distinct values as a JSON list, most frequent first, as many as were listed. Null when not computed")
-    distinct_count: scalars.RowCount | None = kante.django_field(description="How many distinct values the column holds. Null when not computed")
-    created_at: datetime.datetime = kante.django_field(description="When this summary was last pinned")
+    histogram: list[float] = kante.django_field(
+        description="The counts per bin (y values)"
+    )
+    bins: list[float] = kante.django_field(
+        description="The bins (x values): their edges, one more than the counts, or their centres, as many as the counts"
+    )
+    distinct_values: JSON | None = kante.django_field(
+        description="The distinct values as a JSON list, most frequent first, as many as were listed. Null when not computed"
+    )
+    distinct_count: scalars.RowCount | None = kante.django_field(
+        description="How many distinct values the column holds. Null when not computed"
+    )
+    created_at: datetime.datetime = kante.django_field(
+        description="When this summary was last pinned"
+    )
 
 
 #: The structure a keyed row is, by the container keying it. A mask label has none yet.
 _KEY_STRUCTURES: dict[type, str] = {models.MeshCollection: "@mikro/meshobject"}
 
 
-@strawberry.type(description="One container keying a table: its contents are the table's row ids (`TableDataset.keyedBy`)")
+@strawberry.type(
+    description="One container keying a table: its contents are the table's row ids (`TableDataset.keyedBy`)"
+)
 class TableKey:
-    source: Annotated["Resident", strawberry.lazy("core.types.coords")] = strawberry.field(
-        description="The container whose contents are the ids: a label mask's dataset, a mesh collection"
+    source: Annotated["Resident", strawberry.lazy("core.types.coords")] = (
+        strawberry.field(
+            description="The container whose contents are the ids: a label mask's dataset, a mesh collection"
+        )
     )
-    produces: List[str] = strawberry.field(description="The table axes its ids land on: the id column(s) a row is found by")
-    passes_through: List[str] = strawberry.field(description="Table axes the source shares by name (a per-frame mask's `t`), which select alongside the id")
+    produces: list[str] = strawberry.field(
+        description="The table axes its ids land on: the id column(s) a row is found by"
+    )
+    passes_through: list[str] = strawberry.field(
+        description="Table axes the source shares by name (a per-frame mask's `t`), which select alongside the id"
+    )
     structure: str | None = strawberry.field(
         default=None,
         description=(
@@ -147,22 +185,32 @@ class TableKey:
 class TableDataset(OrgScoped):
     """A parquet-backed table dataset."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
     @kante.django_field(
         description="What this table structurally is, materialized at creation from its declared columns: the one placement member its SPACE coordinate columns denote (RECORDS for none, then POINTS_1D, POINTS_2D, POINTS_3D, POINTS_ND), then a modifier per declared fact (TIMED, TRACKED, GROUPED, KEYED, NODE_TABLE, EDGE_TABLE), then SERIES for a table that is one value against one measured coordinate. A tracking result is [POINTS_2D, TIMED, TRACKED]; a table of per-object measurements keyed to a label mask is [RECORDS, KEYED]; a readout over time is [RECORDS, TIMED, SERIES]. Declared, not measured: the server never scans the rows, so TIMED says a TIME coordinate column exists, not that the rows span more than one instant"
     )
-    def spec(self, info: Info) -> List[enums.TableDatasetSpec]:
+    def spec(self, info: Info) -> list[enums.TableDatasetSpec]:
         """Every spec the table's declared columns satisfy."""
         return self.spec
 
-    @kante.django_field(description="The lenses over this table dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lenses over this table dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`"
+    )
+    def lenses(
+        self, info: Info, windowed: bool | None = None
+    ) -> list[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:
         """The container's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
             return list(lenses)
-        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+        return list(
+            lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[])
+        )
 
     @kante.django_field(
         description=(
@@ -170,13 +218,23 @@ class TableDataset(OrgScoped):
             "stored, kind by kind in registration order and oldest first within a kind"
         )
     )
-    def visualizations(self, info: Info) -> List[Annotated["Visualization", strawberry.lazy("core.types.visualization")]]:
+    def visualizations(
+        self, info: Info
+    ) -> list[Annotated["Visualization", strawberry.lazy("core.types.visualization")]]:
         """The scenes and charts with a layer through a lens of this table."""
         lens_ids = list(self.lenses.values_list("pk", flat=True))
-        return [row for _composition, rows in compositions.drawing(lens_ids) for row in build_prescoped_queryset(info, rows).order_by("pk")]
+        return [
+            row
+            for _composition, rows in compositions.drawing(lens_ids)
+            for row in build_prescoped_queryset(info, rows).order_by("pk")
+        ]
 
-    @kante.django_field(description="The lens that selects this whole table dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every table dataset is created with one")
-    def full_lens(self, info: Info) -> Optional[Annotated["TableLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lens that selects this whole table dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every table dataset is created with one"
+    )
+    def full_lens(
+        self, info: Info
+    ) -> Annotated["TableLens", strawberry.lazy("core.types.array_dataset")] | None:
         """The whole lens over this container."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 
@@ -187,19 +245,28 @@ class TableDataset(OrgScoped):
             "of `attributePlans` from the source's side. Empty for a table nothing keys: localizations placed by their own coordinates, or a table of per-dataset values"
         )
     )
-    def keyed_by(self, info: Info) -> List["TableKey"]:
+    def keyed_by(self, info: Info) -> list["TableKey"]:
         """The keys landing on this table."""
         return [
-            TableKey(source=container, produces=produces, passes_through=passes, structure=_KEY_STRUCTURES.get(type(container)))
+            TableKey(
+                source=container,
+                produces=produces,
+                passes_through=passes,
+                structure=_KEY_STRUCTURES.get(type(container)),
+            )
             for container, produces, passes in graph_logic.table_keys(self)
         ]
 
-    @kante.django_field(description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    @kante.django_field(
+        description="This table's stored vector, as `<model id>:<floats>`. Null until it has been indexed."
+    )
     def embedding(self) -> Embedding | None:
         return embedding_of(self)
 
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
-        description="The folder this table dataset is filed in. Organisational only: it says where a user keeps this table, never where its rows sit in space -- that is `coordinateSystem` and the edges out of it"
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(
+            description="The folder this table dataset is filed in. Organisational only: it says where a user keeps this table, never where its rows sit in space -- that is `coordinateSystem` and the edges out of it"
+        )
     )
 
     @kante.django_field(
@@ -210,56 +277,88 @@ class TableDataset(OrgScoped):
         ),
         prefetch_related=["file_links__file"],
     )
-    def source_files(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def source_files(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file this table dataset was produced from."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
+            filters,
+            info,
+        )
 
     @kante.django_field(
         description="The files written out of this table dataset: an OME-TIFF export, a rendered snapshot registered as a file. The mirror of `sourceFiles`",
         prefetch_related=["file_links__file"],
     )
-    def exports(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def exports(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file written out of this table dataset."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION),
+            filters,
+            info,
+        )
 
     id: auto
     name: auto
     description: str | None
-    created_at: datetime.datetime = kante.django_field(description="When this table dataset was created")
-    row_count: scalars.RowCount | None = kante.django_field(description="How many rows the parquet holds, read off its footer -- never by scanning. Null until the footer was read")
-    provenance_entries: List["ProvenanceEntry"] = kante.django_field(
+    created_at: datetime.datetime = kante.django_field(
+        description="When this table dataset was created"
+    )
+    row_count: scalars.RowCount | None = kante.django_field(
+        description="How many rows the parquet holds, read off its footer -- never by scanning. Null until the footer was read"
+    )
+    provenance_entries: list["ProvenanceEntry"] = kante.django_field(
         description="Every change made to this table: who created it, and every subsequent rename or redescription, attributed to the client, user and task it happened under. Only `name` and `description` can change -- the store, the columns and the coordinate system derived from them are fixed at creation"
     )
-    store: ParquetStore = kante.django_field(description="The Parquet store holding the rows. Request an access grant from it and read the Parquet directly")
-    columns: List[Column] = kante.django_field(description="The declared column schema, in order. The COORDINATE columns are the axes of this table's coordinate system")
-    coordinate_system: CoordinateSystem = kante.django_field(description="The coordinate system this table owns. Its axes are the table's coordinate columns (or a single INDEX axis for a pure measurement table)")
-    created_through: Task | None = kante.django_field(description="The task this table was created through, if any")
-    anchors: List[Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(
+    store: ParquetStore = kante.django_field(
+        description="The Parquet store holding the rows. Request an access grant from it and read the Parquet directly"
+    )
+    columns: list[Column] = kante.django_field(
+        description="The declared column schema, in order. The COORDINATE columns are the axes of this table's coordinate system"
+    )
+    coordinate_system: CoordinateSystem = kante.django_field(
+        description="The coordinate system this table owns. Its axes are the table's coordinate columns (or a single INDEX axis for a pure measurement table)"
+    )
+    created_through: Task | None = kante.django_field(
+        description="The task this table was created through, if any"
+    )
+    anchors: list[
+        Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]
+    ] = kante.django_field(
         description=(
             "The coordinate anchors of this table, each pinning metadata spokes -- a microscope state, OME metadata, a channel label -- to values of its coordinate columns "
             "keyed by column name, or to the whole table when its coordinates are empty. The same hub an array dataset uses, so a measurement table carries the acquisition facts of "
             "the image it was segmented out of"
         )
     )
-    created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
-    referenced_by: List[Column] = kante.django_field(
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
+    referenced_by: list[Column] = kante.django_field(
         description="Every column, in any table, that declares this table as its reference target -- the reverse of `Column.references`. This table cannot be deleted while any of them exist"
     )
 
     @kante.django_field(
         description="Every edge from this table's space back into data it was computed from, in declared order -- the first is the primary parent, the one that places it. UNMAPPABLE where the lineage is recorded but no geometry is claimed; empty for a freestanding table. The same relation a derived dataset's `derivedFrom` records"
     )
-    def derived_from(self, info: Info) -> List[Transformation]:
+    def derived_from(self, info: Info) -> list[Transformation]:
         """The edges relating this table's space to the data it came from."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
 
-    @kante.django_field(description="The table's axis names, in order. Derived from the coordinate columns")
-    def axis_names(self, info: Info) -> List[str]:
+    @kante.django_field(
+        description="The table's axis names, in order. Derived from the coordinate columns"
+    )
+    def axis_names(self, info: Info) -> list[str]:
         """The table's axis names."""
         return self.axis_names
 
-    @kante.django_field(description="How this table was produced: the run, its parameters and its inputs")
+    @kante.django_field(
+        description="How this table was produced: the run, its parameters and its inputs"
+    )
     def provenance_metadata(self, info: Info) -> scalars.Any:
         """How this table was produced."""
         return self.provenance_metadata

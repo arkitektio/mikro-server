@@ -1,57 +1,62 @@
-from kante.types import Info
-from mikro_server.logs import QuietErrorsSchema
+from typing import Annotated
+
+import arkitekt_datalayer.mutations as datalayer_mutations
+import arkitekt_datalayer.scalars as datalayer_scalars
+import kante
 import strawberry
-from strawberry_django.optimizer import DjangoOptimizerExtension
+import strawberry_django
+from arkitekt_datalayer.datalayer import load_config
+from arkitekt_service.collaborations import graphql as collaboration_types
+from arkitekt_service.graphql import (
+    CollaborationGate,
+    TelemetryExtension,
+    annotate_schema,
+)
+from authentikate import models as ak_models
+from authentikate.strawberry import AuthExtension, AuthSubscribeExtension
 from authentikate.strawberry.extension import AuthentikateExtension
+from kante.types import Info
+from koherent import models as koherent_models
+from koherent.strawberry.extension import KoherentExtension
 from strawberry import ID as StrawberryID
-from core import types, models, filters, order
-from core.types._shared import build_prescoped_queryset
-from core import mutations
-from core import queries
-from core import subscriptions
+from strawberry.schema.config import StrawberryConfig
+from strawberry_django.fields.field import StrawberryDjangoField
+from strawberry_django.optimizer import DjangoOptimizerExtension
+
 from chart import filters as chart_filters
 from chart import mutations as chart_mutations
 from chart import types as chart_types
-from grid import filters as grid_filters
-from grid import mutations as grid_mutations
-from grid import types as grid_types
-from metric import mutations as metric_mutations
-from metric import types as metric_types
-from visualization import mutations as visualization_mutations
-import strawberry_django
-from strawberry_django.fields.field import StrawberryDjangoField
-from koherent.strawberry.extension import KoherentExtension
-from lightpath.constants import interface_types
-from lightpath.inputs.types import element_union_types
+from core import filters, models, mutations, order, queries, subscriptions, types
+from core import scalars as core_scalars
 from core.input_unions import unionElementOf
 from core.inputs.coords import derived_from_union_types, transform_union_types
-from core.render.layer.inputs import color_by_union_types
 from core.inputs.file_link import file_link_union_types
 from core.inputs.identification import identification_union_types
 from core.render.layer.constants import layer_render_node_types
-from core.types.layers import layer_types
-from core.types.lenses import lens_types
+from core.render.layer.inputs import color_by_union_types
+from core.scoping import get_for_org
+from core.types._shared import build_prescoped_queryset
 from core.types.attribute_plans import sample_step_types
 from core.types.coords import transformation_types
-from typing import Annotated
-from authentikate.strawberry import AuthExtension, AuthSubscribeExtension
-from authentikate import models as ak_models
-from koherent import models as koherent_models
-import arkitekt_datalayer.mutations as datalayer_mutations
-from arkitekt_datalayer.datalayer import load_config
-import arkitekt_datalayer.scalars as datalayer_scalars
-import kante
-from core import scalars as core_scalars
-from kanne_server import scalars as kanne_scalars
-from strawberry.schema.config import StrawberryConfig
-from core.scoping import get_for_org
-from arkitekt_service.graphql import CollaborationGate, TelemetryExtension, annotate_schema
-from arkitekt_service.collaborations import graphql as collaboration_types
-from mikro_server.service import service as mikro_service
-from mikro_server.contract import EDITOR, ANNOTATOR
+from core.types.layers import layer_types
+from core.types.lenses import lens_types
 from embeddings.strawberry import scalar_map as embedding_scalars
+from grid import filters as grid_filters
+from grid import mutations as grid_mutations
+from grid import types as grid_types
+from kanne_server import scalars as kanne_scalars
+from lightpath.constants import interface_types
+from lightpath.inputs.types import element_union_types
+from metric import mutations as metric_mutations
+from metric import types as metric_types
+from mikro_server.contract import ANNOTATOR, EDITOR
+from mikro_server.logs import QuietErrorsSchema
+from mikro_server.service import service as mikro_service
+from visualization import mutations as visualization_mutations
 
-ID = Annotated[StrawberryID, strawberry.argument(description="The unique identifier of an object")]
+ID = Annotated[
+    StrawberryID, strawberry.argument(description="The unique identifier of an object")
+]
 
 
 def field(scope: str = "mikro_read", **kwargs):
@@ -69,10 +74,17 @@ class CreatedByCallerField(StrawberryDjangoField):
 
     def get_queryset(self, queryset, info, **kwargs):
         # Narrow before the parent paginates: a sliced queryset can no longer be filtered.
-        return super().get_queryset(queryset.filter(creator=info.context.request.user), info, **kwargs)
+        return super().get_queryset(
+            queryset.filter(creator=info.context.request.user), info, **kwargs
+        )
 
 
-def mutation(scope: str = "mikro_write", roles: list[str] | None = None, guests: bool = False, **kwargs) -> strawberry.mutation:
+def mutation(
+    scope: str = "mikro_write",
+    roles: list[str] | None = None,
+    guests: bool = False,
+    **kwargs,
+) -> strawberry.mutation:
     """A write: an app needs ``scope`` for it, a member one of ``roles`` (``mikro_editor`` unless it says
     otherwise; ``mikro_admin`` holds every role).
 
@@ -80,16 +92,27 @@ def mutation(scope: str = "mikro_write", roles: list[str] | None = None, guests:
     the resolver then checks its target is in such a collaboration (``require_in_collaboration``).
     """
 
-    return strawberry_django.mutation(extensions=[AuthExtension(scopes=[scope], any_role_of=roles or [EDITOR], allow_scoped=guests)], **kwargs)
+    return strawberry_django.mutation(
+        extensions=[
+            AuthExtension(
+                scopes=[scope], any_role_of=roles or [EDITOR], allow_scoped=guests
+            )
+        ],
+        **kwargs,
+    )
 
 
 def access_mutation(**kwargs) -> strawberry.mutation:
     """A mutation that hands out read credentials: a read, for whoever may see what it reads."""
-    return kante.django_mutation(extensions=[AuthExtension(scopes=["mikro_read"])], **kwargs)
+    return kante.django_mutation(
+        extensions=[AuthExtension(scopes=["mikro_read"])], **kwargs
+    )
 
 
 #: The collaborations of mikro's objects, which a guest of the organization is granted.
-collaboration_api = collaboration_types.resolvers(fetch=lambda model, id, info: get_for_org(model, info, id=id))
+collaboration_api = collaboration_types.resolvers(
+    fetch=lambda model, id, info: get_for_org(model, info, id=id)
+)
 
 
 def upload_mutation(**kwargs) -> strawberry.mutation:
@@ -99,36 +122,62 @@ def upload_mutation(**kwargs) -> strawberry.mutation:
     the config takes a restart, like every other setting.
     """
     roles = load_config().upload_roles or [EDITOR]
-    return kante.django_mutation(extensions=[AuthExtension(scopes=["mikro_write"], any_role_of=roles)], **kwargs)
+    return kante.django_mutation(
+        extensions=[AuthExtension(scopes=["mikro_write"], any_role_of=roles)], **kwargs
+    )
 
 
 def subscription(**kwargs) -> strawberry.subscription:
     """A subscription: what it streams is read, so an app needs ``mikro_read`` for it."""
-    return strawberry.subscription(extensions=[AuthSubscribeExtension(scopes=["mikro_read"])], **kwargs)
+    return strawberry.subscription(
+        extensions=[AuthSubscribeExtension(scopes=["mikro_read"])], **kwargs
+    )
 
 
 def describe_object(info: Info, identifier: str, id: ID) -> list[types.DescriptorValue]:
     declared = mikro_service.structure_for(identifier)
     if declared is None or not isinstance(declared.model, type):
         return []
-    hosted = build_prescoped_queryset(info, declared.model.objects.filter(pk=id)).first()
+    hosted = build_prescoped_queryset(
+        info, declared.model.objects.filter(pk=id)
+    ).first()
     if hosted is None:
         return []
-    return [types.DescriptorValue(key=key, value=value) for key, value in declared.describe(hosted).items()]
+    return [
+        types.DescriptorValue(key=key, value=value)
+        for key, value in declared.describe(hosted).items()
+    ]
 
 
 @strawberry.type
 class Query:
-    describe: list[types.DescriptorValue] = field(resolver=describe_object, description="The descriptors of one object by its structure's identifier, as a port's `requires` and a runtime formula read them. Empty for an unknown identifier, or an object the organization cannot see.")
+    describe: list[types.DescriptorValue] = field(
+        resolver=describe_object,
+        description="The descriptors of one object by its structure's identifier, as a port's `requires` and a runtime formula read them. Empty for an unknown identifier, or an object the organization cannot see.",
+    )
 
-    tasks: list[types.Task] = field(description="List the Rekuest tasks under which objects were created or changed")
-    folders: list[types.Folder] = field(description="List folders (collections of images, files and tables)")
-    myfolders: list[types.Folder] = field(field_cls=CreatedByCallerField, description="List folders created by the current user")
+    tasks: list[types.Task] = field(
+        description="List the Rekuest tasks under which objects were created or changed"
+    )
+    folders: list[types.Folder] = field(
+        description="List folders (collections of images, files and tables)"
+    )
+    myfolders: list[types.Folder] = field(
+        field_cls=CreatedByCallerField,
+        description="List folders created by the current user",
+    )
 
-    scenes: list[types.Scene] = field(description="List scenes (compositions of layers over array datasets)")
+    scenes: list[types.Scene] = field(
+        description="List scenes (compositions of layers over array datasets)"
+    )
     scene: types.Scene = field(description="Get a single scene by ID")
 
-    layers: list[types.Layer] = field(filters=filters.LayerFilter, ordering=order.LayerOrder, pagination=True, description="List layers placed in scenes (a heterogeneous list of layer kinds)")
+    layers: list[types.Layer] = field(
+        filters=filters.LayerFilter,
+        ordering=order.LayerOrder,
+        pagination=True,
+        description="List layers placed in scenes (a heterogeneous list of layer kinds)",
+    )
     layer: types.Layer = field(description="Get a single layer by ID")
     mesh_object: types.MeshObject = field(
         resolver=queries.mesh_object,
@@ -143,50 +192,105 @@ class Query:
         ),
     )
 
-    collaborations: list[collaboration_types.Collaboration] = field(resolver=collaboration_api.collaborations, description="List the organization's collaborations: what a guest granted one sees of it (a guest: the collaborations granted to them)")
-    collaboration: collaboration_types.Collaboration = field(resolver=collaboration_api.collaboration, description="Get a single collaboration by ID")
-    collaborations_stats: collaboration_types.CollaborationStats = field(resolver=collaboration_api.collaborations_stats, description="Count the collaborations `collaborations` lists, and the objects in them")
+    collaborations: list[collaboration_types.Collaboration] = field(
+        resolver=collaboration_api.collaborations,
+        description="List the organization's collaborations: what a guest granted one sees of it (a guest: the collaborations granted to them)",
+    )
+    collaboration: collaboration_types.Collaboration = field(
+        resolver=collaboration_api.collaboration,
+        description="Get a single collaboration by ID",
+    )
+    collaborations_stats: collaboration_types.CollaborationStats = field(
+        resolver=collaboration_api.collaborations_stats,
+        description="Count the collaborations `collaborations` lists, and the objects in them",
+    )
 
-    charts: list[chart_types.Chart] = field(description="List charts (compositions of data laid out along one metric axis)")
+    charts: list[chart_types.Chart] = field(
+        description="List charts (compositions of data laid out along one metric axis)"
+    )
     chart: chart_types.Chart = field(description="Get a single chart by ID")
 
-    chart_layers: list[chart_types.ChartLayer] = field(filters=chart_filters.ChartLayerFilter, ordering=chart_filters.ChartLayerOrder, pagination=True, description="List layers drawn in charts (a heterogeneous list of layer kinds)")
-    chart_layer: chart_types.ChartLayer = field(description="Get a single chart layer by ID")
+    chart_layers: list[chart_types.ChartLayer] = field(
+        filters=chart_filters.ChartLayerFilter,
+        ordering=chart_filters.ChartLayerOrder,
+        pagination=True,
+        description="List layers drawn in charts (a heterogeneous list of layer kinds)",
+    )
+    chart_layer: chart_types.ChartLayer = field(
+        description="Get a single chart layer by ID"
+    )
 
-    grids: list[grid_types.Grid] = field(description="List grids (compositions laying out the members of one or two enumerating axes: a heatmap of genes against cells, a table's cells against channels)")
+    grids: list[grid_types.Grid] = field(
+        description="List grids (compositions laying out the members of one or two enumerating axes: a heatmap of genes against cells, a table's cells against channels)"
+    )
     grid: grid_types.Grid = field(description="Get a single grid by ID")
 
-    grid_layers: list[grid_types.GridLayer] = field(filters=grid_filters.GridLayerFilter, ordering=grid_filters.GridLayerOrder, pagination=True, description="List layers drawn in grids (a heterogeneous list of layer kinds)")
-    grid_layer: grid_types.GridLayer = field(description="Get a single grid layer by ID")
+    grid_layers: list[grid_types.GridLayer] = field(
+        filters=grid_filters.GridLayerFilter,
+        ordering=grid_filters.GridLayerOrder,
+        pagination=True,
+        description="List layers drawn in grids (a heterogeneous list of layer kinds)",
+    )
+    grid_layer: grid_types.GridLayer = field(
+        description="Get a single grid layer by ID"
+    )
 
-    metrics: list[metric_types.Metric] = field(description="List metrics: values recorded about annotations and datasets, by apps and people")
+    metrics: list[metric_types.Metric] = field(
+        description="List metrics: values recorded about annotations and datasets, by apps and people"
+    )
     metric: metric_types.Metric = field(description="Get a single metric by ID")
 
     # Unoptimized: the optimizer cannot follow a polymorphic interface to its kinds' own tables.
-    lenses: list[types.Lens] = field(filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, disable_optimization=True, description="List lenses: selections over array datasets (by slices) and over tables, sparse datasets, meshes, networks and annotation collections (by windows), a heterogeneous list of lens kinds")
-    lens: types.Lens = field(disable_optimization=True, description="Get a single lens of any kind by ID")
+    lenses: list[types.Lens] = field(
+        filters=filters.LensFilter,
+        ordering=order.LensOrder,
+        pagination=True,
+        disable_optimization=True,
+        description="List lenses: selections over array datasets (by slices) and over tables, sparse datasets, meshes, networks and annotation collections (by windows), a heterogeneous list of lens kinds",
+    )
+    lens: types.Lens = field(
+        disable_optimization=True, description="Get a single lens of any kind by ID"
+    )
 
-    array_datasets: list[types.ArrayDataset] = field(description="List array datasets (N-dimensional arrays with named dimensions and anchored metadata)")
-    array_dataset: types.ArrayDataset = field(description="Get a single array dataset by ID")
+    array_datasets: list[types.ArrayDataset] = field(
+        description="List array datasets (N-dimensional arrays with named dimensions and anchored metadata)"
+    )
+    array_dataset: types.ArrayDataset = field(
+        description="Get a single array dataset by ID"
+    )
 
-    data_arrays: list[types.DataArray] = field(description="List data arrays (the multiscale zarr arrays backing array datasets)")
+    data_arrays: list[types.DataArray] = field(
+        description="List data arrays (the multiscale zarr arrays backing array datasets)"
+    )
     data_array: types.DataArray = field(description="Get a single data array by ID")
 
-    coordinate_anchors: list[types.CoordinateAnchor] = field(description="List coordinate anchors (the hubs pinning metadata spokes to coordinates of an array, table or sparse dataset)")
+    coordinate_anchors: list[types.CoordinateAnchor] = field(
+        description="List coordinate anchors (the hubs pinning metadata spokes to coordinates of an array, table or sparse dataset)"
+    )
 
-    annotations: list[types.Annotation] = field(description="List annotations (human-drawn shapes, each in its collection's coordinate system)")
+    annotations: list[types.Annotation] = field(
+        description="List annotations (human-drawn shapes, each in its collection's coordinate system)"
+    )
     annotation: types.Annotation = field(description="Get a single annotation by ID")
 
-    annotation_collections: list[types.AnnotationCollection] = field(description="List annotation collections (named sets of human-drawn shapes, each owning the coordinate system they are drawn in)")
-    annotation_collection: types.AnnotationCollection = field(description="Get a single annotation collection by ID")
+    annotation_collections: list[types.AnnotationCollection] = field(
+        description="List annotation collections (named sets of human-drawn shapes, each owning the coordinate system they are drawn in)"
+    )
+    annotation_collection: types.AnnotationCollection = field(
+        description="Get a single annotation collection by ID"
+    )
 
     nearest_annotations = field(
         resolver=queries.nearest_annotations,
         description="The k annotations of one collection nearest to a point, by cube distance between the point and each annotation's intrinsic bounding box (GiST-accelerated; 0 inside the box). Scoped to one collection because boxes only compare within one frame; the point is in the collection's nearest-intrinsic space, in its coordinate order",
     )
 
-    coordinate_systems: list[types.CoordinateSystem] = field(description="List coordinate systems (the nodes of the RFC-5 coordinate graph)")
-    coordinate_system: types.CoordinateSystem = field(description="Get a single coordinate system by ID")
+    coordinate_systems: list[types.CoordinateSystem] = field(
+        description="List coordinate systems (the nodes of the RFC-5 coordinate graph)"
+    )
+    coordinate_system: types.CoordinateSystem = field(
+        description="Get a single coordinate system by ID"
+    )
 
     transformations: list[types.Transformation] = field(
         filters=filters.TransformationFilter,
@@ -194,7 +298,9 @@ class Query:
         pagination=True,
         description="List transformations (the directed edges of the coordinate graph). Compose them client-side; the server never resolves a path to world, because the same dataset can sit in two scenes under two registrations",
     )
-    transformation: types.Transformation = field(description="Get a single transformation by ID")
+    transformation: types.Transformation = field(
+        description="Get a single transformation by ID"
+    )
 
     coordinate_graph = field(
         resolver=queries.coordinate_graph,
@@ -337,18 +443,36 @@ class Query:
         ),
     )
 
-    mesh_collections: list[types.MeshCollection] = field(description="List mesh collections (immutable Parquet-backed mesh sets, each in a coordinate system of its own)")
-    mesh_collection: types.MeshCollection = field(description="Get a single mesh collection by ID")
-    network_collections: list[types.NetworkCollection] = field(description="List network collections (immutable Parquet-backed node/edge networks, each in a coordinate system of its own)")
-    network_collection: types.NetworkCollection = field(description="Get a single network collection by ID")
-    fixtures: list[types.Fixture] = field(description="List fixtures (binary glTF scenes of hardware around the sample, each in a unit-carrying coordinate system of its own)")
+    mesh_collections: list[types.MeshCollection] = field(
+        description="List mesh collections (immutable Parquet-backed mesh sets, each in a coordinate system of its own)"
+    )
+    mesh_collection: types.MeshCollection = field(
+        description="Get a single mesh collection by ID"
+    )
+    network_collections: list[types.NetworkCollection] = field(
+        description="List network collections (immutable Parquet-backed node/edge networks, each in a coordinate system of its own)"
+    )
+    network_collection: types.NetworkCollection = field(
+        description="Get a single network collection by ID"
+    )
+    fixtures: list[types.Fixture] = field(
+        description="List fixtures (binary glTF scenes of hardware around the sample, each in a unit-carrying coordinate system of its own)"
+    )
     fixture: types.Fixture = field(description="Get a single fixture by ID")
 
-    sparse_datasets: list[types.SparseDataset] = field(description="List sparse datasets (matrices over two enumerated axes, stored as anndata-spelled zarr groups)")
-    sparse_dataset: types.SparseDataset = field(description="Get a single sparse dataset by ID")
+    sparse_datasets: list[types.SparseDataset] = field(
+        description="List sparse datasets (matrices over two enumerated axes, stored as anndata-spelled zarr groups)"
+    )
+    sparse_dataset: types.SparseDataset = field(
+        description="Get a single sparse dataset by ID"
+    )
 
-    table_datasets: list[types.TableDataset] = field(description="List table datasets (Parquet-backed tables of scientific records: measurements, localizations, expression levels)")
-    table_dataset: types.TableDataset = field(description="Get a single table dataset by ID")
+    table_datasets: list[types.TableDataset] = field(
+        description="List table datasets (Parquet-backed tables of scientific records: measurements, localizations, expression levels)"
+    )
+    table_dataset: types.TableDataset = field(
+        description="Get a single table dataset by ID"
+    )
 
     children = field(
         resolver=queries.children,
@@ -359,13 +483,21 @@ class Query:
         description="Count what `children` pages through with the same filter: the total and one count per kind",
     )
 
-    scene_snapshots: list[types.SceneSnapshot] = field(description="List scene snapshots (pre-rendered pictures of a composition, for previewing it without compositing the layers)")
+    scene_snapshots: list[types.SceneSnapshot] = field(
+        description="List scene snapshots (pre-rendered pictures of a composition, for previewing it without compositing the layers)"
+    )
 
-    animations: list[types.Animation] = field(description="List animations (named camera tours through a scene)")
+    animations: list[types.Animation] = field(
+        description="List animations (named camera tours through a scene)"
+    )
 
-    files: list[types.File] = field(description="List files (raw microscopy files such as .czi or .ome.tiff)")
-    myfiles: list[types.File] = field(field_cls=CreatedByCallerField, description="List files created by the current user")
-
+    files: list[types.File] = field(
+        description="List files (raw microscopy files such as .czi or .ome.tiff)"
+    )
+    myfiles: list[types.File] = field(
+        field_cls=CreatedByCallerField,
+        description="List files created by the current user",
+    )
 
     permissions = field(
         resolver=queries.permissions,
@@ -375,22 +507,63 @@ class Query:
         resolver=queries.available_permissions,
         description="Get available permissions for a specific identifier",
     )
-    array_datasets_stats: types.ArrayDatasetStats = field(resolver=types.ArrayDatasetStatsResolver, description="Get statistics about array datasets: counts and time-bucketed series over the datasets of the current organization")
-    lenses_stats: types.LensStats = field(resolver=types.LensStatsResolver, description="Get statistics about lenses: counts and time-bucketed series over the lenses of the current organization")
-    coordinate_systems_stats: types.CoordinateSystemStats = field(resolver=types.CoordinateSystemStatsResolver, description="Get statistics about coordinate systems: counts and time-bucketed series over the coordinate systems of the current organization")
-    table_datasets_stats: types.TableDatasetStats = field(resolver=types.TableDatasetStatsResolver, description="Get statistics about table datasets: counts and time-bucketed series over the table datasets of the current organization")
-    sparse_datasets_stats: types.SparseDatasetStats = field(resolver=types.SparseDatasetStatsResolver, description="Get statistics about sparse datasets: counts and time-bucketed series over the sparse datasets of the current organization")
-    folders_stats: types.FolderStats = field(resolver=types.FolderStatsResolver, description="Get statistics about folders: counts and time-bucketed series over the folders of the current organization")
-    files_stats: types.FileStats = field(resolver=types.FileStatsResolver, description="Get statistics about files: counts and time-bucketed series over the files of the current organization")
-    annotations_stats: types.AnnotationStats = field(resolver=types.AnnotationStatsResolver, description="Get statistics about annotations: counts over the annotations of the current organization")
-    scenes_stats: types.SceneStats = field(resolver=types.SceneStatsResolver, description="Get statistics about scenes: counts over the scenes of the current organization")
-    charts_stats: chart_types.ChartStats = field(resolver=chart_types.ChartStatsResolver, description="Get statistics about charts: counts and time-bucketed series over the charts of the current organization")
-    grids_stats: grid_types.GridStats = field(resolver=grid_types.GridStatsResolver, description="Get statistics about grids: counts and time-bucketed series over the grids of the current organization")
+    array_datasets_stats: types.ArrayDatasetStats = field(
+        resolver=types.ArrayDatasetStatsResolver,
+        description="Get statistics about array datasets: counts and time-bucketed series over the datasets of the current organization",
+    )
+    lenses_stats: types.LensStats = field(
+        resolver=types.LensStatsResolver,
+        description="Get statistics about lenses: counts and time-bucketed series over the lenses of the current organization",
+    )
+    coordinate_systems_stats: types.CoordinateSystemStats = field(
+        resolver=types.CoordinateSystemStatsResolver,
+        description="Get statistics about coordinate systems: counts and time-bucketed series over the coordinate systems of the current organization",
+    )
+    table_datasets_stats: types.TableDatasetStats = field(
+        resolver=types.TableDatasetStatsResolver,
+        description="Get statistics about table datasets: counts and time-bucketed series over the table datasets of the current organization",
+    )
+    sparse_datasets_stats: types.SparseDatasetStats = field(
+        resolver=types.SparseDatasetStatsResolver,
+        description="Get statistics about sparse datasets: counts and time-bucketed series over the sparse datasets of the current organization",
+    )
+    folders_stats: types.FolderStats = field(
+        resolver=types.FolderStatsResolver,
+        description="Get statistics about folders: counts and time-bucketed series over the folders of the current organization",
+    )
+    files_stats: types.FileStats = field(
+        resolver=types.FileStatsResolver,
+        description="Get statistics about files: counts and time-bucketed series over the files of the current organization",
+    )
+    annotations_stats: types.AnnotationStats = field(
+        resolver=types.AnnotationStatsResolver,
+        description="Get statistics about annotations: counts over the annotations of the current organization",
+    )
+    scenes_stats: types.SceneStats = field(
+        resolver=types.SceneStatsResolver,
+        description="Get statistics about scenes: counts over the scenes of the current organization",
+    )
+    charts_stats: chart_types.ChartStats = field(
+        resolver=chart_types.ChartStatsResolver,
+        description="Get statistics about charts: counts and time-bucketed series over the charts of the current organization",
+    )
+    grids_stats: grid_types.GridStats = field(
+        resolver=grid_types.GridStatsResolver,
+        description="Get statistics about grids: counts and time-bucketed series over the grids of the current organization",
+    )
 
-    @field(description="List the memberships of the current organization (excluding bots)")
+    @field(
+        description="List the memberships of the current organization (excluding bots)"
+    )
     def members(self, info: Info) -> list[types.Membership]:
         """Return all memberships for the current organization, excluding those with the 'bot' role."""
-        return ak_models.Membership.objects.filter(organization=info.context.request.organization).exclude(roles__contains="bot").distinct()
+        return (
+            ak_models.Membership.objects.filter(
+                organization=info.context.request.organization
+            )
+            .exclude(roles__contains="bot")
+            .distinct()
+        )
 
     @field(description="Get a single Rekuest task by ID")
     def task(self, info: Info, id: ID) -> types.Task:
@@ -415,12 +588,31 @@ class Query:
 
 @strawberry.type
 class Mutation:
-
-    create_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.create_collaboration, description="Create an empty collaboration, to put objects in and grant a guest")
-    add_to_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.add_to_collaboration, description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw")
-    add_many_to_collaboration = mutation(scope="mikro_share", resolver=mutations.add_many_to_collaboration, description="Put several objects in a collaboration at once, each with what it needs to be seen; all or none. How a dataset goes in with what was derived from it")
-    remove_from_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.remove_from_collaboration, description="Take an object out of a collaboration, with what it brought that nothing else there needs")
-    delete_collaboration = mutation(scope="mikro_share", resolver=collaboration_api.delete_collaboration, description="Delete a collaboration: whoever was granted it sees nothing of it any more")
+    create_collaboration = mutation(
+        scope="mikro_share",
+        resolver=collaboration_api.create_collaboration,
+        description="Create an empty collaboration, to put objects in and grant a guest",
+    )
+    add_to_collaboration = mutation(
+        scope="mikro_share",
+        resolver=collaboration_api.add_to_collaboration,
+        description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw",
+    )
+    add_many_to_collaboration = mutation(
+        scope="mikro_share",
+        resolver=mutations.add_many_to_collaboration,
+        description="Put several objects in a collaboration at once, each with what it needs to be seen; all or none. How a dataset goes in with what was derived from it",
+    )
+    remove_from_collaboration = mutation(
+        scope="mikro_share",
+        resolver=collaboration_api.remove_from_collaboration,
+        description="Take an object out of a collaboration, with what it brought that nothing else there needs",
+    )
+    delete_collaboration = mutation(
+        scope="mikro_share",
+        resolver=collaboration_api.delete_collaboration,
+        description="Delete a collaboration: whoever was granted it sees nothing of it any more",
+    )
 
     request_media_upload = upload_mutation(
         description="Upload media and return a URL for access",
@@ -610,7 +802,10 @@ class Mutation:
         resolver=mutations.set_default_scene,
         description="Nominate the scene to open for a dataset, and take its thumbnail from. Null clears it",
     )
-    delete_array_dataset = mutation(resolver=mutations.delete_array_dataset, description="Delete an existing array dataset")
+    delete_array_dataset = mutation(
+        resolver=mutations.delete_array_dataset,
+        description="Delete an existing array dataset",
+    )
     create_phasor_histogram = mutation(
         resolver=mutations.create_phasor_histogram,
         description="Attach a phasor distribution (the 2D g/s density at one axis and harmonic) to a dataset, so a client can range a phasor overlay without reading the cube",
@@ -678,7 +873,12 @@ class Mutation:
         resolver=mutations.update_annotation,
         description="Edit an annotation: name, kind, vectors, pins or styling. New vectors re-derive the bounding box against the current transform chain",
     )
-    delete_annotation = mutation(scope="mikro_annotate", roles=[EDITOR, ANNOTATOR], resolver=mutations.delete_annotation, description="Delete an existing annotation")
+    delete_annotation = mutation(
+        scope="mikro_annotate",
+        roles=[EDITOR, ANNOTATOR],
+        resolver=mutations.delete_annotation,
+        description="Delete an existing annotation",
+    )
     delete_derived = mutation(
         resolver=mutations.delete_derived,
         description="Delete everything made from one object -- derived data, data computed within a shape, shapes refined or converted from it, series converted out of a file, files exported from a dataset, transitively -- and keep the object. Every row is held to its own owner and delete guards before anything goes; one refusal deletes nothing. Answers the `<kind>:<id>` keys deleted; nothing made from it deletes nothing (`preflightDeleteDerived` lists what it takes)",
@@ -688,7 +888,10 @@ class Mutation:
         resolver=mutations.create_annotation_collection,
         description="Create an annotation collection explicitly, in a coordinate system of its own, optionally derived from the system the shapes are drawn over. The common path -- drawing on a scene -- goes through createAnnotation instead, which mints the scene's collection on first use",
     )
-    delete_annotation_collection = mutation(resolver=mutations.delete_annotation_collection, description="Delete an annotation collection. Its coordinate system, its annotations and its layers cascade with it")
+    delete_annotation_collection = mutation(
+        resolver=mutations.delete_annotation_collection,
+        description="Delete an annotation collection. Its coordinate system, its annotations and its layers cascade with it",
+    )
 
     # Lens
 
@@ -696,12 +899,30 @@ class Mutation:
         resolver=mutations.create_lens,
         description="The array lens making a selection over a dataset by slices: the one that exists for that selection, or a new one with its coordinate system and its edge back into the dataset's grid",
     )
-    create_table_lens = mutation(resolver=mutations.create_table_lens, description="The lens keeping these windows of a table dataset's columns -- a coordinate (a region of space) or a numeric measurement (a gate, `area >= 50`): the one that exists, or a new one. It lives in the table's own space")
-    create_sparse_lens = mutation(resolver=mutations.create_sparse_lens, description="The lens keeping these windows of a sparse dataset's axes: the one that exists, or a new one. A subset of positions, never a re-indexing")
-    create_fixture_lens = mutation(resolver=mutations.create_fixture_lens, description="The lens keeping these windows of a fixture's own space -- a clip box: the one that exists, or a new one")
-    create_mesh_lens = mutation(resolver=mutations.create_mesh_lens, description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one")
-    create_network_lens = mutation(resolver=mutations.create_network_lens, description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one")
-    create_annotation_lens = mutation(resolver=mutations.create_annotation_lens, description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one")
+    create_table_lens = mutation(
+        resolver=mutations.create_table_lens,
+        description="The lens keeping these windows of a table dataset's columns -- a coordinate (a region of space) or a numeric measurement (a gate, `area >= 50`): the one that exists, or a new one. It lives in the table's own space",
+    )
+    create_sparse_lens = mutation(
+        resolver=mutations.create_sparse_lens,
+        description="The lens keeping these windows of a sparse dataset's axes: the one that exists, or a new one. A subset of positions, never a re-indexing",
+    )
+    create_fixture_lens = mutation(
+        resolver=mutations.create_fixture_lens,
+        description="The lens keeping these windows of a fixture's own space -- a clip box: the one that exists, or a new one",
+    )
+    create_mesh_lens = mutation(
+        resolver=mutations.create_mesh_lens,
+        description="The lens keeping these windows of a mesh collection's own space: the one that exists, or a new one",
+    )
+    create_network_lens = mutation(
+        resolver=mutations.create_network_lens,
+        description="The lens keeping these windows of a network collection's own space: the one that exists, or a new one",
+    )
+    create_annotation_lens = mutation(
+        resolver=mutations.create_annotation_lens,
+        description="The lens keeping these windows of an annotation collection's drawing space: the one that exists, or a new one",
+    )
     set_position_label = mutation(
         resolver=mutations.set_position_label,
         description=(
@@ -714,7 +935,10 @@ class Mutation:
         resolver=mutations.set_lens_default_scene,
         description="Nominate the scene to open for a lens, and take its thumbnail from. Null clears it. On an unsliced lens this writes its dataset's nomination: the lens is the dataset, looked at whole",
     )
-    delete_lens = mutation(resolver=mutations.delete_lens, description="Delete a lens of any kind. Refused while a layer draws through it, and for a container's whole lens")
+    delete_lens = mutation(
+        resolver=mutations.delete_lens,
+        description="Delete a lens of any kind. Refused while a layer draws through it, and for a container's whole lens",
+    )
 
     create_scene = mutation(
         resolver=mutations.create_scene,
@@ -733,12 +957,17 @@ class Mutation:
         resolver=mutations.create_scene_from_lens,
         description="Bootstrap a renderable scene showing one lens of any kind: a crop, a sub-volume or the whole array as one layer per channel; a window over a table as a point or track layer; a window over a mesh, network or annotation collection as that layer. Composes in the dataset's intrinsic grid, or the container's own space, unless `world` names another space the lens reaches",
     )
-    update_scene = mutation(resolver=mutations.update_scene, description="Set a scene's viewer preferences: how a client should open it")
+    update_scene = mutation(
+        resolver=mutations.update_scene,
+        description="Set a scene's viewer preferences: how a client should open it",
+    )
     clear_scene = mutation(
         resolver=mutations.clear_scene,
         description="Delete every layer of a scene, keeping the scene itself. A pure view-state reset: no coordinate system, registration or dataset is touched, and other scenes over the same space never notice",
     )
-    delete_scene = mutation(resolver=mutations.delete_scene, description="Delete an existing scene")
+    delete_scene = mutation(
+        resolver=mutations.delete_scene, description="Delete an existing scene"
+    )
 
     create_chart = mutation(
         resolver=chart_mutations.create_chart,
@@ -748,8 +977,14 @@ class Mutation:
         resolver=chart_mutations.create_chart_from_coordinate_system,
         description="Bootstrap a chart over an existing coordinate system, drawing every array, table and annotation collection already laid along its axis. Authors no edges",
     )
-    update_chart = mutation(resolver=chart_mutations.update_chart, description="Rename or re-describe a chart. Its world is fixed")
-    delete_chart = mutation(resolver=chart_mutations.delete_chart, description="Delete a chart and its layers. The data they drew and the chart's world are untouched")
+    update_chart = mutation(
+        resolver=chart_mutations.update_chart,
+        description="Rename or re-describe a chart. Its world is fixed",
+    )
+    delete_chart = mutation(
+        resolver=chart_mutations.delete_chart,
+        description="Delete a chart and its layers. The data they drew and the chart's world are untouched",
+    )
     create_trace_chart_layer = mutation(
         resolver=chart_mutations.create_trace_chart_layer,
         description="Draw an array as a trace in a chart: a lens with one metric axis free, laid along the chart's axis by the graph, and optionally one CHANNEL or INDEX axis free as one line per position",
@@ -774,17 +1009,30 @@ class Mutation:
         resolver=chart_mutations.create_distribution_chart_layer,
         description="Summarise the values of one column of a table lens' rows in a chart: a histogram or a box, over every row or once per value of a grouping column such as a condition",
     )
-    update_chart_layer = mutation(resolver=chart_mutations.update_chart_layer, description="Restyle a chart layer of any kind: name, visibility, order, opacity, colour and its look")
-    update_trace_chart_layer = mutation(resolver=chart_mutations.update_trace_chart_layer, description="Retune a trace: draw another array lens along the chart's axis, or restyle it")
-    update_series_chart_layer = mutation(resolver=chart_mutations.update_series_chart_layer, description="Retune a series: read another value column or table lens against the chart's axis, or restyle it")
+    update_chart_layer = mutation(
+        resolver=chart_mutations.update_chart_layer,
+        description="Restyle a chart layer of any kind: name, visibility, order, opacity, colour and its look",
+    )
+    update_trace_chart_layer = mutation(
+        resolver=chart_mutations.update_trace_chart_layer,
+        description="Retune a trace: draw another array lens along the chart's axis, or restyle it",
+    )
+    update_series_chart_layer = mutation(
+        resolver=chart_mutations.update_series_chart_layer,
+        description="Retune a series: read another value column or table lens against the chart's axis, or restyle it",
+    )
     update_points_chart_layer = mutation(
-        resolver=chart_mutations.update_points_chart_layer, description="Retune a points layer: plot other columns or another table lens' rows, or restyle it"
+        resolver=chart_mutations.update_points_chart_layer,
+        description="Retune a points layer: plot other columns or another table lens' rows, or restyle it",
     )
     update_distribution_chart_layer = mutation(
         resolver=chart_mutations.update_distribution_chart_layer,
         description="Retune a distribution: summarise another column, regroup or rebin it, switch between histogram and box, or restyle it",
     )
-    delete_chart_layer = mutation(resolver=chart_mutations.delete_chart_layer, description="Delete a chart layer. Deletes nothing it drew")
+    delete_chart_layer = mutation(
+        resolver=chart_mutations.delete_chart_layer,
+        description="Delete a chart layer. Deletes nothing it drew",
+    )
 
     create_grid = mutation(
         resolver=grid_mutations.create_grid,
@@ -794,8 +1042,14 @@ class Mutation:
         resolver=grid_mutations.create_grid_from_coordinate_system,
         description="Bootstrap a grid over an existing space, drawing each sparse matrix and array covering its axes as a heatmap and each table as cells. Authors no edges",
     )
-    update_grid = mutation(resolver=grid_mutations.update_grid, description="Rename or re-describe a grid. Its world is fixed")
-    delete_grid = mutation(resolver=grid_mutations.delete_grid, description="Delete a grid and its layers. The data they drew and the grid's world are untouched")
+    update_grid = mutation(
+        resolver=grid_mutations.update_grid,
+        description="Rename or re-describe a grid. Its world is fixed",
+    )
+    delete_grid = mutation(
+        resolver=grid_mutations.delete_grid,
+        description="Delete a grid and its layers. The data they drew and the grid's world are untouched",
+    )
     create_heatmap_grid_layer = mutation(
         resolver=grid_mutations.create_heatmap_grid_layer,
         description="Draw an array or a sparse matrix in a grid: one cell per position along the grid's axes, coloured by the value there -- genes against cells",
@@ -804,8 +1058,14 @@ class Mutation:
         resolver=grid_mutations.create_cells_grid_layer,
         description="Draw a table's rows in a grid: one cell per row at its position along the grid's axes, coloured by a numeric column -- a long-form table's mean per cell and channel",
     )
-    update_grid_layer = mutation(resolver=grid_mutations.update_grid_layer, description="Restyle a grid layer. View state only")
-    delete_grid_layer = mutation(resolver=grid_mutations.delete_grid_layer, description="Delete a grid layer. Deletes nothing it drew")
+    update_grid_layer = mutation(
+        resolver=grid_mutations.update_grid_layer,
+        description="Restyle a grid layer. View state only",
+    )
+    delete_grid_layer = mutation(
+        resolver=grid_mutations.delete_grid_layer,
+        description="Delete a grid layer. Deletes nothing it drew",
+    )
 
     create_metric = mutation(
         resolver=metric_mutations.create_metric,
@@ -815,7 +1075,10 @@ class Mutation:
         resolver=metric_mutations.create_metrics,
         description="Record many values in one transaction. No signal is sent for each: a reader finds them in mikro's change feed",
     )
-    delete_metric = mutation(resolver=metric_mutations.delete_metric, description="Delete a metric. One a correction supersedes is kept while the correction stands")
+    delete_metric = mutation(
+        resolver=metric_mutations.delete_metric,
+        description="Delete a metric. One a correction supersedes is kept while the correction stands",
+    )
 
     auto_visualize = mutation(
         resolver=visualization_mutations.auto_visualize,
@@ -832,27 +1095,38 @@ class Mutation:
         resolver=mutations.update_transformation,
         description="Refine a transformation's parameters, bumping its version",
     )
-    delete_transformation = mutation(resolver=mutations.delete_transformation, description="Delete an existing transformation")
+    delete_transformation = mutation(
+        resolver=mutations.delete_transformation,
+        description="Delete an existing transformation",
+    )
     delete_registration = mutation(
         resolver=mutations.delete_registration,
-        description="Un-register a source from a space by naming the source and the space rather than the edge. Deletes every edge from the source\'s space into that one -- rivals are allowed, so there is no single edge to mean -- and returns their ids. An UNMAPPABLE declaration is not a placement and is never matched",
+        description="Un-register a source from a space by naming the source and the space rather than the edge. Deletes every edge from the source's space into that one -- rivals are allowed, so there is no single edge to mean -- and returns their ids. An UNMAPPABLE declaration is not a placement and is never matched",
     )
 
     create_mesh_collection = mutation(
         resolver=mutations.create_mesh_collection,
         description="Register an immutable mesh collection against a coordinate system",
     )
-    delete_mesh_collection = mutation(resolver=mutations.delete_mesh_collection, description="Delete an existing mesh collection")
+    delete_mesh_collection = mutation(
+        resolver=mutations.delete_mesh_collection,
+        description="Delete an existing mesh collection",
+    )
     create_network_collection = mutation(
         resolver=mutations.create_network_collection,
         description="Register an immutable network collection from an uploaded konnektion store, in a coordinate system of its own",
     )
-    delete_network_collection = mutation(resolver=mutations.delete_network_collection, description="Delete an existing network collection")
+    delete_network_collection = mutation(
+        resolver=mutations.delete_network_collection,
+        description="Delete an existing network collection",
+    )
     create_fixture = mutation(
         resolver=mutations.create_fixture,
         description="Register a fixture -- a coverslip, a dish, a holder -- from an uploaded binary glTF, in a unit-carrying coordinate system of its own",
     )
-    delete_fixture = mutation(resolver=mutations.delete_fixture, description="Delete an existing fixture")
+    delete_fixture = mutation(
+        resolver=mutations.delete_fixture, description="Delete an existing fixture"
+    )
     create_sparse_dataset = mutation(
         resolver=mutations.create_sparse_dataset,
         description=(
@@ -863,21 +1137,35 @@ class Mutation:
             "encoding and its chunking were read from the store when its upload was finished, and are checked against these axes rather than taken from them"
         ),
     )
-    update_sparse_dataset = mutation(resolver=mutations.update_sparse_dataset, description="Rename a sparse dataset or redescribe it -- the whole of what is editable. Its stores, axes and coordinate system are fixed at creation; a recomputation is a new dataset")
-    delete_sparse_dataset = mutation(resolver=mutations.delete_sparse_dataset, description="Delete an existing sparse dataset")
+    update_sparse_dataset = mutation(
+        resolver=mutations.update_sparse_dataset,
+        description="Rename a sparse dataset or redescribe it -- the whole of what is editable. Its stores, axes and coordinate system are fixed at creation; a recomputation is a new dataset",
+    )
+    delete_sparse_dataset = mutation(
+        resolver=mutations.delete_sparse_dataset,
+        description="Delete an existing sparse dataset",
+    )
 
     create_table_dataset = mutation(
         resolver=mutations.create_table_dataset,
         description="Create a table dataset from a Parquet store. Its declared coordinate columns become the axes of a coordinate system it owns, which lets a localization table be placed in a scene; a table with no coordinate columns is a measurement table whose rows enumerate objects and whose lineage edge is UNMAPPABLE",
     )
-    update_table_dataset = mutation(resolver=mutations.update_table_dataset, description="Rename a table dataset or redescribe it -- the whole of what is editable. Its store, columns and coordinate system are fixed at creation; a recomputation is a new table")
-    delete_table_dataset = mutation(resolver=mutations.delete_table_dataset, description="Delete an existing table dataset")
+    update_table_dataset = mutation(
+        resolver=mutations.update_table_dataset,
+        description="Rename a table dataset or redescribe it -- the whole of what is editable. Its store, columns and coordinate system are fixed at creation; a recomputation is a new table",
+    )
+    delete_table_dataset = mutation(
+        resolver=mutations.delete_table_dataset,
+        description="Delete an existing table dataset",
+    )
 
     create_layer = mutation(
         resolver=mutations.create_layer,
         description="Create a general image layer: array (lens) data rendered through a composable render graph. The kind for a layer that actually composites -- several channels together, an authored transfer curve, a tint, per-channel opacity. For a recipe of fixed shape, createIntensityLayer, createRgbLayer, createVolumeLayer and createPhasorLayer make a layer of that kind, whose settings are fields rather than a tree",
     )
-    delete_layer = mutation(resolver=mutations.delete_layer, description="Delete an existing layer")
+    delete_layer = mutation(
+        resolver=mutations.delete_layer, description="Delete an existing layer"
+    )
     update_layer = mutation(
         resolver=mutations.update_layer,
         description="Update a general image layer's lens, scene, compositing settings and render graph. Refuses every other kind, naming the mutation that does write its settings -- a layer's kind is fixed for the life of the row",
@@ -988,7 +1276,9 @@ class Mutation:
         resolver=mutations.from_file_like,
         description="Create a file from file-like data",
     )
-    delete_file = mutation(resolver=mutations.delete_file, description="Delete an existing file")
+    delete_file = mutation(
+        resolver=mutations.delete_file, description="Delete an existing file"
+    )
 
     # Folder
     create_folder = mutation(
@@ -999,13 +1289,19 @@ class Mutation:
         resolver=mutations.ensure_folder,
         description="Create a new folder to organize data",
     )
-    update_folder = mutation(resolver=mutations.update_folder, description="Update folder metadata")
+    update_folder = mutation(
+        resolver=mutations.update_folder, description="Update folder metadata"
+    )
     revert_folder = mutation(
         resolver=mutations.revert_folder,
         description="Revert folder to a previous version",
     )
-    pin_folder = mutation(resolver=mutations.pin_folder, description="Pin a folder for quick access")
-    delete_folder = mutation(resolver=mutations.delete_folder, description="Delete an existing folder")
+    pin_folder = mutation(
+        resolver=mutations.pin_folder, description="Pin a folder for quick access"
+    )
+    delete_folder = mutation(
+        resolver=mutations.delete_folder, description="Delete an existing folder"
+    )
     put_folders_in_folder = mutation(
         resolver=mutations.put_folders_in_folder,
         description="Add folders as children of another folder",
@@ -1014,7 +1310,9 @@ class Mutation:
         resolver=mutations.release_folders_from_folder,
         description="Remove folders from being children of another folder",
     )
-    put_files_in_folder = mutation(resolver=mutations.put_files_in_folder, description="Add files to a folder")
+    put_files_in_folder = mutation(
+        resolver=mutations.put_files_in_folder, description="Add files to a folder"
+    )
     release_files_from_folder = mutation(
         resolver=mutations.release_files_from_folder,
         description="Remove files from a folder",
@@ -1022,46 +1320,81 @@ class Mutation:
     # Re-filing for the four containers. Without these a container could be filed once, at
     # creation, and never moved -- `folder` was on the create inputs and nowhere else.
     # Releasing unfiles and deletes nothing, the same statement `on_delete=SET_NULL` makes.
-    put_array_datasets_in_folder = mutation(resolver=mutations.put_array_datasets_in_folder, description="File array datasets in a folder")
+    put_array_datasets_in_folder = mutation(
+        resolver=mutations.put_array_datasets_in_folder,
+        description="File array datasets in a folder",
+    )
     release_array_datasets_from_folder = mutation(
         resolver=mutations.release_array_datasets_from_folder,
         description="Unfile array datasets from a folder. They are not deleted, only unfiled",
     )
-    put_table_datasets_in_folder = mutation(resolver=mutations.put_table_datasets_in_folder, description="File table datasets in a folder")
+    put_table_datasets_in_folder = mutation(
+        resolver=mutations.put_table_datasets_in_folder,
+        description="File table datasets in a folder",
+    )
     release_table_datasets_from_folder = mutation(
         resolver=mutations.release_table_datasets_from_folder,
         description="Unfile table datasets from a folder. They are not deleted, only unfiled",
     )
-    put_mesh_collections_in_folder = mutation(resolver=mutations.put_mesh_collections_in_folder, description="File mesh collections in a folder")
+    put_mesh_collections_in_folder = mutation(
+        resolver=mutations.put_mesh_collections_in_folder,
+        description="File mesh collections in a folder",
+    )
     release_mesh_collections_from_folder = mutation(
         resolver=mutations.release_mesh_collections_from_folder,
         description="Unfile mesh collections from a folder. They are not deleted, only unfiled",
     )
-    put_fixtures_in_folder = mutation(resolver=mutations.put_fixtures_in_folder, description="File fixtures in a folder")
+    put_fixtures_in_folder = mutation(
+        resolver=mutations.put_fixtures_in_folder,
+        description="File fixtures in a folder",
+    )
     release_fixtures_from_folder = mutation(
         resolver=mutations.release_fixtures_from_folder,
         description="Unfile fixtures from a folder. They are not deleted, only unfiled",
     )
-    put_annotation_collections_in_folder = mutation(resolver=mutations.put_annotation_collections_in_folder, description="File annotation collections in a folder")
+    put_annotation_collections_in_folder = mutation(
+        resolver=mutations.put_annotation_collections_in_folder,
+        description="File annotation collections in a folder",
+    )
     release_annotation_collections_from_folder = mutation(
         resolver=mutations.release_annotation_collections_from_folder,
         description="Unfile annotation collections from a folder. They are not deleted, only unfiled",
     )
 
     # SceneSnapshot
-    create_scene_snapshot = mutation(resolver=mutations.create_scene_snapshot, description="Adopt an uploaded media file as a pre-rendered picture of a scene")
-    delete_scene_snapshot = mutation(resolver=mutations.delete_scene_snapshot, description="Delete an existing scene snapshot")
-    pin_scene_snapshot = mutation(resolver=mutations.pin_scene_snapshot, description="Pin a scene snapshot for quick access")
+    create_scene_snapshot = mutation(
+        resolver=mutations.create_scene_snapshot,
+        description="Adopt an uploaded media file as a pre-rendered picture of a scene",
+    )
+    delete_scene_snapshot = mutation(
+        resolver=mutations.delete_scene_snapshot,
+        description="Delete an existing scene snapshot",
+    )
+    pin_scene_snapshot = mutation(
+        resolver=mutations.pin_scene_snapshot,
+        description="Pin a scene snapshot for quick access",
+    )
 
     # Animation
-    create_animation = mutation(resolver=mutations.create_animation, description="Author a named camera tour of a scene")
-    update_animation = mutation(resolver=mutations.update_animation, description="Re-author a camera tour: rename it, or replace its stops")
-    delete_animation = mutation(resolver=mutations.delete_animation, description="Delete an existing camera tour")
+    create_animation = mutation(
+        resolver=mutations.create_animation,
+        description="Author a named camera tour of a scene",
+    )
+    update_animation = mutation(
+        resolver=mutations.update_animation,
+        description="Re-author a camera tour: rename it, or replace its stops",
+    )
+    delete_animation = mutation(
+        resolver=mutations.delete_animation,
+        description="Delete an existing camera tour",
+    )
 
 
 @strawberry.type
 class Subscription:
-    files = subscription(resolver=subscriptions.files, description="Subscribe to real-time file updates")
+    files = subscription(
+        resolver=subscriptions.files, description="Subscribe to real-time file updates"
+    )
     annotations = subscription(
         resolver=subscriptions.annotations,
         description="Follow one annotation collection: an event for every annotation drawn into it, edited or deleted. Carries changes only -- read the collection's current annotations with the `annotations` query first",
@@ -1078,7 +1411,10 @@ class Subscription:
         resolver=subscriptions.table_datasets,
         description="Follow the table datasets of one folder, or of the whole organization when no folder is given: an event for every one created, edited or deleted",
     )
-    scenes = subscription(resolver=subscriptions.scenes, description="Follow the organization's scenes: an event for every one created, edited or deleted")
+    scenes = subscription(
+        resolver=subscriptions.scenes,
+        description="Follow the organization's scenes: an event for every one created, edited or deleted",
+    )
     lenses = subscription(
         resolver=subscriptions.lenses,
         description=(
@@ -1111,11 +1447,33 @@ schema = Schema(
         CollaborationGate,
         KoherentExtension,
     ],
-    types=[*interface_types, *element_union_types, *layer_render_node_types, *layer_types, *lens_types, *chart_types.chart_layer_types, *grid_types.grid_layer_types, *transformation_types, *transform_union_types, *derived_from_union_types, *color_by_union_types, *file_link_union_types, *identification_union_types, *sample_step_types],
+    types=[
+        *interface_types,
+        *element_union_types,
+        *layer_render_node_types,
+        *layer_types,
+        *lens_types,
+        *chart_types.chart_layer_types,
+        *grid_types.grid_layer_types,
+        *transformation_types,
+        *transform_union_types,
+        *derived_from_union_types,
+        *color_by_union_types,
+        *file_link_union_types,
+        *identification_union_types,
+        *sample_step_types,
+    ],
     # The union member inputs above are referenced by no field: they are published for
     # codegen, and the directive on each says which flat union input it belongs to.
     schema_directives=[unionElementOf],
-    config=StrawberryConfig(scalar_map={**core_scalars.SCALAR_MAP, **datalayer_scalars.SCALAR_MAP, **kanne_scalars.SCALAR_MAP, **embedding_scalars}),
+    config=StrawberryConfig(
+        scalar_map={
+            **core_scalars.SCALAR_MAP,
+            **datalayer_scalars.SCALAR_MAP,
+            **kanne_scalars.SCALAR_MAP,
+            **embedding_scalars,
+        }
+    ),
 )
 
 # Which structure each type is (`@identified`), and, behind the gate, that mikro lets guests in.

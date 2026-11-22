@@ -1,16 +1,16 @@
 """Ordering tests for the new order_type classes (ordering: [XOrder!] argument)."""
 
-
 import pytest
-
 from kante.context import HttpContext
-from mikro_server.schema import schema
 
-from tests.seed import create_folder, create_file
+from mikro_server.schema import schema
+from tests.seed import create_file, create_folder
 
 
 async def execute(ctx, query, ordering):
-    result = await schema.execute(query, context_value=ctx, variable_values={"ordering": ordering})
+    result = await schema.execute(
+        query, context_value=ctx, variable_values={"ordering": ordering}
+    )
     assert not result.errors, result.errors
     return result.data
 

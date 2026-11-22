@@ -65,58 +65,98 @@ MEASUREMENTS = [
     {"name": "area", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
 ]
 
-MICROSCOPE = {"stage": {"x": "100.5 um", "y": "-3.25 um"}, "temperature": "37 degC", "devices": []}
+MICROSCOPE = {
+    "stage": {"x": "100.5 um", "y": "-3.25 um"},
+    "temperature": "37 degC",
+    "devices": [],
+}
 
 
-async def _create(ctx: HttpContext, name: str, columns: list[dict], anchors: list[dict] | None = None):
+async def _create(
+    ctx: HttpContext, name: str, columns: list[dict], anchors: list[dict] | None = None
+):
     payload = await seed.table_input(ctx, name, columns)
     if anchors is not None:
         payload["anchors"] = anchors
-    return await schema.execute(CREATE_TABLE, context_value=ctx, variable_values={"input": payload})
+    return await schema.execute(
+        CREATE_TABLE, context_value=ctx, variable_values={"input": payload}
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_anchor_pins_spokes_to_its_coordinate_columns(authenticated_context: HttpContext):
+async def test_a_table_anchor_pins_spokes_to_its_coordinate_columns(
+    authenticated_context: HttpContext,
+):
     """Anchors stated at create land on the table with the dataset side empty."""
     result = await _create(
         authenticated_context,
         "Anchored",
         LOCALIZATIONS,
         anchors=[
-            {"axisAnchors": [{"axis": "x", "value": 3}], "label": {"label": "GFP"}, "microscope": MICROSCOPE},
-            {"axisAnchors": [], "omeMetadata": {"metadataString": '{"Instrument": "confocal"}'}},
+            {
+                "axisAnchors": [{"axis": "x", "value": 3}],
+                "label": {"label": "GFP"},
+                "microscope": MICROSCOPE,
+            },
+            {
+                "axisAnchors": [],
+                "omeMetadata": {"metadataString": '{"Instrument": "confocal"}'},
+            },
         ],
     )
     assert result.errors is None, result.errors
     table_id = int(result.data["createTableDataset"]["id"])
 
-    anchors = [anchor async for anchor in models.CoordinateAnchor.objects.filter(table_id=table_id).order_by("pk")]
+    anchors = [
+        anchor
+        async for anchor in models.CoordinateAnchor.objects.filter(
+            table_id=table_id
+        ).order_by("pk")
+    ]
     assert [anchor.coordinates for anchor in anchors] == [{"x": 3}, {}]
     assert all(anchor.dataset_id is None for anchor in anchors)
-    assert all(anchor.organization_id == authenticated_context.request.organization.pk for anchor in anchors)
+    assert all(
+        anchor.organization_id == authenticated_context.request.organization.pk
+        for anchor in anchors
+    )
 
     label = await models.ChannelLabel.objects.aget(anchor__table_id=table_id)
     assert label.label == "GFP"
-    assert await models.OptikitState.objects.filter(anchor__table_id=table_id).acount() == 1
+    assert (
+        await models.OptikitState.objects.filter(anchor__table_id=table_id).acount()
+        == 1
+    )
     ome = await models.OmeMetadata.objects.aget(anchor__table_id=table_id)
     assert ome.metadata == {"Instrument": "confocal"}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_reads_its_anchors_back(authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_a_table_reads_its_anchors_back(
+    authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """`TableDataset.anchors` and the `coordinateAnchors` list both serve them, within the tenant."""
     result = await _create(
         authenticated_context,
         "Readable",
         LOCALIZATIONS,
-        anchors=[{"axisAnchors": [{"axis": "y", "value": 1}], "label": {"label": "DAPI"}, "microscope": MICROSCOPE}],
+        anchors=[
+            {
+                "axisAnchors": [{"axis": "y", "value": 1}],
+                "label": {"label": "DAPI"},
+                "microscope": MICROSCOPE,
+            }
+        ],
     )
     assert result.errors is None, result.errors
     table_id = result.data["createTableDataset"]["id"]
 
-    read = await schema.execute(TABLE_ANCHORS, context_value=authenticated_context, variable_values={"id": table_id})
+    read = await schema.execute(
+        TABLE_ANCHORS,
+        context_value=authenticated_context,
+        variable_values={"id": table_id},
+    )
     assert read.errors is None, read.errors
     [anchor] = read.data["tableDataset"]["anchors"]
     assert anchor["coordinates"] == {"y": 1}
@@ -125,36 +165,76 @@ async def test_a_table_reads_its_anchors_back(authenticated_context: HttpContext
     assert anchor["channelLabel"] == {"label": "DAPI"}
     assert anchor["microscope"]["state"]["stage"]["x"] is not None
 
-    listed = await schema.execute(LIST_ANCHORS, context_value=authenticated_context, variable_values={"table": table_id})
+    listed = await schema.execute(
+        LIST_ANCHORS,
+        context_value=authenticated_context,
+        variable_values={"table": table_id},
+    )
     assert listed.errors is None, listed.errors
-    assert [entry["coordinates"] for entry in listed.data["coordinateAnchors"]] == [{"y": 1}]
+    assert [entry["coordinates"] for entry in listed.data["coordinateAnchors"]] == [
+        {"y": 1}
+    ]
 
-    foreign = await schema.execute(LIST_ANCHORS, context_value=other_org_context, variable_values={"table": table_id})
+    foreign = await schema.execute(
+        LIST_ANCHORS,
+        context_value=other_org_context,
+        variable_values={"table": table_id},
+    )
     assert foreign.errors is None, foreign.errors
     assert foreign.data["coordinateAnchors"] == []
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_anchor_must_name_a_coordinate_column(authenticated_context: HttpContext):
+async def test_an_anchor_must_name_a_coordinate_column(
+    authenticated_context: HttpContext,
+):
     """A key that is not one of the table's axis-typed columns is refused, and nothing is written."""
-    result = await _create(authenticated_context, "Mispinned", LOCALIZATIONS, anchors=[{"axisAnchors": [{"axis": "z", "value": 0}], "label": {"label": "nope"}}])
+    result = await _create(
+        authenticated_context,
+        "Mispinned",
+        LOCALIZATIONS,
+        anchors=[
+            {"axisAnchors": [{"axis": "z", "value": 0}], "label": {"label": "nope"}}
+        ],
+    )
     assert result.errors is not None
-    assert "['z']" in result.errors[0].message and "['x', 'y']" in result.errors[0].message
+    assert (
+        "['z']" in result.errors[0].message and "['x', 'y']" in result.errors[0].message
+    )
     assert not await models.TableDataset.objects.filter(name="Mispinned").aexists()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_without_coordinate_columns_only_takes_global_anchors(authenticated_context: HttpContext):
+async def test_a_table_without_coordinate_columns_only_takes_global_anchors(
+    authenticated_context: HttpContext,
+):
     """The synthetic `object` axis is not a column: nothing can be pinned along it."""
-    refused = await _create(authenticated_context, "Flat", MEASUREMENTS, anchors=[{"axisAnchors": [{"axis": "object", "value": 0}], "label": {"label": "nope"}}])
+    refused = await _create(
+        authenticated_context,
+        "Flat",
+        MEASUREMENTS,
+        anchors=[
+            {
+                "axisAnchors": [{"axis": "object", "value": 0}],
+                "label": {"label": "nope"},
+            }
+        ],
+    )
     assert refused.errors is not None
     assert "only be global" in refused.errors[0].message
 
-    accepted = await _create(authenticated_context, "Flat", MEASUREMENTS, anchors=[{"axisAnchors": [], "label": {"label": "whole table"}}])
+    accepted = await _create(
+        authenticated_context,
+        "Flat",
+        MEASUREMENTS,
+        anchors=[{"axisAnchors": [], "label": {"label": "whole table"}}],
+    )
     assert accepted.errors is None, accepted.errors
-    anchor = await models.CoordinateAnchor.objects.aget(table_id=accepted.data["createTableDataset"]["id"])
+    anchor = await models.CoordinateAnchor.objects.aget(
+        table_id=accepted.data["createTableDataset"]["id"]
+    )
     assert anchor.coordinates == {}
 
 
@@ -166,7 +246,16 @@ async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext):
         authenticated_context,
         "Phasored",
         LOCALIZATIONS,
-        anchors=[{"axisAnchors": [], "phasorHistogram": {"axis": "tau", "counts": [1.0, 0.0, 0.0, 0.0], "bins": 2}}],
+        anchors=[
+            {
+                "axisAnchors": [],
+                "phasorHistogram": {
+                    "axis": "tau",
+                    "counts": [1.0, 0.0, 0.0, 0.0],
+                    "bins": 2,
+                },
+            }
+        ],
     )
     assert result.errors is not None
     assert "array-only" in result.errors[0].message
@@ -175,7 +264,9 @@ async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_metadata_is_attached_to_an_existing_table_on_one_anchor(authenticated_context: HttpContext):
+async def test_metadata_is_attached_to_an_existing_table_on_one_anchor(
+    authenticated_context: HttpContext,
+):
     """`createCoordinateAnchor` get-or-creates on (table, coordinates) and replaces a restated spoke."""
     created = await _create(authenticated_context, "Later", LOCALIZATIONS)
     assert created.errors is None, created.errors
@@ -184,44 +275,86 @@ async def test_metadata_is_attached_to_an_existing_table_on_one_anchor(authentic
     first = await schema.execute(
         CREATE_ANCHOR,
         context_value=authenticated_context,
-        variable_values={"input": {"table": table_id, "anchor": {"axisAnchors": [{"axis": "x", "value": 3}], "label": {"label": "first"}}}},
+        variable_values={
+            "input": {
+                "table": table_id,
+                "anchor": {
+                    "axisAnchors": [{"axis": "x", "value": 3}],
+                    "label": {"label": "first"},
+                },
+            }
+        },
     )
     assert first.errors is None, first.errors
     second = await schema.execute(
         CREATE_ANCHOR,
         context_value=authenticated_context,
-        variable_values={"input": {"table": table_id, "anchor": {"axisAnchors": [{"axis": "x", "value": 3}], "label": {"label": "second"}, "omeMetadata": {"metadataString": "{}"}}}},
+        variable_values={
+            "input": {
+                "table": table_id,
+                "anchor": {
+                    "axisAnchors": [{"axis": "x", "value": 3}],
+                    "label": {"label": "second"},
+                    "omeMetadata": {"metadataString": "{}"},
+                },
+            }
+        },
     )
     assert second.errors is None, second.errors
 
-    assert first.data["createCoordinateAnchor"]["id"] == second.data["createCoordinateAnchor"]["id"]
+    assert (
+        first.data["createCoordinateAnchor"]["id"]
+        == second.data["createCoordinateAnchor"]["id"]
+    )
     assert second.data["createCoordinateAnchor"]["table"] == {"id": table_id}
     assert await models.CoordinateAnchor.objects.filter(table_id=table_id).acount() == 1
     label = await models.ChannelLabel.objects.aget(anchor__table_id=table_id)
     assert label.label == "second"
-    assert await models.OmeMetadata.objects.filter(anchor__table_id=table_id).acount() == 1
+    assert (
+        await models.OmeMetadata.objects.filter(anchor__table_id=table_id).acount() == 1
+    )
 
     unknown = await schema.execute(
         CREATE_ANCHOR,
         context_value=authenticated_context,
-        variable_values={"input": {"table": table_id, "anchor": {"axisAnchors": [{"axis": "z", "value": 0}], "label": {"label": "nope"}}}},
+        variable_values={
+            "input": {
+                "table": table_id,
+                "anchor": {
+                    "axisAnchors": [{"axis": "z", "value": 0}],
+                    "label": {"label": "nope"},
+                },
+            }
+        },
     )
     assert unknown.errors is not None and "['z']" in unknown.errors[0].message
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_metadata_is_attached_to_an_existing_array_dataset_too(authenticated_context: HttpContext):
+async def test_metadata_is_attached_to_an_existing_array_dataset_too(
+    authenticated_context: HttpContext,
+):
     """The same mutation serves an array dataset, checked against its axes."""
     dataset = await seed.create_array_dataset(authenticated_context, "Array")
 
     result = await schema.execute(
         CREATE_ANCHOR,
         context_value=authenticated_context,
-        variable_values={"input": {"dataset": str(dataset.pk), "anchor": {"axisAnchors": [{"axis": "c", "value": 1}], "label": {"label": "mCherry"}}}},
+        variable_values={
+            "input": {
+                "dataset": str(dataset.pk),
+                "anchor": {
+                    "axisAnchors": [{"axis": "c", "value": 1}],
+                    "label": {"label": "mCherry"},
+                },
+            }
+        },
     )
     assert result.errors is None, result.errors
-    anchor = await models.CoordinateAnchor.objects.select_related("channel_label").aget(dataset=dataset)
+    anchor = await models.CoordinateAnchor.objects.select_related("channel_label").aget(
+        dataset=dataset
+    )
     assert anchor.coordinates == {"c": 1}
     assert anchor.table_id is None
     assert anchor.organization_id == dataset.organization_id
@@ -230,26 +363,55 @@ async def test_metadata_is_attached_to_an_existing_array_dataset_too(authenticat
     both = await schema.execute(
         CREATE_ANCHOR,
         context_value=authenticated_context,
-        variable_values={"input": {"dataset": str(dataset.pk), "table": "1", "anchor": {"axisAnchors": [], "label": {"label": "nope"}}}},
+        variable_values={
+            "input": {
+                "dataset": str(dataset.pk),
+                "table": "1",
+                "anchor": {"axisAnchors": [], "label": {"label": "nope"}},
+            }
+        },
     )
     assert both.errors is not None and "exactly one" in both.errors[0].message
-    neither = await schema.execute(CREATE_ANCHOR, context_value=authenticated_context, variable_values={"input": {"anchor": {"axisAnchors": [], "label": {"label": "nope"}}}})
+    neither = await schema.execute(
+        CREATE_ANCHOR,
+        context_value=authenticated_context,
+        variable_values={
+            "input": {"anchor": {"axisAnchors": [], "label": {"label": "nope"}}}
+        },
+    )
     assert neither.errors is not None and "exactly one" in neither.errors[0].message
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_table_takes_its_anchors_with_it(authenticated_context: HttpContext):
+async def test_deleting_the_table_takes_its_anchors_with_it(
+    authenticated_context: HttpContext,
+):
     """An anchor is part of its table: cascade, spokes included."""
-    created = await _create(authenticated_context, "Doomed", LOCALIZATIONS, anchors=[{"axisAnchors": [], "label": {"label": "gone"}}])
+    created = await _create(
+        authenticated_context,
+        "Doomed",
+        LOCALIZATIONS,
+        anchors=[{"axisAnchors": [], "label": {"label": "gone"}}],
+    )
     assert created.errors is None, created.errors
     table_id = created.data["createTableDataset"]["id"]
-    assert await models.ChannelLabel.objects.filter(anchor__table_id=table_id).acount() == 1
+    assert (
+        await models.ChannelLabel.objects.filter(anchor__table_id=table_id).acount()
+        == 1
+    )
 
-    deleted = await schema.execute(DELETE_TABLE, context_value=authenticated_context, variable_values={"input": {"id": table_id}})
+    deleted = await schema.execute(
+        DELETE_TABLE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": table_id}},
+    )
     assert deleted.errors is None, deleted.errors
     assert await models.CoordinateAnchor.objects.filter(table_id=table_id).acount() == 0
-    assert await models.ChannelLabel.objects.filter(anchor__table_id=table_id).acount() == 0
+    assert (
+        await models.ChannelLabel.objects.filter(anchor__table_id=table_id).acount()
+        == 0
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -259,23 +421,33 @@ async def test_an_anchor_has_exactly_one_container(authenticated_context: HttpCo
     dataset = await seed.create_array_dataset(authenticated_context, "Constrained")
     created = await _create(authenticated_context, "Constrained", LOCALIZATIONS)
     assert created.errors is None, created.errors
-    table = await models.TableDataset.objects.aget(pk=created.data["createTableDataset"]["id"])
+    table = await models.TableDataset.objects.aget(
+        pk=created.data["createTableDataset"]["id"]
+    )
     organization = authenticated_context.request.organization
 
     def neither():
         with transaction.atomic():
-            models.CoordinateAnchor.objects.create(coordinates={}, organization=organization)
+            models.CoordinateAnchor.objects.create(
+                coordinates={}, organization=organization
+            )
 
     def both():
         with transaction.atomic():
-            models.CoordinateAnchor.objects.create(dataset=dataset, table=table, coordinates={})
+            models.CoordinateAnchor.objects.create(
+                dataset=dataset, table=table, coordinates={}
+            )
 
     with pytest.raises(IntegrityError):
         await sync_to_async(neither)()
     with pytest.raises(IntegrityError):
         await sync_to_async(both)()
 
-    plain = await sync_to_async(models.CoordinateAnchor.objects.create)(dataset=dataset, coordinates={"c": 0})
+    plain = await sync_to_async(models.CoordinateAnchor.objects.create)(
+        dataset=dataset, coordinates={"c": 0}
+    )
     assert plain.organization_id == dataset.organization_id
-    on_table = await sync_to_async(models.CoordinateAnchor.objects.create)(table=table, coordinates={})
+    on_table = await sync_to_async(models.CoordinateAnchor.objects.create)(
+        table=table, coordinates={}
+    )
     assert on_table.organization_id == table.organization_id

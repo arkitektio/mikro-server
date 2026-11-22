@@ -16,7 +16,9 @@ _LOADER_KEY = "grid_graphs"
 LAYER_PLACEMENT_RELATIONS = ("grid__world",)
 
 #: The axes of every space a layer can name as its source.
-LAYER_SOURCE_AXIS_PREFETCH = (Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),)
+LAYER_SOURCE_AXIS_PREFETCH = (
+    Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),
+)
 
 
 class GridGraph(placement.PlacementGraph):
@@ -24,8 +26,16 @@ class GridGraph(placement.PlacementGraph):
 
     def __init__(self, grid: "models.Grid", *, loaders: dict | None = None) -> None:
         self.grid = grid
-        self.layers = list(grid.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(*LAYER_SOURCE_AXIS_PREFETCH))
-        systems = {source.pk for layer in self.layers if (source := grid_logic.layer_source_system(layer)) is not None}
+        self.layers = list(
+            grid.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(
+                *LAYER_SOURCE_AXIS_PREFETCH
+            )
+        )
+        systems = {
+            source.pk
+            for layer in self.layers
+            if (source := grid_logic.layer_source_system(layer)) is not None
+        }
         super().__init__(grid.world, seed_systems=systems, loaders=loaders)
 
 

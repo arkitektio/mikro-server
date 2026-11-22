@@ -20,16 +20,22 @@ no flag to record which way round a matrix runs, because half the graph would
 end up pointing the wrong way and nothing would tell you.
 """
 
+import kante
+import strawberry
 from django.db import transaction
 from django.db.models import Q
 from kante.types import Info
-import strawberry
 from pydantic import BaseModel, Field
 
-import kante
 from core import enums, models, types
 from core.creation import CreationContext
-from core.inputs.coords import SelectorInput, SelectorInputModel, TransformInput, TransformSpec, assert_orthonormal
+from core.inputs.coords import (
+    SelectorInput,
+    SelectorInputModel,
+    TransformInput,
+    TransformSpec,
+    assert_orthonormal,
+)
 from core.logic import compositions as compositions_logic
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import graph as graph_logic
@@ -47,14 +53,25 @@ class CreateTransformationInputModel(BaseModel):
     selector: SelectorInputModel | None = None
 
 
-@kante.pydantic_input(CreateTransformationInputModel, description="Input for creating one edge of the coordinate graph, mapping an input coordinate system to an output one")
+@kante.pydantic_input(
+    CreateTransformationInputModel,
+    description="Input for creating one edge of the coordinate graph, mapping an input coordinate system to an output one",
+)
 class CreateTransformationInput:
     """Input for creating one edge of the coordinate graph."""
 
-    input: strawberry.ID = strawberry.field(description="The coordinate system this transformation maps from")
-    output: strawberry.ID = strawberry.field(description="The coordinate system this transformation maps to. Direction is always forward -- if your registration library gave you the inverse, invert it before calling")
-    transform: TransformInput = strawberry.field(description="The edge's kind and parameters, as a discriminated union: `kind` selects a member, and only that member's fields are read -- any other supplied field is rejected, never dropped")
-    name: str | None = strawberry.field(default=None, description="Optional name for the transformation")
+    input: strawberry.ID = strawberry.field(
+        description="The coordinate system this transformation maps from"
+    )
+    output: strawberry.ID = strawberry.field(
+        description="The coordinate system this transformation maps to. Direction is always forward -- if your registration library gave you the inverse, invert it before calling"
+    )
+    transform: TransformInput = strawberry.field(
+        description="The edge's kind and parameters, as a discriminated union: `kind` selects a member, and only that member's fields are read -- any other supplied field is rejected, never dropped"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="Optional name for the transformation"
+    )
     validity: enums.PlacementValidity | None = strawberry.field(
         default=None,
         description="How much this map is actually known. Defaults to MANUAL -- someone authored it. Say VALIDATED when the registration was checked against the data, INFERRED when the numbers were read from metadata. A layer's validity is the weakest edge on its path to world",
@@ -66,14 +83,16 @@ class CreateTransformationInput:
     selector: SelectorInput | None = strawberry.field(
         default=None,
         description=(
-            "Where along one axis this edge applies, e.g. {axis: \"c\", index: 2} for a per-channel correction. Orthogonal to `kind` -- any kind of map can be "
+            'Where along one axis this edge applies, e.g. {axis: "c", index: 2} for a per-channel correction. Orthogonal to `kind` -- any kind of map can be '
             "scoped this way. Omit it for an edge that holds everywhere, which is the usual case. A path query crosses a scoped edge only when it fixes that "
             "coordinate with `at`, because without it where the data sits genuinely has no single answer"
         ),
     )
 
 
-def create_transformation(info: Info, input: CreateTransformationInput) -> types.Transformation:
+def create_transformation(
+    info: Info, input: CreateTransformationInput
+) -> types.Transformation:
     """Create one edge of the coordinate graph.
 
     A thin request-scoped wrapper: it lowers the transform union to its member's
@@ -103,7 +122,9 @@ def create_transformation(info: Info, input: CreateTransformationInput) -> types
         selector=model.selector.model_dump() if model.selector else None,
         input_axes=lowered.input_axes,
         output_axes=lowered.output_axes,
-        parts=graph_logic.resolve_part_fields(lowered.parts, lambda id: get_for_org(models.CoordinateSystem, info, id=id)),
+        parts=graph_logic.resolve_part_fields(
+            lowered.parts, lambda id: get_for_org(models.CoordinateSystem, info, id=id)
+        ),
         reason=lowered.reason,
         validity=model.validity,
         value_relation=model.value_relation,
@@ -121,24 +142,41 @@ class UpdateTransformationInputModel(BaseModel):
     validity: enums.PlacementValidity | None = None
 
 
-
-@kante.pydantic_input(UpdateTransformationInputModel, description="Input for refining an edge's parameters. The refinement is recorded in the edge's provenance, which is what tells an ROI its chain has moved")
+@kante.pydantic_input(
+    UpdateTransformationInputModel,
+    description="Input for refining an edge's parameters. The refinement is recorded in the edge's provenance, which is what tells an ROI its chain has moved",
+)
 class UpdateTransformationInput:
     """Input for refining an edge's parameters."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the transformation to refine")
-    name: str | None = strawberry.field(default=None, description="A new name for the transformation")
-    part: int | None = strawberry.field(default=None, description="(BY_DIMENSION) The index of the part to refine: its parameters are refined, its kind and axes stay -- a different map over different axes is a new edge")
-    scale: list[float] | None = strawberry.field(default=None, description="(SCALE) The refined per-axis scale factors")
-    translation: list[float] | None = strawberry.field(default=None, description="(TRANSLATION) The refined per-axis offsets")
-    affine: list[list[float]] | None = strawberry.field(default=None, description="(AFFINE / ROTATION) The refined matrix")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the transformation to refine"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="A new name for the transformation"
+    )
+    part: int | None = strawberry.field(
+        default=None,
+        description="(BY_DIMENSION) The index of the part to refine: its parameters are refined, its kind and axes stay -- a different map over different axes is a new edge",
+    )
+    scale: list[float] | None = strawberry.field(
+        default=None, description="(SCALE) The refined per-axis scale factors"
+    )
+    translation: list[float] | None = strawberry.field(
+        default=None, description="(TRANSLATION) The refined per-axis offsets"
+    )
+    affine: list[list[float]] | None = strawberry.field(
+        default=None, description="(AFFINE / ROTATION) The refined matrix"
+    )
     validity: enums.PlacementValidity | None = strawberry.field(
         default=None,
         description="A new validity for the edge -- how it stops being an assumption: set MANUAL when a real registration replaces an assumed one in place, VALIDATED when it was checked against the data. Every layer whose path runs through this edge reflects it immediately, because a layer's validity is derived, never stored",
     )
 
 
-def update_transformation(info: Info, input: UpdateTransformationInput) -> types.Transformation:
+def update_transformation(
+    info: Info, input: UpdateTransformationInput
+) -> types.Transformation:
     """Refine an edge's parameters in place.
 
     The history row the save writes is the signal that every ROI downstream of this edge was
@@ -153,7 +191,11 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     # in every scene, for everyone -- more than a delete of it would.
     assert_can_delete(info, transformation, creator_owner, action="refine")
 
-    supplied = [field for field in ("scale", "translation", "affine") if getattr(model, field) is not None]
+    supplied = [
+        field
+        for field in ("scale", "translation", "affine")
+        if getattr(model, field) is not None
+    ]
     if supplied or model.part is not None or model.validity is not None:
         coordinate_system_logic.assert_edge_refinable(transformation)
     if transformation.kind == enums.TransformKind.UNMAPPABLE.value and supplied:
@@ -161,14 +203,18 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
         # without this the parameters would be written and simply never read -- a map that
         # exists in the database and nowhere else. If the geometry turns out to survive
         # after all, the edge was the wrong kind, and changing the kind is the honest fix.
-        raise ValueError(f"An UNMAPPABLE transformation declares that no point of one space corresponds to a point of the other, so there is nothing to refine: it has no `{supplied[0]}`. If a correspondence does exist, replace the edge with one whose kind can express it.")
+        raise ValueError(
+            f"An UNMAPPABLE transformation declares that no point of one space corresponds to a point of the other, so there is nothing to refine: it has no `{supplied[0]}`. If a correspondence does exist, replace the edge with one whose kind can express it."
+        )
 
     if transformation.kind == enums.TransformKind.BY_DIMENSION.value:
         # Only parameters live in a part: a rename or a new validity is the edge's own.
         if supplied or model.part is not None:
             _refine_part(transformation, model, supplied)
     elif model.part is not None:
-        raise ValueError(f"A {transformation.kind} transformation has no parts: only a BY_DIMENSION is refined part by part, so drop `part`.")
+        raise ValueError(
+            f"A {transformation.kind} transformation has no parts: only a BY_DIMENSION is refined part by part, so drop `part`."
+        )
     else:
         _refine_params(transformation, model, supplied)
 
@@ -186,7 +232,6 @@ def update_transformation(info: Info, input: UpdateTransformationInput) -> types
     # there is no counter here to bump, and so none to forget.
     transformation.save(update_fields=["params", "parts", "name", "validity"])
 
-
     return transformation
 
 
@@ -194,11 +239,16 @@ class DeleteTransformationInputModel(BaseModel):
     id: str = Field(description="The ID of the transformation to delete")
 
 
-@kante.pydantic_input(DeleteTransformationInputModel, description="Input for deleting a transformation by ID")
+@kante.pydantic_input(
+    DeleteTransformationInputModel,
+    description="Input for deleting a transformation by ID",
+)
 class DeleteTransformationInput:
     """Input for deleting a transformation by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the transformation to delete")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the transformation to delete"
+    )
 
 
 # `creator_owner`, not `self_owner`: a Transformation has a creator but no
@@ -206,7 +256,9 @@ class DeleteTransformationInput:
 #: PROTECT, the second route to a stranded picker: leaving the table in place and removing the
 #: crossing strands an entry exactly as deleting the table does. Asked as a hypothetical -- the
 #: walk re-run without this edge -- so a rival edge still providing the crossing is not refused.
-delete_transformation = make_delete(models.Transformation, DeleteTransformationInput, owner=creator_owner)
+delete_transformation = make_delete(
+    models.Transformation, DeleteTransformationInput, owner=creator_owner
+)
 
 
 class DeleteRegistrationInputModel(BaseModel):
@@ -225,15 +277,33 @@ class DeleteRegistrationInputModel(BaseModel):
 class DeleteRegistrationInput:
     """Input for un-registering a source from a shared space."""
 
-    dataset: strawberry.ID | None = strawberry.field(default=None, description="Un-register this dataset. Provide exactly one source")
-    table_dataset: strawberry.ID | None = strawberry.field(default=None, description="Un-register this table dataset. Provide exactly one source")
-    mesh_collection: strawberry.ID | None = strawberry.field(default=None, description="Un-register this mesh collection. Provide exactly one source")
-    annotation_collection: strawberry.ID | None = strawberry.field(default=None, description="Un-register this annotation collection. Provide exactly one source")
-    coordinate_system: strawberry.ID | None = strawberry.field(default=None, description="Un-register this coordinate system. Provide exactly one source")
-    world: strawberry.ID = strawberry.field(description="The space to un-register the source from")
+    dataset: strawberry.ID | None = strawberry.field(
+        default=None, description="Un-register this dataset. Provide exactly one source"
+    )
+    table_dataset: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="Un-register this table dataset. Provide exactly one source",
+    )
+    mesh_collection: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="Un-register this mesh collection. Provide exactly one source",
+    )
+    annotation_collection: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="Un-register this annotation collection. Provide exactly one source",
+    )
+    coordinate_system: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="Un-register this coordinate system. Provide exactly one source",
+    )
+    world: strawberry.ID = strawberry.field(
+        description="The space to un-register the source from"
+    )
 
 
-def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[strawberry.ID]:
+def delete_registration(
+    info: Info, input: DeleteRegistrationInput
+) -> list[strawberry.ID]:
     """Delete the registration placing a source in a shared space, named by source and space.
 
     The inverse of a `registrations` entry in `createCoordinateSystem`, for the caller who
@@ -249,11 +319,27 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
     world = get_for_org(models.CoordinateSystem, info, id=model.world)
 
     source_system = coordinate_system_logic.resolve_source_system(
-        dataset=get_for_org(models.ArrayDataset, info, id=model.dataset) if model.dataset else None,
-        table_dataset=get_for_org(models.TableDataset, info, id=model.table_dataset) if model.table_dataset else None,
-        mesh_collection=get_for_org(models.MeshCollection, info, id=model.mesh_collection) if model.mesh_collection else None,
-        annotation_collection=get_for_org(models.AnnotationCollection, info, id=model.annotation_collection) if model.annotation_collection else None,
-        coordinate_system=get_for_org(models.CoordinateSystem, info, id=model.coordinate_system) if model.coordinate_system else None,
+        dataset=get_for_org(models.ArrayDataset, info, id=model.dataset)
+        if model.dataset
+        else None,
+        table_dataset=get_for_org(models.TableDataset, info, id=model.table_dataset)
+        if model.table_dataset
+        else None,
+        mesh_collection=get_for_org(
+            models.MeshCollection, info, id=model.mesh_collection
+        )
+        if model.mesh_collection
+        else None,
+        annotation_collection=get_for_org(
+            models.AnnotationCollection, info, id=model.annotation_collection
+        )
+        if model.annotation_collection
+        else None,
+        coordinate_system=get_for_org(
+            models.CoordinateSystem, info, id=model.coordinate_system
+        )
+        if model.coordinate_system
+        else None,
     )
 
     # **Every** matching edge, not one (RFC-9). Under RFC-6 at most one could match, because
@@ -270,7 +356,9 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
         inputs |= {
             system_id
             for system_id in models.CoordinateSystem.objects.filter(
-                Q(datasets__id=dataset_id) | Q(lenses__arraylens__dataset_id=dataset_id) | Q(data_arrays__dataset_id=dataset_id)
+                Q(datasets__id=dataset_id)
+                | Q(lenses__arraylens__dataset_id=dataset_id)
+                | Q(data_arrays__dataset_id=dataset_id)
             ).values_list("pk", flat=True)
         }
 
@@ -281,7 +369,9 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
         .order_by("pk")
     )
     if not edges:
-        raise ValueError(f"Nothing to delete: no edge relates this source to '{world.name}'.")
+        raise ValueError(
+            f"Nothing to delete: no edge relates this source to '{world.name}'."
+        )
 
     # One transaction, and each edge authorised and guarded as `deleteTransformation` guards
     # one: a rival somebody else authored refuses the whole request rather than leaving it
@@ -297,7 +387,11 @@ def delete_registration(info: Info, input: DeleteRegistrationInput) -> list[stra
     return deleted
 
 
-def _refine_params(transformation: models.Transformation, model: UpdateTransformationInputModel, supplied: list[str]) -> None:
+def _refine_params(
+    transformation: models.Transformation,
+    model: UpdateTransformationInputModel,
+    supplied: list[str],
+) -> None:
     """Refine a whole-edge map's parameters, held to the same gates creation is."""
     # The kinds gate refinement exactly as they gate creation: a parameter the kind never
     # reads would be written and never read back.
@@ -305,9 +399,17 @@ def _refine_params(transformation: models.Transformation, model: UpdateTransform
     offending = [field for field in supplied if field not in allowed]
     if offending:
         if transformation.kind == enums.TransformKind.SEQUENCE.value:
-            raise ValueError(f"A {transformation.kind} transformation carries its map as `steps`, written by the ingest from the data's own shapes and slices, so there is no `{offending[0]}` here to refine.")
-        reads_clause = "it reads " + ", ".join(f"`{param}`" for param in allowed) if allowed else "it takes no parameters at all"
-        raise ValueError(f"A {transformation.kind} transformation does not read `{offending[0]}`: {reads_clause}, so refining it would write a number nothing reads.")
+            raise ValueError(
+                f"A {transformation.kind} transformation carries its map as `steps`, written by the ingest from the data's own shapes and slices, so there is no `{offending[0]}` here to refine."
+            )
+        reads_clause = (
+            "it reads " + ", ".join(f"`{param}`" for param in allowed)
+            if allowed
+            else "it takes no parameters at all"
+        )
+        raise ValueError(
+            f"A {transformation.kind} transformation does not read `{offending[0]}`: {reads_clause}, so refining it would write a number nothing reads."
+        )
 
     params = dict(transformation.params)
     for field in ("scale", "translation", "affine"):
@@ -324,7 +426,10 @@ def _refine_params(transformation: models.Transformation, model: UpdateTransform
     # And a ROTATION stays one: the input validators that check `MᵀM ≈ I` at creation never
     # see a refinement, so without this a rotation could be refined into a shear that still
     # reports itself an isometry.
-    if transformation.kind == enums.TransformKind.ROTATION.value and params.get("affine") is not None:
+    if (
+        transformation.kind == enums.TransformKind.ROTATION.value
+        and params.get("affine") is not None
+    ):
         assert_orthonormal(params["affine"], noun="ROTATION")
 
     # The rank it lands on is the rank the endpoints already fix, and an update that
@@ -340,31 +445,61 @@ def _refine_params(transformation: models.Transformation, model: UpdateTransform
     transformation.params = params
 
 
-def _refine_part(transformation: models.Transformation, model: UpdateTransformationInputModel, supplied: list[str]) -> None:
+def _refine_part(
+    transformation: models.Transformation,
+    model: UpdateTransformationInputModel,
+    supplied: list[str],
+) -> None:
     """Refine one BY_DIMENSION part's parameters, the whole edge re-validated as a write."""
     parts = list(transformation.parts or [])
     if model.part is None or not 0 <= model.part < len(parts):
-        raise ValueError(f"A BY_DIMENSION is refined part by part: name the part in `part`, an index below {len(parts)}.")
+        raise ValueError(
+            f"A BY_DIMENSION is refined part by part: name the part in `part`, an index below {len(parts)}."
+        )
     target = parts[model.part]
     allowed = graph_logic.updatable_params(target["kind"])
     offending = [field for field in supplied if field not in allowed]
     if offending:
-        reads_clause = "it reads " + ", ".join(f"`{param}`" for param in allowed) if allowed else "it takes no parameters to refine"
-        raise ValueError(f"Part {model.part} is {target['kind']}, which does not read `{offending[0]}`: {reads_clause}.")
+        reads_clause = (
+            "it reads " + ", ".join(f"`{param}`" for param in allowed)
+            if allowed
+            else "it takes no parameters to refine"
+        )
+        raise ValueError(
+            f"Part {model.part} is {target['kind']}, which does not read `{offending[0]}`: {reads_clause}."
+        )
 
     lowered = []
     for index, part in enumerate(parts):
         params = dict(part.get("params") or {})
         if index == model.part:
             params.update({field: getattr(model, field) for field in supplied})
-            if part["kind"] == enums.PartKind.ROTATION.value and params.get("affine") is not None:
+            if (
+                part["kind"] == enums.PartKind.ROTATION.value
+                and params.get("affine") is not None
+            ):
                 assert_orthonormal(params["affine"], noun="ROTATION part")
-        entry = {"kind": part["kind"], "input_axes": part["input_axes"], "output_axes": part["output_axes"]}
+        entry = {
+            "kind": part["kind"],
+            "input_axes": part["input_axes"],
+            "output_axes": part["output_axes"],
+        }
         if part["kind"] == enums.PartKind.FIELD.value:
-            entry.update(field=transformation.field_of(part), unit=params.get("unit"), min=params.get("min"), max=params.get("max"))
+            entry.update(
+                field=transformation.field_of(part),
+                unit=params.get("unit"),
+                min=params.get("min"),
+                max=params.get("max"),
+            )
         else:
-            entry.update({field: params.get(field) for field in ("scale", "translation", "affine")})
+            entry.update(
+                {
+                    field: params.get(field)
+                    for field in ("scale", "translation", "affine")
+                }
+            )
         lowered.append(entry)
-    stored, _links = graph_logic.assert_parts(lowered, input_system=transformation.input, output_system=transformation.output)
+    stored, _links = graph_logic.assert_parts(
+        lowered, input_system=transformation.input, output_system=transformation.output
+    )
     transformation.parts = stored
-

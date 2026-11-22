@@ -1,33 +1,36 @@
-from django.db import transaction
-
-from kante.types import Info
-import strawberry
-
-from core import types, models
-
-
-from core import enums
 import kante
+import strawberry
+from django.db import transaction
+from kante.types import Info
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from core import enums, models, types
+from core.input_unions import prose_errors
+from core.inputs.validators import (
+    Alpha,
+    assert_contrast_limits,
+    assert_rgba,
+    assert_white_balance,
+)
 from core.logic import attribute_plans as attribute_plans_logic
 from core.logic import column_options as column_options_logic
-from core.logic.column_options import mesh_collection_system
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
+from core.logic.column_options import mesh_collection_system
 from core.logic.layer_preview import persist_layer
-from core.input_unions import prose_errors
-from core.inputs.validators import Alpha, assert_contrast_limits, assert_rgba, assert_white_balance
-from core.scoping import get_for_org
 from core.mutations._generic import make_delete
-from core.render.layer import inputs as layer_inputs
-from core.render.layer import label as label_models
 from core.render import color_by as color_by_models
 from core.render import filter_by as filter_by_models
 from core.render import joins
+from core.render.layer import inputs as layer_inputs
+from core.render.layer import label as label_models
 from core.render.layer import models as layer_models
+from core.scoping import get_for_org
 
 
-def _build_layer_node(info: Info, node: layer_inputs.LayerNodeInputModel, lens) -> layer_models.LayerNodeUnion:
+def _build_layer_node(
+    info: Info, node: layer_inputs.LayerNodeInputModel, lens
+) -> layer_models.LayerNodeUnion:
     """Lower a fat GraphQL render-graph node into its strict tagged-union model, validating the lenses it samples."""
     if node.kind == "channel":
         transfer = node.transfer or layer_inputs.TransferFunctionInputModel()
@@ -58,7 +61,9 @@ def _build_layer_node(info: Info, node: layer_inputs.LayerNodeInputModel, lens) 
     if node.kind == "phasor":
         phasor_axis = default_phasor_axis(lens, node.phasor_axis)
         if not phasor_axis:
-            raise ValueError(f"A 'phasor' render node needs a phasor_axis, and this lens has no MICROTIME or SPECTRUM axis to default to ({[spec.name for spec in lens.axis_specs]})")
+            raise ValueError(
+                f"A 'phasor' render node needs a phasor_axis, and this lens has no MICROTIME or SPECTRUM axis to default to ({[spec.name for spec in lens.axis_specs]})"
+            )
         assert_phasor_axis(lens, phasor_axis)
         return layer_models.PhasorNodeModel(
             phasor_axis=phasor_axis,
@@ -71,7 +76,9 @@ def _build_layer_node(info: Info, node: layer_inputs.LayerNodeInputModel, lens) 
     raise ValueError(f"Unknown render node kind '{node.kind}'")
 
 
-def _node_lens(info: Info, lens_id: str | None, layer_lens: "models.ArrayLens") -> str | None:
+def _node_lens(
+    info: Info, lens_id: str | None, layer_lens: "models.ArrayLens"
+) -> str | None:
     """The single-channel lens a channel or phasor node samples, checked against the layer's lens.
 
     None is the layer's own lens, which must then pin one channel itself; an id names a crop of
@@ -79,14 +86,18 @@ def _node_lens(info: Info, lens_id: str | None, layer_lens: "models.ArrayLens") 
     id the node stores, so the recipe stays a JSON document.
     """
     if lens_id is None:
-        assert_single_channel(layer_lens, role="A render node sampling the layer's own lens")
+        assert_single_channel(
+            layer_lens, role="A render node sampling the layer's own lens"
+        )
         return None
     component = get_for_org(models.ArrayLens, info, id=lens_id)
     assert_component_lens(component, layer_lens, field="lens")
     return str(component.pk)
 
 
-def _build_phasor_transfer(transfer: layer_inputs.PhasorTransferInputModel | None) -> layer_models.PhasorTransferModel:
+def _build_phasor_transfer(
+    transfer: layer_inputs.PhasorTransferInputModel | None,
+) -> layer_models.PhasorTransferModel:
     """Lower a phasor transfer input, validating its cursors."""
     if transfer is None:
         return layer_models.PhasorTransferModel()
@@ -98,13 +109,17 @@ def _build_phasor_transfer(transfer: layer_inputs.PhasorTransferInputModel | Non
         min=transfer.min,
         max=transfer.max,
         colormap=transfer.colormap or enums.ColorMap.RAINBOW,
-        weight_by_intensity=transfer.weight_by_intensity if transfer.weight_by_intensity is not None else True,
+        weight_by_intensity=transfer.weight_by_intensity
+        if transfer.weight_by_intensity is not None
+        else True,
         intensity=layer_models.TransferFunctionModel(**intensity.model_dump()),
         cursors=cursors,
     )
 
 
-def _build_phasor_cursor(cursor: layer_inputs.PhasorCursorInputModel) -> layer_models.PhasorCursorModel:
+def _build_phasor_cursor(
+    cursor: layer_inputs.PhasorCursorInputModel,
+) -> layer_models.PhasorCursorModel:
     """Lower one phasor cursor, checking it actually describes a region.
 
     A circle without a radius and a polygon with two points are not degenerate regions,
@@ -117,13 +132,19 @@ def _build_phasor_cursor(cursor: layer_inputs.PhasorCursorInputModel) -> layer_m
         if cursor.g is None or cursor.s is None or cursor.radius is None:
             raise ValueError("A 'circle' phasor cursor requires g, s and radius")
         if cursor.radius <= 0:
-            raise ValueError(f"A 'circle' phasor cursor needs a positive radius, got {cursor.radius}")
+            raise ValueError(
+                f"A 'circle' phasor cursor needs a positive radius, got {cursor.radius}"
+            )
     elif kind == enums.PhasorCursorKind.POLYGON:
         points = cursor.points or []
         if len(points) < 3:
-            raise ValueError(f"A 'polygon' phasor cursor requires at least three (g, s) vertices, got {len(points)}")
+            raise ValueError(
+                f"A 'polygon' phasor cursor requires at least three (g, s) vertices, got {len(points)}"
+            )
         if any(len(point) != 2 for point in points):
-            raise ValueError("Every vertex of a 'polygon' phasor cursor must be a (g, s) pair")
+            raise ValueError(
+                "Every vertex of a 'polygon' phasor cursor must be a (g, s) pair"
+            )
 
     return layer_models.PhasorCursorModel(
         kind=kind,
@@ -161,14 +182,18 @@ def assert_phasor_axis(lens, phasor_axis: str) -> None:
     """
     axis = next((spec for spec in lens.axis_specs if spec.name == phasor_axis), None)
     if axis is None:
-        raise ValueError(f"phasor_axis '{phasor_axis}' is not an axis of this lens ({[spec.name for spec in lens.axis_specs]})")
+        raise ValueError(
+            f"phasor_axis '{phasor_axis}' is not an axis of this lens ({[spec.name for spec in lens.axis_specs]})"
+        )
     if not coords_logic.is_phasor_axis(axis.type):
         raise ValueError(
             f"phasor_axis '{phasor_axis}' is a {axis.type} axis, not a MICROTIME or SPECTRUM axis. A phasor is the Fourier transform of a pixel's profile along a continuously sampled axis -- an arrival-time histogram or a spectrum. Taking it over a {axis.type} axis produces a (g, s) that means nothing."
         )
 
 
-def build_render_graph(info: Info, graph_input: layer_inputs.LayerRenderGraphInputModel, lens) -> dict:
+def build_render_graph(
+    info: Info, graph_input: layer_inputs.LayerRenderGraphInputModel, lens
+) -> dict:
     """Validate a layer render-graph input against the lens and return its JSON representation."""
     root = _build_layer_node(info, graph_input.root, lens)
     if not isinstance(root, layer_models.BlendNodeModel):
@@ -186,10 +211,16 @@ def assert_renderable(lens: "models.ArrayLens") -> coords_logic.RenderAxes:
     in prose a caller can act on.
     """
     axes = coords_logic.resolve_render_axes(lens.axis_specs)
-    if not coords_logic.is_renderable(lens.axis_specs, lens.axis_names, lens.shape_list):
+    if not coords_logic.is_renderable(
+        lens.axis_specs, lens.axis_names, lens.shape_list
+    ):
         width, height = lens.get_size_of_axis(axes.x), lens.get_size_of_axis(axes.y)
-        raise ValueError(f"Lens {lens.pk} is not renderable: its x axis '{axes.x}' ({width} px) and y axis '{axes.y}' ({height} px) must both have more than one pixel")
+        raise ValueError(
+            f"Lens {lens.pk} is not renderable: its x axis '{axes.x}' ({width} px) and y axis '{axes.y}' ({height} px) must both have more than one pixel"
+        )
     return axes
+
+
 def assert_single_channel(lens: "models.ArrayLens", *, role: str) -> None:
     """Refuse a lens that keeps more than one position on a CHANNEL axis, where one channel is drawn.
 
@@ -198,17 +229,25 @@ def assert_single_channel(lens: "models.ArrayLens", *, role: str) -> None:
     index here to narrow the lens by: the lens itself pins the channel, and a lens that does
     not is refused naming the cut that would.
     """
-    wide = {axis: extent for axis, extent in coords_logic.channel_extents(lens.axis_specs, lens.shape_list).items() if extent > 1}
+    wide = {
+        axis: extent
+        for axis, extent in coords_logic.channel_extents(
+            lens.axis_specs, lens.shape_list
+        ).items()
+        if extent > 1
+    }
     if not wide:
         return
     axis, extent = next(iter(wide.items()))
     raise ValueError(
         f"{role} must pin one channel, but lens {lens.pk} keeps {extent} positions along its CHANNEL axis '{axis}'. "
-        f"Cut the channel first -- createLens(lens: {lens.pk}, slices: [{{axis: \"{axis}\", start: i, stop: i + 1}}]) -- and draw through that lens: one lens per channel, one layer (or node) per lens."
+        f'Cut the channel first -- createLens(lens: {lens.pk}, slices: [{{axis: "{axis}", start: i, stop: i + 1}}]) -- and draw through that lens: one lens per channel, one layer (or node) per lens.'
     )
 
 
-def assert_component_lens(component: "models.ArrayLens", extent: "models.ArrayLens", *, field: str) -> None:
+def assert_component_lens(
+    component: "models.ArrayLens", extent: "models.ArrayLens", *, field: str
+) -> None:
     """Check that a lens named beside a layer's lens is a single-channel crop of it.
 
     Same dataset, every voxel it keeps kept by the layer's lens too
@@ -217,10 +256,19 @@ def assert_component_lens(component: "models.ArrayLens", extent: "models.ArrayLe
     client never sent.
     """
     if component.dataset_id != extent.dataset_id:
-        raise ValueError(f"{field}: lens {component.pk} selects from dataset {component.dataset_id}, but the layer's lens {extent.pk} selects from dataset {extent.dataset_id}. A component is a crop of the layer's own lens")
+        raise ValueError(
+            f"{field}: lens {component.pk} selects from dataset {component.dataset_id}, but the layer's lens {extent.pk} selects from dataset {extent.dataset_id}. A component is a crop of the layer's own lens"
+        )
     dataset = extent.dataset
-    if not coords_logic.lens_within(dataset.shape_list, dataset.axis_names, extent.slices_list, component.slices_list):
-        raise ValueError(f"{field}: lens {component.pk} keeps voxels the layer's lens {extent.pk} does not. A component is a crop of the layer's lens -- cut it with createLens(lens: {extent.pk}, slices: ...)")
+    if not coords_logic.lens_within(
+        dataset.shape_list,
+        dataset.axis_names,
+        extent.slices_list,
+        component.slices_list,
+    ):
+        raise ValueError(
+            f"{field}: lens {component.pk} keeps voxels the layer's lens {extent.pk} does not. A component is a crop of the layer's lens -- cut it with createLens(lens: {extent.pk}, slices: ...)"
+        )
     assert_single_channel(component, role=f"{field}: a component lens")
 
 
@@ -240,16 +288,29 @@ def _graph_sources(render_graph: dict) -> list[dict]:
 
 def graph_channel_lens_ids(render_graph: dict) -> set[int]:
     """The lenses a stored graph's nodes name: what `Layer.channel_lenses` indexes for the delete guard."""
-    return {int(node["lens"]) for node in _graph_sources(render_graph) if node.get("lens") is not None}
+    return {
+        int(node["lens"])
+        for node in _graph_sources(render_graph)
+        if node.get("lens") is not None
+    }
 
 
-def _assert_graph_lenses(info: Info, render_graph: dict, lens: "models.ArrayLens") -> None:
+def _assert_graph_lenses(
+    info: Info, render_graph: dict, lens: "models.ArrayLens"
+) -> None:
     """Re-check a stored graph's sources against a layer's new lens, when the layer is rebound without a new graph."""
     for node in _graph_sources(render_graph):
         if node.get("lens") is None:
-            assert_single_channel(lens, role=f"A '{node['kind']}' render node sampling the layer's own lens")
+            assert_single_channel(
+                lens,
+                role=f"A '{node['kind']}' render node sampling the layer's own lens",
+            )
         else:
-            assert_component_lens(get_for_org(models.ArrayLens, info, id=str(node["lens"])), lens, field=f"renderGraph '{node['kind']}' node lens")
+            assert_component_lens(
+                get_for_org(models.ArrayLens, info, id=str(node["lens"])),
+                lens,
+                field=f"renderGraph '{node['kind']}' node lens",
+            )
 
 
 class CreateLayerInputModel(BaseModel):
@@ -263,17 +324,32 @@ class CreateLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateLayerInputModel, description="Input for creating an image layer: an array lens drawn through a composable render graph")
+@kante.pydantic_input(
+    CreateLayerInputModel,
+    description="Input for creating an image layer: an array lens drawn through a composable render graph",
+)
 class CreateLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The array lens the layer draws through")
+    scene: strawberry.ID = strawberry.field(
+        description="The scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The array lens the layer draws through"
+    )
     render_graph: layer_inputs.LayerRenderGraphInput = strawberry.field(
         description="The composable in-layer render graph (channels + transfer functions + in-layer blend). This is the single source of truth for how the image layer is rendered. For a simple single-channel layer use the createIntensityLayer mutation, which builds the graph for you."
     )
-    blending: enums.Blending | None = strawberry.field(description="Optional blending mode used to composite this layer over the layers below it. Defaults to 'additive'.")
-    opacity: float | None = strawberry.field(description="Optional layer alpha, from 0 (transparent) to 1 (opaque), for alpha-over compositing. Defaults to 1.0")
-    visible: bool | None = strawberry.field(description="Optional flag controlling whether the layer participates in compositing. Defaults to true.")
-    order: int | None = strawberry.field(description="Optional explicit z-index for deterministic back-to-front compositing. Defaults to 0.")
+    blending: enums.Blending | None = strawberry.field(
+        description="Optional blending mode used to composite this layer over the layers below it. Defaults to 'additive'."
+    )
+    opacity: float | None = strawberry.field(
+        description="Optional layer alpha, from 0 (transparent) to 1 (opaque), for alpha-over compositing. Defaults to 1.0"
+    )
+    visible: bool | None = strawberry.field(
+        description="Optional flag controlling whether the layer participates in compositing. Defaults to true."
+    )
+    order: int | None = strawberry.field(
+        description="Optional explicit z-index for deterministic back-to-front compositing. Defaults to 0."
+    )
 
 
 def create_layer(
@@ -292,7 +368,11 @@ def create_layer(
     # while building it.
     render_graph = build_render_graph(info, model.render_graph, lens)
 
-    graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        lens.coordinate_system,
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     # The graph and the index of the lenses it names are one write: a graph whose lenses the
     # delete guard cannot see is a layer waiting to lose its source.
@@ -321,16 +401,33 @@ class UpdateLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateLayerInputModel, description="Input for updating an image layer. Every field is a patch: what is not sent keeps its current value")
+@kante.pydantic_input(
+    UpdateLayerInputModel,
+    description="Input for updating an image layer. Every field is a patch: what is not sent keeps its current value",
+)
 class UpdateLayerInput:
     id: strawberry.ID = strawberry.field(description="The ID of the layer to update")
-    scene: strawberry.ID | None = strawberry.field(description="The scene to move the layer into; omit to keep it where it is")
-    lens: strawberry.ID | None = strawberry.field(description="The array lens to rebind the layer onto; omit to keep its lens")
-    blending: enums.Blending | None = strawberry.field(description="Optional blending mode used to composite this layer over the layers below it.")
-    opacity: float | None = strawberry.field(description="Optional layer alpha, from 0 (transparent) to 1 (opaque), for alpha-over compositing")
-    visible: bool | None = strawberry.field(description="Optional flag controlling whether the layer participates in compositing.")
-    order: int | None = strawberry.field(description="Optional explicit z-index for deterministic back-to-front compositing.")
-    render_graph: layer_inputs.LayerRenderGraphInput | None = strawberry.field(description="Optional composable in-layer render graph. When provided, it replaces the layer's render graph (the single source of truth for how the image layer is rendered).")
+    scene: strawberry.ID | None = strawberry.field(
+        description="The scene to move the layer into; omit to keep it where it is"
+    )
+    lens: strawberry.ID | None = strawberry.field(
+        description="The array lens to rebind the layer onto; omit to keep its lens"
+    )
+    blending: enums.Blending | None = strawberry.field(
+        description="Optional blending mode used to composite this layer over the layers below it."
+    )
+    opacity: float | None = strawberry.field(
+        description="Optional layer alpha, from 0 (transparent) to 1 (opaque), for alpha-over compositing"
+    )
+    visible: bool | None = strawberry.field(
+        description="Optional flag controlling whether the layer participates in compositing."
+    )
+    order: int | None = strawberry.field(
+        description="Optional explicit z-index for deterministic back-to-front compositing."
+    )
+    render_graph: layer_inputs.LayerRenderGraphInput | None = strawberry.field(
+        description="Optional composable in-layer render graph. When provided, it replaces the layer's render graph (the single source of truth for how the image layer is rendered)."
+    )
 
 
 #: What each kind's render settings are called, and which mutation writes them. One table so
@@ -338,22 +435,55 @@ class UpdateLayerInput:
 #: and so adding a kind cannot leave a guard silently listing eight of nine.
 _KIND_VOCABULARY: "dict[str, tuple[str, str]]" = {
     enums.LayerKind.IMAGE.value: ("a composable render graph", "updateLayer"),
-    enums.LayerKind.INTENSITY.value: ("one channel's colormap, contrast limits, gamma and projection", "updateIntensityLayer"),
-    enums.LayerKind.RGB.value: ("three channel indices and one pair of contrast limits", "updateRgbLayer"),
-    enums.LayerKind.PHASOR.value: ("a phasor reduction and its color transfer", "updatePhasorLayer"),
-    enums.LayerKind.LABEL.value: ("an id-to-color hashing, a background id and its pickers", "updateLabelLayer"),
-    enums.LayerKind.ANNOTATION.value: ("no render settings of its own -- per-shape styling lives on the annotations", ""),
-    enums.LayerKind.POINT.value: ("per-point size and color columns", "updatePointLayer"),
-    enums.LayerKind.TRACK.value: ("a track color column and line width", "updateTrackLayer"),
-    enums.LayerKind.MESH.value: ("a material, shading and its pickers", "updateMeshLayer"),
-    enums.LayerKind.NETWORK.value: ("a colour, its segment widths, whether direction and nodes are drawn, and its pickers", "updateNetworkLayer"),
-    enums.LayerKind.VECTOR.value: ("a glyph style, a sampling stride, a magnitude scale and a magnitude colormap window", "updateVectorLayer"),
-    enums.LayerKind.FIXTURE.value: ("a material override and a wireframe toggle", "updateFixtureLayer"),
+    enums.LayerKind.INTENSITY.value: (
+        "one channel's colormap, contrast limits, gamma and projection",
+        "updateIntensityLayer",
+    ),
+    enums.LayerKind.RGB.value: (
+        "three channel indices and one pair of contrast limits",
+        "updateRgbLayer",
+    ),
+    enums.LayerKind.PHASOR.value: (
+        "a phasor reduction and its color transfer",
+        "updatePhasorLayer",
+    ),
+    enums.LayerKind.LABEL.value: (
+        "an id-to-color hashing, a background id and its pickers",
+        "updateLabelLayer",
+    ),
+    enums.LayerKind.ANNOTATION.value: (
+        "no render settings of its own -- per-shape styling lives on the annotations",
+        "",
+    ),
+    enums.LayerKind.POINT.value: (
+        "per-point size and color columns",
+        "updatePointLayer",
+    ),
+    enums.LayerKind.TRACK.value: (
+        "a track color column and line width",
+        "updateTrackLayer",
+    ),
+    enums.LayerKind.MESH.value: (
+        "a material, shading and its pickers",
+        "updateMeshLayer",
+    ),
+    enums.LayerKind.NETWORK.value: (
+        "a colour, its segment widths, whether direction and nodes are drawn, and its pickers",
+        "updateNetworkLayer",
+    ),
+    enums.LayerKind.VECTOR.value: (
+        "a glyph style, a sampling stride, a magnitude scale and a magnitude colormap window",
+        "updateVectorLayer",
+    ),
+    enums.LayerKind.FIXTURE.value: (
+        "a material override and a wireframe toggle",
+        "updateFixtureLayer",
+    ),
 }
 
 
 def _a(kind: str) -> str:
-    """"a label" / "an image". A vowel is not worth a sentence, but a refusal that reads wrong reads as a bug."""
+    """ "a label" / "an image". A vowel is not worth a sentence, but a refusal that reads wrong reads as a bug."""
     return f"an {kind}" if kind[:1] in "aeiou" else f"a {kind}"
 
 
@@ -373,10 +503,14 @@ def assert_kind(layer, expected: enums.LayerKind, *, mutation: str) -> None:
     """
     if layer.kind == expected.value:
         return
-    theirs, theirs_mutation = _KIND_VOCABULARY.get(layer.kind, ("different render settings", ""))
+    theirs, theirs_mutation = _KIND_VOCABULARY.get(
+        layer.kind, ("different render settings", "")
+    )
     mine, _ = _KIND_VOCABULARY[expected.value]
     instead = f" Use {theirs_mutation}." if theirs_mutation else ""
-    raise ValueError(f"Layer {layer.pk} is {_a(layer.kind)} layer, not {_a(expected.value)} layer. {mine.capitalize()} is not its render vocabulary -- what it carries is {theirs}.{instead}")
+    raise ValueError(
+        f"Layer {layer.pk} is {_a(layer.kind)} layer, not {_a(expected.value)} layer. {mine.capitalize()} is not its render vocabulary -- what it carries is {theirs}.{instead}"
+    )
 
 
 def update_layer(
@@ -387,8 +521,12 @@ def update_layer(
 
     layer = get_for_org(models.Layer, info, id=model.id)
     assert_kind(layer, enums.LayerKind.IMAGE, mutation="updateLayer")
-    lens = get_for_org(models.ArrayLens, info, id=model.lens) if model.lens else layer.lens
-    scene = get_for_org(models.Scene, info, id=model.scene) if model.scene else layer.scene
+    lens = (
+        get_for_org(models.ArrayLens, info, id=model.lens) if model.lens else layer.lens
+    )
+    scene = (
+        get_for_org(models.Scene, info, id=model.scene) if model.scene else layer.scene
+    )
 
     assert_renderable(lens)
 
@@ -404,8 +542,14 @@ def update_layer(
     # Rebinding a layer into a scene (or onto a lens) is the same claim creating it
     # there makes, so it meets the same gate. Only an actual change is checked: a
     # no-op resend of the current ids must not re-litigate an existing layer.
-    if (model.lens and lens.pk != layer.lens_id) or (model.scene and scene.pk != layer.scene_id):
-        graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
+    if (model.lens and lens.pk != layer.lens_id) or (
+        model.scene and scene.pk != layer.scene_id
+    ):
+        graph_logic.assert_placeable_in(
+            scene.world,
+            lens.coordinate_system,
+            destination=f"the world of scene '{scene.name}'",
+        )
 
     if model.lens:
         layer.lens = lens
@@ -459,7 +603,19 @@ def update_layer(
 # ---------------------------------------------------------------------------
 
 
-def _create_flat_layer(info: Info, *, lens_id: str, scene_id: str, kind: enums.LayerKind, blending: enums.Blending, opacity: float | None, visible: bool | None, order: int | None, name: str | None = None, **render) -> "models.Layer":
+def _create_flat_layer(
+    info: Info,
+    *,
+    lens_id: str,
+    scene_id: str,
+    kind: enums.LayerKind,
+    blending: enums.Blending,
+    opacity: float | None,
+    visible: bool | None,
+    order: int | None,
+    name: str | None = None,
+    **render,
+) -> "models.Layer":
     """Create a layer of a fixed-shape kind from its render columns.
 
     The body every fixed-shape creator shares, and it does the same three things in the
@@ -471,7 +627,11 @@ def _create_flat_layer(info: Info, *, lens_id: str, scene_id: str, kind: enums.L
     lens = get_for_org(models.ArrayLens, info, id=lens_id)
     scene = get_for_org(models.Scene, info, id=scene_id)
 
-    graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        lens.coordinate_system,
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     return persist_layer(
         kind=kind,
@@ -507,25 +667,62 @@ class CreateRgbLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateRgbLayerInputModel, description="Create a layer that composites three single-channel lenses, each a crop of `lens`, as the red, green and blue components of one picture")
+@kante.pydantic_input(
+    CreateRgbLayerInputModel,
+    description="Create a layer that composites three single-channel lenses, each a crop of `lens`, as the red, green and blue components of one picture",
+)
 class CreateRgbLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the data")
-    red_lens: strawberry.ID = strawberry.field(description="The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position (createLens(lens:, slices:))")
-    green_lens: strawberry.ID = strawberry.field(description="The single-channel lens drawn as green: a crop of `lens` with its channel axis at one position (createLens(lens:, slices:))")
-    blue_lens: strawberry.ID = strawberry.field(description="The single-channel lens drawn as blue: a crop of `lens` with its channel axis at one position (createLens(lens:, slices:))")
-    clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units, applied to all three channels")
-    clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units, applied to all three channels")
-    white_balance: list[float] | None = strawberry.field(default=None, description="Per-component gains [red, green, blue], each > 0, multiplied into the components before the contrast limits. Omit for no correction")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The ID of the lens providing the data"
+    )
+    red_lens: strawberry.ID = strawberry.field(
+        description="The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position (createLens(lens:, slices:))"
+    )
+    green_lens: strawberry.ID = strawberry.field(
+        description="The single-channel lens drawn as green: a crop of `lens` with its channel axis at one position (createLens(lens:, slices:))"
+    )
+    blue_lens: strawberry.ID = strawberry.field(
+        description="The single-channel lens drawn as blue: a crop of `lens` with its channel axis at one position (createLens(lens:, slices:))"
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower contrast limit, in the data's own intensity units, applied to all three channels",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper contrast limit, in the data's own intensity units, applied to all three channels",
+    )
+    white_balance: list[float] | None = strawberry.field(
+        default=None,
+        description="Per-component gains [red, green, blue], each > 0, multiplied into the components before the contrast limits. Omit for no correction",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
-def _rgb_components(info: Info, lens: "models.ArrayLens", *, red: str, green: str, blue: str) -> dict[str, "models.ArrayLens"]:
+def _rgb_components(
+    info: Info, lens: "models.ArrayLens", *, red: str, green: str, blue: str
+) -> dict[str, "models.ArrayLens"]:
     """The three component lenses of an RGB layer, each checked as a single-channel crop of its lens."""
     components = {}
-    for field, lens_id in (("red_lens", red), ("green_lens", green), ("blue_lens", blue)):
+    for field, lens_id in (
+        ("red_lens", red),
+        ("green_lens", green),
+        ("blue_lens", blue),
+    ):
         component = get_for_org(models.ArrayLens, info, id=lens_id)
         assert_component_lens(component, lens, field=field)
         components[field] = component
@@ -536,7 +733,9 @@ def create_rgb_layer(info: Info, input: CreateRgbLayerInput) -> types.RgbLayer:
     model = input.to_pydantic()
     lens = get_for_org(models.ArrayLens, info, id=model.lens)
     assert_renderable(lens)
-    components = _rgb_components(info, lens, red=model.red_lens, green=model.green_lens, blue=model.blue_lens)
+    components = _rgb_components(
+        info, lens, red=model.red_lens, green=model.green_lens, blue=model.blue_lens
+    )
 
     # NORMAL, not ADDITIVE: a photograph sits *over* what is beneath it. Summing it with the
     # layers below would be light arriving from two acquisitions at once, which is what
@@ -557,7 +756,9 @@ def create_rgb_layer(info: Info, input: CreateRgbLayerInput) -> types.RgbLayer:
     )
 
 
-def _tint_colormap(colormap: enums.ColorMap | None, color: list[int] | None) -> enums.ColorMap | None:
+def _tint_colormap(
+    colormap: enums.ColorMap | None, color: list[int] | None
+) -> enums.ColorMap | None:
     """The colormap an intensity input means, given the tint sent beside it. Either/or.
 
     A tint is not drawn *over* a colormap, it stands in for one: the channel's own intensity
@@ -610,26 +811,63 @@ class CreateIntensityLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateIntensityLayerInputModel, description="Create a single-channel intensity layer rendered through a colormap (e.g. a fluorescence channel)")
+@kante.pydantic_input(
+    CreateIntensityLayerInputModel,
+    description="Create a single-channel intensity layer rendered through a colormap (e.g. a fluorescence channel)",
+)
 class CreateIntensityLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the data")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through (default 'grey'). Set either this or `color`, not both")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. For a channel whose colour is a measured fact (an emission wavelength, or what the acquisition software saved) and matches no named map. Either/or with `colormap`: a tinted layer's colormap is stored as 'intensity', and any other colormap sent beside a tint is refused")
-    clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
-    clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
-    gamma: float | None = strawberry.field(default=None, description="Gamma correction (default 1.0)")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'additive', suitable for fluorescence)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The ID of the lens providing the data"
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap to render the intensity through (default 'grey'). Set either this or `color`, not both",
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. For a channel whose colour is a measured fact (an emission wavelength, or what the acquisition software saved) and matches no named map. Either/or with `colormap`: a tinted layer's colormap is stored as 'intensity', and any other colormap sent beside a tint is refused",
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    gamma: float | None = strawberry.field(
+        default=None, description="Gamma correction (default 1.0)"
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'additive', suitable for fluorescence)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
-def create_intensity_layer(info: Info, input: CreateIntensityLayerInput) -> types.IntensityLayer:
+def create_intensity_layer(
+    info: Info, input: CreateIntensityLayerInput
+) -> types.IntensityLayer:
     return _create_intensity_layer(info, input.to_pydantic(), projection_mode=None)
 
 
-def _create_intensity_layer(info: Info, model, *, projection_mode: enums.ProjectionMode | None) -> "models.Layer":
+def _create_intensity_layer(
+    info: Info, model, *, projection_mode: enums.ProjectionMode | None
+) -> "models.Layer":
     """The body `createIntensityLayer` and `createVolumeLayer` share.
 
     They differ in one field. A volume is one channel drawn through z rather than one channel
@@ -687,14 +925,28 @@ _MEASURE_ROLES = column_options_logic.MEASURE_ROLES
 
 def _column_on(table, column_name: str):
     """A named column of a table, or the refusal that lists what it does declare."""
-    column = next((candidate for candidate in table.columns.all() if candidate.name == column_name), None)
+    column = next(
+        (
+            candidate
+            for candidate in table.columns.all()
+            if candidate.name == column_name
+        ),
+        None,
+    )
     if column is None:
-        declared = ", ".join(f"'{candidate.name}'" for candidate in table.columns.all()) or "none"
-        raise ValueError(f"Table '{table.name}' declares no column '{column_name}'. Its columns are: {declared}.")
+        declared = (
+            ", ".join(f"'{candidate.name}'" for candidate in table.columns.all())
+            or "none"
+        )
+        raise ValueError(
+            f"Table '{table.name}' declares no column '{column_name}'. Its columns are: {declared}."
+        )
     return column
 
 
-def _resolve_joined_column(reachable: dict, join_path, table_id: str, column_name: str, *, source: str) -> tuple:
+def _resolve_joined_column(
+    reachable: dict, join_path, table_id: str, column_name: str, *, source: str
+) -> tuple:
     """The claims a joined-column reference makes, checked against the facts in hand.
 
     Shared by `colorBy` and `filterBy` because it is one relation, not two: both name a column
@@ -720,8 +972,17 @@ def _resolve_joined_column(reachable: dict, join_path, table_id: str, column_nam
     first_id = str(join_path[0].table) if join_path else str(table_id)
     table = reachable.get(first_id)
     if table is None:
-        known = ", ".join(f"'{candidate.name}' ({pk})" for pk, candidate in reachable.items()) or "none"
-        reached = "The first hop of a `joinPath` starts there too" if join_path else "Author the edge with createTableDataset(keyedBy:) naming it"
+        known = (
+            ", ".join(
+                f"'{candidate.name}' ({pk})" for pk, candidate in reachable.items()
+            )
+            or "none"
+        )
+        reached = (
+            "The first hop of a `joinPath` starts there too"
+            if join_path
+            else "Author the edge with createTableDataset(keyedBy:) naming it"
+        )
         raise ValueError(
             f"Table dataset {first_id} is not reachable from {source} by a FIELD edge, so its rows cannot be looked up from the ids it carries. "
             f"{reached}, or use one of the tables that already key off it: {known}."
@@ -738,14 +999,20 @@ def _resolve_joined_column(reachable: dict, join_path, table_id: str, column_nam
                 "A hop column declares its target with `references` at createTableDataset; a column that identifies nothing is a value, not a join."
             )
 
-        next_id = str(join_path[index + 1].table) if index + 1 < len(join_path) else str(table_id)
+        next_id = (
+            str(join_path[index + 1].table)
+            if index + 1 < len(join_path)
+            else str(table_id)
+        )
         if str(target.pk) != next_id:
             raise ValueError(
                 f"joinPath[{index}]: column '{column.name}' of table '{table.name}' identifies rows of table '{target.name}' ({target.pk}), "
                 f"but the next step names table {next_id}. A hop goes where the column says it goes."
             )
         if next_id in visited:
-            raise ValueError(f"joinPath[{index}]: hopping into table '{target.name}' ({target.pk}) revisits a table this path already stands in. A cycle reads the same rows forever.")
+            raise ValueError(
+                f"joinPath[{index}]: hopping into table '{target.name}' ({target.pk}) revisits a table this path already stands in. A cycle reads the same rows forever."
+            )
 
         steps.append(joins.JoinStepModel(table=str(table.pk), column=column.name))
         visited.add(next_id)
@@ -763,7 +1030,9 @@ def reachable_tables(info: Info, system) -> dict:
     for the same reason :func:`_build_color_by` is: a mask and a mesh collection are the same
     thing to a FIELD edge.
     """
-    return attribute_plans_logic.field_reachable_tables(system, info.context.request.organization)
+    return attribute_plans_logic.field_reachable_tables(
+        system, info.context.request.organization
+    )
 
 
 def mesh_reachable_tables(info: Info, collection) -> dict:
@@ -771,7 +1040,14 @@ def mesh_reachable_tables(info: Info, collection) -> dict:
     return reachable_tables(info, mesh_collection_system(collection))
 
 
-def _resolve_sparse_slice(info: Info, system, lens_id: str | None, *, source: str, reachable: dict | None = None) -> "models.SparseLens":
+def _resolve_sparse_slice(
+    info: Info,
+    system,
+    lens_id: str | None,
+    *,
+    source: str,
+    reachable: dict | None = None,
+) -> "models.SparseLens":
     """Resolve and check one slice: a sparse lens pinning one position on every axis its matrix identifies itself by.
 
     Factored out of the colouring because a **rule** asks exactly the same three questions --
@@ -785,19 +1061,32 @@ def _resolve_sparse_slice(info: Info, system, lens_id: str | None, *, source: st
     `createSparseLens(windows:)` where `min == max` pins a position.
     """
     if lens_id is None:
-        raise ValueError("a sparse colouring reads one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by")
+        raise ValueError(
+            "a sparse colouring reads one slice of a matrix, so it requires `lens`: a sparse lens pinning one position on every axis the matrix identifies itself by"
+        )
     if reachable is None:
-        reachable = attribute_plans_logic.field_reachable_sparse_datasets(system, info.context.request.organization)
+        reachable = attribute_plans_logic.field_reachable_sparse_datasets(
+            system, info.context.request.organization
+        )
     lens = get_for_org(models.SparseLens, info, id=lens_id)
     dataset = reachable.get(str(lens.sparse_dataset_id))
     if dataset is None:
-        known = ", ".join(f"'{candidate.name}' ({pk})" for pk, candidate in reachable.items()) or "none"
+        known = (
+            ", ".join(
+                f"'{candidate.name}' ({pk})" for pk, candidate in reachable.items()
+            )
+            or "none"
+        )
         raise ValueError(
             f"Lens {lens.pk} selects over sparse dataset {lens.sparse_dataset_id}, which is not reachable from {source} by a FIELD edge, so the ids it is indexed by are not the ids this source supplies. "
             f"Author the edge with createSparseDataset(keyedBy:) naming this source, or use one that already keys off it: {known}."
         )
     names = dataset.axis_names
-    indexed = {names[array.indexed_axis] for array in dataset.arrays.all() if 0 <= array.indexed_axis < len(names)}
+    indexed = {
+        names[array.indexed_axis]
+        for array in dataset.arrays.all()
+        if 0 <= array.indexed_axis < len(names)
+    }
     identified = {reference.axis for reference in dataset.axis_references.all()}
     shape = dataset.shape
     pinned = {window.axis: window for window in lens.windows_list}
@@ -808,13 +1097,22 @@ def _resolve_sparse_slice(info: Info, system, lens_id: str | None, *, source: st
             f"Cut the slice with createSparseLens(sparseDataset: {dataset.pk}, windows: [{{axis, min: v, max: v}}]) over exactly {sorted(identified)}."
         )
     for axis, window in pinned.items():
-        if window.min is None or window.max is None or window.min != window.max or window.min != int(window.min):
+        if (
+            window.min is None
+            or window.max is None
+            or window.min != window.max
+            or window.min != int(window.min)
+        ):
             raise ValueError(
                 f"Lens {lens.pk} keeps {window.min}..{window.max} along '{axis}', but a slice is one position: a window whose min and max are the same whole number. "
-                f"Cut it with createSparseLens(sparseDataset: {dataset.pk}, windows: [{{axis: \"{axis}\", min: v, max: v}}])."
+                f'Cut it with createSparseLens(sparseDataset: {dataset.pk}, windows: [{{axis: "{axis}", min: v, max: v}}]).'
             )
         value = int(window.min)
-        extent = shape[names.index(axis)] if axis in names and len(shape) == len(names) else None
+        extent = (
+            shape[names.index(axis)]
+            if axis in names and len(shape) == len(names)
+            else None
+        )
         if extent is not None and not 0 <= value < extent:
             raise ValueError(
                 f"Lens {lens.pk} pins position {value} along '{axis}', which runs 0..{extent - 1} in '{dataset.name}'. A position is a row of the table that axis references, not an id of its own."
@@ -828,7 +1126,9 @@ def _resolve_sparse_slice(info: Info, system, lens_id: str | None, *, source: st
     return lens
 
 
-def _build_sparse_color_by(info: Info, system, color_by, *, source: str, reachable: dict | None = None) -> color_by_models.ColorByModel:
+def _build_sparse_color_by(
+    info: Info, system, color_by, *, source: str, reachable: dict | None = None
+) -> color_by_models.ColorByModel:
     """Resolve and check a SPARSE `colorBy`: one slice of a matrix this source's ids index.
 
     Three things have to hold and none is knowable from the input alone.
@@ -847,7 +1147,9 @@ def _build_sparse_color_by(info: Info, system, color_by, *, source: str, reachab
     1 777 ms against 2.2 ms, measured. A colouring the server knows would do that is one it
     refuses rather than publishes.
     """
-    lens = _resolve_sparse_slice(info, system, color_by.lens, source=source, reachable=reachable)
+    lens = _resolve_sparse_slice(
+        info, system, color_by.lens, source=source, reachable=reachable
+    )
 
     return color_by_models.ColorByModel(
         kind="SPARSE",
@@ -876,7 +1178,9 @@ def _build_graph_color_by(collection, color_by) -> color_by_models.ColorByModel:
             if vocabulary
             else "It declares none at all -- it was built before konnektion stored attributes, so rebuild and re-upload it to carry the intrinsic metrics."
         )
-        raise ValueError(f"Network collection {collection.pk} carries no per-node attribute '{color_by.attribute}'. {carried}")
+        raise ValueError(
+            f"Network collection {collection.pk} carries no per-node attribute '{color_by.attribute}'. {carried}"
+        )
 
     # Re-checked here even though the union member refuses it, because this is the boundary
     # every path funnels through -- the same both-ends discipline the COLUMN role rule gets.
@@ -897,7 +1201,18 @@ def _build_graph_color_by(collection, color_by) -> color_by_models.ColorByModel:
     )
 
 
-def _build_color_by(info: Info, system, color_by: layer_inputs.ColorByInputModel, *, source: str = "this mask", reachable: dict | None = None, reachable_sparse: dict | None = None, join_path=(), collection=None, node_targets: dict | None = None) -> color_by_models.ColorByModel:
+def _build_color_by(
+    info: Info,
+    system,
+    color_by: layer_inputs.ColorByInputModel,
+    *,
+    source: str = "this mask",
+    reachable: dict | None = None,
+    reachable_sparse: dict | None = None,
+    join_path=(),
+    collection=None,
+    node_targets: dict | None = None,
+) -> color_by_models.ColorByModel:
     """Resolve and check a `colorBy` against the FIELD edge that makes it answerable.
 
     Two things have to hold, and neither is knowable from the input alone: the table must
@@ -930,14 +1245,20 @@ def _build_color_by(info: Info, system, color_by: layer_inputs.ColorByInputModel
     if color_by.kind == enums.ColorSourceKind.SPARSE:
         # A different source, the same question -- so a sibling rather than a branch threaded
         # through the checks below, none of which is about a column here.
-        return _build_sparse_color_by(info, system, color_by, source=source, reachable=reachable_sparse)
+        return _build_sparse_color_by(
+            info, system, color_by, source=source, reachable=reachable_sparse
+        )
 
     if reachable is None:
-        reachable = attribute_plans_logic.field_reachable_tables(system, info.context.request.organization)
+        reachable = attribute_plans_logic.field_reachable_tables(
+            system, info.context.request.organization
+        )
     # Passed in rather than read off `color_by`, because this function is also the one-colouring
     # entry point -- a caller resolving a single colouring with no picker around it has no path
     # to give -- and a parameter says that where a `getattr` would only imply it.
-    table, column, steps = _resolve_joined_column(reachable, join_path, color_by.table, color_by.column, source=source)
+    table, column, steps = _resolve_joined_column(
+        reachable, join_path, color_by.table, color_by.column, source=source
+    )
 
     # Which *sort* of colormap the column takes, which is the same question the role has always
     # answered -- it used to be spelled "a colormap or a `classColors` map", and a qualitative
@@ -955,9 +1276,13 @@ def _build_color_by(info: Info, system, color_by: layer_inputs.ColorByInputModel
             f"Name a qualitative colormap instead: {', '.join(sorted(member.value for member in enums.QUALITATIVE_COLORMAPS))}."
         )
     if not is_measure and (color_by.min is not None or color_by.max is not None):
-        raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are categorical, so a `min`/`max` window would impose an order they do not have. Drop them.")
+        raise ValueError(
+            f"Column '{column.name}' is a {column.role} column -- its values are categorical, so a `min`/`max` window would impose an order they do not have. Drop them."
+        )
     if not is_measure and color_by.hide_below_min:
-        raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are categorical, so there is no bottom of a window for `hideBelowMin` to hide. Drop it, or filter the values out with a `filterBys` rule.")
+        raise ValueError(
+            f"Column '{column.name}' is a {column.role} column -- its values are categorical, so there is no bottom of a window for `hideBelowMin` to hide. Drop it, or filter the values out with a `filterBys` rule."
+        )
 
     # A node/edge table's entry carries the granularity its shape derives -- STAMPED here,
     # never sent: the caller has no field for it on a COLUMN entry, and re-deriving at every
@@ -1018,15 +1343,27 @@ def build_color_bys(
     # same one `reachable` came from, but a picker of column colourings should not pay for it.
     # A caller with a differently-rooted walk (the network wrapper's depth-zero one) passes its
     # own in, exactly as it does `reachable`.
-    if reachable_sparse is None and any(entry.kind == enums.ColorSourceKind.SPARSE for entry in color_bys):
-        reachable_sparse = attribute_plans_logic.field_reachable_sparse_datasets(system, info.context.request.organization)
+    if reachable_sparse is None and any(
+        entry.kind == enums.ColorSourceKind.SPARSE for entry in color_bys
+    ):
+        reachable_sparse = attribute_plans_logic.field_reachable_sparse_datasets(
+            system, info.context.request.organization
+        )
 
     entries: list[dict] = []
     seen: dict[tuple, int] = {}
     for index, color_by in enumerate(color_bys):
         try:
             checked = _build_color_by(
-                info, system, color_by, source=source, reachable=reachable, reachable_sparse=reachable_sparse, join_path=color_by.join_path, collection=collection, node_targets=node_targets
+                info,
+                system,
+                color_by,
+                source=source,
+                reachable=reachable,
+                reachable_sparse=reachable_sparse,
+                join_path=color_by.join_path,
+                collection=collection,
+                node_targets=node_targets,
             )
         except ValueError as error:
             raise ValueError(f"colorBys[{index}]: {error}") from error
@@ -1075,12 +1412,22 @@ def build_color_bys(
                 "Two entries that render identically are one colouring wearing two names; drop one, or give it a different colormap, window or source."
             )
         seen[key] = index
-        entries.append(entry_model(**checked.model_dump(), label=color_by.label).model_dump(mode="json"))
+        entries.append(
+            entry_model(**checked.model_dump(), label=color_by.label).model_dump(
+                mode="json"
+            )
+        )
 
     return entries
 
 
-def build_mesh_color_bys(info: Info, collection, color_bys: "list[layer_inputs.MeshColorByInputModel] | None", *, reachable: dict | None = None) -> list[dict] | None:
+def build_mesh_color_bys(
+    info: Info,
+    collection,
+    color_bys: "list[layer_inputs.MeshColorByInputModel] | None",
+    *,
+    reachable: dict | None = None,
+) -> list[dict] | None:
     """That builder, rooted on a mesh collection and storing mesh-named entries."""
     return build_color_bys(
         info,
@@ -1114,16 +1461,22 @@ def network_reachable_walks(info: Info, collection) -> tuple[dict, dict, dict]:
     system = column_options_logic.network_collection_system(collection)
     organization = info.context.request.organization
     node_tables = column_options_logic.network_node_tables(collection)
-    reachable = attribute_plans_logic.field_reachable_tables(system, organization, max_depth=0)
+    reachable = attribute_plans_logic.field_reachable_tables(
+        system, organization, max_depth=0
+    )
     reachable.update({pk: table for pk, (table, _) in node_tables.items()})
     return (
         reachable,
-        attribute_plans_logic.field_reachable_sparse_datasets(system, organization, max_depth=0),
+        attribute_plans_logic.field_reachable_sparse_datasets(
+            system, organization, max_depth=0
+        ),
         {pk: granularity for pk, (_, granularity) in node_tables.items()},
     )
 
 
-def build_network_color_bys(info: Info, collection, color_bys, *, walks: tuple[dict, dict, dict] | None = None) -> list[dict] | None:
+def build_network_color_bys(
+    info: Info, collection, color_bys, *, walks: tuple[dict, dict, dict] | None = None
+) -> list[dict] | None:
     """The colour builder, rooted on a network collection and storing network-named entries.
 
     The one call site where GRAPH entries are legal (`collection` is what resolves them), the
@@ -1133,7 +1486,9 @@ def build_network_color_bys(info: Info, collection, color_bys, *, walks: tuple[d
     """
     if color_bys is None:
         return None
-    reachable, reachable_sparse, node_targets = walks if walks is not None else network_reachable_walks(info, collection)
+    reachable, reachable_sparse, node_targets = (
+        walks if walks is not None else network_reachable_walks(info, collection)
+    )
     return build_color_bys(
         info,
         column_options_logic.network_collection_system(collection),
@@ -1184,8 +1539,12 @@ def build_filter_bys(
     # Resolved once for the whole picker, and only if something in it is sparse -- the same
     # hoist `build_color_bys` makes, so a picker of column rules pays for no walk it does not
     # use. A caller with a differently-rooted walk passes its own in, as with `reachable`.
-    if reachable_sparse is None and any(rule.kind == enums.ColorSourceKind.SPARSE for rule in filter_bys):
-        reachable_sparse = attribute_plans_logic.field_reachable_sparse_datasets(system, info.context.request.organization)
+    if reachable_sparse is None and any(
+        rule.kind == enums.ColorSourceKind.SPARSE for rule in filter_bys
+    ):
+        reachable_sparse = attribute_plans_logic.field_reachable_sparse_datasets(
+            system, info.context.request.organization
+        )
 
     entries: list[dict] = []
     for index, filter_by in enumerate(filter_bys):
@@ -1206,7 +1565,9 @@ def build_filter_bys(
                         if vocabulary
                         else "It declares none at all -- it was built before konnektion stored attributes, so rebuild and re-upload it to carry the intrinsic metrics."
                     )
-                    raise ValueError(f"Network collection {collection.pk} carries no per-node attribute '{filter_by.attribute}'. {carried}")
+                    raise ValueError(
+                        f"Network collection {collection.pk} carries no per-node attribute '{filter_by.attribute}'. {carried}"
+                    )
             except ValueError as error:
                 raise ValueError(f"filterBys[{index}]: {error}") from error
             target = getattr(filter_by, "target", None)
@@ -1228,7 +1589,13 @@ def build_filter_bys(
             # `_resolve_sparse_slice` is what keeps "offered means accepted" true across the
             # two pickers rather than only within each.
             try:
-                lens = _resolve_sparse_slice(info, system, filter_by.lens, source=source, reachable=reachable_sparse)
+                lens = _resolve_sparse_slice(
+                    info,
+                    system,
+                    filter_by.lens,
+                    source=source,
+                    reachable=reachable_sparse,
+                )
             except ValueError as error:
                 raise ValueError(f"filterBys[{index}]: {error}") from error
             entries.append(
@@ -1243,24 +1610,45 @@ def build_filter_bys(
             )
             continue
         try:
-            table, column, steps = _resolve_joined_column(reachable, filter_by.join_path, filter_by.table, filter_by.column, source=source)
+            table, column, steps = _resolve_joined_column(
+                reachable,
+                filter_by.join_path,
+                filter_by.table,
+                filter_by.column,
+                source=source,
+            )
 
-            if own_table_id is not None and not steps and str(table.pk) == own_table_id and column.role == enums.ColumnRoleChoices.COORDINATE.value:
+            if (
+                own_table_id is not None
+                and not steps
+                and str(table.pk) == own_table_id
+                and column.role == enums.ColumnRoleChoices.COORDINATE.value
+            ):
                 raise ValueError(
                     f"'{column.name}' is a coordinate column of this layer's own table: a range over it is a window, which is the lens' selection and not a picker rule. "
                     "Cut the lens instead (`createTableLens` with `windows`, or `lens:` on it) and draw through that; the layer hands it on as `windowFilters`"
                 )
             is_measure = column.role in _MEASURE_ROLES
             if is_measure and filter_by.values is not None:
-                raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are measured, so they are filtered by a `min`/`max` range over them, not by a `values` list naming each one.")
-            if not is_measure and (filter_by.min is not None or filter_by.max is not None):
-                raise ValueError(f"Column '{column.name}' is a {column.role} column -- its values are categorical, so a bound would impose an order they do not have. Pass `values` instead.")
+                raise ValueError(
+                    f"Column '{column.name}' is a {column.role} column -- its values are measured, so they are filtered by a `min`/`max` range over them, not by a `values` list naming each one."
+                )
+            if not is_measure and (
+                filter_by.min is not None or filter_by.max is not None
+            ):
+                raise ValueError(
+                    f"Column '{column.name}' is a {column.role} column -- its values are categorical, so a bound would impose an order they do not have. Pass `values` instead."
+                )
 
             # The colour builder's stamp, applied to rules by the same door: a COLUMN rule
             # over a node/edge table hides nodes or segments rather than whole objects, and
             # which is a fact of the table's shape -- stamped, never sent, so a caller-sent
             # `target` on a COLUMN rule is refused rather than trusted.
-            first_id = str(filter_by.join_path[0].table) if filter_by.join_path else str(filter_by.table)
+            first_id = (
+                str(filter_by.join_path[0].table)
+                if filter_by.join_path
+                else str(filter_by.table)
+            )
             stamped_target = (node_targets or {}).get(first_id)
             sent_target = getattr(filter_by, "target", None)
             if sent_target is not None:
@@ -1293,7 +1681,13 @@ def build_filter_bys(
     return entries
 
 
-def build_mesh_filter_bys(info: Info, collection, filter_bys: "list[layer_inputs.MeshFilterByInputModel] | None", *, reachable: dict | None = None) -> list[dict] | None:
+def build_mesh_filter_bys(
+    info: Info,
+    collection,
+    filter_bys: "list[layer_inputs.MeshFilterByInputModel] | None",
+    *,
+    reachable: dict | None = None,
+) -> list[dict] | None:
     """That builder, rooted on a mesh collection and storing mesh-named entries."""
     return build_filter_bys(
         info,
@@ -1305,7 +1699,9 @@ def build_mesh_filter_bys(info: Info, collection, filter_bys: "list[layer_inputs
     )
 
 
-def build_network_filter_bys(info: Info, collection, filter_bys, *, walks: tuple[dict, dict, dict] | None = None) -> list[dict] | None:
+def build_network_filter_bys(
+    info: Info, collection, filter_bys, *, walks: tuple[dict, dict, dict] | None = None
+) -> list[dict] | None:
     """The filter builder, rooted on a network collection and storing network-named entries.
 
     Shares :func:`network_reachable_walks`'s depth-zero rooting and node-table door with the
@@ -1314,7 +1710,9 @@ def build_network_filter_bys(info: Info, collection, filter_bys, *, walks: tuple
     """
     if filter_bys is None:
         return None
-    reachable, reachable_sparse, node_targets = walks if walks is not None else network_reachable_walks(info, collection)
+    reachable, reachable_sparse, node_targets = (
+        walks if walks is not None else network_reachable_walks(info, collection)
+    )
     return build_filter_bys(
         info,
         column_options_logic.network_collection_system(collection),
@@ -1344,17 +1742,30 @@ def assert_active_filter_bys(filter_bys: list, active: list[int] | None) -> None
         # Same trap as `activeColorBy`, and worse here: this column is JSON, so a negative index
         # is not even caught by the database on the way in. `filterBys[-1]` applies the last rule.
         if index < 0:
-            raise ValueError(f"`activeFilterBys[{position}]` is {index}. An index into the picker counts from 0; a negative one would silently apply a rule from the end.")
+            raise ValueError(
+                f"`activeFilterBys[{position}]` is {index}. An index into the picker counts from 0; a negative one would silently apply a rule from the end."
+            )
         if index >= len(filter_bys):
             raise ValueError(
                 f"`activeFilterBys[{position}]` is {index}, but this layer publishes {len(filter_bys)} filter(s)"
-                + (f", indexed 0..{len(filter_bys) - 1}." if filter_bys else ". Pass `filterBys` as well, or leave `activeFilterBys` empty to draw everything.")
+                + (
+                    f", indexed 0..{len(filter_bys) - 1}."
+                    if filter_bys
+                    else ". Pass `filterBys` as well, or leave `activeFilterBys` empty to draw everything."
+                )
             )
     if len(set(active)) != len(active):
-        raise ValueError(f"`activeFilterBys` names the same filter twice ({active}). Applying one rule twice narrows nothing -- each index appears at most once.")
+        raise ValueError(
+            f"`activeFilterBys` names the same filter twice ({active}). Applying one rule twice narrows nothing -- each index appears at most once."
+        )
 
 
-def assert_active_color_by(color_bys: list, active: int | None, *, fallback: str = "draw the flat material color") -> None:
+def assert_active_color_by(
+    color_bys: list,
+    active: int | None,
+    *,
+    fallback: str = "draw the flat material color",
+) -> None:
     """Refuse an `activeColorBy` that indexes nothing.
 
     Checked against the list *being written*, never the stored one: a patch that shortens the
@@ -1370,14 +1781,26 @@ def assert_active_color_by(color_bys: list, active: int | None, *, fallback: str
     # Python one -- `colorBys[-1]` quietly draws the *last* entry -- so nothing below this line
     # would ever notice, and the caller would get someone else's colouring instead of an error.
     if active < 0:
-        raise ValueError(f"`activeColorBy` is {active}. An index into the picker counts from 0; a negative one would silently select from the end.")
+        raise ValueError(
+            f"`activeColorBy` is {active}. An index into the picker counts from 0; a negative one would silently select from the end."
+        )
     if not color_bys:
-        raise ValueError(f"`activeColorBy` is set, but this layer publishes no colourings to index into. Pass `colorBys` as well, or leave `activeColorBy` null to {fallback}.")
+        raise ValueError(
+            f"`activeColorBy` is set, but this layer publishes no colourings to index into. Pass `colorBys` as well, or leave `activeColorBy` null to {fallback}."
+        )
     if active >= len(color_bys):
-        raise ValueError(f"`activeColorBy` is {active}, but this layer publishes {len(color_bys)} colouring(s), indexed 0..{len(color_bys) - 1}.")
+        raise ValueError(
+            f"`activeColorBy` is {active}, but this layer publishes {len(color_bys)} colouring(s), indexed 0..{len(color_bys) - 1}."
+        )
 
 
-def build_label_render(info: Info, render: layer_inputs.LabelRenderInputModel | None, lens, *, base: label_models.LabelRenderModel | None = None) -> label_models.LabelRenderModel:
+def build_label_render(
+    info: Info,
+    render: layer_inputs.LabelRenderInputModel | None,
+    lens,
+    *,
+    base: label_models.LabelRenderModel | None = None,
+) -> label_models.LabelRenderModel:
     """Lower a label render input onto a base recipe, validating the joins.
 
     Omitted fields keep the base's value, which is what makes ``updateLabelLayer`` a patch
@@ -1416,13 +1839,21 @@ def build_label_render(info: Info, render: layer_inputs.LabelRenderInputModel | 
         entry_model=color_by_models.LabelColorByModel,
         reachable=reachable,
     )
-    color_bys = current.color_bys if built_color_bys is None else [label_models.LabelColorByModel(**entry) for entry in built_color_bys]
+    color_bys = (
+        current.color_bys
+        if built_color_bys is None
+        else [label_models.LabelColorByModel(**entry) for entry in built_color_bys]
+    )
 
     if "active_color_by" not in named:
         # Not named: keep the stored choice. A shorter picker cannot leave the old index
         # dangling, so one that no longer holds it falls back to the hash.
         active_color_by = current.active_color_by
-        if built_color_bys is not None and active_color_by is not None and active_color_by >= len(color_bys):
+        if (
+            built_color_bys is not None
+            and active_color_by is not None
+            and active_color_by >= len(color_bys)
+        ):
             active_color_by = None
     elif render.active_color_by is None:
         # Named, and null: publish the picker and draw NONE of it -- every id back to its hashed
@@ -1430,7 +1861,9 @@ def build_label_render(info: Info, render: layer_inputs.LabelRenderInputModel | 
         # switching a colouring off was only reachable as a side effect of shortening the list.
         active_color_by = None
     else:
-        assert_active_color_by(color_bys, render.active_color_by, fallback="hash each id to a colour")
+        assert_active_color_by(
+            color_bys, render.active_color_by, fallback="hash each id to a colour"
+        )
         active_color_by = render.active_color_by
 
     built_filter_bys = build_filter_bys(
@@ -1441,7 +1874,11 @@ def build_label_render(info: Info, render: layer_inputs.LabelRenderInputModel | 
         entry_model=filter_by_models.LabelFilterByModel,
         reachable=reachable,
     )
-    filter_bys = current.filter_bys if built_filter_bys is None else [label_models.LabelFilterByModel(**entry) for entry in built_filter_bys]
+    filter_bys = (
+        current.filter_bys
+        if built_filter_bys is None
+        else [label_models.LabelFilterByModel(**entry) for entry in built_filter_bys]
+    )
 
     if render.active_filter_bys is None:
         # The same fallback the colour picker takes, for the same reason. The indices that
@@ -1449,7 +1886,9 @@ def build_label_render(info: Info, render: layer_inputs.LabelRenderInputModel | 
         # and never reordered under a caller.
         active_filter_bys = list(current.active_filter_bys)
         if built_filter_bys is not None:
-            active_filter_bys = [index for index in active_filter_bys if index < len(filter_bys)]
+            active_filter_bys = [
+                index for index in active_filter_bys if index < len(filter_bys)
+            ]
     else:
         assert_active_filter_bys(filter_bys, render.active_filter_bys)
         active_filter_bys = render.active_filter_bys
@@ -1484,14 +1923,33 @@ class CreateLabelLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateLabelLayerInputModel, description="Create a label layer that renders an instance / segmentation map: an array whose values are discrete object ids")
+@kante.pydantic_input(
+    CreateLabelLayerInputModel,
+    description="Create a label layer that renders an instance / segmentation map: an array whose values are discrete object ids",
+)
 class CreateLabelLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the label / instance-map data")
-    render: layer_inputs.LabelRenderInput | None = strawberry.field(default=None, description="How the ids become color. Omit for the defaults: the pixel value itself is the id, hashed to a color, with 0 transparent")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The ID of the lens providing the label / instance-map data"
+    )
+    render: layer_inputs.LabelRenderInput | None = strawberry.field(
+        default=None,
+        description="How the ids become color. Omit for the defaults: the pixel value itself is the id, hashed to a color, with 0 transparent",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
 def create_label_layer(info: Info, input: CreateLabelLayerInput) -> types.LabelLayer:
@@ -1503,7 +1961,11 @@ def create_label_layer(info: Info, input: CreateLabelLayerInput) -> types.LabelL
 
     label_render = build_label_render(info, model.render, lens)
 
-    graph_logic.assert_placeable_in(scene.world, lens.coordinate_system, destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        lens.coordinate_system,
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     return persist_layer(
         kind=enums.LayerKind.LABEL,
@@ -1528,13 +1990,28 @@ class UpdateLabelLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateLabelLayerInputModel, description="Update a label layer's render settings. Every field is a patch: what is not sent keeps its current value")
+@kante.pydantic_input(
+    UpdateLabelLayerInputModel,
+    description="Update a label layer's render settings. Every field is a patch: what is not sent keeps its current value",
+)
 class UpdateLabelLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the label layer to update")
-    render: layer_inputs.LabelRenderInput | None = strawberry.field(default=None, description="The render settings to change. Fields you omit keep their current value, so toggling `contour` does not drop the selection")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the label layer to update"
+    )
+    render: layer_inputs.LabelRenderInput | None = strawberry.field(
+        default=None,
+        description="The render settings to change. Fields you omit keep their current value, so toggling `contour` does not drop the selection",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
 def update_label_layer(info: Info, input: UpdateLabelLayerInput) -> types.LabelLayer:
@@ -1542,8 +2019,14 @@ def update_label_layer(info: Info, input: UpdateLabelLayerInput) -> types.LabelL
     layer = get_for_org(models.Layer, info, id=model.id)
     assert_kind(layer, enums.LayerKind.LABEL, mutation="updateLabelLayer")
 
-    base = label_models.LabelRenderModel(**layer.label_render) if layer.label_render else label_models.LabelRenderModel()
-    layer.label_render = build_label_render(info, model.render, layer.lens, base=base).model_dump(mode="json")
+    base = (
+        label_models.LabelRenderModel(**layer.label_render)
+        if layer.label_render
+        else label_models.LabelRenderModel()
+    )
+    layer.label_render = build_label_render(
+        info, model.render, layer.lens, base=base
+    ).model_dump(mode="json")
     if model.opacity is not None:
         layer.opacity = model.opacity
     if model.visible is not None:
@@ -1587,25 +2070,64 @@ class CreateVolumeLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateVolumeLayerInputModel, description="Create a single-channel layer rendered as a 3D volume projection (MIP / attenuated-MIP / volume / isosurface) over its z-axis")
+@kante.pydantic_input(
+    CreateVolumeLayerInputModel,
+    description="Create a single-channel layer rendered as a 3D volume projection (MIP / attenuated-MIP / volume / isosurface) over its z-axis",
+)
 class CreateVolumeLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the volumetric data")
-    mode: enums.ProjectionMode | None = strawberry.field(default=None, description="The 3D projection / rendering mode over the z-axis (default 'mip')")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through (default 'grey'). Set either this or `color`, not both")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Either/or with `colormap`: a tinted layer's colormap is stored as 'intensity', and any other colormap sent beside a tint is refused")
-    clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
-    clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
-    gamma: float | None = strawberry.field(default=None, description="Gamma correction (default 1.0)")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'additive')")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The ID of the lens providing the volumetric data"
+    )
+    mode: enums.ProjectionMode | None = strawberry.field(
+        default=None,
+        description="The 3D projection / rendering mode over the z-axis (default 'mip')",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap to render the intensity through (default 'grey'). Set either this or `color`, not both",
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Either/or with `colormap`: a tinted layer's colormap is stored as 'intensity', and any other colormap sent beside a tint is refused",
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    gamma: float | None = strawberry.field(
+        default=None, description="Gamma correction (default 1.0)"
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode (default 'additive')"
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
-def create_volume_layer(info: Info, input: CreateVolumeLayerInput) -> types.IntensityLayer:
+def create_volume_layer(
+    info: Info, input: CreateVolumeLayerInput
+) -> types.IntensityLayer:
     model = input.to_pydantic()
-    return _create_intensity_layer(info, model, projection_mode=model.mode or enums.ProjectionMode.MIP)
+    return _create_intensity_layer(
+        info, model, projection_mode=model.mode or enums.ProjectionMode.MIP
+    )
 
 
 class CreatePhasorLayerInputModel(BaseModel):
@@ -1621,17 +2143,44 @@ class CreatePhasorLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreatePhasorLayerInputModel, description="Create a layer that reduces one axis of a lens to a phasor and colors each pixel by it -- a lifetime overlay over a FLIM cube, or a spectral one over a hyperspectral cube")
+@kante.pydantic_input(
+    CreatePhasorLayerInputModel,
+    description="Create a layer that reduces one axis of a lens to a phasor and colors each pixel by it -- a lifetime overlay over a FLIM cube, or a spectral one over a hyperspectral cube",
+)
 class CreatePhasorLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The ID of the lens providing the data")
-    phasor_axis: str | None = strawberry.field(default=None, description="The axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis; defaults to the lens' only such axis")
-    harmonic: int | None = strawberry.field(default=None, description="The harmonic of the transform (default 1)")
-    transfer: layer_inputs.PhasorTransferInput | None = strawberry.field(default=None, description="How the phasor becomes the pixel's color: the mode, the value range, the colormap and any phasor-space cursors. Defaults to a plain phase colormap")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal' -- this is an overlay, alpha-composited over the layers beneath it, not additive fluorescence)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The ID of the lens providing the data"
+    )
+    phasor_axis: str | None = strawberry.field(
+        default=None,
+        description="The axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis; defaults to the lens' only such axis",
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="The harmonic of the transform (default 1)"
+    )
+    transfer: layer_inputs.PhasorTransferInput | None = strawberry.field(
+        default=None,
+        description="How the phasor becomes the pixel's color: the mode, the value range, the colormap and any phasor-space cursors. Defaults to a plain phase colormap",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal' -- this is an overlay, alpha-composited over the layers beneath it, not additive fluorescence)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
 
 
 def create_phasor_layer(info: Info, input: CreatePhasorLayerInput) -> types.PhasorLayer:
@@ -1641,7 +2190,9 @@ def create_phasor_layer(info: Info, input: CreatePhasorLayerInput) -> types.Phas
 
     phasor_axis = default_phasor_axis(lens, model.phasor_axis)
     if not phasor_axis:
-        raise ValueError(f"This lens has no MICROTIME or SPECTRUM axis to take a phasor over ({[spec.name for spec in lens.axis_specs]})")
+        raise ValueError(
+            f"This lens has no MICROTIME or SPECTRUM axis to take a phasor over ({[spec.name for spec in lens.axis_specs]})"
+        )
     assert_phasor_axis(lens, phasor_axis)
 
     assert_single_channel(lens, role="A phasor layer's lens")
@@ -1718,23 +2269,60 @@ class UpdateIntensityLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateIntensityLayerInputModel, description="Update an intensity layer's render settings. Every field is a patch: what is not sent keeps its current value")
+@kante.pydantic_input(
+    UpdateIntensityLayerInputModel,
+    description="Update an intensity layer's render settings. Every field is a patch: what is not sent keeps its current value",
+)
 class UpdateIntensityLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the intensity layer to update")
-    name: str | None = strawberry.field(default=None, description="A human-readable name for the layer, e.g. the channel it draws")
-    colormap: enums.ColorMap | None = strawberry.field(default=None, description="The colormap to render the intensity through. Set either this or `color`, not both. Sent alone it replaces a tint the layer carries -- the way back from a tint to a colormap -- except 'intensity', which is the map a tint already has and leaves it in place")
-    color: list[int] | None = strawberry.field(default=None, description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Sets the layer's colormap to 'intensity'; any other colormap sent beside it is refused. Omitting this keeps the current tint, because null already means 'unchanged' -- send a `colormap` to go back to one")
-    clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction")
-    clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction")
-    gamma: float | None = strawberry.field(default=None, description="Gamma correction applied to the normalized intensities")
-    projection_mode: enums.ProjectionMode | None = strawberry.field(default=None, description="How z is collapsed. Omitting this keeps the current mode -- there is no spelling here for 'stop projecting', because null already means 'unchanged'; recreate the layer to go back to drawing the plane")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the intensity layer to update"
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="A human-readable name for the layer, e.g. the channel it draws",
+    )
+    colormap: enums.ColorMap | None = strawberry.field(
+        default=None,
+        description="The colormap to render the intensity through. Set either this or `color`, not both. Sent alone it replaces a tint the layer carries -- the way back from a tint to a colormap -- except 'intensity', which is the map a tint already has and leaves it in place",
+    )
+    color: list[int] | None = strawberry.field(
+        default=None,
+        description="A solid RGBA color to tint the channel with, instead of a colormap: four components, each 0..255. Sets the layer's colormap to 'intensity'; any other colormap sent beside it is refused. Omitting this keeps the current tint, because null already means 'unchanged' -- send a `colormap` to go back to one",
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper contrast limit, in the data's own intensity units -- not a normalized fraction",
+    )
+    gamma: float | None = strawberry.field(
+        default=None,
+        description="Gamma correction applied to the normalized intensities",
+    )
+    projection_mode: enums.ProjectionMode | None = strawberry.field(
+        default=None,
+        description="How z is collapsed. Omitting this keeps the current mode -- there is no spelling here for 'stop projecting', because null already means 'unchanged'; recreate the layer to go back to drawing the plane",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
-def update_intensity_layer(info: Info, input: UpdateIntensityLayerInput) -> types.IntensityLayer:
+def update_intensity_layer(
+    info: Info, input: UpdateIntensityLayerInput
+) -> types.IntensityLayer:
     model = input.to_pydantic()
     layer = get_for_org(models.Layer, info, id=model.id)
     assert_kind(layer, enums.LayerKind.INTENSITY, mutation="updateIntensityLayer")
@@ -1779,19 +2367,51 @@ class UpdateRgbLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateRgbLayerInputModel, description="Update an RGB layer's render settings. Every field is a patch: what is not sent keeps its current value")
+@kante.pydantic_input(
+    UpdateRgbLayerInputModel,
+    description="Update an RGB layer's render settings. Every field is a patch: what is not sent keeps its current value",
+)
 class UpdateRgbLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the RGB layer to update")
-    name: str | None = strawberry.field(default=None, description="A human-readable name for the layer")
-    red_lens: strawberry.ID | None = strawberry.field(default=None, description="The single-channel lens drawn as red: a crop of the layer's lens with its channel axis at one position")
-    green_lens: strawberry.ID | None = strawberry.field(default=None, description="The single-channel lens drawn as green: a crop of the layer's lens with its channel axis at one position")
-    blue_lens: strawberry.ID | None = strawberry.field(default=None, description="The single-channel lens drawn as blue: a crop of the layer's lens with its channel axis at one position")
-    clim_min: float | None = strawberry.field(default=None, description="Lower contrast limit, in the data's own intensity units, applied to all three channels")
-    clim_max: float | None = strawberry.field(default=None, description="Upper contrast limit, in the data's own intensity units, applied to all three channels")
-    white_balance: list[float] | None = strawberry.field(default=None, description="Per-component gains [red, green, blue], each > 0. A patch like every field here, so omitting it keeps the current gains; send [1, 1, 1] to remove the correction")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the RGB layer to update"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="A human-readable name for the layer"
+    )
+    red_lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The single-channel lens drawn as red: a crop of the layer's lens with its channel axis at one position",
+    )
+    green_lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The single-channel lens drawn as green: a crop of the layer's lens with its channel axis at one position",
+    )
+    blue_lens: strawberry.ID | None = strawberry.field(
+        default=None,
+        description="The single-channel lens drawn as blue: a crop of the layer's lens with its channel axis at one position",
+    )
+    clim_min: float | None = strawberry.field(
+        default=None,
+        description="Lower contrast limit, in the data's own intensity units, applied to all three channels",
+    )
+    clim_max: float | None = strawberry.field(
+        default=None,
+        description="Upper contrast limit, in the data's own intensity units, applied to all three channels",
+    )
+    white_balance: list[float] | None = strawberry.field(
+        default=None,
+        description="Per-component gains [red, green, blue], each > 0. A patch like every field here, so omitting it keeps the current gains; send [1, 1, 1] to remove the correction",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
 def update_rgb_layer(info: Info, input: UpdateRgbLayerInput) -> types.RgbLayer:
@@ -1801,7 +2421,11 @@ def update_rgb_layer(info: Info, input: UpdateRgbLayerInput) -> types.RgbLayer:
 
     # Each component is checked against the layer's lens as creation checked it; an omitted one
     # keeps the lens it has.
-    for field, lens_id in (("red_lens", model.red_lens), ("green_lens", model.green_lens), ("blue_lens", model.blue_lens)):
+    for field, lens_id in (
+        ("red_lens", model.red_lens),
+        ("green_lens", model.green_lens),
+        ("blue_lens", model.blue_lens),
+    ):
         if lens_id is not None:
             component = get_for_org(models.ArrayLens, info, id=lens_id)
             assert_component_lens(component, layer.lens, field=field)
@@ -1834,17 +2458,41 @@ class UpdatePhasorLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdatePhasorLayerInputModel, description="Update a phasor layer's render settings. Every field is a patch: what is not sent keeps its current value, except `transfer`, which replaces the whole transfer when given")
+@kante.pydantic_input(
+    UpdatePhasorLayerInputModel,
+    description="Update a phasor layer's render settings. Every field is a patch: what is not sent keeps its current value, except `transfer`, which replaces the whole transfer when given",
+)
 class UpdatePhasorLayerInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the phasor layer to update")
-    name: str | None = strawberry.field(default=None, description="A human-readable name for the layer")
-    phasor_axis: str | None = strawberry.field(default=None, description="The axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis")
-    harmonic: int | None = strawberry.field(default=None, description="The harmonic of the transform")
-    transfer: layer_inputs.PhasorTransferInput | None = strawberry.field(default=None, description="How the phasor becomes the pixel's color. Given, it replaces the whole transfer -- the cursors included, which is what makes 'remove a cursor' expressible at all")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the phasor layer to update"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="A human-readable name for the layer"
+    )
+    phasor_axis: str | None = strawberry.field(
+        default=None,
+        description="The axis the phasor is taken over. Must be a MICROTIME or SPECTRUM axis",
+    )
+    harmonic: int | None = strawberry.field(
+        default=None, description="The harmonic of the transform"
+    )
+    transfer: layer_inputs.PhasorTransferInput | None = strawberry.field(
+        default=None,
+        description="How the phasor becomes the pixel's color. Given, it replaces the whole transfer -- the cursors included, which is what makes 'remove a cursor' expressible at all",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha for alpha-over compositing, from 0 (transparent) to 1 (opaque)",
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
 
 def update_phasor_layer(info: Info, input: UpdatePhasorLayerInput) -> types.PhasorLayer:
@@ -1852,19 +2500,31 @@ def update_phasor_layer(info: Info, input: UpdatePhasorLayerInput) -> types.Phas
     layer = get_for_org(models.Layer, info, id=model.id)
     assert_kind(layer, enums.LayerKind.PHASOR, mutation="updatePhasorLayer")
 
-    current = layer_models.PhasorRenderModel(**layer.phasor_render) if layer.phasor_render else None
+    current = (
+        layer_models.PhasorRenderModel(**layer.phasor_render)
+        if layer.phasor_render
+        else None
+    )
     if current is None:
-        raise ValueError(f"Layer {model.id} is a phasor layer with no phasor render settings, which should not be possible -- it cannot be patched, only recreated.")
+        raise ValueError(
+            f"Layer {model.id} is a phasor layer with no phasor render settings, which should not be possible -- it cannot be patched, only recreated."
+        )
 
-    phasor_axis = model.phasor_axis if model.phasor_axis is not None else current.phasor_axis
+    phasor_axis = (
+        model.phasor_axis if model.phasor_axis is not None else current.phasor_axis
+    )
     assert_phasor_axis(layer.lens, phasor_axis)
 
     layer.phasor_render = layer_models.PhasorRenderModel(
         phasor_axis=phasor_axis,
-        harmonic=assert_harmonic(model.harmonic) if model.harmonic is not None else current.harmonic,
+        harmonic=assert_harmonic(model.harmonic)
+        if model.harmonic is not None
+        else current.harmonic,
         # Replaced wholesale rather than merged, for the reason a label layer's pickers are:
         # `cursors` is a list, and a merge has no spelling for removing an entry from one.
-        transfer=_build_phasor_transfer(model.transfer) if model.transfer is not None else current.transfer,
+        transfer=_build_phasor_transfer(model.transfer)
+        if model.transfer is not None
+        else current.transfer,
     ).model_dump(mode="json")
     _patch_layer_compositing(layer, model)
     layer.save()
@@ -1875,7 +2535,9 @@ class DeleteLayerInputModel(BaseModel):
     id: str = Field(description="The ID of the layer to delete")
 
 
-@kante.pydantic_input(DeleteLayerInputModel, description="Input for deleting a layer by ID")
+@kante.pydantic_input(
+    DeleteLayerInputModel, description="Input for deleting a layer by ID"
+)
 class DeleteLayerInput:
     """Input for deleting a layer by ID"""
 

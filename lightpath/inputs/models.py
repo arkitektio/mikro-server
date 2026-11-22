@@ -1,33 +1,42 @@
 from __future__ import annotations
-from typing import Annotated, Optional, List, Literal
+
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from kanne_server import quantities
-from lightpath.enums import ChannelKind, FilterKind, PortRole, ElementKind, ObjectiveImmersion, PulseKind
+from lightpath.enums import (
+    ChannelKind,
+    ElementKind,
+    FilterKind,
+    ObjectiveImmersion,
+    PortRole,
+    PulseKind,
+)
 from lightpath.objects import models as object_models
 
 
 class Vec3InputModel(BaseModel):
     """3D vector for input."""
 
-    x: Optional[float] = None
-    y: Optional[float] = None
-    z: Optional[float] = None
+    x: float | None = None
+    y: float | None = None
+    z: float | None = None
 
 
 class EulerInputModel(BaseModel):
     """Euler angles for input."""
 
-    rx: Optional[float] = None
-    ry: Optional[float] = None
-    rz: Optional[float] = None
+    rx: float | None = None
+    ry: float | None = None
+    rz: float | None = None
 
 
 class Pose3DInputModel(BaseModel):
     """Pose with optional position and orientation."""
 
-    position: Optional[Vec3InputModel] = None
-    orientation: Optional[EulerInputModel] = None
+    position: Vec3InputModel | None = None
+    orientation: EulerInputModel | None = None
 
 
 class SpectrumInputModel(BaseModel):
@@ -40,21 +49,21 @@ class SpectrumInputModel(BaseModel):
 class BeamStateInputModel(BaseModel):
     """Beam properties for input edges."""
 
-    wavelength: Optional[quantities.Length] = None
-    power: Optional[quantities.Power] = None
-    polarization: Optional[str] = None
-    mode_hint: Optional[str] = None
+    wavelength: quantities.Length | None = None
+    power: quantities.Power | None = None
+    polarization: str | None = None
+    mode_hint: str | None = None
 
 
 class LightPortInputModel(BaseModel):
     """Port definition for input."""
 
-    id: Optional[str] = None  # optional: may be generated server-side
+    id: str | None = None  # optional: may be generated server-side
     name: str
     role: PortRole
     channel: ChannelKind = ChannelKind.FREE_SPACE
-    spectrum: Optional[SpectrumInputModel] = None
-    max_incoming_edges: Optional[int] = None
+    spectrum: SpectrumInputModel | None = None
+    max_incoming_edges: int | None = None
 
 
 # --------------------------------------------------------------------------------------
@@ -78,14 +87,14 @@ class OpticalElementInputBase(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: Optional[str] = None
+    id: str | None = None
     label: str
     kind: ElementKind
-    pose: Optional[Pose3DInputModel] = None
-    ports: List[LightPortInputModel] = Field(default_factory=list)
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
-    serial_number: Optional[str] = None
+    pose: Pose3DInputModel | None = None
+    ports: list[LightPortInputModel] = Field(default_factory=list)
+    manufacturer: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
 
     def _base_kwargs(self) -> dict:
         """The base fields, in the shape the storage models take."""
@@ -123,13 +132,13 @@ class LaserElementInputModel(OpticalElementInputBase):
 
     kind: Literal[ElementKind.LASER] = ElementKind.LASER
     nominal_wavelength: quantities.Length
-    power: Optional[quantities.Power] = None
-    channel: Optional[ChannelKind] = None
-    laser_medium: Optional[str] = None
-    pulse_kind: Optional[PulseKind] = None
-    repetition_rate: Optional[quantities.Frequency] = None
-    has_pockels_cell: Optional[bool] = None
-    has_q_switch: Optional[bool] = None
+    power: quantities.Power | None = None
+    channel: ChannelKind | None = None
+    laser_medium: str | None = None
+    pulse_kind: PulseKind | None = None
+    repetition_rate: quantities.Frequency | None = None
+    has_pockels_cell: bool | None = None
+    has_q_switch: bool | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
@@ -150,33 +159,41 @@ class LampElementInputModel(OpticalElementInputBase):
     """A lamp: an incoherent source."""
 
     kind: Literal[ElementKind.LAMP] = ElementKind.LAMP
-    channel: Optional[ChannelKind] = None
-    lamp_type: Optional[str] = None
+    channel: ChannelKind | None = None
+    lamp_type: str | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.LampElementModel(**self._base_kwargs(), channel=self.channel or ChannelKind.FREE_SPACE, lamp_type=self.lamp_type)
+        return object_models.LampElementModel(
+            **self._base_kwargs(),
+            channel=self.channel or ChannelKind.FREE_SPACE,
+            lamp_type=self.lamp_type,
+        )
 
 
 class OtherSourceElementInputModel(OpticalElementInputBase):
     """A source that is neither a laser nor a lamp."""
 
     kind: Literal[ElementKind.OTHER_SOURCE] = ElementKind.OTHER_SOURCE
-    channel: Optional[ChannelKind] = None
-    lamp_type: Optional[str] = None
+    channel: ChannelKind | None = None
+    lamp_type: str | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.OtherSourceElementModel(**self._base_kwargs(), channel=self.channel or ChannelKind.FREE_SPACE, lamp_type=self.lamp_type)
+        return object_models.OtherSourceElementModel(
+            **self._base_kwargs(),
+            channel=self.channel or ChannelKind.FREE_SPACE,
+            lamp_type=self.lamp_type,
+        )
 
 
 class DetectorElementInputModel(OpticalElementInputBase):
     """A point detector: a PMT, an APD."""
 
     kind: Literal[ElementKind.DETECTOR] = ElementKind.DETECTOR
-    nepd_w_per_sqrt_hz: Optional[float] = None
-    amplifier_gain_db: Optional[float] = None
-    gain: Optional[float] = None
+    nepd_w_per_sqrt_hz: float | None = None
+    amplifier_gain_db: float | None = None
+    gain: float | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
@@ -192,36 +209,42 @@ class CCDElementInputModel(OpticalElementInputBase):
     """An array detector: a CCD, a CMOS."""
 
     kind: Literal[ElementKind.CCD] = ElementKind.CCD
-    pixel_size: Optional[quantities.Length] = None
-    resolution: Optional[List[int]] = None
+    pixel_size: quantities.Length | None = None
+    resolution: list[int] | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
         resolution = tuple(self.resolution) if self.resolution else None
-        return object_models.CCDElementModel(**self._base_kwargs(), pixel_size=self.pixel_size, resolution=resolution)
+        return object_models.CCDElementModel(
+            **self._base_kwargs(), pixel_size=self.pixel_size, resolution=resolution
+        )
 
 
 class MirrorElementInputModel(OpticalElementInputBase):
     """A mirror, at an angle, over a coating band."""
 
     kind: Literal[ElementKind.MIRROR] = ElementKind.MIRROR
-    angle_deg: Optional[float] = None
-    band_min: Optional[quantities.Length] = None
-    band_max: Optional[quantities.Length] = None
+    angle_deg: float | None = None
+    band_min: quantities.Length | None = None
+    band_max: quantities.Length | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.MirrorElementModel(**self._base_kwargs(), angle_deg=self.angle_deg, band=_band(self.band_min, self.band_max))
+        return object_models.MirrorElementModel(
+            **self._base_kwargs(),
+            angle_deg=self.angle_deg,
+            band=_band(self.band_min, self.band_max),
+        )
 
 
 class BeamSplitterElementInputModel(OpticalElementInputBase):
     """A splitter: what it reflects, what it transmits."""
 
     kind: Literal[ElementKind.BEAM_SPLITTER] = ElementKind.BEAM_SPLITTER
-    r_fraction: Optional[float] = None
-    t_fraction: Optional[float] = None
-    band_min: Optional[quantities.Length] = None
-    band_max: Optional[quantities.Length] = None
+    r_fraction: float | None = None
+    t_fraction: float | None = None
+    band_min: quantities.Length | None = None
+    band_max: quantities.Length | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
@@ -237,23 +260,25 @@ class LensElementInputModel(OpticalElementInputBase):
     """A thin lens: a focal length."""
 
     kind: Literal[ElementKind.LENS] = ElementKind.LENS
-    focal_length: Optional[quantities.Length] = None
+    focal_length: quantities.Length | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.LensElementModel(**self._base_kwargs(), focal_length=self.focal_length)
+        return object_models.LensElementModel(
+            **self._base_kwargs(), focal_length=self.focal_length
+        )
 
 
 class ObjectiveElementInputModel(OpticalElementInputBase):
     """A microscope objective."""
 
     kind: Literal[ElementKind.OBJECTIVE] = ElementKind.OBJECTIVE
-    magnification: Optional[float] = None
-    numerical_aperture: Optional[float] = None
-    brand: Optional[str] = None
-    working_distance: Optional[quantities.Length] = None
-    immersion_medium: Optional[ObjectiveImmersion] = None
-    iris: Optional[bool] = None
+    magnification: float | None = None
+    numerical_aperture: float | None = None
+    brand: str | None = None
+    working_distance: quantities.Length | None = None
+    immersion_medium: ObjectiveImmersion | None = None
+    iris: bool | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
@@ -272,31 +297,35 @@ class PinholeElementInputModel(OpticalElementInputBase):
     """A confocal pinhole: a diameter."""
 
     kind: Literal[ElementKind.PINHOLE] = ElementKind.PINHOLE
-    diameter: Optional[quantities.Length] = None
+    diameter: quantities.Length | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.PinholeElementModel(**self._base_kwargs(), diameter=self.diameter)
+        return object_models.PinholeElementModel(
+            **self._base_kwargs(), diameter=self.diameter
+        )
 
 
 class ApertureElementInputModel(OpticalElementInputBase):
     """A stop: a hole of some diameter, with no confocal claim attached."""
 
     kind: Literal[ElementKind.APERTURE] = ElementKind.APERTURE
-    diameter: Optional[quantities.Length] = None
+    diameter: quantities.Length | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.ApertureElementModel(**self._base_kwargs(), diameter=self.diameter)
+        return object_models.ApertureElementModel(
+            **self._base_kwargs(), diameter=self.diameter
+        )
 
 
 class FilterElementInputModel(OpticalElementInputBase):
     """A spectral filter."""
 
     kind: Literal[ElementKind.FILTER] = ElementKind.FILTER
-    description: Optional[str] = None
-    filter_kind: Optional[FilterKind] = None
-    transmittance: Optional[float] = None
+    description: str | None = None
+    filter_kind: FilterKind | None = None
+    transmittance: float | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
@@ -312,21 +341,25 @@ class PolarizerElementInputModel(OpticalElementInputBase):
     """A polarization filter, at an angle."""
 
     kind: Literal[ElementKind.POLARIZER] = ElementKind.POLARIZER
-    angle_deg: Optional[float] = None
-    extinction_ratio: Optional[float] = None
+    angle_deg: float | None = None
+    extinction_ratio: float | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.PolarizerElementModel(**self._base_kwargs(), angle_deg=self.angle_deg, extinction_ratio=self.extinction_ratio)
+        return object_models.PolarizerElementModel(
+            **self._base_kwargs(),
+            angle_deg=self.angle_deg,
+            extinction_ratio=self.extinction_ratio,
+        )
 
 
 class WaveplateElementInputModel(OpticalElementInputBase):
     """A retarder: a fraction of a wave, at an angle."""
 
     kind: Literal[ElementKind.WAVEPLATE] = ElementKind.WAVEPLATE
-    angle_deg: Optional[float] = None
-    retardance: Optional[float] = None
-    design_wavelength: Optional[quantities.Length] = None
+    angle_deg: float | None = None
+    retardance: float | None = None
+    design_wavelength: quantities.Length | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
@@ -342,35 +375,44 @@ class ShutterElementInputModel(OpticalElementInputBase):
     """A blocker: open or closed. An AOTF or EOM used purely as a gate is one of these."""
 
     kind: Literal[ElementKind.SHUTTER] = ElementKind.SHUTTER
-    is_open: Optional[bool] = None
-    shutter_type: Optional[str] = None
-    gain: Optional[float] = None
+    is_open: bool | None = None
+    shutter_type: str | None = None
+    gain: float | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.ShutterElementModel(**self._base_kwargs(), is_open=self.is_open, shutter_type=self.shutter_type, gain=self.gain)
+        return object_models.ShutterElementModel(
+            **self._base_kwargs(),
+            is_open=self.is_open,
+            shutter_type=self.shutter_type,
+            gain=self.gain,
+        )
 
 
 class SampleElementInputModel(OpticalElementInputBase):
     """The sample itself, as a station on the path."""
 
     kind: Literal[ElementKind.SAMPLE] = ElementKind.SAMPLE
-    description: Optional[str] = None
+    description: str | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.SampleElementModel(**self._base_kwargs(), description=self.description)
+        return object_models.SampleElementModel(
+            **self._base_kwargs(), description=self.description
+        )
 
 
 class OtherElementInputModel(OpticalElementInputBase):
     """Anything the vocabulary above does not name."""
 
     kind: Literal[ElementKind.OTHER] = ElementKind.OTHER
-    description: Optional[str] = None
+    description: str | None = None
 
     def to_element(self) -> object:
         """Build the storage model for this element."""
-        return object_models.OtherElementModel(**self._base_kwargs(), description=self.description)
+        return object_models.OtherElementModel(
+            **self._base_kwargs(), description=self.description
+        )
 
 
 #: Every element kind, keyed by discriminator value. Total over `ElementKind` by the same
@@ -421,22 +463,22 @@ OpticalElementSpec = Annotated[
 class LightEdgeInputModel(BaseModel):
     """Input model for connecting two ports."""
 
-    id: Optional[str] = None
+    id: str | None = None
     source_element_id: str
     source_port_id: str
     target_element_id: str
     target_port_id: str
-    path_length: Optional[quantities.Length] = None
-    medium: Optional[str] = Field(default="AIR")
-    loss_db: Optional[float] = Field(default=0.0)
-    beam: Optional[BeamStateInputModel] = None
+    path_length: quantities.Length | None = None
+    medium: str | None = Field(default="AIR")
+    loss_db: float | None = Field(default=0.0)
+    beam: BeamStateInputModel | None = None
 
 
 class LightpathGraphInputModel(BaseModel):
     """Bulk graph input model for elements and edges."""
 
-    elements: List[OpticalElementSpec]
-    edges: List[LightEdgeInputModel]
+    elements: list[OpticalElementSpec]
+    edges: list[LightEdgeInputModel]
 
     def to_graph(self) -> object_models.LightpathGraphModel:
         """The storage graph this input describes.
@@ -451,5 +493,8 @@ class LightpathGraphInputModel(BaseModel):
         """
         return object_models.LightpathGraphModel(
             elements=[element.to_element() for element in self.elements],
-            edges=[object_models.LightEdgeModel(**edge.model_dump(exclude_none=True)) for edge in self.edges],
+            edges=[
+                object_models.LightEdgeModel(**edge.model_dump(exclude_none=True))
+                for edge in self.edges
+            ],
         )

@@ -10,14 +10,13 @@ model's dump as the stored JSON, and the same model reconstructed on read.
 from unittest.mock import patch
 
 import pytest
-from asgiref.sync import sync_to_async
 from arkitekt_datalayer.models import ZarrStore
+from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import models
 from mikro_server.schema import schema
 from optikit.models import OptikitStateModel
-
 
 CREATE = """
 mutation Create($input: CreateArrayDatasetInput!) {
@@ -41,7 +40,9 @@ async def _store(ctx: HttpContext, key: str) -> ZarrStore:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(authenticated_context: HttpContext):
+async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(
+    authenticated_context: HttpContext,
+):
     """Ingest pins the recorded Optikit state to its coordinate, through composable typed input.
 
     Quantities arrive as unit-carrying strings and are stored canonically; the stored
@@ -73,7 +74,11 @@ async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(authenticat
             "data": str(store.id),
             "name": "Acquired",
             "scales": [],
-            "axes": [{"name": "c", "type": "CHANNEL"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
+            "axes": [
+                {"name": "c", "type": "CHANNEL"},
+                {"name": "y", "type": "SPACE"},
+                {"name": "x", "type": "SPACE"},
+            ],
             "anchors": [
                 {
                     "axisAnchors": [{"axis": "c", "value": 0}],
@@ -83,12 +88,18 @@ async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(authenticat
         }
     }
     with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
-        result = await schema.execute(CREATE, context_value=authenticated_context, variable_values=variables)
+        result = await schema.execute(
+            CREATE, context_value=authenticated_context, variable_values=variables
+        )
     assert not result.errors, result.errors
 
-    spoke = await models.OptikitState.objects.aget(anchor__dataset_id=result.data["createArrayDataset"]["id"])
+    spoke = await models.OptikitState.objects.aget(
+        anchor__dataset_id=result.data["createArrayDataset"]["id"]
+    )
     anchor = await sync_to_async(lambda: spoke.anchor)()
-    assert anchor.coordinates == {"c": 0}, "the hardware truth is pinned to the coordinate it was recorded at"
+    assert anchor.coordinates == {"c": 0}, (
+        "the hardware truth is pinned to the coordinate it was recorded at"
+    )
 
     # The stored JSON is the model's dump: reconstructing it recovers the state the
     # client sent, quantities compared canonically rather than by their spelling.
@@ -102,7 +113,9 @@ async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(authenticat
     from core.models import ArrayDataset
     from tests import seed
 
-    dataset = await ArrayDataset.objects.aget(pk=result.data["createArrayDataset"]["id"])
+    dataset = await ArrayDataset.objects.aget(
+        pk=result.data["createArrayDataset"]["id"]
+    )
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
     read = await schema.execute(
         """
@@ -143,16 +156,35 @@ async def test_a_setting_holds_exactly_one_value(authenticated_context: HttpCont
             "data": str(store.id),
             "name": "Broken",
             "scales": [],
-            "axes": [{"name": "c", "type": "CHANNEL"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
+            "axes": [
+                {"name": "c", "type": "CHANNEL"},
+                {"name": "y", "type": "SPACE"},
+                {"name": "x", "type": "SPACE"},
+            ],
             "anchors": [
                 {
                     "axisAnchors": [],
-                    "microscope": {"devices": [{"label": "laser", "settings": [{"name": "power", "quantity": "20 mW", "number": 20.0}]}]},
+                    "microscope": {
+                        "devices": [
+                            {
+                                "label": "laser",
+                                "settings": [
+                                    {
+                                        "name": "power",
+                                        "quantity": "20 mW",
+                                        "number": 20.0,
+                                    }
+                                ],
+                            }
+                        ]
+                    },
                 }
             ],
         }
     }
     with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
-        result = await schema.execute(CREATE, context_value=authenticated_context, variable_values=variables)
+        result = await schema.execute(
+            CREATE, context_value=authenticated_context, variable_values=variables
+        )
     assert result.errors
     assert "one value" in str(result.errors[0])

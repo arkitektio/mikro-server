@@ -4,17 +4,13 @@ import time
 import boto3
 import psycopg
 import pytest
-from moto import mock_aws
-
-from authentikate.models import Client, Organization, User, Membership
+from authentikate.models import Client, Membership, Organization, User
 from django.contrib.contenttypes.management import create_contenttypes
 from django.db.models.signals import post_migrate
-from kante.context import HttpContext, UniversalRequest
-from strawberry.http.temporal_response import TemporalResponse
 from dokker import PortNotFoundError, testing
-
-
-
+from kante.context import HttpContext, UniversalRequest
+from moto import mock_aws
+from strawberry.http.temporal_response import TemporalResponse
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -37,7 +33,6 @@ def s3(aws_credentials):
         yield boto3.client("s3", region_name="us-east-1")
 
 
-
 @pytest.fixture(scope="session")
 def backend_stack():
     """Bring up the integration stack and yield the host port its postgres landed on.
@@ -54,7 +49,9 @@ def backend_stack():
     `django_db_modify_db_settings` needs it to point Django at this stack *before*
     pytest-django creates the test database -- see that fixture below.
     """
-    docker_compose_path = os.path.join(os.path.dirname(__file__), "integration", "docker-compose.yaml")
+    docker_compose_path = os.path.join(
+        os.path.dirname(__file__), "integration", "docker-compose.yaml"
+    )
 
     # No `down()` before `up()`: `testing()` mints a fresh `dokker-test-<uuid>` project
     # every call, so downing it would only tear down the empty project this run just
@@ -146,7 +143,9 @@ def django_db_setup(django_db_setup, django_db_blocker):
         contenttypes = list(ContentType.objects.all())
         permissions = list(Permission.objects.all())
 
-    post_migrate.disconnect(dispatch_uid="django.contrib.auth.management.create_permissions")
+    post_migrate.disconnect(
+        dispatch_uid="django.contrib.auth.management.create_permissions"
+    )
     post_migrate.disconnect(create_contenttypes)
 
     def restore_contenttypes_and_permissions(sender, **kwargs):
@@ -201,7 +200,13 @@ def authenticated_context(db, backend_stack):
     )
     request.set_membership(membership)  # type: ignore
 
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer test"}, type="http")
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer test"},
+        type="http",
+    )
+
 
 @pytest.fixture(scope="function")
 def bot_context(db, backend_stack) -> HttpContext:
@@ -229,7 +234,12 @@ def bot_context(db, backend_stack) -> HttpContext:
     )
     request.set_membership(membership)  # type: ignore
 
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer bottest"}, type="http")
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer bottest"},
+        type="http",
+    )
 
 
 @pytest.fixture(scope="function")
@@ -254,7 +264,12 @@ def editor_context(db, backend_stack) -> HttpContext:
     )
     request.set_membership(membership)  # type: ignore
 
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer editortest"}, type="http")
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer editortest"},
+        type="http",
+    )
 
 
 @pytest.fixture(scope="function")
@@ -278,7 +293,12 @@ def other_org_context(db, backend_stack) -> HttpContext:
     )
     request.set_membership(membership)  # type: ignore
 
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer othertest"}, type="http")
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer othertest"},
+        type="http",
+    )
 
 
 @pytest.fixture(scope="function")
@@ -302,13 +322,22 @@ def same_user_other_org_context(db, backend_stack) -> HttpContext:
     )
     request.set_membership(membership)  # type: ignore
 
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer test-other-org"}, type="http")
-
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer test-other-org"},
+        type="http",
+    )
 
 
 def _token_context(token: str) -> HttpContext:
     """A context authenticated by static ``token`` alone; the extension fills in who that is."""
-    return HttpContext(request=UniversalRequest(_extensions={"token": token}), response=TemporalResponse(), headers={"Authorization": f"Bearer {token}"}, type="http")
+    return HttpContext(
+        request=UniversalRequest(_extensions={"token": token}),
+        response=TemporalResponse(),
+        headers={"Authorization": f"Bearer {token}"},
+        type="http",
+    )
 
 
 @pytest.fixture(scope="function")

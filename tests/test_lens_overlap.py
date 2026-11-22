@@ -53,8 +53,26 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str = "Traced") -
         variable_values={
             "input": {
                 "name": name,
-                "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}],
-                "derivedFrom": [{"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}}],
+                "axes": [
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "x", "type": "SPACE"},
+                ],
+                "derivedFrom": [
+                    {
+                        "kind": "DATASET",
+                        "dataset": str(dataset.pk),
+                        "transform": {
+                            "kind": "BY_DIMENSION",
+                            "parts": [
+                                {
+                                    "kind": "IDENTITY",
+                                    "inputAxes": ["y", "x"],
+                                    "outputAxes": ["y", "x"],
+                                }
+                            ],
+                        },
+                    }
+                ],
             }
         },
     )
@@ -62,16 +80,38 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str = "Traced") -
     return result.data["createAnnotationCollection"]["id"]
 
 
-async def _draw(ctx: HttpContext, vectors: list[list[float]], *, collection: str | None = None, scene: str | None = None, coordinates: list[dict] | None = None) -> str:
+async def _draw(
+    ctx: HttpContext,
+    vectors: list[list[float]],
+    *,
+    collection: str | None = None,
+    scene: str | None = None,
+    coordinates: list[dict] | None = None,
+) -> str:
     """One rectangle, into a collection or onto a scene."""
     target = {"collection": collection} if collection else {"scene": scene}
-    result = await schema.execute(CREATE, context_value=ctx, variable_values={"input": {**target, "kind": "RECTANGLE", "vectors": vectors, "coordinates": coordinates or []}})
+    result = await schema.execute(
+        CREATE,
+        context_value=ctx,
+        variable_values={
+            "input": {
+                **target,
+                "kind": "RECTANGLE",
+                "vectors": vectors,
+                "coordinates": coordinates or [],
+            }
+        },
+    )
     assert not result.errors, result.errors
     return result.data["createAnnotation"]["id"]
 
 
 async def _overlapping(ctx: HttpContext, annotation_id: str) -> set[str]:
-    result = await schema.execute(OVERLAPPING, context_value=_fresh_request(ctx), variable_values={"annotation": annotation_id})
+    result = await schema.execute(
+        OVERLAPPING,
+        context_value=_fresh_request(ctx),
+        variable_values={"annotation": annotation_id},
+    )
     assert not result.errors, result.errors
     return {lens["id"] for lens in result.data["lenses"]}
 
@@ -89,90 +129,137 @@ async def _cost(ctx: HttpContext, annotation_id: str) -> tuple[set[str], int]:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_lenses_over_the_annotated_dataset_are_told_apart_by_their_slices(authenticated_context: HttpContext):
+async def test_lenses_over_the_annotated_dataset_are_told_apart_by_their_slices(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image")
     whole = await seed.create_lens(ctx, dataset)
     near = await seed.create_lens(ctx, dataset, slices=NEAR)
     far = await seed.create_lens(ctx, dataset, slices=FAR)
-    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
+    annotation = await _draw(
+        ctx, SQUARE, collection=await _collection_over(ctx, dataset)
+    )
 
     found = await _overlapping(ctx, annotation)
 
     assert found == {str(whole.pk), str(near.pk)}
-    assert str(far.pk) not in found, "rows 40 to 64 do not meet a shape on rows 10 to 20"
+    assert str(far.pk) not in found, (
+        "rows 40 to 64 do not meet a shape on rows 10 to 20"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_over_another_dataset_overlaps_through_a_shared_world(authenticated_context: HttpContext):
+async def test_a_lens_over_another_dataset_overlaps_through_a_shared_world(
+    authenticated_context: HttpContext,
+):
     """The annotation is drawn on one dataset; the lenses look at another registered beside it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
-    drawn_on = await seed.create_array_dataset(ctx, "DrawnOn", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    beside = await seed.create_array_dataset(ctx, "Beside", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    apart = await seed.create_array_dataset(ctx, "Apart", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    drawn_on = await seed.create_array_dataset(
+        ctx, "DrawnOn", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    beside = await seed.create_array_dataset(
+        ctx, "Beside", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    apart = await seed.create_array_dataset(
+        ctx, "Apart", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     for dataset in (drawn_on, beside):
         await seed.register_into_scene(ctx, scene, dataset)
 
     meets = await seed.create_lens(ctx, beside, slices=NEAR)
     misses = await seed.create_lens(ctx, beside, slices=FAR)
     unregistered = await seed.create_lens(ctx, apart)
-    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, drawn_on))
+    annotation = await _draw(
+        ctx, SQUARE, collection=await _collection_over(ctx, drawn_on)
+    )
 
     found = await _overlapping(ctx, annotation)
 
     assert str(meets.pk) in found
     assert str(misses.pk) not in found
-    assert str(unregistered.pk) not in found, "a dataset in no space the annotation reaches is not co-registered with it"
+    assert str(unregistered.pk) not in found, (
+        "a dataset in no space the annotation reaches is not co-registered with it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_annotation_drawn_onto_a_scene_overlaps_the_lenses_placed_in_it(authenticated_context: HttpContext):
+async def test_an_annotation_drawn_onto_a_scene_overlaps_the_lenses_placed_in_it(
+    authenticated_context: HttpContext,
+):
     """A scene's own collection is registered straight into the world, with no dataset under it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
-    dataset = await seed.create_array_dataset(ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     await seed.register_into_scene(ctx, scene, dataset)
     whole = await seed.create_lens(ctx, dataset)
     near = await seed.create_lens(ctx, dataset, slices=NEAR)
     far = await seed.create_lens(ctx, dataset, slices=FAR)
-    off_plane = await seed.create_lens(ctx, dataset, slices=[{"axis": "z", "start": 5, "stop": 8}])
+    off_plane = await seed.create_lens(
+        ctx, dataset, slices=[{"axis": "z", "start": 5, "stop": 8}]
+    )
 
     annotation = await _draw(ctx, SQUARE_ZYX, scene=str(scene.id))
 
-    assert await _overlapping(ctx, annotation) == {str(whole.pk), str(near.pk)}, (far.pk, off_plane.pk)
+    assert await _overlapping(ctx, annotation) == {str(whole.pk), str(near.pk)}, (
+        far.pk,
+        off_plane.pk,
+    )
 
     # A flat shape in a volume says which plane with a pin, and with none it is on all of them.
-    low_plane = await _draw(ctx, SQUARE, scene=str(scene.id), coordinates=[{"name": "z", "value": 2}])
+    low_plane = await _draw(
+        ctx, SQUARE, scene=str(scene.id), coordinates=[{"name": "z", "value": 2}]
+    )
     every_plane = await _draw(ctx, SQUARE, scene=str(scene.id))
     assert await _overlapping(ctx, low_plane) == {str(whole.pk), str(near.pk)}
-    assert await _overlapping(ctx, every_plane) == {str(whole.pk), str(near.pk), str(off_plane.pk)}
+    assert await _overlapping(ctx, every_plane) == {
+        str(whole.pk),
+        str(near.pk),
+        str(off_plane.pk),
+    }
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_pinned_coordinate_keeps_the_annotation_off_the_other_channels(authenticated_context: HttpContext):
+async def test_a_pinned_coordinate_keeps_the_annotation_off_the_other_channels(
+    authenticated_context: HttpContext,
+):
     """A (y, x) shape says nothing about c; its `coordinates` do, and the neighbouring channel must not match."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels")
     whole = await seed.create_lens(ctx, dataset)
-    first = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}])
-    second = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 1, "stop": 2}])
+    first = await seed.create_lens(
+        ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}]
+    )
+    second = await seed.create_lens(
+        ctx, dataset, slices=[{"axis": "c", "start": 1, "stop": 2}]
+    )
     collection = await _collection_over(ctx, dataset)
 
-    pinned = await _draw(ctx, SQUARE, collection=collection, coordinates=[{"name": "c", "value": 0}])
+    pinned = await _draw(
+        ctx, SQUARE, collection=collection, coordinates=[{"name": "c", "value": 0}]
+    )
     unpinned = await _draw(ctx, SQUARE, collection=collection)
 
     # The whole lens spans every channel, so it meets a pinned shape and an unpinned one alike.
     assert await _overlapping(ctx, pinned) == {str(whole.pk), str(first.pk)}
-    assert await _overlapping(ctx, unpinned) == {str(whole.pk), str(first.pk), str(second.pk)}, "a coordinate the annotation does not pin is one it spans"
+    assert await _overlapping(ctx, unpinned) == {
+        str(whole.pk),
+        str(first.pk),
+        str(second.pk),
+    }, "a coordinate the annotation does not pin is one it spans"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_placed_only_per_channel_is_not_returned(authenticated_context: HttpContext):
+async def test_a_lens_placed_only_per_channel_is_not_returned(
+    authenticated_context: HttpContext,
+):
     """Where it sits depends on a channel nobody named, so it has not been shown to overlap."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Chromatic")
@@ -194,11 +281,17 @@ async def test_a_lens_placed_only_per_channel_is_not_returned(authenticated_cont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_filter_stays_inside_the_organization(authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_the_filter_stays_inside_the_organization(
+    authenticated_context: HttpContext, other_org_context: HttpContext
+):
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Shared")
-    mine = await seed.create_array_dataset(ctx, "Mine", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    theirs = await seed.create_array_dataset(other_org_context, "Theirs", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    mine = await seed.create_array_dataset(
+        ctx, "Mine", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    theirs = await seed.create_array_dataset(
+        other_org_context, "Theirs", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     for dataset in (mine, theirs):
         await seed.register_into_scene(ctx, scene, dataset)
     my_lens = await seed.create_lens(ctx, mine)
@@ -206,29 +299,39 @@ async def test_the_filter_stays_inside_the_organization(authenticated_context: H
     annotation = await _draw(ctx, SQUARE_ZYX, scene=str(scene.id))
 
     assert await _overlapping(ctx, annotation) == {str(my_lens.pk)}, their_lens.pk
-    assert await _overlapping(other_org_context, annotation) == set(), "another organization's annotation names nothing here"
+    assert await _overlapping(other_org_context, annotation) == set(), (
+        "another organization's annotation names nothing here"
+    )
 
 
 # --- cost -------------------------------------------------------------------------
 
 
-async def _world_with(ctx: HttpContext, name: str, *, datasets: int, lenses: int) -> str:
+async def _world_with(
+    ctx: HttpContext, name: str, *, datasets: int, lenses: int
+) -> str:
     """A scene of `datasets` volumes, each with its whole lens and `lenses` distinct sliced lenses, and one annotation drawn onto it.
 
     Distinct, because one selection is one lens: `lenses` copies of NEAR would be one row.
     """
     scene = await seed.create_scene(ctx, name)
     for index in range(datasets):
-        dataset = await seed.create_array_dataset(ctx, f"{name}-{index}", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+        dataset = await seed.create_array_dataset(
+            ctx, f"{name}-{index}", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+        )
         await seed.register_into_scene(ctx, scene, dataset)
         for offset in range(lenses):
-            await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 8 + offset, "stop": 40}])
+            await seed.create_lens(
+                ctx, dataset, slices=[{"axis": "y", "start": 8 + offset, "stop": 40}]
+            )
     return await _draw(ctx, SQUARE_ZYX, scene=str(scene.id))
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_cost_does_not_grow_with_the_datasets_or_their_lenses(authenticated_context: HttpContext):
+async def test_the_cost_does_not_grow_with_the_datasets_or_their_lenses(
+    authenticated_context: HttpContext,
+):
     """Flat in both: the residents arrive with everything a lens' extent is made of.
 
     The lens count is the one that would have grown. `Lens.shape_list` is two queries a lens,
@@ -239,35 +342,51 @@ async def test_the_cost_does_not_grow_with_the_datasets_or_their_lenses(authenti
     wide = await _world_with(ctx, "Wide", datasets=6, lenses=1)
     deep = await _world_with(ctx, "Deep", datasets=2, lenses=4)
 
-    (small_found, small_cost), (wide_found, wide_cost), (deep_found, deep_cost) = [await _cost(ctx, annotation) for annotation in (small, wide, deep)]
+    (small_found, small_cost), (wide_found, wide_cost), (deep_found, deep_cost) = [
+        await _cost(ctx, annotation) for annotation in (small, wide, deep)
+    ]
 
     # Each dataset answers with its whole lens and its sliced ones.
     assert (len(small_found), len(wide_found), len(deep_found)) == (4, 12, 10)
-    assert wide_cost == small_cost, f"the cost grew with the datasets: {small_cost} for 2, {wide_cost} for 6"
-    assert deep_cost == small_cost, f"the cost grew with the lenses: {small_cost} for 1 each, {deep_cost} for 4 each"
+    assert wide_cost == small_cost, (
+        f"the cost grew with the datasets: {small_cost} for 2, {wide_cost} for 6"
+    )
+    assert deep_cost == small_cost, (
+        f"the cost grew with the lenses: {small_cost} for 1 each, {deep_cost} for 4 each"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_cost_is_one_graph_per_space_the_annotation_reaches(authenticated_context: HttpContext):
+async def test_the_cost_is_one_graph_per_space_the_annotation_reaches(
+    authenticated_context: HttpContext,
+):
     """What it does grow with, stated: every further space the drawn-on dataset sits in is another walk."""
     ctx = authenticated_context
-    dataset = await seed.create_array_dataset(ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     whole = await seed.create_lens(ctx, dataset)
     lens = await seed.create_lens(ctx, dataset, slices=NEAR)
-    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
+    annotation = await _draw(
+        ctx, SQUARE, collection=await _collection_over(ctx, dataset)
+    )
 
     costs = []
     for name in ("alone", "First", "Second"):
         if name != "alone":
-            await seed.register_into_scene(ctx, await seed.create_scene(ctx, name), dataset)
+            await seed.register_into_scene(
+                ctx, await seed.create_scene(ctx, name), dataset
+            )
         found, cost = await _cost(ctx, annotation)
         assert found == {str(whole.pk), str(lens.pk)}
         costs.append(cost)
 
     alone, one_world, two_worlds = costs
     assert alone < one_world < two_worlds, costs
-    assert two_worlds - one_world <= one_world - alone, f"a second world cost more than the first did: {costs}"
+    assert two_worlds - one_world <= one_world - alone, (
+        f"a second world cost more than the first did: {costs}"
+    )
 
 
 # --- what is reachable at all -----------------------------------------------------
@@ -279,15 +398,23 @@ query Reachable($filters: LensFilter!) {
 """
 
 
-async def _reachable(ctx: HttpContext, annotation_id: str, **filters: object) -> set[str]:
-    result = await schema.execute(REACHABLE, context_value=_fresh_request(ctx), variable_values={"filters": {"reachableFrom": annotation_id, **filters}})
+async def _reachable(
+    ctx: HttpContext, annotation_id: str, **filters: object
+) -> set[str]:
+    result = await schema.execute(
+        REACHABLE,
+        context_value=_fresh_request(ctx),
+        variable_values={"filters": {"reachableFrom": annotation_id, **filters}},
+    )
     assert not result.errors, result.errors
     return {lens["id"] for lens in result.data["lenses"]}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_lens_of_the_annotated_dataset_is_reachable_whether_or_not_the_shape_lies_in_it(authenticated_context: HttpContext):
+async def test_every_lens_of_the_annotated_dataset_is_reachable_whether_or_not_the_shape_lies_in_it(
+    authenticated_context: HttpContext,
+):
     """What a picker offers once a shape is chosen: the data it can be read against, not only the data it happens to cover."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image")
@@ -296,29 +423,45 @@ async def test_every_lens_of_the_annotated_dataset_is_reachable_whether_or_not_t
     near = await seed.create_lens(ctx, dataset, slices=NEAR)
     far = await seed.create_lens(ctx, dataset, slices=FAR)
     stranger = await seed.create_lens(ctx, other)
-    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
+    annotation = await _draw(
+        ctx, SQUARE, collection=await _collection_over(ctx, dataset)
+    )
 
     reachable = await _reachable(ctx, annotation, kind="ARRAY")
 
     assert reachable == {str(whole.pk), str(near.pk), str(far.pk)}
-    assert str(stranger.pk) not in reachable, "a dataset no edge joins to the drawing space is not co-registered with it"
-    assert await _overlapping(ctx, annotation) < await _reachable(ctx, annotation), "the overlap is the reachable lenses the shape lies in"
+    assert str(stranger.pk) not in reachable, (
+        "a dataset no edge joins to the drawing space is not co-registered with it"
+    )
+    assert await _overlapping(ctx, annotation) < await _reachable(ctx, annotation), (
+        "the overlap is the reachable lenses the shape lies in"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_over_another_dataset_is_reachable_through_a_shared_world(authenticated_context: HttpContext):
+async def test_a_lens_over_another_dataset_is_reachable_through_a_shared_world(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
-    drawn_on = await seed.create_array_dataset(ctx, "DrawnOn", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    beside = await seed.create_array_dataset(ctx, "Beside", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    apart = await seed.create_array_dataset(ctx, "Apart", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    drawn_on = await seed.create_array_dataset(
+        ctx, "DrawnOn", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    beside = await seed.create_array_dataset(
+        ctx, "Beside", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    apart = await seed.create_array_dataset(
+        ctx, "Apart", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     for dataset in (drawn_on, beside):
         await seed.register_into_scene(ctx, scene, dataset)
     meets = await seed.create_lens(ctx, beside, slices=NEAR)
     misses = await seed.create_lens(ctx, beside, slices=FAR)
     unregistered = await seed.create_lens(ctx, apart)
-    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, drawn_on))
+    annotation = await _draw(
+        ctx, SQUARE, collection=await _collection_over(ctx, drawn_on)
+    )
 
     reachable = await _reachable(ctx, annotation)
 
@@ -329,19 +472,42 @@ async def test_a_lens_over_another_dataset_is_reachable_through_a_shared_world(a
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collection(authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collection(
+    authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """A freestanding tracing reaches the lens over its own collection and no data; an annotation of another organization names nothing here."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image")
     await seed.create_lens(ctx, dataset)
     freestanding = await schema.execute(
-        CREATE_COLLECTION, context_value=ctx, variable_values={"input": {"name": "Loose", "axes": [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]}}
+        CREATE_COLLECTION,
+        context_value=ctx,
+        variable_values={
+            "input": {
+                "name": "Loose",
+                "axes": [
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "x", "type": "SPACE"},
+                ],
+            }
+        },
     )
     assert not freestanding.errors, freestanding.errors
-    loose = await _draw(ctx, SQUARE, collection=freestanding.data["createAnnotationCollection"]["id"])
+    loose = await _draw(
+        ctx, SQUARE, collection=freestanding.data["createAnnotationCollection"]["id"]
+    )
     drawn = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, dataset))
 
-    own = await sync_to_async(lambda: {str(pk) for pk in models.AnnotationLens.objects.filter(annotation_collection_id=freestanding.data["createAnnotationCollection"]["id"]).values_list("pk", flat=True)})()
+    own = await sync_to_async(
+        lambda: {
+            str(pk)
+            for pk in models.AnnotationLens.objects.filter(
+                annotation_collection_id=freestanding.data[
+                    "createAnnotationCollection"
+                ]["id"]
+            ).values_list("pk", flat=True)
+        }
+    )()
     assert await _reachable(ctx, loose) == own != set()
     assert await _reachable(ctx, loose, kind="ARRAY") == set()
     assert await _reachable(ctx, drawn, kind="ARRAY") != set()
@@ -351,16 +517,34 @@ async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collecti
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_reachability_narrows_beside_the_other_filters(authenticated_context: HttpContext):
+async def test_reachability_narrows_beside_the_other_filters(
+    authenticated_context: HttpContext,
+):
     """A picker's query: the kind, what the port requires, and what the chosen shape reaches."""
     ctx = authenticated_context
-    volume = await seed.create_array_dataset(ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
-    elsewhere = await seed.create_array_dataset(ctx, "ElsewhereVolume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    volume = await seed.create_array_dataset(
+        ctx, "Volume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
+    elsewhere = await seed.create_array_dataset(
+        ctx, "ElsewhereVolume", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     whole = await seed.create_lens(ctx, volume)
     await seed.create_lens(ctx, elsewhere)
-    annotation = await _draw(ctx, SQUARE, collection=await _collection_over(ctx, volume))
+    annotation = await _draw(
+        ctx, SQUARE, collection=await _collection_over(ctx, volume)
+    )
     volumes = [{"key": "@mikro/n_space_axes", "operator": "EQUALS", "value": 3}]
 
-    assert await _reachable(ctx, annotation, kind="ARRAY", requires=volumes) == {str(whole.pk)}
-    assert await _reachable(ctx, annotation, kind="ARRAY", requires=[{"key": "@mikro/n_space_axes", "operator": "EQUALS", "value": 2}]) == set()
+    assert await _reachable(ctx, annotation, kind="ARRAY", requires=volumes) == {
+        str(whole.pk)
+    }
+    assert (
+        await _reachable(
+            ctx,
+            annotation,
+            kind="ARRAY",
+            requires=[{"key": "@mikro/n_space_axes", "operator": "EQUALS", "value": 2}],
+        )
+        == set()
+    )
     assert await _reachable(ctx, annotation, kind="TABLE") == set()

@@ -58,7 +58,9 @@ def organization_path(model: type[django_models.Model]) -> str | None:
     return _find_org_path(model, _MAX_PATH_DEPTH)
 
 
-def scope_queryset(queryset: django_models.QuerySet, info: Info) -> django_models.QuerySet:
+def scope_queryset(
+    queryset: django_models.QuerySet, info: Info
+) -> django_models.QuerySet:
     """Narrow an existing ``queryset`` to the request's organization, and, at a root field, for a
     guest of the organization, to what is in their collaborations (``arkitekt_service.collaborations``). Below a
     root field the collaboration gate holds them to it."""
@@ -71,7 +73,9 @@ def scope_queryset(queryset: django_models.QuerySet, info: Info) -> django_model
                 "registered in core.scoping.UNSCOPED_MODELS"
             )
         return object_scope(queryset, info=info)
-    return object_scope(queryset.filter(**{path: info.context.request.organization}), info=info)
+    return object_scope(
+        queryset.filter(**{path: info.context.request.organization}), info=info
+    )
 
 
 def for_org(model: type[django_models.Model], info: Info) -> django_models.QuerySet:
@@ -79,22 +83,32 @@ def for_org(model: type[django_models.Model], info: Info) -> django_models.Query
     return scope_queryset(model.objects.all(), info)
 
 
-def get_for_org(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:
+def get_for_org(
+    model: type[django_models.Model], info: Info, **kwargs
+) -> django_models.Model:
     """``Model.objects.get`` limited to the request's organization."""
     return for_org(model, info).get(**kwargs)
 
 
-def get_in_org_unshared(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:
+def get_in_org_unshared(
+    model: type[django_models.Model], info: Info, **kwargs
+) -> django_models.Model:
     """``Model.objects.get`` limited to the request's organization alone, not to a guest's collaborations.
 
     For a resolver that then checks the collaboration itself (``require_in_collaboration``): what a guest may
     write to need not be something a root field would hand them.
     """
     path = organization_path(model)
-    queryset = model.objects.all() if path is None else model.objects.filter(**{path: info.context.request.organization})
+    queryset = (
+        model.objects.all()
+        if path is None
+        else model.objects.filter(**{path: info.context.request.organization})
+    )
     return queryset.get(**kwargs)
 
 
-async def aget_for_org(model: type[django_models.Model], info: Info, **kwargs) -> django_models.Model:
+async def aget_for_org(
+    model: type[django_models.Model], info: Info, **kwargs
+) -> django_models.Model:
     """Async ``Model.objects.aget`` limited to the request's organization."""
     return await for_org(model, info).aget(**kwargs)

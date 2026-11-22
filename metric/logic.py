@@ -19,11 +19,11 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import QuerySet
 from kante.types import Info
-from kanne_server.scalars import parse_unit
 
 from core import models as core_models
 from core.creation import CreationContext
 from core.scoping import for_org
+from kanne_server.scalars import parse_unit
 from metric import models
 
 #: The feed every metric change is recorded in, named as the structure.
@@ -59,22 +59,40 @@ class MetricSpec:
 def check(spec: MetricSpec) -> MetricSpec:
     """The spec, its unit as pint reads it; ``ValueError`` in prose otherwise."""
     if spec.identifier not in TARGET_MODELS:
-        raise ValueError(f"A metric is about one of {', '.join(TARGET_MODELS)}, not a {spec.identifier}")
+        raise ValueError(
+            f"A metric is about one of {', '.join(TARGET_MODELS)}, not a {spec.identifier}"
+        )
     if not KEY.match(spec.key):
-        raise ValueError(f"A metric key is '<namespace>/<name>' (`ais_suite.measure_profile/threshold_distance`, `user:<sub>/spine_count`), not {spec.key!r}")
+        raise ValueError(
+            f"A metric key is '<namespace>/<name>' (`ais_suite.measure_profile/threshold_distance`, `user:<sub>/spine_count`), not {spec.key!r}"
+        )
     is_quantity = spec.magnitude is not None or spec.unit is not None
     if is_quantity == (spec.code is not None):
-        raise ValueError(f"A metric is a quantity (magnitude and unit) or a code, exactly one: {spec.key!r} gives {'both' if is_quantity else 'neither'}")
+        raise ValueError(
+            f"A metric is a quantity (magnitude and unit) or a code, exactly one: {spec.key!r} gives {'both' if is_quantity else 'neither'}"
+        )
     if is_quantity:
         if spec.magnitude is None or spec.unit is None:
-            raise ValueError(f"A quantity has a magnitude and a unit: {spec.key!r} lacks its {'unit' if spec.unit is None else 'magnitude'}")
-        return MetricSpec(spec.identifier, spec.object, spec.key, spec.magnitude, parse_unit(spec.unit), None, spec.supersedes)
+            raise ValueError(
+                f"A quantity has a magnitude and a unit: {spec.key!r} lacks its {'unit' if spec.unit is None else 'magnitude'}"
+            )
+        return MetricSpec(
+            spec.identifier,
+            spec.object,
+            spec.key,
+            spec.magnitude,
+            parse_unit(spec.unit),
+            None,
+            spec.supersedes,
+        )
     if not spec.code:
         raise ValueError(f"A code is not empty: {spec.key!r}")
     return spec
 
 
-def _targets(info: Info, ctx: CreationContext, specs: Sequence[MetricSpec]) -> dict[tuple[str, str], models.MetricTarget]:
+def _targets(
+    info: Info, ctx: CreationContext, specs: Sequence[MetricSpec]
+) -> dict[tuple[str, str], models.MetricTarget]:
     """The target of every spec, made where it is the first metric about its object.
 
     Each object must be one of the caller's organization. One query per structure named, one
@@ -89,37 +107,75 @@ def _targets(info: Info, ctx: CreationContext, specs: Sequence[MetricSpec]) -> d
         model = TARGET_MODELS[identifier]
         field = models.TARGET_FIELDS[identifier]
         try:
-            found = {str(pk) for pk in for_org(model, info).filter(pk__in=list(objects)).values_list("pk", flat=True)}
-        except (ValueError, ValidationError) as error:  # a malformed id (an annotation's is a uuid)
-            raise ValueError(f"Not ids of a {identifier}: {sorted(objects)[:5]}") from error
+            found = {
+                str(pk)
+                for pk in for_org(model, info)
+                .filter(pk__in=list(objects))
+                .values_list("pk", flat=True)
+            }
+        except (
+            ValueError,
+            ValidationError,
+        ) as error:  # a malformed id (an annotation's is a uuid)
+            raise ValueError(
+                f"Not ids of a {identifier}: {sorted(objects)[:5]}"
+            ) from error
         missing = sorted(objects - found)
         if missing:
-            raise ValueError(f"No {identifier} {', '.join(missing[:10])} in this organization")
-        existing = {str(getattr(t, f"{field}_id")): t for t in models.MetricTarget.objects.filter(**{f"{field}_id__in": list(found)})}
-        new = [models.MetricTarget(organization_id=ctx.organization.id, **{f"{field}_id": obj}) for obj in found if obj not in existing]
+            raise ValueError(
+                f"No {identifier} {', '.join(missing[:10])} in this organization"
+            )
+        existing = {
+            str(getattr(t, f"{field}_id")): t
+            for t in models.MetricTarget.objects.filter(
+                **{f"{field}_id__in": list(found)}
+            )
+        }
+        new = [
+            models.MetricTarget(
+                organization_id=ctx.organization.id, **{f"{field}_id": obj}
+            )
+            for obj in found
+            if obj not in existing
+        ]
         if new:
             # A concurrent first metric about the same object made it already: kept, and read back.
             models.MetricTarget.objects.bulk_create(new, ignore_conflicts=True)
-            existing = {str(getattr(t, f"{field}_id")): t for t in models.MetricTarget.objects.filter(**{f"{field}_id__in": list(found)})}
+            existing = {
+                str(getattr(t, f"{field}_id")): t
+                for t in models.MetricTarget.objects.filter(
+                    **{f"{field}_id__in": list(found)}
+                )
+            }
         for obj, target in existing.items():
             targets[(identifier, obj)] = target
     return targets
 
 
-def _superseded(info: Info, specs: Sequence[MetricSpec], targets: dict[tuple[str, str], models.MetricTarget]) -> dict[str, models.Metric]:
+def _superseded(
+    info: Info,
+    specs: Sequence[MetricSpec],
+    targets: dict[tuple[str, str], models.MetricTarget],
+) -> dict[str, models.Metric]:
     """The metrics the specs correct: each of this organization, about the same object."""
     ids = {spec.supersedes for spec in specs if spec.supersedes}
     if not ids:
         return {}
-    found = {str(m.pk): m for m in for_org(models.Metric, info).filter(pk__in=list(ids))}
+    found = {
+        str(m.pk): m for m in for_org(models.Metric, info).filter(pk__in=list(ids))
+    }
     for spec in specs:
         if spec.supersedes is None:
             continue
         old = found.get(spec.supersedes)
         if old is None:
-            raise ValueError(f"No metric {spec.supersedes} in this organization to supersede")
+            raise ValueError(
+                f"No metric {spec.supersedes} in this organization to supersede"
+            )
         if old.target_id != targets[(spec.identifier, spec.object)].pk:
-            raise ValueError(f"Metric {spec.supersedes} is about another object: a correction is about what it corrects")
+            raise ValueError(
+                f"Metric {spec.supersedes} is about another object: a correction is about what it corrects"
+            )
     return found
 
 
@@ -162,8 +218,17 @@ def _rows(info: Info, specs: Sequence[MetricSpec]) -> list[models.Metric]:
 
 def describe(metric: models.Metric) -> dict[str, str | float]:
     """A metric's descriptors: its key, its value, and the object it is about (read off the target's key columns)."""
-    value: dict[str, str | float] = {"@mikro/magnitude": metric.magnitude, "@mikro/unit": metric.unit} if metric.code is None else {"@mikro/metric_code": metric.code}
-    return {"@mikro/metric_key": metric.key, **value, "@mikro/target_identifier": metric.target.identifier, "@mikro/target_object": metric.target.object}
+    value: dict[str, str | float] = (
+        {"@mikro/magnitude": metric.magnitude, "@mikro/unit": metric.unit}
+        if metric.code is None
+        else {"@mikro/metric_code": metric.code}
+    )
+    return {
+        "@mikro/metric_key": metric.key,
+        **value,
+        "@mikro/target_identifier": metric.target.identifier,
+        "@mikro/target_object": metric.target.object,
+    }
 
 
 def _change(metric: models.Metric, kind: str, organization: str) -> Change:
@@ -175,7 +240,9 @@ def create_metric(info: Info, spec: MetricSpec) -> models.Metric:
     (row,) = _rows(info, [spec])
     with transaction.atomic():
         row.save()
-        record_change(_change(row, "CREATED", info.context.request.organization.identifier))
+        record_change(
+            _change(row, "CREATED", info.context.request.organization.identifier)
+        )
     return row
 
 
@@ -184,13 +251,17 @@ def create_metrics(info: Info, specs: Sequence[MetricSpec]) -> list[models.Metri
     if not specs:
         return []
     if len(specs) > MAX_BATCH:
-        raise ValueError(f"At most {MAX_BATCH} metrics per call, not {len(specs)}: a call is one transaction, and the feed waits for it")
+        raise ValueError(
+            f"At most {MAX_BATCH} metrics per call, not {len(specs)}: a call is one transaction, and the feed waits for it"
+        )
     from mikro_server.service import service
 
     rows = _rows(info, specs)
     with transaction.atomic():
         # Described before the insert: a metric's descriptors are its own columns and its target's.
-        created = models.Metric.objects.bulk_create(service.stamp(rows), batch_size=1000)
+        created = models.Metric.objects.bulk_create(
+            service.stamp(rows), batch_size=1000
+        )
         organization = info.context.request.organization.identifier
         record_changes([_change(metric, "CREATED", organization) for metric in created])
     return created
@@ -208,13 +279,22 @@ def delete_metric(info: Info, id: str) -> str:
     return id
 
 
-def record_pruned(sender: type[models.Metric], rows: QuerySet[models.Metric], **kwargs: object) -> None:
+def record_pruned(
+    sender: type[models.Metric], rows: QuerySet[models.Metric], **kwargs: object
+) -> None:
     """``prune_organizations`` deletes metrics past ``delete_metric``: each still gets its DELETED entry.
 
     Connected to ``arkitekt_service.server.prune.pruning``, sent inside the transaction that
     deletes ``rows`` -- so the entries commit with the delete, or not at all.
     """
-    record_changes([Change(FEED, "DELETED", str(pk), organization, uuid=uuid) for pk, uuid, organization in rows.values_list("pk", "uuid", "organization__identifier")])
+    record_changes(
+        [
+            Change(FEED, "DELETED", str(pk), organization, uuid=uuid)
+            for pk, uuid, organization in rows.values_list(
+                "pk", "uuid", "organization__identifier"
+            )
+        ]
+    )
 
 
 # --- the feed --------------------------------------------------------------------------------
@@ -237,7 +317,11 @@ def render(entries: list[Entry]) -> dict[str, JSON]:
 def _body(metric: models.Metric) -> JSON:
     task = metric.created_through
     return {
-        "target": {"identifier": metric.target.identifier, "object": metric.target.object, "uuid": str(metric.target.uuid)},
+        "target": {
+            "identifier": metric.target.identifier,
+            "object": metric.target.object,
+            "uuid": str(metric.target.uuid),
+        },
         "key": metric.key,
         "magnitude": metric.magnitude,
         "unit": metric.unit,
@@ -250,10 +334,20 @@ def _body(metric: models.Metric) -> JSON:
             "issuer": metric.creator.iss if metric.creator is not None else None,
         },
         "task": (
-            {"task_id": task.task_id, "root_task_id": task.root_task_id, "parent_task_id": task.parent_task_id, "agent_sub": task.agent_sub, "agent_client_id": task.agent_client_id, "caller_sub": task.caller_sub, "assigner_sub": task.assigner_sub}
+            {
+                "task_id": task.task_id,
+                "root_task_id": task.root_task_id,
+                "parent_task_id": task.parent_task_id,
+                "agent_sub": task.agent_sub,
+                "agent_client_id": task.agent_client_id,
+                "caller_sub": task.caller_sub,
+                "assigner_sub": task.assigner_sub,
+            }
             if task is not None
             else None
         ),
-        "supersedes": str(metric.supersedes.uuid) if metric.supersedes is not None else None,
+        "supersedes": str(metric.supersedes.uuid)
+        if metric.supersedes is not None
+        else None,
         "created_at": metric.created_at.isoformat(),
     }

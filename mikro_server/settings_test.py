@@ -55,7 +55,11 @@ AUTHENTIKATE = {
             "viewertest": {"sub": "4", "roles": []},
             # The user of "test" calling through a different app: app-scoped space references
             # (tests/test_coordinate_system_api.py) are namespaced by the app, not the user.
-            "otherapptest": {"sub": "1", "client_id": "other_app_client", "client_app": "other_app"},
+            "otherapptest": {
+                "sub": "1",
+                "client_id": "other_app_client",
+                "client_app": "other_app",
+            },
             # The same user through a token naming no release, so its client belongs to no app.
             "noapptest": {"sub": "1", "client_id": "bare_client", "client_release": ""},
             # An app granted only what it reads, for the scope tests (tests/test_scopes.py).
@@ -88,4 +92,3 @@ DATABASE_ROUTERS = []
 
 # Use in-memory channel layer for tests instead of Redis
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-

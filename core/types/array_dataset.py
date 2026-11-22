@@ -1,63 +1,75 @@
 import datetime
 import math
+from typing import TYPE_CHECKING, Annotated, Optional
 
-from django.db.models import Prefetch
-
-import strawberry
-from strawberry import auto
-from typing import TYPE_CHECKING, Annotated, List, Optional
-from core import models, scalars, filters, enums
-from kante.types import Info
-from lightpath.objects.types import LightpathGraph
-from optikit.models import OptikitStateModel
-from optikit.types import OptikitStateGraph
-from lightpath.objects.models import LightpathGraphModel
-from core.render.layer.types import LabelColorBy, LabelFilterBy, LabelRender, LayerRenderGraph, MeshColorBy, MeshFilterBy, NetworkColorBy, NetworkFilterBy, PhasorRender
-from core.render.layer.label import LabelRenderModel
-from core.render import color_by as color_by_models
-from core.render import filter_by as filter_by_models
-from core.render.layer.models import LayerRenderGraphModel, PhasorRenderModel
-from core.render.camera.types import CameraState
-from core.render.camera.models import CameraStateModel
-from core.inputs.coords import CoordinateInput, at_map
-from core.inputs import SliceInput, WindowInput
-from strawberry_django.pagination import OffsetPaginationInput
-from core.types.visualization import Visualization
-from core.types.coords import (
-    AffinePlacement,
-    AxisVoxelSize,
-    PlacementField,
-    VoxelSize,
-    CoordinateSystem,
-    Fixture,
-    MeshCollection,
-    NetworkCollection,
-    PlacementStep,
-    Resident,
-    Transformation,
-)
 import kante
-from strawberry.scalars import JSON
-from arkitekt_datalayer.types import MediaStore, ZarrStore
+import strawberry
 from arkitekt_datalayer.scalars import ByteCount
-from core.logic.sizes import array_dataset_size_bytes
-from core.scoping import for_org, scope_queryset
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
-from core.type_gen import create_stats_type
+from arkitekt_datalayer.types import MediaStore, ZarrStore
+from django.db.models import Prefetch
+from kante.types import Info
+from strawberry import auto
+from strawberry.scalars import JSON
+from strawberry_django.pagination import OffsetPaginationInput
 
-from kanne_server import scalars as kanne_scalars
-
+from core import base_models, enums, filters, models, order, scalars
 from core import descriptors as descriptors_logic
-from core import order, base_models
+from core.inputs import SliceInput, WindowInput
+from core.inputs.coords import CoordinateInput, at_map
 from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.logic import phasor as phasor_logic
 from core.logic import scene_graph
-
+from core.logic.sizes import array_dataset_size_bytes
+from core.render import color_by as color_by_models
+from core.render import filter_by as filter_by_models
+from core.render.camera.models import CameraStateModel
+from core.render.camera.types import CameraState
+from core.render.layer.label import LabelRenderModel
+from core.render.layer.models import LayerRenderGraphModel, PhasorRenderModel
+from core.render.layer.types import (
+    LabelColorBy,
+    LabelFilterBy,
+    LabelRender,
+    LayerRenderGraph,
+    MeshColorBy,
+    MeshFilterBy,
+    NetworkColorBy,
+    NetworkFilterBy,
+    PhasorRender,
+)
+from core.scoping import for_org, scope_queryset
+from core.type_gen import create_stats_type
+from core.types._shared import (
+    DESCRIPTORS_DESCRIPTION,
+    OrgScoped,
+    apply_link_filters,
+    build_prescoped_queryset,
+    resolve_descriptors,
+)
 from core.types.auth import ProvenanceEntry, Task, User
+from core.types.coords import (
+    AffinePlacement,
+    AxisVoxelSize,
+    CoordinateSystem,
+    Fixture,
+    MeshCollection,
+    NetworkCollection,
+    PlacementField,
+    PlacementStep,
+    Resident,
+    Transformation,
+    VoxelSize,
+)
+from core.types.visualization import Visualization
 from embeddings.strawberry import Embedding, embedding_of
+from kanne_server import scalars as kanne_scalars
+from lightpath.objects.models import LightpathGraphModel
+from lightpath.objects.types import LightpathGraph
+from optikit.models import OptikitStateModel
+from optikit.types import OptikitStateGraph
 
 if TYPE_CHECKING:
     # Only for the lazy annotation on the file-link fields below; importing it at runtime
@@ -78,7 +90,13 @@ _LATEST_SNAPSHOT_KEY = "latest_snapshot_by_scene"
 _FULL_LENSES_ATTR = "_prefetched_full_lenses"
 #: The whole lens with its nomination, for the dataset's `defaultScene`/`latestSnapshot`: a second prefetch of the same row, under its own name so the two hints never collide.
 _NOMINATING_LENS_ATTR = "_prefetched_nominating_lens"
-_NOMINATING_LENS_PREFETCH = lambda info: Prefetch("lenses", queryset=models.ArrayLens.objects.filter(slices=[]).select_related("default_scene").order_by("pk"), to_attr=_NOMINATING_LENS_ATTR)  # noqa: E731
+_NOMINATING_LENS_PREFETCH = lambda info: Prefetch(  # noqa: E731
+    "lenses",
+    queryset=models.ArrayLens.objects.filter(slices=[])
+    .select_related("default_scene")
+    .order_by("pk"),
+    to_attr=_NOMINATING_LENS_ATTR,
+)
 
 
 def _nominating_lens(dataset) -> "models.ArrayLens | None":  # noqa: ANN001 - the ArrayDataset row
@@ -86,7 +104,12 @@ def _nominating_lens(dataset) -> "models.ArrayLens | None":  # noqa: ANN001 - th
     prefetched = getattr(dataset, _NOMINATING_LENS_ATTR, None)
     if prefetched is not None:
         return prefetched[0] if prefetched else None
-    return models.ArrayLens.objects.filter(dataset=dataset, slices=[]).select_related("default_scene").order_by("pk").first()
+    return (
+        models.ArrayLens.objects.filter(dataset=dataset, slices=[])
+        .select_related("default_scene")
+        .order_by("pk")
+        .first()
+    )
 
 
 def _latest_snapshot_map(info: Info) -> "dict[int, models.SceneSnapshot] | None":
@@ -113,7 +136,9 @@ def _latest_snapshot_map(info: Info) -> "dict[int, models.SceneSnapshot] | None"
     by_scene = loaders.get(_LATEST_SNAPSHOT_KEY)
     if by_scene is None:
         rows = (
-            models.SceneSnapshot.objects.filter(organization=info.context.request.organization)
+            models.SceneSnapshot.objects.filter(
+                organization=info.context.request.organization
+            )
             .select_related("store")
             .order_by("scene_id", "-created_at", "-pk")
             .distinct("scene_id")
@@ -155,7 +180,11 @@ def _scene_snapshot(info: Info, scene_id: "int | None") -> "SceneSnapshot | None
         return None
     by_scene = _latest_snapshot_map(info)
     if by_scene is None:
-        return models.SceneSnapshot.objects.filter(scene_id=scene_id).order_by("-created_at", "-pk").first()
+        return (
+            models.SceneSnapshot.objects.filter(scene_id=scene_id)
+            .order_by("-created_at", "-pk")
+            .first()
+        )
     return by_scene.get(scene_id)
 
 
@@ -169,7 +198,11 @@ def _scene_snapshot(info: Info, scene_id: "int | None") -> "SceneSnapshot | None
 class ArrayDataset(OrgScoped):
     """A multi-dimensional array dataset with named dimensions, described by its intrinsic pixel-grid coordinate system."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
     @kante.django_field(
         description=(
@@ -178,16 +211,20 @@ class ArrayDataset(OrgScoped):
             "refused -- an axis the dataset lacks, an axis sliced twice, a window that selects nothing"
         )
     )
-    def descriptors_sliced(self, info: Info, slices: List[SliceInput]) -> Optional[JSON]:
+    def descriptors_sliced(self, info: Info, slices: list[SliceInput]) -> JSON | None:
         """The descriptors of this dataset's lens for ``slices``, computed over an unsaved lens."""
         return coordinate_system_logic.sliced_descriptors(self, slices)
 
-    @kante.django_field(description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    @kante.django_field(
+        description="This dataset's stored vector, as `<model id>:<floats>`. Null until it has been indexed."
+    )
     def embedding(self) -> Embedding | None:
         return embedding_of(self)
 
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
-        description="The folder this dataset is filed in. Organisational only: it says where a user keeps this dataset, never where the data sits in space -- that is `intrinsicSystem` and the edges out of it"
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(
+            description="The folder this dataset is filed in. Organisational only: it says where a user keeps this dataset, never where the data sits in space -- that is `intrinsicSystem` and the edges out of it"
+        )
     )
 
     @kante.django_field(
@@ -198,46 +235,72 @@ class ArrayDataset(OrgScoped):
         ),
         prefetch_related=["file_links__file"],
     )
-    def source_files(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def source_files(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file this dataset was produced from."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
+            filters,
+            info,
+        )
 
     @kante.django_field(
         description="The files written out of this dataset: an OME-TIFF export, a rendered snapshot registered as a file. The mirror of `sourceFiles`",
         prefetch_related=["file_links__file"],
     )
-    def exports(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def exports(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file written out of this dataset."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION),
+            filters,
+            info,
+        )
 
     id: auto
     name: auto
     description: str | None
-    created_at: datetime.datetime = kante.django_field(description="When this dataset was created")
-    size_bytes: Optional[ByteCount] = kante.django_field(
+    created_at: datetime.datetime = kante.django_field(
+        description="When this dataset was created"
+    )
+    size_bytes: ByteCount | None = kante.django_field(
         annotate=lambda info: array_dataset_size_bytes(),
         description="The bytes this dataset holds: every level of its pyramid, as their stores measured them when the upload finished. Null when no store could be measured",
     )
     # `name` and `description` are the only two fields `updateArrayDataset` can reach, which is
     # exactly why the audit trail is worth reading: a rename is the one thing about a dataset
     # that can change, so who changed it is the one history there is to keep.
-    provenance_entries: List["ProvenanceEntry"] = kante.django_field(
+    provenance_entries: list["ProvenanceEntry"] = kante.django_field(
         description="Every change made to this dataset: who created it, and every subsequent rename or redescription, attributed to the client, user and task it happened under. Only `name` and `description` can change -- the arrays, the axes and the coordinate systems built from them are fixed at creation"
     )
-    created_through: Task | None = kante.django_field(description="The task this dataset was created through, if any")
-    anchors: List["CoordinateAnchor"] = kante.django_field(
+    created_through: Task | None = kante.django_field(
+        description="The task this dataset was created through, if any"
+    )
+    anchors: list["CoordinateAnchor"] = kante.django_field(
         description="The coordinate anchors of this dataset, each pinning metadata spokes -- a microscope state, OME metadata, a value histogram, a channel label -- to some of its level-0 coordinates"
     )
-    created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
     # Described by their own fields: the help text names the deriver (core.derived).
-    acquisition_start: datetime.datetime | None = kante.django_field(description=models.ArrayDataset._meta.get_field("acquisition_start").help_text)
-    acquisition_end: datetime.datetime | None = kante.django_field(description=models.ArrayDataset._meta.get_field("acquisition_end").help_text)
-    derivation_conflicts: List["DerivationConflict"] = kante.django_field(
+    acquisition_start: datetime.datetime | None = kante.django_field(
+        description=models.ArrayDataset._meta.get_field("acquisition_start").help_text
+    )
+    acquisition_end: datetime.datetime | None = kante.django_field(
+        description=models.ArrayDataset._meta.get_field("acquisition_end").help_text
+    )
+    derivation_conflicts: list["DerivationConflict"] = kante.django_field(
         description="Anchors of this dataset that cannot all be true, found while deriving its columns: an anchor contradicting one it holds over. Each leaves its column null. Empty when the metadata is consistent"
     )
-    data_arrays: List["DataArray"] = kante.django_field(description="The multiscale data arrays belonging to this dataset")
+    data_arrays: list["DataArray"] = kante.django_field(
+        description="The multiscale data arrays belonging to this dataset"
+    )
 
-    @kante.django_field(description="The dataset's INTRINSIC coordinate system: its level-0 pixel grid, the space every pyramid level and lens maps into and the space ROIs resolve against. Structural and unit-independent")
+    @kante.django_field(
+        description="The dataset's INTRINSIC coordinate system: its level-0 pixel grid, the space every pyramid level and lens maps into and the space ROIs resolve against. Structural and unit-independent"
+    )
     def intrinsic_system(self, info: Info) -> CoordinateSystem | None:
         """The dataset's INTRINSIC coordinate system."""
         return self.intrinsic_coordinate_system
@@ -245,14 +308,14 @@ class ArrayDataset(OrgScoped):
     @kante.django_field(
         description="The edges from this dataset's pixel grid back into the lenses it was computed from, when it is a derived dataset: one for a deconvolution or a resample, several for a fusion of channels or tiles. Empty for a dataset that was acquired rather than derived. The order is the priority its creator declared: the first edge is the primary parent, the one that places the dataset. They are edges, not labels: each carries the map itself, so a client can compose it -- and they are why a derived dataset inherits its sources' placements instead of needing its own registration"
     )
-    def derived_from(self, info: Info) -> List[Transformation]:
+    def derived_from(self, info: Info) -> list[Transformation]:
         """The stored derivation edges, primary parent first, if this dataset was computed from others."""
         return graph_logic.derivation_edges(self)
 
     @kante.django_field(
         description="The datasets computed from this one -- the other end of `derivedFrom`, and the way to ask what a source produced: the deconvolutions, segmentations and projections that named a space of this dataset as their parent. Derived from the same edges, never a stored back-reference that could disagree with them. Every child, not just those this dataset places: a fusion that named this source second is listed here, and so is a child whose derivation is UNMAPPABLE -- it came from here even though its geometry did not survive. The maps themselves are on each child's own `derivedFrom`"
     )
-    def derived_datasets(self, info: Info) -> List["ArrayDataset"]:
+    def derived_datasets(self, info: Info) -> list["ArrayDataset"]:
         """The datasets whose derivation edges land in one of this dataset's spaces."""
         return graph_logic.derived_datasets(self)
 
@@ -263,16 +326,21 @@ class ArrayDataset(OrgScoped):
             "*datasets*. Same edges, same kind-blindness: an UNMAPPABLE child came from here even though its geometry did not survive"
         )
     )
-    def derived_residents(self, info: Info) -> List[Resident]:
+    def derived_residents(self, info: Info) -> list[Resident]:
         """Every container whose derivation edges land in one of this dataset's spaces."""
         return graph_logic.derived_containers(self)
 
-    @kante.django_field(description="How many containers `derivedResidents` lists: a count for a tile, without loading what they are")
+    @kante.django_field(
+        description="How many containers `derivedResidents` lists: a count for a tile, without loading what they are"
+    )
     def derived_residents_count(self, info: Info) -> int:
         """The number of containers derived from this dataset."""
         return len(graph_logic.derived_containers(self))
 
-    @kante.django_field(prefetch_related=["data_arrays"], description="Whether this dataset carries a resolution pyramid. Derived: true when it has more than one level")
+    @kante.django_field(
+        prefetch_related=["data_arrays"],
+        description="Whether this dataset carries a resolution pyramid. Derived: true when it has more than one level",
+    )
     def multiscale(self, info: Info) -> bool:
         """Whether the dataset has more than one pyramid level."""
         return self.multiscale
@@ -281,7 +349,7 @@ class ArrayDataset(OrgScoped):
         prefetch_related=["coordinate_system__axes"],
         description="The dataset's axis names, in array order. Derived from the axes of its intrinsic coordinate system",
     )
-    def axis_names(self, info: Info) -> List[str]:
+    def axis_names(self, info: Info) -> list[str]:
         """The dataset's axis names."""
         return self.axis_names
 
@@ -297,7 +365,9 @@ class ArrayDataset(OrgScoped):
     )
     def pyramid_is_label_compliant(self, info: Info) -> bool | None:
         """Whether every downsampled level was built by picking rather than averaging."""
-        methods = [array.scale_method for array in self.data_arrays.all() if array.level != 0]
+        methods = [
+            array.scale_method for array in self.data_arrays.all() if array.level != 0
+        ]
         if not methods:
             return True
         if all(method is None for method in methods):
@@ -307,21 +377,28 @@ class ArrayDataset(OrgScoped):
     @kante.django_field(
         description="What this dataset structurally is, materialized at creation from the axes of its intrinsic coordinate system and its level-0 shape: the one spatial spec its SPACE axes denote, then a modifier per non-spatial axis type: the acquisition ones (TIMESERIES, MULTICHANNEL, SPECTRAL, FLIM), then the ones that say what the values or positions are (DISPLACEMENT_FIELD, COORDINATE_FIELD, INDEXED). An axis counts only when it has more than one position. A 3D timelapse is [VOLUME, TIMESERIES, MULTICHANNEL]; a 2D flow field is [IMAGE, DISPLACEMENT_FIELD]. Last comes TRACE, for a dataset that is a curve along one measured axis: a decay is [SCALAR, FLIM, TRACE], a line profile per channel [PROFILE, MULTICHANNEL, TRACE]. A stack stored with a single plane is an IMAGE, and a single frame is not a TIMESERIES; `hasAxisTypes` is the filter for whether an axis is declared at all. Empty while the intrinsic system does not exist yet"
     )
-    def spec(self, info: Info) -> List[enums.ArrayDatasetSpec]:
+    def spec(self, info: Info) -> list[enums.ArrayDatasetSpec]:
         """Every spec the dataset's axes satisfy."""
         return self.spec
 
-    @kante.django_field(prefetch_related=["data_arrays"], description="The dataset's shape: that of its level-0 array")
-    def shape(self, info: Info) -> List[int]:
+    @kante.django_field(
+        prefetch_related=["data_arrays"],
+        description="The dataset's shape: that of its level-0 array",
+    )
+    def shape(self, info: Info) -> list[int]:
         """The dataset's shape."""
         return self.shape_list
 
     @kante.django_field(
         description="The scenes this dataset is rendered in, reached through its lenses' layers. Derived, never stored: a scene is a composition and this is a fact of the graph, so there is no dataset-to-scene column that could disagree with it. A scene shows this dataset once a layer over one of its lenses is composed there -- typically by staging one of its spaces with createSceneFromCoordinateSystem"
     )
-    def scenes(self, info: Info) -> List["Scene"]:
+    def scenes(self, info: Info) -> list["Scene"]:
         """The scenes this dataset is rendered in, through its lenses' layers."""
-        return list(models.Scene.objects.filter(layers__lens__arraylens__dataset=self).distinct())
+        return list(
+            models.Scene.objects.filter(
+                layers__lens__arraylens__dataset=self
+            ).distinct()
+        )
 
     @kante.django_field(
         description=(
@@ -329,7 +406,7 @@ class ArrayDataset(OrgScoped):
             "selects everything, which is `fullLens`. A list for people wants `sliced: true` and `fullLens` beside it"
         )
     )
-    def lenses(self, info: Info, sliced: Optional[bool] = None) -> List["ArrayLens"]:
+    def lenses(self, info: Info, sliced: bool | None = None) -> list["ArrayLens"]:
         """The dataset's lenses, optionally only the sliced or only the unsliced ones."""
         lenses = self.lenses.order_by("pk")
         if sliced is None:
@@ -338,7 +415,13 @@ class ArrayDataset(OrgScoped):
 
     @kante.django_field(
         # One query for a page of datasets rather than one a row: every tile links to this.
-        prefetch_related=[lambda info: Prefetch("lenses", queryset=models.ArrayLens.objects.filter(slices=[]).order_by("pk"), to_attr=_FULL_LENSES_ATTR)],
+        prefetch_related=[
+            lambda info: Prefetch(
+                "lenses",
+                queryset=models.ArrayLens.objects.filter(slices=[]).order_by("pk"),
+                to_attr=_FULL_LENSES_ATTR,
+            )
+        ],
         description=(
             "The lens that selects this whole dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and the whole array is meant. Every dataset is "
             "created with one, and there is one; null only for a dataset with no pixel grid to select from -- reading never mints one"
@@ -372,17 +455,21 @@ class ArrayDataset(OrgScoped):
             "of the dataset**: snapshots are taken of compositions, so if the nominated scene stages other data too, the tile shows that data as well. This used to answer instead "
             "from *sole occupancy* -- the newest picture of a scene whose only anchored dataset was this one -- which guaranteed the picture showed nothing else but returned null "
             "for every dataset staged alongside another, and cost a five-query graph walk per request to decide"
-        )
+        ),
     )
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
         """The newest picture of the scene this dataset nominates."""
         return _default_scene_snapshot(info, self)
 
 
-@strawberry.type(description="How much one step along an axis spans, measured against another grid's steps")
+@strawberry.type(
+    description="How much one step along an axis spans, measured against another grid's steps"
+)
 class AxisScaleFactor:
     axis: str = strawberry.field(description="The axis, by name")
-    factor: float = strawberry.field(description="How many steps of the other grid one step along this axis spans")
+    factor: float = strawberry.field(
+        description="How many steps of the other grid one step along this axis spans"
+    )
 
 
 @kante.django_type(
@@ -421,7 +508,10 @@ class DataArray(OrgScoped):
 
     @kante.django_field(
         select_related=["coordinate_system", "dataset__coordinate_system"],
-        prefetch_related=["coordinate_system__axes", "dataset__coordinate_system__axes"],
+        prefetch_related=[
+            "coordinate_system__axes",
+            "dataset__coordinate_system__axes",
+        ],
         description=(
             "How many level-0 voxels one voxel of this level spans, per axis of this level, read off `toParent`: 4.0 on y and x for a level downsampled by four, 1.0 on an "
             "axis it keeps. Every 1.0 for level 0. Null when the edge does not condense into an affine map, which a stored level edge always does"
@@ -437,12 +527,18 @@ class DataArray(OrgScoped):
             return [AxisScaleFactor(axis=name, factor=1.0) for name in names]
         parent = self.dataset.coordinate_system
         try:
-            condensed = graph_logic.condense_path([(self.to_parent, False)], source_axes=names, destination_axes=[axis.name for axis in parent.axes.all()])
+            condensed = graph_logic.condense_path(
+                [(self.to_parent, False)],
+                source_axes=names,
+                destination_axes=[axis.name for axis in parent.axes.all()],
+            )
         except coords_logic.NonAffineTransformError:
             return None
         factors = []
         for column, name in enumerate(condensed.input_axes):
-            factor = math.sqrt(sum(row[column] * row[column] for row in condensed.matrix))
+            factor = math.sqrt(
+                sum(row[column] * row[column] for row in condensed.matrix)
+            )
             factors.append(AxisScaleFactor(axis=name, factor=factor))
         return factors
 
@@ -457,7 +553,9 @@ class OptikitState:
 
     id: auto
 
-    @kante.django_field(description="The recorded microscope state, reconstructed into its typed form: stage pose and environment as quantities, everything else as per-device named settings")
+    @kante.django_field(
+        description="The recorded microscope state, reconstructed into its typed form: stage pose and environment as quantities, everything else as per-device named settings"
+    )
     def state(self, info: Info) -> OptikitStateGraph:
         """The recorded microscope state."""
         return OptikitStateModel(**self.state)
@@ -504,8 +602,12 @@ class AcquisitionWindow:
     """When the data at a coordinate anchor's coordinates was acquired."""
 
     id: auto
-    start: datetime.datetime = kante.django_field(description="When the first of the data at these coordinates was acquired")
-    end: datetime.datetime = kante.django_field(description="When the last of it was acquired. Equal to start for one instant")
+    start: datetime.datetime = kante.django_field(
+        description="When the first of the data at these coordinates was acquired"
+    )
+    end: datetime.datetime = kante.django_field(
+        description="When the last of it was acquired. Equal to start for one instant"
+    )
 
 
 @kante.django_type(
@@ -516,8 +618,12 @@ class DerivationConflict:
     """Anchors of a dataset that cannot all be true."""
 
     id: auto
-    field: str = kante.django_field(description="The derived field the conflict left null, e.g. 'acquisition_start'")
-    reason: str = kante.django_field(description="What the anchors say that cannot all be true")
+    field: str = kante.django_field(
+        description="The derived field the conflict left null, e.g. 'acquisition_start'"
+    )
+    reason: str = kante.django_field(
+        description="What the anchors say that cannot all be true"
+    )
 
     @kante.django_field(description="The IDs of the anchors that contradict each other")
     def anchors(self, info: Info) -> list[strawberry.ID]:
@@ -547,7 +653,9 @@ class PositionLabel:
     id: auto
     label: str = kante.django_field(description="The name")
     creator: User | None = kante.django_field(description="Who gave the name")
-    created_at: datetime.datetime = kante.django_field(description="When the name was last given")
+    created_at: datetime.datetime = kante.django_field(
+        description="When the name was last given"
+    )
 
 
 @kante.django_type(
@@ -569,11 +677,15 @@ class PhasorHistogram:
     total: int | None
     calibrated: bool
 
-    @kante.django_field(description="The flattened bins x bins (g, s) density, row-major with s outermost")
+    @kante.django_field(
+        description="The flattened bins x bins (g, s) density, row-major with s outermost"
+    )
     def counts(self, info: Info) -> list[float]:
         return self.counts
 
-    @kante.django_field(description="The summed profile along the phasor axis (a decay for a MICROTIME axis, a spectrum for a SPECTRUM one), one value per bin")
+    @kante.django_field(
+        description="The summed profile along the phasor axis (a decay for a MICROTIME axis, a spectrum for a SPECTRUM one), one value per bin"
+    )
     def profile(self, info: Info) -> list[float]:
         return self.profile
 
@@ -607,23 +719,45 @@ class CoordinateAnchor:
     """The axis-agnostic hub that pins metadata spokes to specific coordinates of an array, table or sparse dataset."""
 
     id: auto
-    dataset: Optional[ArrayDataset] = kante.django_field(description="The array dataset this anchor pins into, or null otherwise")
-    table: Optional[Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(description="The table dataset this anchor pins into, or null otherwise")
-    sparse: Optional[Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")]] = kante.django_field(description="The sparse dataset this anchor pins into, or null otherwise")
+    dataset: ArrayDataset | None = kante.django_field(
+        description="The array dataset this anchor pins into, or null otherwise"
+    )
+    table: (
+        Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")] | None
+    ) = kante.django_field(
+        description="The table dataset this anchor pins into, or null otherwise"
+    )
+    sparse: (
+        Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")] | None
+    ) = kante.django_field(
+        description="The sparse dataset this anchor pins into, or null otherwise"
+    )
     # The reverse accessor from OptikitState.anchor is `microscope`, not `optikit_state`.
-    microscope: OptikitState | None = kante.django_field(description="The microscope state recorded at this coordinate")
+    microscope: OptikitState | None = kante.django_field(
+        description="The microscope state recorded at this coordinate"
+    )
     value_histogram: ValueHistogram | None
-    channel_label: ChannelLabel | None = kante.django_field(description="The channel label ingest recorded at this coordinate")
-    position_label: PositionLabel | None = kante.django_field(description="What a person calls the data at this coordinate (`setPositionLabel`): read before `channelLabel` when a lens is named")
+    channel_label: ChannelLabel | None = kante.django_field(
+        description="The channel label ingest recorded at this coordinate"
+    )
+    position_label: PositionLabel | None = kante.django_field(
+        description="What a person calls the data at this coordinate (`setPositionLabel`): read before `channelLabel` when a lens is named"
+    )
     light_graph: LightPath | None
-    acquisition_window: AcquisitionWindow | None = kante.django_field(description="When the data at these coordinates was acquired")
+    acquisition_window: AcquisitionWindow | None = kante.django_field(
+        description="When the data at these coordinates was acquired"
+    )
     # Declared below this type, hence the forward reference.
-    ome_metadata: Optional["OmeMetadata"] = kante.django_field(description="The OME image metadata recorded at this coordinate")
+    ome_metadata: Optional["OmeMetadata"] = kante.django_field(
+        description="The OME image metadata recorded at this coordinate"
+    )
     # Lists, not single spokes: one anchor may carry a phasor at several harmonics, and over
     # several axes -- neither of which the anchor's coordinates can pin.
     phasor_histograms: list[PhasorHistogram]
     phasor_calibrations: list[PhasorCalibration]
-    column_summaries: list[Annotated["ColumnSummary", strawberry.lazy("core.types.table_dataset")]] = kante.django_field(
+    column_summaries: list[
+        Annotated["ColumnSummary", strawberry.lazy("core.types.table_dataset")]
+    ] = kante.django_field(
         description="(table) What clients computed over the table's columns at this coordinate: one summary per column summarised"
     )
 
@@ -675,31 +809,42 @@ class OmeMetadata:
 class Scene(OrgScoped, Visualization):
     """A composition of layers over a shared world coordinate system."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
     id: auto
     name: auto
-    created_at: datetime.datetime | None = kante.django_field(description="When this scene was created. Null for a scene made before the time was kept whose history records none")
-    layers: List["Layer"] = kante.django_field(
+    created_at: datetime.datetime | None = kante.django_field(
+        description="When this scene was created. Null for a scene made before the time was kept whose history records none"
+    )
+    layers: list["Layer"] = kante.django_field(
         filters=filters.LayerFilter,
         ordering=order.LayerOrder,
         pagination=True,
         description="The layers placed in this scene (a heterogeneous list of layer kinds)",
     )
-    snapshots: List["SceneSnapshot"] = kante.django_field(
+    snapshots: list["SceneSnapshot"] = kante.django_field(
         filters=filters.SceneSnapshotFilter,
         ordering=order.SceneSnapshotOrder,
         pagination=True,
         description="The pre-rendered pictures of this composition, for previewing it without compositing the layers",
     )
-    animations: List["Animation"] = kante.django_field(
+    animations: list["Animation"] = kante.django_field(
         filters=filters.AnimationFilter,
         ordering=order.AnimationOrder,
         pagination=True,
         description="The named camera tours through this composition",
     )
-    preferred_view: enums.PreferredView = kante.django_field(description="How a viewer should open this scene: flat, volumetric, or its own choice. A preference, not a constraint -- nothing server-side reads it, and a viewer that cannot render volumes is not wrong to show the slice view")
-    background_color: list[float] | None = kante.django_field(description="The viewer background, as RGBA. Null lets the viewer use its own")
+    preferred_view: enums.PreferredView = kante.django_field(
+        description="How a viewer should open this scene: flat, volumetric, or its own choice. A preference, not a constraint -- nothing server-side reads it, and a viewer that cannot render volumes is not wrong to show the slice view"
+    )
+    background_color: list[float] | None = kante.django_field(
+        description="The viewer background, as RGBA. Null lets the viewer use its own"
+    )
+
     @kante.django_field(
         description=(
             "The lenses that nominate this scene as the one to open for them, and take their thumbnail from it -- a container's whole lens where the container was nominated for. Several "
@@ -707,10 +852,13 @@ class Scene(OrgScoped, Visualization):
             "coordinate graph derives"
         )
     )
-    def default_for(self, info: Info) -> List["Lens"]:
+    def default_for(self, info: Info) -> list["Lens"]:
         """The lenses nominating this scene."""
         return list(self.default_for_lenses.all())
-    @kante.django_field(description="The most recent picture of this composition -- the tile to put on the scene. Null until something snapshots it")
+
+    @kante.django_field(
+        description="The most recent picture of this composition -- the tile to put on the scene. Null until something snapshots it"
+    )
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
         """The newest picture of this scene."""
         by_scene = _latest_snapshot_map(info)
@@ -728,13 +876,18 @@ class Scene(OrgScoped, Visualization):
     # moved `registrations` off this type. They now hang off the space, as `placedSystems`
     # and `annotations`: ask `worldCoordinateSystem { ... }`.
 
-    @kante.django_field(description="The annotation collection minted for this scene as its default drawing surface, or null before the first annotation is drawn on it. Bookkeeping, not placement: what places the collection is its registration edge into this scene's world")
+    @kante.django_field(
+        description="The annotation collection minted for this scene as its default drawing surface, or null before the first annotation is drawn on it. Bookkeeping, not placement: what places the collection is its registration edge into this scene's world"
+    )
     def annotation_collection(self, info: Info) -> Optional["AnnotationCollection"]:
         """The scene's minted drawing surface, if any."""
         return getattr(self, "annotation_collection", None)
 
 
-@kante.pydantic_type(base_models.SliceModel, description="A slice along a named axis, with optional start, stop and step")
+@kante.pydantic_type(
+    base_models.SliceModel,
+    description="A slice along a named axis, with optional start, stop and step",
+)
 class Slice:
     """A slice along a named axis, with optional start, stop and step"""
 
@@ -744,7 +897,10 @@ class Slice:
     step: int | None
 
 
-@kante.pydantic_type(base_models.WindowModel, description="A value window along a named axis of a container that is not an array: the positions kept, by value, with an open side as null")
+@kante.pydantic_type(
+    base_models.WindowModel,
+    description="A value window along a named axis of a container that is not an array: the positions kept, by value, with an open side as null",
+)
 class Window:
     axis: str
     min: float | None
@@ -775,7 +931,11 @@ class Lens:
     """A selection over a container. The concrete kind says what the container is and how it is selected over."""
 
     id: auto
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
@@ -783,12 +943,16 @@ class Lens:
         scoped = build_prescoped_queryset(info, queryset)
         return scoped.with_sources() if hasattr(scoped, "with_sources") else scoped
 
-    @kante.django_field(description="What this lens selects over: an array by slices, or a table, a sparse dataset, a mesh, a network or an annotation collection by windows")
+    @kante.django_field(
+        description="What this lens selects over: an array by slices, or a table, a sparse dataset, a mesh, a network or an annotation collection by windows"
+    )
     def kind(self, info: Info) -> enums.LensKind:
         """The container kind, from the row's concrete model."""
         return enums.LensKind(type(self).KIND)
 
-    @kante.django_field(select_related=["coordinate_system"], description=_LENS_SYSTEM_DESCRIPTION)
+    @kante.django_field(
+        select_related=["coordinate_system"], description=_LENS_SYSTEM_DESCRIPTION
+    )
     def coordinate_system(self, info: Info) -> CoordinateSystem:
         """The system the lens' selection is expressed in: its own, or its container's."""
         return self.coordinate_system
@@ -829,21 +993,31 @@ class Lens:
             "position names, and for a kind whose container carries no anchors"
         )
     )
-    def name_anchors(self, info: Info) -> List["CoordinateAnchor"]:
+    def name_anchors(self, info: Info) -> list["CoordinateAnchor"]:
         """The anchors naming this lens."""
-        from core.logic import coords as coords_logic, lens_names as lens_names_logic
+        from core.logic import coords as coords_logic
+        from core.logic import lens_names as lens_names_logic
 
         real = self._real()
         pinned = coords_logic.pins(real.selection)
         if not pinned or type(real) not in lens_names_logic.ANCHOR_FIELD:
             return []
-        return lens_names_logic.holding_anchors(pinned, lens_names_logic.labelled_anchors(real.container))
-    created_at: datetime.datetime = kante.django_field(description="When this selection was first asked for; a whole lens, when its container was made")
+        return lens_names_logic.holding_anchors(
+            pinned, lens_names_logic.labelled_anchors(real.container)
+        )
+
+    created_at: datetime.datetime = kante.django_field(
+        description="When this selection was first asked for; a whole lens, when its container was made"
+    )
     creator: User | None = kante.django_field(
         description="Who made this selection: the first to ask for it. The container's creator for a whole lens, which exists from the container's creation. Asking for a selection that exists hands back the row and changes nothing"
     )
-    created_through: Task | None = kante.django_field(description="The task this selection was made under, if any")
-    created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
+    created_through: Task | None = kante.django_field(
+        description="The task this selection was made under, if any"
+    )
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
 
     @kante.django_field(
         description=(
@@ -854,14 +1028,20 @@ class Lens:
     def default_scene(self, info: Info) -> Optional["Scene"]:
         """The scene this lens nominates: its own when it selects something and has one, otherwise its container's."""
         scene_id = self.nominated_scene_id
-        return models.Scene.objects.filter(pk=scene_id).first() if scene_id is not None else None
+        return (
+            models.Scene.objects.filter(pk=scene_id).first()
+            if scene_id is not None
+            else None
+        )
 
-    @kante.django_field(description="The coordinate anchors inside this selection: an anchor global along an axis, or pinned inside the lens' range on it. Empty for a container kind that carries no anchors (meshes, networks, annotation collections)")
+    @kante.django_field(
+        description="The coordinate anchors inside this selection: an anchor global along an axis, or pinned inside the lens' range on it. Empty for a container kind that carries no anchors (meshes, networks, annotation collections)"
+    )
     def active_anchors(
         self,
         info: Info,
         within: Annotated[
-            Optional[List[WindowInput]],
+            list[WindowInput] | None,
             strawberry.argument(
                 description=(
                     "Narrow further to the anchors inside every one of these windows, in the container's own anchor coordinates (an array's indices, a table's values): "
@@ -869,16 +1049,28 @@ class Lens:
                 )
             ),
         ] = None,
-        pagination: Optional[OffsetPaginationInput] = None,
-    ) -> List[CoordinateAnchor]:
+        pagination: OffsetPaginationInput | None = None,
+    ) -> list[CoordinateAnchor]:
         """The anchors the selection keeps, optionally narrowed and paged, oldest first."""
         anchors = self.active_anchors
         if within:
-            anchors = models.anchors_in_windows(anchors, [base_models.WindowModel(axis=window.axis, min=window.min, max=window.max) for window in within])
+            anchors = models.anchors_in_windows(
+                anchors,
+                [
+                    base_models.WindowModel(
+                        axis=window.axis, min=window.min, max=window.max
+                    )
+                    for window in within
+                ],
+            )
         anchors = anchors.order_by("pk")
         if pagination is not None:
             offset = pagination.offset or 0
-            anchors = anchors[offset:] if pagination.limit is None or pagination.limit < 0 else anchors[offset : offset + pagination.limit]
+            anchors = (
+                anchors[offset:]
+                if pagination.limit is None or pagination.limit < 0
+                else anchors[offset : offset + pagination.limit]
+            )
         return list(anchors)
 
     @kante.django_field(
@@ -888,9 +1080,13 @@ class Lens:
             "container and a window or a crop for what it contains; a scene showing a selection that reaches outside this one is that selection's to report"
         )
     )
-    def scenes(self, info: Info) -> List["Scene"]:
+    def scenes(self, info: Info) -> list["Scene"]:
         """The scenes with a layer over this lens or a selection within it, whatever its kind."""
-        return list(models.Scene.objects.filter(layers__lens_id__in=coordinate_system_logic.lens_ids_within(self)).distinct())
+        return list(
+            models.Scene.objects.filter(
+                layers__lens_id__in=coordinate_system_logic.lens_ids_within(self)
+            ).distinct()
+        )
 
 
 @kante.django_type(
@@ -909,7 +1105,7 @@ class ArrayLens(Lens, OrgScoped):
     @kante.django_field(
         description="What this selection structurally is: its dataset's `spec` vocabulary, read over the shape its slices cut out. Materialized when the lens is made -- a lens and its dataset are immutable -- and what the `arraySpec` filter reads. An axis counts only when the lens keeps more than one position along it, so one plane of a [VOLUME, MULTICHANNEL] stack is [IMAGE, MULTICHANNEL], one channel of that is [IMAGE], and one row of an image is [PROFILE, TRACE]. The whole lens answers what its dataset does"
     )
-    def spec(self, info: Info) -> List[enums.ArrayDatasetSpec]:
+    def spec(self, info: Info) -> list[enums.ArrayDatasetSpec]:
         """Every spec the lens' axes satisfy at the shape it selects."""
         return self.spec
 
@@ -923,7 +1119,6 @@ class ArrayLens(Lens, OrgScoped):
     def latest_snapshot(self, info: Info) -> Optional["SceneSnapshot"]:
         """The newest picture of the scene this lens nominates, falling back to its dataset's."""
         return _scene_snapshot(info, self.nominated_scene_id)
-
 
     @kante.django_field(
         description=(
@@ -941,15 +1136,19 @@ class ArrayLens(Lens, OrgScoped):
         description=(
             "The descriptors `createLens(input: {lens: <this>, annotation:})` would give the lens it returns, without making it: what a crop of this lens to the shape's box "
             "provides to an action's port (one plane of a stack is an IMAGE, a pinned channel counts one). Null when the shape has no box or misses this lens -- the cut would be refused"
-        )
+        ),
     )
-    def descriptors_under(self, info: Info, annotation: strawberry.ID) -> Optional[JSON]:
+    def descriptors_under(self, info: Info, annotation: strawberry.ID) -> JSON | None:
         """The descriptors of this lens' crop to an annotation, computed over an unsaved lens."""
-        shape = scope_queryset(models.Annotation.objects.select_related("collection"), info).get(id=annotation)
+        shape = scope_queryset(
+            models.Annotation.objects.select_related("collection"), info
+        ).get(id=annotation)
         return coordinate_system_logic.cut_descriptors(self, shape)
 
-    @kante.django_field(description="The lens' axis names, in array order. A selection never drops or reorders an axis")
-    def axis_names(self, info: Info) -> List[str]:
+    @kante.django_field(
+        description="The lens' axis names, in array order. A selection never drops or reorders an axis"
+    )
+    def axis_names(self, info: Info) -> list[str]:
         """The lens' axis names."""
         return self.axis_names
 
@@ -960,14 +1159,22 @@ class ArrayLens(Lens, OrgScoped):
             "per lens, so read it on a lens, not across a page of them"
         )
     )
-    def color_by_options(self, info: Info, max_join_depth: int = 1) -> List[Annotated["ColorByOption", strawberry.lazy("core.types.column_options")]]:
+    def color_by_options(
+        self, info: Info, max_join_depth: int = 1
+    ) -> list[Annotated["ColorByOption", strawberry.lazy("core.types.column_options")]]:
         """The picker's candidates, built by the one function the write path validates against."""
-        from core.queries.column_options import label_color_by_options as resolve_options
+        from core.queries.column_options import (
+            label_color_by_options as resolve_options,
+        )
 
-        return resolve_options(info, strawberry.ID(str(self.pk)), max_join_depth=max_join_depth)
+        return resolve_options(
+            info, strawberry.ID(str(self.pk)), max_join_depth=max_join_depth
+        )
 
-    @kante.django_field(description="The shape this lens' slices cut out of its dataset")
-    def shape(self, info: Info) -> List[int]:
+    @kante.django_field(
+        description="The shape this lens' slices cut out of its dataset"
+    )
+    def shape(self, info: Info) -> list[int]:
         """The lens' shape."""
         return self.shape_list
 
@@ -980,10 +1187,21 @@ class ArrayLens(Lens, OrgScoped):
             "raises, so it is the form to put in a fragment"
         ),
     )
-    def voxel_size(self, info: Info) -> List[AxisVoxelSize]:
+    def voxel_size(self, info: Info) -> list[AxisVoxelSize]:
         """The canonical calibration's axes."""
-        canonical = next((calibration for calibration in _lens_calibrations(self) if calibration.canonical), None)
-        return [AxisVoxelSize.of(size) for size in canonical.sizes] if canonical is not None else []
+        canonical = next(
+            (
+                calibration
+                for calibration in _lens_calibrations(self)
+                if calibration.canonical
+            ),
+            None,
+        )
+        return (
+            [AxisVoxelSize.of(size) for size in canonical.sizes]
+            if canonical is not None
+            else []
+        )
 
     @kante.django_field(
         select_related=["dataset", "coordinate_system"],
@@ -992,7 +1210,7 @@ class ArrayLens(Lens, OrgScoped):
             "`voxelSize` is not what you expected: a rival calibration, its validity, its route, or why it was passed over (`problem`)"
         ),
     )
-    def voxel_sizes(self, info: Info) -> List[VoxelSize]:
+    def voxel_sizes(self, info: Info) -> list[VoxelSize]:
         """One entry per physical space reached."""
         return [
             VoxelSize(
@@ -1017,19 +1235,23 @@ class ArrayLens(Lens, OrgScoped):
     @kante.django_field(
         description="The datasets computed from this lens' selection: the direct other end of `derivedFrom`, which names a *lens* as a parent rather than a dataset. An unsliced lens reports what was derived from the whole intrinsic grid -- its space is that grid, so it can say nothing narrower. Like the forward field this reports every child, whether or not this lens is its primary parent and whether or not its geometry survived"
     )
-    def derived_datasets(self, info: Info) -> List[ArrayDataset]:
+    def derived_datasets(self, info: Info) -> list[ArrayDataset]:
         """The datasets whose derivation edges land in this lens' space."""
         return graph_logic.lens_derived_datasets(self)
 
-    @kante.django_field(description="The slices, in the one normalized spelling: dataset axis order, explicit ints, a step always present. Empty for the whole lens")
-    def slices(self, info: Info) -> List[Slice]:
+    @kante.django_field(
+        description="The slices, in the one normalized spelling: dataset axis order, explicit ints, a step always present. Empty for the whole lens"
+    )
+    def slices(self, info: Info) -> list[Slice]:
         """The stored slices."""
         return self.slices_list
 
     @kante.django_field(
         description="Everything needed to reduce one axis of this lens to a phasor: the bin count and width, the period the transform runs over, the laser rate, the instrument-response correction and the persisted distribution. Null when the lens has no MICROTIME or SPECTRUM axis. Derived -- none of it is stored on the lens, and a phasor render node references it rather than copying it, so two layers over one dataset cannot disagree about the instrument"
     )
-    def phasor(self, info: Info, axis: str | None = None, harmonic: int = 1) -> "PhasorContext | None":
+    def phasor(
+        self, info: Info, axis: str | None = None, harmonic: int = 1
+    ) -> "PhasorContext | None":
         """The phasor context of one axis of this lens, at one harmonic."""
         return resolve_phasor_context(self, axis_name=axis, harmonic=harmonic)
 
@@ -1046,47 +1268,69 @@ def _lens_calibrations(lens: "models.ArrayLens") -> "list[graph_logic.Calibratio
 _WINDOWS_DESCRIPTION = "The windows, in the one normalized spelling: container axis order, floats, an open side as null. Empty for the whole lens"
 
 
-@kante.django_type(models.TableLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a table dataset by value windows on its columns: the rows kept. A window on a coordinate column bounds a region of space; one on a numeric measurement column is a gate (`area >= 50`), which bounds nothing in space. Lives in the table's own space")
+@kante.django_type(
+    models.TableLens,
+    filters=filters.LensFilter,
+    ordering=order.LensOrder,
+    pagination=True,
+    description="A selection over a table dataset by value windows on its columns: the rows kept. A window on a coordinate column bounds a region of space; one on a numeric measurement column is a gate (`area >= 50`), which bounds nothing in space. Lives in the table's own space",
+)
 class TableLens(Lens, OrgScoped):
     """A selection over a table dataset."""
 
     id: auto
-    table_dataset: Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]
+    table_dataset: Annotated[
+        "TableDataset", strawberry.lazy("core.types.table_dataset")
+    ]
 
     @kante.django_field(
         description="What this selection structurally is: its table's `spec` vocabulary, read over what its windows leave free. Materialized when the lens is made, and what the `tableSpec` filter reads. A coordinate column a window pins to one value (min == max) no longer counts: one frame of a [POINTS_2D, TIMED, TRACKED] table is [POINTS_2D, TRACKED], and one z-plane of a POINTS_3D table is POINTS_2D. A window that only bounds changes nothing -- the server never scans the rows, so it cannot say they stopped spreading. The whole lens answers what its table does"
     )
-    def spec(self, info: Info) -> List[enums.TableDatasetSpec]:
+    def spec(self, info: Info) -> list[enums.TableDatasetSpec]:
         """Every spec the table's columns satisfy under the lens' pins."""
         return self.spec
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
-    def windows(self, info: Info) -> List[Window]:
+    def windows(self, info: Info) -> list[Window]:
         """The stored windows."""
         return self.windows_list
 
 
-@kante.django_type(models.SparseLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a sparse dataset by windows on its axes: the positions kept, never re-indexed. Lives in the dataset's own space")
+@kante.django_type(
+    models.SparseLens,
+    filters=filters.LensFilter,
+    ordering=order.LensOrder,
+    pagination=True,
+    description="A selection over a sparse dataset by windows on its axes: the positions kept, never re-indexed. Lives in the dataset's own space",
+)
 class SparseLens(Lens, OrgScoped):
     """A selection over a sparse dataset."""
 
     id: auto
-    sparse_dataset: Annotated["SparseDataset", strawberry.lazy("core.types.sparse_dataset")]
+    sparse_dataset: Annotated[
+        "SparseDataset", strawberry.lazy("core.types.sparse_dataset")
+    ]
 
     @kante.django_field(
         description="What this selection structurally is: its matrix's `spec` vocabulary, read over what its windows leave free. Materialized when the lens is made, and what the `sparseSpec` filter reads. An axis a window pins to one position (min == max) no longer counts, so one feature of a MATRIX is a VECTOR -- and a SLICE when it pins exactly the axes the matrix identifies itself by and a layout makes the read contiguous, which is what a SPARSE colour or filter picker entry accepts"
     )
-    def spec(self, info: Info) -> List[enums.SparseDatasetSpec]:
+    def spec(self, info: Info) -> list[enums.SparseDatasetSpec]:
         """Every spec the matrix satisfies under the lens' windows."""
         return self.spec
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
-    def windows(self, info: Info) -> List[Window]:
+    def windows(self, info: Info) -> list[Window]:
         """The stored windows."""
         return self.windows_list
 
 
-@kante.django_type(models.MeshLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a mesh collection by windows in its own space")
+@kante.django_type(
+    models.MeshLens,
+    filters=filters.LensFilter,
+    ordering=order.LensOrder,
+    pagination=True,
+    description="A selection over a mesh collection by windows in its own space",
+)
 class MeshLens(Lens, OrgScoped):
     """A selection over a mesh collection."""
 
@@ -1094,38 +1338,60 @@ class MeshLens(Lens, OrgScoped):
     mesh_collection: Annotated["MeshCollection", strawberry.lazy("core.types.coords")]
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
-    def windows(self, info: Info) -> List[Window]:
+    def windows(self, info: Info) -> list[Window]:
         """The stored windows."""
         return self.windows_list
 
 
-@kante.django_type(models.NetworkLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a network collection by windows in its own space")
+@kante.django_type(
+    models.NetworkLens,
+    filters=filters.LensFilter,
+    ordering=order.LensOrder,
+    pagination=True,
+    description="A selection over a network collection by windows in its own space",
+)
 class NetworkLens(Lens, OrgScoped):
     """A selection over a network collection."""
 
     id: auto
-    network_collection: Annotated["NetworkCollection", strawberry.lazy("core.types.coords")]
+    network_collection: Annotated[
+        "NetworkCollection", strawberry.lazy("core.types.coords")
+    ]
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
-    def windows(self, info: Info) -> List[Window]:
+    def windows(self, info: Info) -> list[Window]:
         """The stored windows."""
         return self.windows_list
 
 
-@kante.django_type(models.FixtureLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over a fixture by windows in its own space: a clip box, or the whole model")
+@kante.django_type(
+    models.FixtureLens,
+    filters=filters.LensFilter,
+    ordering=order.LensOrder,
+    pagination=True,
+    description="A selection over a fixture by windows in its own space: a clip box, or the whole model",
+)
 class FixtureLens(Lens, OrgScoped):
     """A selection over a fixture."""
 
     id: auto
-    fixture: Annotated["Fixture", strawberry.lazy("core.types.coords")] = kante.django_field(description="The fixture this lens selects over")
+    fixture: Annotated["Fixture", strawberry.lazy("core.types.coords")] = (
+        kante.django_field(description="The fixture this lens selects over")
+    )
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
-    def windows(self, info: Info) -> List[Window]:
+    def windows(self, info: Info) -> list[Window]:
         """The stored windows."""
         return self.windows_list
 
 
-@kante.django_type(models.AnnotationLens, filters=filters.LensFilter, ordering=order.LensOrder, pagination=True, description="A selection over an annotation collection by windows in its drawing space")
+@kante.django_type(
+    models.AnnotationLens,
+    filters=filters.LensFilter,
+    ordering=order.LensOrder,
+    pagination=True,
+    description="A selection over an annotation collection by windows in its drawing space",
+)
 class AnnotationLens(Lens, OrgScoped):
     """A selection over an annotation collection."""
 
@@ -1133,7 +1399,7 @@ class AnnotationLens(Lens, OrgScoped):
     annotation_collection: "AnnotationCollection"
 
     @kante.django_field(description=_WINDOWS_DESCRIPTION)
-    def windows(self, info: Info) -> List[Window]:
+    def windows(self, info: Info) -> list[Window]:
         """The stored windows."""
         return self.windows_list
 
@@ -1143,10 +1409,12 @@ class AnnotationLens(Lens, OrgScoped):
             "annotation for a whole lens. Decided per shape, so it costs a read of the collection"
         )
     )
-    def annotations(self, info: Info) -> List["Annotation"]:
+    def annotations(self, info: Info) -> list["Annotation"]:
         """The shapes inside the windows: every one of the collection's for the whole lens."""
         del info
-        return descriptors_logic.annotations_in_windows(self.annotation_collection, [] if self.is_whole else self.windows_list)
+        return descriptors_logic.annotations_in_windows(
+            self.annotation_collection, [] if self.is_whole else self.windows_list
+        )
 
 
 @kante.django_type(
@@ -1158,13 +1426,25 @@ class AnimationWaypoint:
     """One camera pose in a tour, and how the viewer travels to it."""
 
     id: auto
-    animation: "Animation" = kante.django_field(description="The tour this pose belongs to")
-    order: int = kante.django_field(description="The pose's index in the tour. Written by enumeration when the tour is authored, so it always runs 0, 1, 2 ... with no gaps")
-    name: str = kante.django_field(description="What this stop shows, e.g. 'the nucleus'")
-    duration_ms: int = kante.django_field(description="How long the viewer takes to travel TO this pose, in milliseconds. Ignored for the first pose, which is where the tour starts")
-    easing: enums.Easing = kante.django_field(description="How the viewer eases the camera along that travel")
+    animation: "Animation" = kante.django_field(
+        description="The tour this pose belongs to"
+    )
+    order: int = kante.django_field(
+        description="The pose's index in the tour. Written by enumeration when the tour is authored, so it always runs 0, 1, 2 ... with no gaps"
+    )
+    name: str = kante.django_field(
+        description="What this stop shows, e.g. 'the nucleus'"
+    )
+    duration_ms: int = kante.django_field(
+        description="How long the viewer takes to travel TO this pose, in milliseconds. Ignored for the first pose, which is where the tour starts"
+    )
+    easing: enums.Easing = kante.django_field(
+        description="How the viewer eases the camera along that travel"
+    )
 
-    @kante.django_field(description="Where the camera is: a position keyed by the world's axis names, plus the flat and volumetric views of it")
+    @kante.django_field(
+        description="Where the camera is: a position keyed by the world's axis names, plus the flat and volumetric views of it"
+    )
     def camera(self, info: Info) -> CameraState:
         """The camera pose, rehydrated from its stored dump."""
         return CameraStateModel(**self.camera)
@@ -1180,17 +1460,25 @@ class AnimationWaypoint:
 class Animation:
     """A named camera tour of a scene: the poses a viewer pans through, in order."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION
+    )
 
     id: auto
     scene: "Scene" = kante.django_field(description="The scene this tour flies through")
     name: str
     description: str | None
-    waypoints: List[AnimationWaypoint] = kante.django_field(description="The poses the viewer pans through, in tour order")
+    waypoints: list[AnimationWaypoint] = kante.django_field(
+        description="The poses the viewer pans through, in tour order"
+    )
     created_at: datetime.datetime
     creator: User | None
-    created_through: Task | None = kante.django_field(description="The task this tour was created through, if any")
-    created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
+    created_through: Task | None = kante.django_field(
+        description="The task this tour was created through, if any"
+    )
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
@@ -1208,16 +1496,26 @@ class Animation:
 class SceneSnapshot:
     """A pre-rendered picture of a composition: every layer of the scene, blended."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors, description=DESCRIPTORS_DESCRIPTION
+    )
 
     id: auto
-    scene: "Scene" = kante.django_field(description="The composition this is a picture of")
-    store: MediaStore = kante.django_field(description="The media store holding the rendered image. Ask it for an accessGrant to actually fetch the bytes")
+    scene: "Scene" = kante.django_field(
+        description="The composition this is a picture of"
+    )
+    store: MediaStore = kante.django_field(
+        description="The media store holding the rendered image. Ask it for an accessGrant to actually fetch the bytes"
+    )
     name: str
     created_at: datetime.datetime
     creator: User | None
-    created_through: Task | None = kante.django_field(description="The task this snapshot was created through, if any")
-    created_through_by: User | None = kante.django_field(description="The assigner of the creating task, if any")
+    created_through: Task | None = kante.django_field(
+        description="The task this snapshot was created through, if any"
+    )
+    created_through_by: User | None = kante.django_field(
+        description="The assigner of the creating task, if any"
+    )
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
@@ -1225,18 +1523,31 @@ class SceneSnapshot:
         return build_prescoped_queryset(info, queryset)
 
 
-@kante.type(description="Which axis of a data source maps to screen x, y, z, time and intensity. Derived from the axis types, never stored")
+@kante.type(
+    description="Which axis of a data source maps to screen x, y, z, time and intensity. Derived from the axis types, never stored"
+)
 class RenderAxes:
     """Which axis of a data source maps to screen x, y, z, time and intensity."""
 
-    x: str = strawberry.field(description="The axis mapped to screen x: the last (fastest-varying) spatial axis")
-    y: str = strawberry.field(description="The axis mapped to screen y: the second-to-last spatial axis")
-    z: str | None = strawberry.field(description="The axis mapped to screen z: the third-to-last spatial axis, if the data is volumetric")
+    x: str = strawberry.field(
+        description="The axis mapped to screen x: the last (fastest-varying) spatial axis"
+    )
+    y: str = strawberry.field(
+        description="The axis mapped to screen y: the second-to-last spatial axis"
+    )
+    z: str | None = strawberry.field(
+        description="The axis mapped to screen z: the third-to-last spatial axis, if the data is volumetric"
+    )
     t: str | None = strawberry.field(description="The time axis, if the data has one")
-    intensity: str | None = strawberry.field(description="The channel axis, if the data has one")
-    phasor: str | None = strawberry.field(description="The axis a phasor may be taken over -- a MICROTIME (FLIM arrival time) or SPECTRUM (wavelength) axis -- if the data has one")
-    vector: str | None = strawberry.field(description="The DISPLACEMENT value axis, if the data has one: its positions are the components of a per-point offset, which is what a vector layer draws")
-
+    intensity: str | None = strawberry.field(
+        description="The channel axis, if the data has one"
+    )
+    phasor: str | None = strawberry.field(
+        description="The axis a phasor may be taken over -- a MICROTIME (FLIM arrival time) or SPECTRUM (wavelength) axis -- if the data has one"
+    )
+    vector: str | None = strawberry.field(
+        description="The DISPLACEMENT value axis, if the data has one: its positions are the components of a per-point offset, which is what a vector layer draws"
+    )
 
 
 @kante.type(
@@ -1246,9 +1557,15 @@ class PhasorContext:
     """Everything needed to reduce one axis of a lens to a phasor, at one harmonic."""
 
     axis: str = strawberry.field(description="The axis the phasor is taken over")
-    axis_type: enums.AxisType = strawberry.field(description="What that axis samples: MICROTIME (so the phase reads as a fluorescence lifetime) or SPECTRUM (so it reads as a spectral centre of mass)")
-    bins: int = strawberry.field(description="The number of bins along that axis on this lens: the N of the transform")
-    harmonic: int = strawberry.field(description="The harmonic this context was resolved for. It selects the calibration and the distribution below, which are both harmonic-specific")
+    axis_type: enums.AxisType = strawberry.field(
+        description="What that axis samples: MICROTIME (so the phase reads as a fluorescence lifetime) or SPECTRUM (so it reads as a spectral centre of mass)"
+    )
+    bins: int = strawberry.field(
+        description="The number of bins along that axis on this lens: the N of the transform"
+    )
+    harmonic: int = strawberry.field(
+        description="The harmonic this context was resolved for. It selects the calibration and the distribution below, which are both harmonic-specific"
+    )
     bin_width: kanne_scalars.GenericQuantity | None = strawberry.field(
         description="The physical width of one bin, from the physical space that scales the axis: a duration ('0.098 ns') for a microtime axis, a wavelength step ('5 nm') for a spectrum axis. Null when the dataset has no physical space -- the phasor is then computable only in bin units"
     )
@@ -1261,10 +1578,14 @@ class PhasorContext:
     calibration: "PhasorCalibration | None" = strawberry.field(
         description="The instrument-response correction at this axis and harmonic. Null means the phasor is uncalibrated -- which still renders, its hue is just not traceable to an absolute lifetime"
     )
-    phasor_histogram: "PhasorHistogram | None" = strawberry.field(description="The persisted (g, s) density at this axis and harmonic, so a client can range the overlay's colormap without reading the cube. Null until a task has computed one")
+    phasor_histogram: "PhasorHistogram | None" = strawberry.field(
+        description="The persisted (g, s) density at this axis and harmonic, so a client can range the overlay's colormap without reading the cube. Null until a task has computed one"
+    )
 
 
-def resolve_phasor_context(lens: "models.ArrayLens", axis_name: str | None, harmonic: int) -> "PhasorContext | None":
+def resolve_phasor_context(
+    lens: "models.ArrayLens", axis_name: str | None, harmonic: int
+) -> "PhasorContext | None":
     """Assemble the phasor context of one axis of a lens.
 
     The three acquisition facts a phasor needs live in three different places -- the bin width
@@ -1290,8 +1611,17 @@ def resolve_phasor_context(lens: "models.ArrayLens", axis_name: str | None, harm
     # k dataset bins, and the period it covers is that spacing times the lens' bin count. The
     # context reports the lens' own grid, so a stepped lens renders right rather than being
     # handed a window k times too short.
-    step = next((int(slice_.step or 1) for slice_ in lens.slices_list if slice_.axis == axis.name), 1)
-    bin_width = _scaled_quantity(_resolve_bin_width(dataset, axis.name, len(axis_specs)), step)
+    step = next(
+        (
+            int(slice_.step or 1)
+            for slice_ in lens.slices_list
+            if slice_.axis == axis.name
+        ),
+        1,
+    )
+    bin_width = _scaled_quantity(
+        _resolve_bin_width(dataset, axis.name, len(axis_specs)), step
+    )
 
     return PhasorContext(
         axis=axis.name,
@@ -1309,7 +1639,9 @@ def resolve_phasor_context(lens: "models.ArrayLens", axis_name: str | None, harm
     )
 
 
-def _resolve_bin_width(dataset: "models.ArrayDataset", axis_name: str, axis_count: int) -> str | None:
+def _resolve_bin_width(
+    dataset: "models.ArrayDataset", axis_name: str, axis_count: int
+) -> str | None:
     """The physical width of one bin along an axis, from the first physical space that scales it.
 
     **Takes the axis by name, and resolves it separately in each system.** It used to take one
@@ -1334,19 +1666,31 @@ def _resolve_bin_width(dataset: "models.ArrayDataset", axis_name: str, axis_coun
         return None
     axis_index = intrinsic_names.index(axis_name)
 
-    for system in graph_logic.physical_neighbours(dataset.coordinate_system) if dataset.coordinate_system else []:
-        edge = models.Transformation.objects.filter(input=intrinsic, output=system).first()
+    for system in (
+        graph_logic.physical_neighbours(dataset.coordinate_system)
+        if dataset.coordinate_system
+        else []
+    ):
+        edge = models.Transformation.objects.filter(
+            input=intrinsic, output=system
+        ).first()
         if edge is None:
             continue
 
-        scale = phasor_logic.axis_scale(phasor_logic.flatten_edge(edge.kind, edge.params, edge.step_pairs), axis_index, axis_count)
+        scale = phasor_logic.axis_scale(
+            phasor_logic.flatten_edge(edge.kind, edge.params, edge.step_pairs),
+            axis_index,
+            axis_count,
+        )
         if scale is None:
             continue
 
         # By name. A physical space that does not carry this axis at all says nothing about
         # its bin width -- so move on to the next neighbour rather than reading whatever
         # happens to sit at the same position.
-        unit = next((axis.unit for axis in system.axes.all() if axis.name == axis_name), None)
+        unit = next(
+            (axis.unit for axis in system.axes.all() if axis.name == axis_name), None
+        )
         if unit:
             return phasor_logic.quantity(scale, unit)
 
@@ -1410,17 +1754,26 @@ class Layer:
         made `layers` and `layer(id)` read every organization's layers.
         """
         queryset = build_prescoped_queryset(info, queryset)
-        return queryset.select_related(*scene_graph.LAYER_PLACEMENT_RELATIONS).prefetch_related(*scene_graph.LAYER_SOURCE_AXIS_PREFETCH)
+        return queryset.select_related(
+            *scene_graph.LAYER_PLACEMENT_RELATIONS
+        ).prefetch_related(*scene_graph.LAYER_SOURCE_AXIS_PREFETCH)
 
     @kante.django_field(
         description="The path of transformation edges from this layer's source coordinate system to its scene's world system. A layer belongs to exactly one scene, so this is the one 'to world' question with a single right answer -- the path uses the layer's dataset facts plus the world's registrations, which are the same for every scene over that space. Null when the layer is unregistered or has no source system; empty when the source already is the world system. Every step is here in full, with its own validity, invariance and provenance, which is what to ask for when you care *how* the data got placed; `asAffine` is the same path composed, for when you only need the map",
     )
-    def path_to_world(self, info: Info, at: List[CoordinateInput] | None = None) -> List[PlacementStep] | None:
+    def path_to_world(
+        self, info: Info, at: list[CoordinateInput] | None = None
+    ) -> list[PlacementStep] | None:
         """The layer's placement path, as (edge, inverted) steps."""
-        steps = scene_graph.for_request(info, self.scene).placement_path(self, at=at_map(at))
+        steps = scene_graph.for_request(info, self.scene).placement_path(
+            self, at=at_map(at)
+        )
         if steps is None:
             return None
-        return [PlacementStep(transformation=edge, inverted=inverted) for edge, inverted in steps]
+        return [
+            PlacementStep(transformation=edge, inverted=inverted)
+            for edge, inverted in steps
+        ]
 
     @kante.django_field(
         description=(
@@ -1432,15 +1785,27 @@ class Layer:
             "`strict: true` to be refused a partial map instead of handed one"
         ),
     )
-    def as_affine(self, info: Info, strict: bool = False, at: List[CoordinateInput] | None = None) -> AffinePlacement | None:
+    def as_affine(
+        self, info: Info, strict: bool = False, at: list[CoordinateInput] | None = None
+    ) -> AffinePlacement | None:
         """The layer's placement path composed into one labelled affine map."""
-        condensed = scene_graph.for_request(info, self.scene).condensed_placement(self, at=at_map(at))
+        condensed = scene_graph.for_request(info, self.scene).condensed_placement(
+            self, at=at_map(at)
+        )
         if condensed is None:
             return None
 
         if strict and not condensed.total:
-            world_axes = [axis.name for axis in self.scene.world.axes.all()] if self.scene.world else []
-            missing = [axis for axis in world_axes if axis not in condensed.output_axes and axis not in condensed.fields]
+            world_axes = (
+                [axis.name for axis in self.scene.world.axes.all()]
+                if self.scene.world
+                else []
+            )
+            missing = [
+                axis
+                for axis in world_axes
+                if axis not in condensed.output_axes and axis not in condensed.fields
+            ]
             raise ValueError(
                 f"This layer's placement does not constrain every axis of its scene's world: it maps onto {condensed.output_axes} and says nothing about {missing}. "
                 "That is an honest partial registration, not a failure -- drop `strict` to read the map over the axes it does name, or author a registration that places the data along the rest."
@@ -1451,7 +1816,10 @@ class Layer:
             input_axes=condensed.input_axes,
             output_axes=condensed.output_axes,
             total=condensed.total,
-            fields=[PlacementField.from_form(axis, form, condensed.input_axes) for axis, form in condensed.fields.items()],
+            fields=[
+                PlacementField.from_form(axis, form, condensed.input_axes)
+                for axis, form in condensed.fields.items()
+            ],
         )
 
     @kante.django_field(
@@ -1462,9 +1830,15 @@ class Layer:
             "Pass the same `at` you would pass `pathToWorld` to be told about that coordinate. Derived, never stored"
         ),
     )
-    def placement(self, info: Info, at: List[CoordinateInput] | None = None) -> enums.PlacementState:
+    def placement(
+        self, info: Info, at: list[CoordinateInput] | None = None
+    ) -> enums.PlacementState:
         """PLACED, CONDITIONAL, UNREGISTERED or UNMAPPABLE."""
-        return enums.PlacementState(scene_graph.for_request(info, self.scene).placement_state(self, at=at_map(at)))
+        return enums.PlacementState(
+            scene_graph.for_request(info, self.scene).placement_state(
+                self, at=at_map(at)
+            )
+        )
 
     @kante.django_field(
         description=(
@@ -1474,9 +1848,15 @@ class Layer:
             "Derived, never stored -- and distinct from a single edge's `validity`: this is the minimum over the whole path"
         ),
     )
-    def placement_validity(self, info: Info, at: List[CoordinateInput] | None = None) -> enums.PlacementValidity:
+    def placement_validity(
+        self, info: Info, at: list[CoordinateInput] | None = None
+    ) -> enums.PlacementValidity:
         """The weakest validity on the layer's placement path."""
-        return enums.PlacementValidity(scene_graph.for_request(info, self.scene).placement_validity(self, at=at_map(at)))
+        return enums.PlacementValidity(
+            scene_graph.for_request(info, self.scene).placement_validity(
+                self, at=at_map(at)
+            )
+        )
 
     @kante.django_field(
         description=(
@@ -1488,12 +1868,18 @@ class Layer:
             "and distinct from a single edge's `invariance`, this being the minimum over the whole path. `placement` says which of the reasons a NONE layer has"
         ),
     )
-    def placement_invariance(self, info: Info, at: List[CoordinateInput] | None = None) -> enums.TransformInvariance:
+    def placement_invariance(
+        self, info: Info, at: list[CoordinateInput] | None = None
+    ) -> enums.TransformInvariance:
         """The weakest invariance class on the layer's placement path."""
-        return enums.TransformInvariance(scene_graph.for_request(info, self.scene).placement_invariance(self, at=at_map(at)))
+        return enums.TransformInvariance(
+            scene_graph.for_request(info, self.scene).placement_invariance(
+                self, at=at_map(at)
+            )
+        )
 
 
-def _level_placements(layer, info: Info) -> List["LevelPlacement"]:
+def _level_placements(layer, info: Info) -> list["LevelPlacement"]:
     """One placement per pyramid level of a lens-sourced layer, each anchored at that level's ARRAY system.
 
     Module-level and shared rather than a method repeated per type. Every kind that sources
@@ -1504,9 +1890,16 @@ def _level_placements(layer, info: Info) -> List["LevelPlacement"]:
     return [
         LevelPlacement(
             data_array=array,
-            path=None if steps is None else [PlacementStep(transformation=edge, inverted=inverted) for edge, inverted in steps],
+            path=None
+            if steps is None
+            else [
+                PlacementStep(transformation=edge, inverted=inverted)
+                for edge, inverted in steps
+            ],
         )
-        for array, steps in scene_graph.for_request(info, layer.scene).level_placements(layer)
+        for array, steps in scene_graph.for_request(info, layer.scene).level_placements(
+            layer
+        )
     ]
 
 
@@ -1543,14 +1936,16 @@ class ImageLayer(Layer):
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.IMAGE.value
 
-    @kante.django_field(description="The composable in-layer render graph, if this layer defines one")
+    @kante.django_field(
+        description="The composable in-layer render graph, if this layer defines one"
+    )
     def render_graph(self, info: Info) -> LayerRenderGraph | None:
         if not self.render_graph:
             return None
         return LayerRenderGraphModel(**self.render_graph)
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
-    def level_paths(self, info: Info) -> List["LevelPlacement"]:
+    def level_paths(self, info: Info) -> list["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
         return _level_placements(self, info)
 
@@ -1585,10 +1980,13 @@ class IntensityLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.INTENSITY.value
+        return (
+            isinstance(obj, models.Layer)
+            and obj.kind == enums.LayerKind.INTENSITY.value
+        )
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
-    def level_paths(self, info: Info) -> List["LevelPlacement"]:
+    def level_paths(self, info: Info) -> list["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
         return _level_placements(self, info)
 
@@ -1614,12 +2012,18 @@ class RgbLayer(Layer):
         disable_optimization=True,
         description="The array lens this layer draws through: the selection, and the space the data is placed from. Read through the layer's own prefetch rather than the optimizer's, which cannot follow a polymorphic foreign key to the kind",
     )
-    red_lens: ArrayLens = kante.django_field(description="The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position")
-    green_lens: ArrayLens = kante.django_field(description="The single-channel lens drawn as green: a crop of `lens` with its channel axis at one position")
-    blue_lens: ArrayLens = kante.django_field(description="The single-channel lens drawn as blue: a crop of `lens` with its channel axis at one position")
+    red_lens: ArrayLens = kante.django_field(
+        description="The single-channel lens drawn as red: a crop of `lens` with its channel axis at one position"
+    )
+    green_lens: ArrayLens = kante.django_field(
+        description="The single-channel lens drawn as green: a crop of `lens` with its channel axis at one position"
+    )
+    blue_lens: ArrayLens = kante.django_field(
+        description="The single-channel lens drawn as blue: a crop of `lens` with its channel axis at one position"
+    )
     clim_min: float | None
     clim_max: float | None
-    white_balance: List[float] | None = kante.django_field(
+    white_balance: list[float] | None = kante.django_field(
         description="Per-component gains [red, green, blue], multiplied into the components before the shared contrast limits. Null: no correction, the same as [1, 1, 1]",
     )
 
@@ -1628,7 +2032,7 @@ class RgbLayer(Layer):
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.RGB.value
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
-    def level_paths(self, info: Info) -> List["LevelPlacement"]:
+    def level_paths(self, info: Info) -> list["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
         return _level_placements(self, info)
 
@@ -1656,16 +2060,20 @@ class PhasorLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.PHASOR.value
+        return (
+            isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.PHASOR.value
+        )
 
-    @kante.django_field(description="Which axis is reduced to a phasor, at which harmonic, and how the resulting (g, s) becomes color")
+    @kante.django_field(
+        description="Which axis is reduced to a phasor, at which harmonic, and how the resulting (g, s) becomes color"
+    )
     def phasor_render(self, info: Info) -> PhasorRender | None:
         if not self.phasor_render:
             return None
         return PhasorRenderModel(**self.phasor_render)
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
-    def level_paths(self, info: Info) -> List["LevelPlacement"]:
+    def level_paths(self, info: Info) -> list["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
         return _level_placements(self, info)
 
@@ -1701,7 +2109,9 @@ class VectorLayer(Layer):
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.VECTOR.value
+        return (
+            isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.VECTOR.value
+        )
 
     @kante.django_field(
         description=(
@@ -1716,7 +2126,7 @@ class VectorLayer(Layer):
         return coords_logic.resolve_render_axes(self.lens.axis_specs).vector
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
-    def level_paths(self, info: Info) -> List["LevelPlacement"]:
+    def level_paths(self, info: Info) -> list["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
         return _level_placements(self, info)
 
@@ -1741,31 +2151,43 @@ class LabelLayer(Layer):
     def is_type_of(cls, obj, info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.LABEL.value
 
-    @kante.django_field(description="How this layer's object ids become color: the hashing, the transparent background id, contour-or-fill, the selection, and any `colorBy`")
+    @kante.django_field(
+        description="How this layer's object ids become color: the hashing, the transparent background id, contour-or-fill, the selection, and any `colorBy`"
+    )
     def label_render(self, info: Info) -> LabelRender | None:
         if not self.label_render:
             return None
         return LabelRenderModel(**self.label_render)
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
-    def level_paths(self, info: Info) -> List["LevelPlacement"]:
+    def level_paths(self, info: Info) -> list["LevelPlacement"]:
         """One placement per pyramid level, each anchored at that level's ARRAY system."""
         return _level_placements(self, info)
 
 
-@kante.type(description="The placement of one pyramid level in a layer's scene: the level and its path to the world system")
+@kante.type(
+    description="The placement of one pyramid level in a layer's scene: the level and its path to the world system"
+)
 class LevelPlacement:
     """The placement of one pyramid level in a layer's scene."""
 
-    data_array: "DataArray" = strawberry.field(description="The pyramid level being placed")
-    path: List[PlacementStep] | None = strawberry.field(description="The path from this level's voxel grid to the scene's world system, or null when the dataset is not registered into the scene")
+    data_array: "DataArray" = strawberry.field(
+        description="The pyramid level being placed"
+    )
+    path: list[PlacementStep] | None = strawberry.field(
+        description="The path from this level's voxel grid to the scene's world system, or null when the dataset is not registered into the scene"
+    )
 
 
-@kante.type(description="A discrete coordinate an annotation is pinned to, e.g. a timepoint or a channel")
+@kante.type(
+    description="A discrete coordinate an annotation is pinned to, e.g. a timepoint or a channel"
+)
 class Coordinate:
     """A discrete coordinate an annotation is pinned to, e.g. a timepoint or a channel."""
 
-    name: str = strawberry.field(description="The name of the coordinate, e.g. 't' or 'c'")
+    name: str = strawberry.field(
+        description="The name of the coordinate, e.g. 't' or 'c'"
+    )
     value: int = strawberry.field(description="The value along that coordinate")
 
 
@@ -1773,8 +2195,12 @@ class Coordinate:
 class BoundingBox:
     """An axis-aligned bounding box, as a min and a max corner."""
 
-    min: list[float] = strawberry.field(description="The lower corner, in the coordinate order of the coordinate system")
-    max: list[float] = strawberry.field(description="The upper corner, in the coordinate order of the coordinate system")
+    min: list[float] = strawberry.field(
+        description="The lower corner, in the coordinate order of the coordinate system"
+    )
+    max: list[float] = strawberry.field(
+        description="The upper corner, in the coordinate order of the coordinate system"
+    )
 
 
 @kante.django_type(
@@ -1787,23 +2213,37 @@ class BoundingBox:
 class AnnotationCollection:
     """A named set of human-drawn annotations, owning the space they are drawn in."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
-    @kante.django_field(description="The lenses over this annotation collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List["AnnotationLens"]:
+    @kante.django_field(
+        description="The lenses over this annotation collection, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`"
+    )
+    def lenses(
+        self, info: Info, windowed: bool | None = None
+    ) -> list["AnnotationLens"]:
         """The container's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
             return list(lenses)
-        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+        return list(
+            lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[])
+        )
 
-    @kante.django_field(description="The lens that selects this whole annotation collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every annotation collection is created with one")
+    @kante.django_field(
+        description="The lens that selects this whole annotation collection: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every annotation collection is created with one"
+    )
     def full_lens(self, info: Info) -> Optional["AnnotationLens"]:
         """The whole lens over this container."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(
-        description="The folder this annotation collection is filed in. Organisational only: distinct from `scene`, which says which drawing surface minted it, and from `coordinateSystem`, which says where its shapes are drawn"
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(
+            description="The folder this annotation collection is filed in. Organisational only: distinct from `scene`, which says which drawing surface minted it, and from `coordinateSystem`, which says where its shapes are drawn"
+        )
     )
 
     @kante.django_field(
@@ -1814,32 +2254,52 @@ class AnnotationCollection:
         ),
         prefetch_related=["file_links__file"],
     )
-    def source_files(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def source_files(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file this annotation collection was produced from."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
+            filters,
+            info,
+        )
 
     @kante.django_field(
         description="The files written out of this annotation collection: an OME-TIFF export, a rendered snapshot registered as a file. The mirror of `sourceFiles`",
         prefetch_related=["file_links__file"],
     )
-    def exports(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def exports(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file written out of this annotation collection."""
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION),
+            filters,
+            info,
+        )
 
     id: auto
     name: auto
     description: str | None
-    scene: Optional["Scene"] = kante.django_field(description="The scene this collection was minted for as its default drawing surface, or null for a freestanding or dataset-derived collection. Bookkeeping, not placement: the registration edge is what places it")
-    coordinate_system: CoordinateSystem = kante.django_field(description="The coordinate system the annotations' vectors are expressed in. The collection owns it; `derivedFrom` relates it to whatever the shapes are drawn over")
-    annotations: List["Annotation"] = kante.django_field(description="The annotations in this collection")
+    scene: Optional["Scene"] = kante.django_field(
+        description="The scene this collection was minted for as its default drawing surface, or null for a freestanding or dataset-derived collection. Bookkeeping, not placement: the registration edge is what places it"
+    )
+    coordinate_system: CoordinateSystem = kante.django_field(
+        description="The coordinate system the annotations' vectors are expressed in. The collection owns it; `derivedFrom` relates it to whatever the shapes are drawn over"
+    )
+    annotations: list["Annotation"] = kante.django_field(
+        description="The annotations in this collection"
+    )
     created_at: datetime.datetime
     creator: User | None
-    provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation collection")
+    provenance_entries: list["ProvenanceEntry"] = kante.django_field(
+        description="Provenance entries for this annotation collection"
+    )
 
     @kante.django_field(
         description="Every edge from this collection's space back into data the shapes are drawn over, in declared order -- the first is the primary parent, the one that places it. An identity into a scene's world for a scene-minted collection, an identity into a dataset's system for one drawn over an image. Empty for a freestanding collection"
     )
-    def derived_from(self, info: Info) -> List["Transformation"]:
+    def derived_from(self, info: Info) -> list["Transformation"]:
         """The edges relating this collection's space to the ones it is drawn over."""
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
@@ -1865,13 +2325,23 @@ class AnnotationDerivation:
     """One source of a shape's `derivedFrom`."""
 
     id: auto
-    relation: enums.AnnotationRelation = kante.django_field(description="How the child came from the source")
-    reason: str | None = kante.django_field(description="A free-form note on why or how, if one was given")
-    created_at: datetime.datetime = kante.django_field(description="When the child was made from the source")
-    creator: User | None = kante.django_field(description="Who made the child, or null when that user is gone")
+    relation: enums.AnnotationRelation = kante.django_field(
+        description="How the child came from the source"
+    )
+    reason: str | None = kante.django_field(
+        description="A free-form note on why or how, if one was given"
+    )
+    created_at: datetime.datetime = kante.django_field(
+        description="When the child was made from the source"
+    )
+    creator: User | None = kante.django_field(
+        description="Who made the child, or null when that user is gone"
+    )
 
     child: "Annotation" = kante.django_field(description="The shape that was made")
-    source: "Annotation" = kante.django_field(description="The shape it was made from. It cannot be deleted while this shape stands, unless the delete cascades to it")
+    source: "Annotation" = kante.django_field(
+        description="The shape it was made from. It cannot be deleted while this shape stands, unless the delete cascades to it"
+    )
 
 
 @kante.django_type(
@@ -1885,21 +2355,41 @@ class Annotation:
     """A human-drawn shape in its collection's coordinate system, described by its vectors and the discrete coordinates it is pinned to."""
 
     id: auto
-    collection: AnnotationCollection = kante.django_field(description="The collection this annotation belongs to; its vectors are expressed in the collection's own coordinate system")
+    collection: AnnotationCollection = kante.django_field(
+        description="The collection this annotation belongs to; its vectors are expressed in the collection's own coordinate system"
+    )
     name: auto
     description: str | None
     kind: enums.AnnotationKind
     vectors: list[list[float]]
     created_with_transforms: int
-    stroke_color: list[int] | None = kante.django_field(description="The stroke (outline) color of the geometry, as RGBA")
-    fill_color: list[int] | None = kante.django_field(description="The fill color of the geometry, as RGBA, or null for no fill")
-    stroke_width: float = kante.django_field(description="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale")
-    filled: bool = kante.django_field(description="Whether the geometry is filled with fill_color")
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    stroke_color: list[int] | None = kante.django_field(
+        description="The stroke (outline) color of the geometry, as RGBA"
+    )
+    fill_color: list[int] | None = kante.django_field(
+        description="The fill color of the geometry, as RGBA, or null for no fill"
+    )
+    stroke_width: float = kante.django_field(
+        description="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale"
+    )
+    filled: bool = kante.django_field(
+        description="Whether the geometry is filled with fill_color"
+    )
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
     # Nullable: the creator FK is SET_NULL, so a shape outlives the user who drew it.
-    creator: User | None = kante.django_field(description="The user that drew this annotation, or null when that user is gone or a client created it without one")
-    created_at: datetime.datetime | None = kante.django_field(description="When this annotation was drawn. Null for a shape drawn before the time was kept whose history records none")
-    provenance_entries: List["ProvenanceEntry"] = kante.django_field(description="Provenance entries for this annotation")
+    creator: User | None = kante.django_field(
+        description="The user that drew this annotation, or null when that user is gone or a client created it without one"
+    )
+    created_at: datetime.datetime | None = kante.django_field(
+        description="When this annotation was drawn. Null for a shape drawn before the time was kept whose history records none"
+    )
+    provenance_entries: list["ProvenanceEntry"] = kante.django_field(
+        description="Provenance entries for this annotation"
+    )
 
     @kante.django_field(
         only=["traced_on"],
@@ -1914,15 +2404,22 @@ class Annotation:
             return None
         return for_org(models.Lens, info).filter(pk=self.traced_on_id).first()
 
-    @kante.django_field(description="The coordinate system this annotation's vectors are expressed in: its collection's own system")
+    @kante.django_field(
+        description="The coordinate system this annotation's vectors are expressed in: its collection's own system"
+    )
     def coordinate_system(self, info: Info) -> CoordinateSystem | None:
         """The collection's coordinate system, surfaced for convenience."""
         return self.collection.coordinate_system_or_none
 
-    @kante.django_field(description="The discrete coordinates this annotation is pinned to. A coordinate the annotation does not pin is one it spans")
+    @kante.django_field(
+        description="The discrete coordinates this annotation is pinned to. A coordinate the annotation does not pin is one it spans"
+    )
     def coordinates(self, info: Info) -> list[Coordinate]:
         """The annotation's discrete pins, unpacked from the stored name-keyed dict."""
-        return [Coordinate(name=name, value=value) for name, value in (self.coordinates or {}).items()]
+        return [
+            Coordinate(name=name, value=value)
+            for name, value in (self.coordinates or {}).items()
+        ]
 
     @kante.django_field(
         description=(
@@ -1936,7 +2433,9 @@ class Annotation:
         """The annotation's bounding box in the frame its collection's chain reaches."""
         if not self.intrinsic_bbox:
             return None
-        return BoundingBox(min=self.intrinsic_bbox["min"], max=self.intrinsic_bbox["max"])
+        return BoundingBox(
+            min=self.intrinsic_bbox["min"], max=self.intrinsic_bbox["max"]
+        )
 
     @kante.django_field(
         description=(
@@ -1945,9 +2444,13 @@ class Annotation:
             "One lens may be listed by several shapes, since a lens is one row per selection. What was *computed* from the shape is `derivedResidents`"
         )
     )
-    def derived_lenses(self, info: Info) -> List[ArrayLens]:
+    def derived_lenses(self, info: Info) -> list[ArrayLens]:
         """The array lenses a `LensCut` row ties to this shape, in the order they were cut."""
-        return list(models.ArrayLens.objects.filter(cuts__annotation=self, organization=info.context.request.organization).order_by("cuts__created_at", "cuts__id"))
+        return list(
+            models.ArrayLens.objects.filter(
+                cuts__annotation=self, organization=info.context.request.organization
+            ).order_by("cuts__created_at", "cuts__id")
+        )
 
     @kante.django_field(
         description=(
@@ -1956,10 +2459,18 @@ class Annotation:
             "Null when the shape has no box or misses the lens, or the lens is not an array lens"
         )
     )
-    def descriptors_under(self, info: Info, lens: strawberry.ID) -> Optional[JSON]:
+    def descriptors_under(self, info: Info, lens: strawberry.ID) -> JSON | None:
         """The descriptors of a lens' crop to this annotation, computed over an unsaved lens."""
-        within = scope_queryset(models.ArrayLens.objects.select_related("dataset"), info).filter(id=lens).first()
-        return coordinate_system_logic.cut_descriptors(within, self) if within is not None else None
+        within = (
+            scope_queryset(models.ArrayLens.objects.select_related("dataset"), info)
+            .filter(id=lens)
+            .first()
+        )
+        return (
+            coordinate_system_logic.cut_descriptors(within, self)
+            if within is not None
+            else None
+        )
 
     @kante.django_field(
         description=(
@@ -1969,11 +2480,13 @@ class Annotation:
             "none of it. The edge itself, with the lens the pixels came from beside it, is on each child's own `derivedFrom`"
         )
     )
-    def derived_residents(self, info: Info) -> List[Resident]:
+    def derived_residents(self, info: Info) -> list[Resident]:
         """Every container with a derivation edge naming this shape."""
         return graph_logic.annotation_derived_containers(self)
 
-    @kante.django_field(description="How many containers `derivedResidents` lists: a count for a tile, without loading what they are")
+    @kante.django_field(
+        description="How many containers `derivedResidents` lists: a count for a tile, without loading what they are"
+    )
     def derived_residents_count(self, info: Info) -> int:
         """The number of containers derived from this shape."""
         return len(graph_logic.annotation_derived_containers(self))
@@ -1984,9 +2497,11 @@ class Annotation:
             "Shape to shape only -- what *data* a shape was computed from is its collection's `derivedFrom`, and what was computed from it is `derivedResidents`"
         )
     )
-    def derived_from(self, info: Info) -> List[AnnotationDerivation]:
+    def derived_from(self, info: Info) -> list[AnnotationDerivation]:
         """The links out of this shape, in declared order."""
-        return list(self.derived_from_links.select_related("source", "creator").order_by("pk"))
+        return list(
+            self.derived_from_links.select_related("source", "creator").order_by("pk")
+        )
 
     @kante.django_field(
         prefetch_related=["derived_from_links"],
@@ -1995,9 +2510,12 @@ class Annotation:
             "Empty for a shape drawn from nothing. What a viewer reads to tell a refinement from the shape it refines"
         ),
     )
-    def source_ids(self, info: Info) -> List[strawberry.ID]:
+    def source_ids(self, info: Info) -> list[strawberry.ID]:
         """The sources' ids, off the prefetched links."""
-        return [strawberry.ID(str(link.source_id)) for link in sorted(self.derived_from_links.all(), key=lambda link: link.pk)]
+        return [
+            strawberry.ID(str(link.source_id))
+            for link in sorted(self.derived_from_links.all(), key=lambda link: link.pk)
+        ]
 
     @kante.django_field(
         description=(
@@ -2005,10 +2523,13 @@ class Annotation:
             "`derivedFrom`. Shapes, never containers: data computed from this shape is `derivedResidents`"
         )
     )
-    def derived_annotations(self, info: Info) -> List["Annotation"]:
+    def derived_annotations(self, info: Info) -> list["Annotation"]:
         """The children whose links name this shape."""
         return list(
-            models.Annotation.objects.filter(derived_from_links__source=self, collection__organization=info.context.request.organization)
+            models.Annotation.objects.filter(
+                derived_from_links__source=self,
+                collection__organization=info.context.request.organization,
+            )
             .select_related("collection__coordinate_system")
             .order_by("derived_from_links__pk")
         )
@@ -2024,7 +2545,11 @@ class Annotation:
         row and would otherwise cost two queries per annotation. At a root field a
         guest gets what is in their collaborations (``scope_queryset``).
         """
-        return scope_queryset(queryset, info).select_related("collection__coordinate_system").prefetch_related("collection__coordinate_system__axes")
+        return (
+            scope_queryset(queryset, info)
+            .select_related("collection__coordinate_system")
+            .prefetch_related("collection__coordinate_system__axes")
+        )
 
 
 @kante.django_type(
@@ -2038,22 +2563,30 @@ class AnnotationLayer(Layer):
     """A layer that renders an annotation collection's drawn shapes in a scene."""
 
     id: auto
-    lens: AnnotationLens = kante.django_field(disable_optimization=True, description="The annotation lens this layer draws through")
+    lens: AnnotationLens = kante.django_field(
+        disable_optimization=True,
+        description="The annotation lens this layer draws through",
+    )
 
     @kante.django_field(description=_CLIP_DESCRIPTION)
-    def clip(self, info: Info) -> List[Window]:
+    def clip(self, info: Info) -> list[Window]:
         """The lens' windows as a clip box."""
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The annotation collection whose shapes this layer renders: the container of the lens. Its own coordinate system is the layer's space")
+    @kante.django_field(
+        description="The annotation collection whose shapes this layer renders: the container of the lens. Its own coordinate system is the layer's space"
+    )
     def annotation_collection(self, info: Info) -> AnnotationCollection:
         """The lens' collection."""
         return self.lens.annotation_collection
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.ANNOTATION.value
+        return (
+            isinstance(obj, models.Layer)
+            and obj.kind == enums.LayerKind.ANNOTATION.value
+        )
 
 
 def _role_column(layer: "models.Layer", role: str) -> str | None:
@@ -2073,14 +2606,20 @@ class PointLayer(Layer):
     """A layer that renders a point cloud from a table dataset, placed and styled in a scene."""
 
     id: auto
-    lens: TableLens = kante.django_field(disable_optimization=True, description="The table lens this layer draws through: the rows its windows keep, in the table's own space")
+    lens: TableLens = kante.django_field(
+        disable_optimization=True,
+        description="The table lens this layer draws through: the rows its windows keep, in the table's own space",
+    )
 
     @kante.django_field(
         description="The table dataset the points are drawn from: the container of the lens. Its declared coordinate columns provide the coordinates and its own system provides the placement -- the column fields below are derived from its schema, never stored per layer"
     )
-    def table_dataset(self, info: Info) -> Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]:
+    def table_dataset(
+        self, info: Info
+    ) -> Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]:
         """The lens' table."""
         return self.lens.table_dataset
+
     size_column: str | None
     point_size: float | None
     colormap: enums.ColorMap | None
@@ -2097,12 +2636,15 @@ class PointLayer(Layer):
         field_name="point_color_bys",
         description="The colourings this layer offers, in the order a picker should show them. Each names a column of a table this layer's ids key into, or one slice of a sparse matrix they index, already checked to be reachable. Empty means there is nothing to pick",
     )
-    def color_bys(self, info: Info) -> List[LabelColorBy]:
+    def color_bys(self, info: Info) -> list[LabelColorBy]:
         """The published picker, rehydrated from its stored dumps."""
         del info
-        return [color_by_models.LabelColorByModel(**entry) for entry in (self.point_color_bys or [])]
+        return [
+            color_by_models.LabelColorByModel(**entry)
+            for entry in (self.point_color_bys or [])
+        ]
 
-    active_filter_bys: List[int] = kante.django_field(
+    active_filter_bys: list[int] = kante.django_field(
         description="Which entries of `filterBys` are applied, as indices into it. They combine with AND: a point is drawn when every active rule keeps it. Empty applies none of them, so everything draws"
     )
 
@@ -2110,18 +2652,25 @@ class PointLayer(Layer):
         field_name="point_filter_bys",
         description="The filters this layer offers, in the order a picker should show them. Each keeps or drops points by a column of a table this layer's ids key into. Empty means nothing is offered and every point draws",
     )
-    def filter_bys(self, info: Info) -> List[LabelFilterBy]:
+    def filter_bys(self, info: Info) -> list[LabelFilterBy]:
         """The published filter picker, rehydrated from its stored dumps."""
         del info
-        return [filter_by_models.LabelFilterByModel(**entry) for entry in (self.point_filter_bys or [])]
+        return [
+            filter_by_models.LabelFilterByModel(**entry)
+            for entry in (self.point_filter_bys or [])
+        ]
 
     @kante.django_field(description=_WINDOW_FILTERS_DESCRIPTION)
-    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+    def window_filters(self, info: Info) -> list[LabelFilterBy]:
         """The lens' windows as row filters."""
         del info
-        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
+        return filter_by_models.filters_for_windows(
+            str(self.lens.table_dataset_id), self.lens.windows_list
+        )
 
-    @kante.django_field(description="The dataset's ID-role column identifying each point, if any")
+    @kante.django_field(
+        description="The dataset's ID-role column identifying each point, if any"
+    )
     def id_column(self, info: Info) -> str | None:
         """The point-id column."""
         return _role_column(self, enums.ColumnRoleChoices.ID.value)
@@ -2142,26 +2691,38 @@ class TrackLayer(Layer):
     """A layer that renders trajectories from a table dataset, placed and styled in a scene."""
 
     id: auto
-    lens: TableLens = kante.django_field(disable_optimization=True, description="The table lens this layer draws through: the rows its windows keep, in the table's own space")
+    lens: TableLens = kante.django_field(
+        disable_optimization=True,
+        description="The table lens this layer draws through: the rows its windows keep, in the table's own space",
+    )
 
     @kante.django_field(description=_WINDOW_FILTERS_DESCRIPTION)
-    def window_filters(self, info: Info) -> List[LabelFilterBy]:
+    def window_filters(self, info: Info) -> list[LabelFilterBy]:
         """The lens' windows as row filters."""
         del info
-        return filter_by_models.filters_for_windows(str(self.lens.table_dataset_id), self.lens.windows_list)
+        return filter_by_models.filters_for_windows(
+            str(self.lens.table_dataset_id), self.lens.windows_list
+        )
 
     @kante.django_field(
         description="The table dataset the tracks are drawn from: the container of the lens. Its coordinate and TRACK_ID columns provide the trajectories -- the column fields below are derived from its schema, never stored per layer"
     )
-    def table_dataset(self, info: Info) -> Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]:
+    def table_dataset(
+        self, info: Info
+    ) -> Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")]:
         """The lens' table."""
         return self.lens.table_dataset
+
     color_by_column: str | None
     line_width: float | None
-    tail_window: int | None = kante.django_field(description="How many timepoints of each track's past are drawn behind the current one; 0 draws the whole track. Null lets the viewer choose")
+    tail_window: int | None = kante.django_field(
+        description="How many timepoints of each track's past are drawn behind the current one; 0 draws the whole track. Null lets the viewer choose"
+    )
     colormap: enums.ColorMap | None
 
-    @kante.django_field(description="The dataset's TRACK_ID column, which groups rows into tracks")
+    @kante.django_field(
+        description="The dataset's TRACK_ID column, which groups rows into tracks"
+    )
     def track_id_column(self, info: Info) -> str | None:
         """The track-id column."""
         return _role_column(self, enums.ColumnRoleChoices.TRACK_ID.value)
@@ -2182,18 +2743,23 @@ class MeshLayer(Layer):
     """A layer that renders a 3D mesh, placed and styled in a scene."""
 
     id: auto
-    lens: MeshLens = kante.django_field(disable_optimization=True, description="The mesh lens this layer draws through")
+    lens: MeshLens = kante.django_field(
+        disable_optimization=True, description="The mesh lens this layer draws through"
+    )
 
     @kante.django_field(description=_CLIP_DESCRIPTION)
-    def clip(self, info: Info) -> List[Window]:
+    def clip(self, info: Info) -> list[Window]:
         """The lens' windows as a clip box."""
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The immutable, coordinate-system-anchored mesh collection this layer renders: the container of the lens. Its geometry is fetched from the collection's Parquet catalog, not through this API")
+    @kante.django_field(
+        description="The immutable, coordinate-system-anchored mesh collection this layer renders: the container of the lens. Its geometry is fetched from the collection's Parquet catalog, not through this API"
+    )
     def collection(self, info: Info) -> MeshCollection | None:
         """The lens' collection."""
         return self.lens.mesh_collection
+
     material_color: list[int] | None
     wireframe: bool
     shading: enums.MeshShading
@@ -2206,11 +2772,14 @@ class MeshLayer(Layer):
         field_name="mesh_color_bys",
         description="The colourings this layer offers, in the order a picker should show them. Each is a column of a table this collection's FIELD edge keys into, already checked to be reachable and to exist. Empty means there is nothing to pick and the material color is the rendering",
     )
-    def color_bys(self, info: Info) -> List[MeshColorBy]:
+    def color_bys(self, info: Info) -> list[MeshColorBy]:
         """The published picker, rehydrated from its stored dumps."""
-        return [color_by_models.MeshColorByModel(**entry) for entry in (self.mesh_color_bys or [])]
+        return [
+            color_by_models.MeshColorByModel(**entry)
+            for entry in (self.mesh_color_bys or [])
+        ]
 
-    active_filter_bys: List[int] = kante.django_field(
+    active_filter_bys: list[int] = kante.django_field(
         description="Which entries of `filterBys` are applied, as indices into it. They combine with AND: an object is drawn when every active rule keeps it. Empty applies none of them, so everything draws"
     )
 
@@ -2218,9 +2787,12 @@ class MeshLayer(Layer):
         field_name="mesh_filter_bys",
         description="The filters this layer offers, in the order a picker should show them. Each keeps or drops objects by a column of a table this collection's FIELD edge keys into, already checked to be reachable and to exist. Empty means nothing is offered and every object draws",
     )
-    def filter_bys(self, info: Info) -> List[MeshFilterBy]:
+    def filter_bys(self, info: Info) -> list[MeshFilterBy]:
         """The published filter picker, rehydrated from its stored dumps."""
-        return [filter_by_models.MeshFilterByModel(**entry) for entry in (self.mesh_filter_bys or [])]
+        return [
+            filter_by_models.MeshFilterByModel(**entry)
+            for entry in (self.mesh_filter_bys or [])
+        ]
 
     @kante.django_field(
         description="The colouring currently drawn: `colorBys[activeColorBy]`, or null when nothing is selected. Derived, never stored -- there is one copy of the choice, and it is the index",
@@ -2250,25 +2822,36 @@ class FixtureLayer(Layer):
     """A layer that renders a fixture, placed and styled in a scene."""
 
     id: auto
-    lens: FixtureLens = kante.django_field(disable_optimization=True, description="The fixture lens this layer draws through")
+    lens: FixtureLens = kante.django_field(
+        disable_optimization=True,
+        description="The fixture lens this layer draws through",
+    )
 
     @kante.django_field(description=_CLIP_DESCRIPTION)
-    def clip(self, info: Info) -> List[Window]:
+    def clip(self, info: Info) -> list[Window]:
         """The lens' windows as a clip box."""
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The fixture this layer renders: the container of the lens. Its geometry is the glTF file in the model's `store`, fetched whole rather than through this API")
+    @kante.django_field(
+        description="The fixture this layer renders: the container of the lens. Its geometry is the glTF file in the model's `store`, fetched whole rather than through this API"
+    )
     def fixture(self, info: Info) -> Fixture | None:
         """The lens' fixture."""
         return self.lens.fixture
 
-    material_color: list[int] | None = kante.django_field(description="One RGBA colour replacing every material of the model, each component 0..255. Null draws the model's own materials as authored")
-    wireframe: bool = kante.django_field(description="Whether the model is drawn as a wireframe instead of solid surfaces")
+    material_color: list[int] | None = kante.django_field(
+        description="One RGBA colour replacing every material of the model, each component 0..255. Null draws the model's own materials as authored"
+    )
+    wireframe: bool = kante.django_field(
+        description="Whether the model is drawn as a wireframe instead of solid surfaces"
+    )
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.FIXTURE.value
+        return (
+            isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.FIXTURE.value
+        )
 
 
 @kante.django_type(
@@ -2282,18 +2865,24 @@ class NetworkLayer(Layer):
     """A layer that renders a node/edge network, placed and styled in a scene."""
 
     id: auto
-    lens: NetworkLens = kante.django_field(disable_optimization=True, description="The network lens this layer draws through")
+    lens: NetworkLens = kante.django_field(
+        disable_optimization=True,
+        description="The network lens this layer draws through",
+    )
 
     @kante.django_field(description=_CLIP_DESCRIPTION)
-    def clip(self, info: Info) -> List[Window]:
+    def clip(self, info: Info) -> list[Window]:
         """The lens' windows as a clip box."""
         del info
         return self.lens.windows_list
 
-    @kante.django_field(description="The immutable, coordinate-system-anchored network collection this layer renders: the container of the lens. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API")
+    @kante.django_field(
+        description="The immutable, coordinate-system-anchored network collection this layer renders: the container of the lens. Its nodes and edges are fetched from the collection's Parquet catalog, not through this API"
+    )
     def collection(self, info: Info) -> NetworkCollection | None:
         """The lens' collection."""
         return self.lens.network_collection
+
     material_color: list[int] | None
     line_width: float | None = kante.django_field(
         description="The flat width of every segment, in scene units. A well-defined length only from `placementInvariance` SIMILARITY up. Overridden where `nodeSizeColumn` or `edgeWidthColumn` is set"
@@ -2307,7 +2896,9 @@ class NetworkLayer(Layer):
     directed: bool = kante.django_field(
         description="Whether the edge direction is drawn, e.g. as arrowheads. A render setting, never a fact about the graph: an edge is always stored source-to-target"
     )
-    show_nodes: bool = kante.django_field(description="Whether a glyph is drawn at each node as well as the segments between them")
+    show_nodes: bool = kante.django_field(
+        description="Whether a glyph is drawn at each node as well as the segments between them"
+    )
     max_level: int | None
     active_color_by: int | None = kante.django_field(
         description="Which entry of `colorBys` is drawn, as an index into it. Null means the flat `materialColor` is what is drawn"
@@ -2317,11 +2908,14 @@ class NetworkLayer(Layer):
         field_name="network_color_bys",
         description="The colourings this layer offers, in the order a picker should show them. A COLUMN or SPARSE entry colours whole objects, already checked reachable; a GRAPH entry colours per node, by a value the collection itself carries, already checked against its manifest. Empty means there is nothing to pick and the material color is the rendering",
     )
-    def color_bys(self, info: Info) -> List[NetworkColorBy]:
+    def color_bys(self, info: Info) -> list[NetworkColorBy]:
         """The published picker, rehydrated from its stored dumps."""
-        return [color_by_models.NetworkColorByModel(**entry) for entry in (self.network_color_bys or [])]
+        return [
+            color_by_models.NetworkColorByModel(**entry)
+            for entry in (self.network_color_bys or [])
+        ]
 
-    active_filter_bys: List[int] = kante.django_field(
+    active_filter_bys: list[int] = kante.django_field(
         description="Which entries of `filterBys` are applied, as indices into it. They combine with AND: something is drawn when every active rule keeps it. Empty applies none of them, so everything draws"
     )
 
@@ -2329,13 +2923,18 @@ class NetworkLayer(Layer):
         field_name="network_filter_bys",
         description="The filters this layer offers, in the order a picker should show them. A COLUMN or SPARSE rule keeps or drops whole objects; a GRAPH rule hides individual nodes and segments by a per-node value the collection carries. Empty means nothing is offered and everything draws",
     )
-    def filter_bys(self, info: Info) -> List[NetworkFilterBy]:
+    def filter_bys(self, info: Info) -> list[NetworkFilterBy]:
         """The published filter picker, rehydrated from its stored dumps."""
-        return [filter_by_models.NetworkFilterByModel(**entry) for entry in (self.network_filter_bys or [])]
+        return [
+            filter_by_models.NetworkFilterByModel(**entry)
+            for entry in (self.network_filter_bys or [])
+        ]
 
     @classmethod
     def is_type_of(cls, obj, info) -> bool:
-        return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.NETWORK.value
+        return (
+            isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.NETWORK.value
+        )
 
 
 # The aggregate behind the homepage statistics sidebars. It replaces the Image-shaped

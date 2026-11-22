@@ -22,11 +22,15 @@ def query_vector(value: str) -> list[float] | None:
     try:
         return engine.embed_query(value)
     except engine.EmbeddingsUnavailable as e:
-        logger.warning("Embeddings unavailable (%s); search %r is lexical-only", e, value)
+        logger.warning(
+            "Embeddings unavailable (%s); search %r is lexical-only", e, value
+        )
         return None
 
 
-def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, name: str) -> tuple[QuerySet[Any], Q]:
+def hybrid_search(
+    queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, name: str
+) -> tuple[QuerySet[Any], Q]:
     """``lexical`` OR (embedded AND cosine distance below the threshold), ranked on ``name``.
 
     Four tiers: ``name`` is the text, ``name`` starts with it, any other ``lexical`` hit,
@@ -49,7 +53,11 @@ def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, 
     vector = query_vector(needle)
 
     digest = hashlib.blake2b(value.encode("utf-8"), digest_size=4).hexdigest()
-    rank, similarity, distance = f"_search_rank_{digest}", f"_search_similarity_{digest}", f"_search_distance_{digest}"
+    rank, similarity, distance = (
+        f"_search_rank_{digest}",
+        f"_search_similarity_{digest}",
+        f"_search_distance_{digest}",
+    )
     if rank not in queryset.query.annotations:
         annotations: dict[str, Any] = {
             rank: Case(
@@ -60,7 +68,11 @@ def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, 
                 output_field=IntegerField(),
             ),
             # Only among lexical hits: a semantic-only row is ordered by its distance alone.
-            similarity: Case(When(lexical, then=TrigramSimilarity(name, needle)), default=Value(0.0), output_field=FloatField()),
+            similarity: Case(
+                When(lexical, then=TrigramSimilarity(name, needle)),
+                default=Value(0.0),
+                output_field=FloatField(),
+            ),
         }
         if vector is not None:
             annotations[distance] = CosineDistance("embedding", vector)
@@ -74,7 +86,9 @@ def hybrid_search(queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, 
 
     # NULL embeddings give a NULL distance, which is never below the threshold: unembedded rows
     # are excluded from the vector leg and reachable lexically only.
-    semantic = Q(embedding__isnull=False) & Q(**{f"{distance}__lt": engine.distance_threshold()})
+    semantic = Q(embedding__isnull=False) & Q(
+        **{f"{distance}__lt": engine.distance_threshold()}
+    )
     return queryset, lexical | semantic
 
 
@@ -110,7 +124,9 @@ def neighbourhood(
         return queryset, Q(pk__in=[])
 
     if "_neighbour_distance" not in queryset.query.annotations:
-        queryset = queryset.annotate(_neighbour_distance=CosineDistance("embedding", vector))
+        queryset = queryset.annotate(
+            _neighbour_distance=CosineDistance("embedding", vector)
+        )
     queryset = queryset.order_by("_neighbour_distance", "pk")
 
     predicate = Q(embedding__isnull=False)
@@ -130,5 +146,7 @@ def neighbours(
     threshold: float | None = None,
 ) -> QuerySet[Any]:
     """The ``limit`` rows of ``queryset`` nearest to ``vector``, nearest first."""
-    queryset, predicate = neighbourhood(queryset, vector, exclude_pk=exclude_pk, threshold=threshold)
+    queryset, predicate = neighbourhood(
+        queryset, vector, exclude_pk=exclude_pk, threshold=threshold
+    )
     return queryset.filter(predicate)[:limit]

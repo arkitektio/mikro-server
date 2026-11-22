@@ -90,7 +90,7 @@ The morphology one, abridged, showing only its landing hop:
 ## Build the statement
 
 ```python
-from plan_sql import build_lookup_sql      # core/logic/plan_sql.py, copied verbatim
+from plan_sql import build_lookup_sql  # core/logic/plan_sql.py, copied verbatim
 
 build_lookup_sql(hop["lookup"])
 # SELECT "area", "mean_intensity" FROM read_parquet(?) WHERE "t" = ? AND "i" = ?
@@ -152,9 +152,9 @@ import zarr
 from plan_sql import build_lookup_sql
 
 # -- SampleStep: the zarr half -------------------------------------------------
-grant = request_zarr_access(plan.sample.store)        # scoped, temporary S3 credentials
-mask = zarr.open(mount(grant), mode="r")              # axis order = sample.system's axes
-value = int(mask[t, y, x])                            # consumes ["y","x"], t passes through
+grant = request_zarr_access(plan.sample.store)  # scoped, temporary S3 credentials
+mask = zarr.open(mount(grant), mode="r")  # axis order = sample.system's axes
+value = int(mask[t, y, x])  # consumes ["y","x"], t passes through
 
 # -- hops[0]: the duckdb half ---------------------------------------------------
 landing = plan.hops[0]
@@ -162,7 +162,7 @@ grant = request_parquet_access(landing.lookup.store)
 con = duckdb.connect()
 con.execute(create_secret_from(grant))
 
-held = {"t": t, plan.sample.produces[0]: value}       # zip against THIS plan's names
+held = {"t": t, plan.sample.produces[0]: value}  # zip against THIS plan's names
 params = [grant.url, *[held[k.axis] for k in landing.lookup.key_columns]]
 rows = con.execute(build_lookup_sql(landing.lookup), params).fetchall()
 ```
@@ -451,10 +451,14 @@ column:
 traces = create_array_dataset(
     data=xr.DataArray(dff, dims=("cell", "t")),
     axes=[AxisInput(name="cell", type=AxisType.INDEX), "t"],
-    derived_from=[TableDatasetDerivedFromInput(
-        table_dataset=cells.id,
-        transform=ByDimensionTransformInput(input_axes=("cell",), output_axes=("cell_id",), affine=((1.0, 1.0),)),
-    )],
+    derived_from=[
+        TableDatasetDerivedFromInput(
+            table_dataset=cells.id,
+            transform=ByDimensionTransformInput(
+                input_axes=("cell",), output_axes=("cell_id",), affine=((1.0, 1.0),)
+            ),
+        )
+    ],
 )
 ```
 

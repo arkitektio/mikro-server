@@ -1,24 +1,26 @@
 """GraphQL types for the sparse matrix dataset, its stored layouts and its identified axes."""
 
 import datetime
-
-from typing import TYPE_CHECKING, Annotated, List, Optional
-
-import strawberry
-from strawberry import auto
+from typing import TYPE_CHECKING, Annotated
 
 import kante
-from strawberry.scalars import JSON
-from kante.types import Info
-
+import strawberry
 from arkitekt_datalayer.types import SparseStore
+from kante.types import Info
+from strawberry import auto
+from strawberry.scalars import JSON
 
 from core import enums, filters, models, order, scalars
 from core.logic import file_link as file_link_logic
+from core.logic import graph as graph_logic
+from core.types._shared import (
+    DESCRIPTORS_DESCRIPTION,
+    OrgScoped,
+    apply_link_filters,
+    resolve_descriptors,
+)
 from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
-from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, OrgScoped
-from core.logic import graph as graph_logic
 
 if TYPE_CHECKING:
     from core.types.array_dataset import CoordinateAnchor
@@ -38,7 +40,9 @@ class SparseArray:
     """One stored layout of a sparse matrix."""
 
     id: auto
-    store: SparseStore = kante.django_field(description="The store holding this layout. Both layouts of one matrix share it -- one matrix is one upload -- so `path` is what says which of them this is. Ask the store for an access grant and read the three arrays directly")
+    store: SparseStore = kante.django_field(
+        description="The store holding this layout. Both layouts of one matrix share it -- one matrix is one upload -- so `path` is what says which of them this is. Ask the store for an access grant and read the three arrays directly"
+    )
     path: str = kante.django_field(
         description="Where this layout sits inside the store's prefix, e.g. `layouts/csr_matrix`. Open the group at this path, not at the store root"
     )
@@ -49,7 +53,9 @@ class SparseArray:
         )
     )
 
-    @kante.django_field(description="The name of the axis this layout indexes, from the dataset's declared order")
+    @kante.django_field(
+        description="The name of the axis this layout indexes, from the dataset's declared order"
+    )
     def indexed_axis_name(self, info: Info) -> str | None:
         """The name of the indexed axis."""
         del info
@@ -69,7 +75,9 @@ class SparseAxisReference:
 
     id: auto
     axis: str = kante.django_field(description="The name of the identified axis")
-    references: Annotated["TableDataset", strawberry.lazy("core.types.table_dataset")] = kante.django_field(
+    references: Annotated[
+        "TableDataset", strawberry.lazy("core.types.table_dataset")
+    ] = kante.django_field(
         description="The table whose rows this axis' positions are. Keyed by its single INDEX coordinate column, which is where a position is looked up"
     )
 
@@ -89,55 +97,91 @@ class SparseAxisReference:
 class SparseDataset(OrgScoped):
     """A sparse matrix dataset."""
 
-    descriptors: JSON = kante.django_field(resolver=resolve_descriptors, only=["stored_descriptors"], description=DESCRIPTORS_DESCRIPTION)
+    descriptors: JSON = kante.django_field(
+        resolver=resolve_descriptors,
+        only=["stored_descriptors"],
+        description=DESCRIPTORS_DESCRIPTION,
+    )
 
     @kante.django_field(
         prefetch_related=["arrays__store", "axis_references"],
         description="What this matrix structurally is, read off its axes and its store's shape: the one rank member its axes of more than one position denote -- MATRIX, ordinarily. Derived on read, never stored. A lens over it answers the same vocabulary for its selection, which is where VECTOR and SLICE appear",
     )
-    def spec(self, info: Info) -> List[enums.SparseDatasetSpec]:
+    def spec(self, info: Info) -> list[enums.SparseDatasetSpec]:
         """Every spec the matrix satisfies."""
         return self.spec
 
-    @kante.django_field(description="The lenses over this sparse dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`")
-    def lenses(self, info: Info, windowed: Optional[bool] = None) -> List[Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lenses over this sparse dataset, oldest first: its whole lens and every window someone has cut. `windowed: true` keeps the windows, `windowed: false` the whole lens, which is also `fullLens`"
+    )
+    def lenses(
+        self, info: Info, windowed: bool | None = None
+    ) -> list[Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]]:
         """The container's lenses, optionally only the windowed or only the whole one."""
         lenses = self.lenses.order_by("pk")
         if windowed is None:
             return list(lenses)
-        return list(lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[]))
+        return list(
+            lenses.exclude(windows=[]) if windowed else lenses.filter(windows=[])
+        )
 
-    @kante.django_field(description="The lens that selects this whole sparse dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every sparse dataset is created with one")
-    def full_lens(self, info: Info) -> Optional[Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")]]:
+    @kante.django_field(
+        description="The lens that selects this whole sparse dataset: what a viewer opens for it, and the handle to pass wherever a `Lens` is asked for and all of it is meant. Every sparse dataset is created with one"
+    )
+    def full_lens(
+        self, info: Info
+    ) -> Annotated["SparseLens", strawberry.lazy("core.types.array_dataset")] | None:
         """The whole lens over this container."""
         return self.lenses.filter(windows=[]).order_by("pk").first()
 
     id: auto
     name: auto
     description: str | None
-    created_at: datetime.datetime = kante.django_field(description="When this sparse dataset was created")
-    folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(description="The folder it is filed in. Organisational only")
-    coordinate_system: CoordinateSystem = kante.django_field(description="The coordinate system whose axes are this matrix's two enumerations. Owned by the dataset, and the space a FIELD edge lands in")
-    arrays: List[SparseArray] = kante.django_field(description="The stored layouts, one per axis a store's `indptr` indexes. One is legal and offers one capability")
-    axis_references: List[SparseAxisReference] = kante.django_field(description="The axes identified by a table rather than by a keying source")
-    provenance_entries: List[ProvenanceEntry] = kante.django_field(description="The recorded history of this dataset. Only `name` and `description` can change")
-    created_through: Task | None = kante.django_field(description="The task this dataset was created through, if any")
-    anchors: List[Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]] = kante.django_field(
+    created_at: datetime.datetime = kante.django_field(
+        description="When this sparse dataset was created"
+    )
+    folder: Annotated["Folder", strawberry.lazy("core.types.folder")] | None = (
+        kante.django_field(description="The folder it is filed in. Organisational only")
+    )
+    coordinate_system: CoordinateSystem = kante.django_field(
+        description="The coordinate system whose axes are this matrix's two enumerations. Owned by the dataset, and the space a FIELD edge lands in"
+    )
+    arrays: list[SparseArray] = kante.django_field(
+        description="The stored layouts, one per axis a store's `indptr` indexes. One is legal and offers one capability"
+    )
+    axis_references: list[SparseAxisReference] = kante.django_field(
+        description="The axes identified by a table rather than by a keying source"
+    )
+    provenance_entries: list[ProvenanceEntry] = kante.django_field(
+        description="The recorded history of this dataset. Only `name` and `description` can change"
+    )
+    created_through: Task | None = kante.django_field(
+        description="The task this dataset was created through, if any"
+    )
+    anchors: list[
+        Annotated["CoordinateAnchor", strawberry.lazy("core.types.array_dataset")]
+    ] = kante.django_field(
         description=(
             "The coordinate anchors of this matrix, each pinning metadata spokes to positions along its enumerated axes, keyed by axis name, or to the whole matrix when its "
             "coordinates are empty. The same hub an array dataset uses, so a per-object matrix carries the acquisition facts of the recording it was computed from"
         )
     )
-    created_through_by: User | None = kante.django_field(description="Who assigned that task")
+    created_through_by: User | None = kante.django_field(
+        description="Who assigned that task"
+    )
 
-    @kante.django_field(description="The matrix's axis names, in the order its stores' `shape` is written")
-    def axis_names(self, info: Info) -> List[str]:
+    @kante.django_field(
+        description="The matrix's axis names, in the order its stores' `shape` is written"
+    )
+    def axis_names(self, info: Info) -> list[str]:
         """The matrix's axis names."""
         del info
         return self.axis_names
 
-    @kante.django_field(description="The shape of the matrix, read off its stores rather than declared. Every layout of one dataset holds the same shape")
-    def shape(self, info: Info) -> List[int]:
+    @kante.django_field(
+        description="The shape of the matrix, read off its stores rather than declared. Every layout of one dataset holds the same shape"
+    )
+    def shape(self, info: Info) -> list[int]:
         """The matrix's shape."""
         del info
         return self.shape
@@ -148,27 +192,44 @@ class SparseDataset(OrgScoped):
             "by scanning every byte, so a surface needing that answer will not offer this dataset"
         )
     )
-    def indexable_axes(self, info: Info) -> List[str]:
+    def indexable_axes(self, info: Info) -> list[str]:
         """The axes a stored layout indexes."""
         del info
         names = self.axis_names
-        return [names[array.indexed_axis] for array in self.arrays.all() if 0 <= array.indexed_axis < len(names)]
+        return [
+            names[array.indexed_axis]
+            for array in self.arrays.all()
+            if 0 <= array.indexed_axis < len(names)
+        ]
 
-    @kante.django_field(description="Every edge from this matrix's space back into the data it was computed from, in declared order")
-    def derived_from(self, info: Info) -> List[Transformation]:
+    @kante.django_field(
+        description="Every edge from this matrix's space back into the data it was computed from, in declared order"
+    )
+    def derived_from(self, info: Info) -> list[Transformation]:
         """The edges relating this matrix's space to what it came from."""
         del info
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
 
-    @kante.django_field(description="The files this dataset was converted from", prefetch_related=["file_links__file"])
-    def source_files(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    @kante.django_field(
+        description="The files this dataset was converted from",
+        prefetch_related=["file_links__file"],
+    )
+    def source_files(
+        self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
+    ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming a file this dataset was produced from."""
         import core.enums as enums
 
-        return apply_link_filters(file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE), filters, info)
+        return apply_link_filters(
+            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
+            filters,
+            info,
+        )
 
-    @kante.django_field(description="How this matrix was produced: the run, its parameters and its inputs")
+    @kante.django_field(
+        description="How this matrix was produced: the run, its parameters and its inputs"
+    )
     def provenance_metadata(self, info: Info) -> scalars.Any:
         """How this matrix was produced."""
         del info

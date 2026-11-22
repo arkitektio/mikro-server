@@ -102,11 +102,15 @@ def create_chart(
     lay it along, or its rows placed in it.
     """
     if (world is None) == (axis is None):
-        raise ValueError("A chart is created over exactly one of `coordinateSystem` (an existing space to adopt) or `axis` (the one axis of a space to create).")
+        raise ValueError(
+            "A chart is created over exactly one of `coordinateSystem` (an existing space to adopt) or `axis` (the one axis of a space to create)."
+        )
 
     with transaction.atomic():
         if world is None:
-            world = coordinate_system_logic.create_world_space(name=f"{name}/axis", axes=[axis], ctx=ctx)
+            world = coordinate_system_logic.create_world_space(
+                name=f"{name}/axis", axes=[axis], ctx=ctx
+            )
         return models.Chart.objects.create(
             name=name,
             description=description,
@@ -137,11 +141,20 @@ def along_axis_of(condensed: "graph_logic.CondensedPlacement | None") -> str | N
     if condensed is None or not condensed.total or len(condensed.matrix) != 1:
         return None
     coefficients = condensed.matrix[0][:-1]
-    read = [name for name, coefficient in zip(condensed.input_axes, coefficients) if coefficient != 0]
+    read = [
+        name
+        for name, coefficient in zip(condensed.input_axes, coefficients)
+        if coefficient != 0
+    ]
     return read[0] if len(read) == 1 else None
 
 
-def resolve_along_axis(chart: "models.Chart", source_system: "core_models.CoordinateSystem | None", *, what: str) -> str:
+def resolve_along_axis(
+    chart: "models.Chart",
+    source_system: "core_models.CoordinateSystem | None",
+    *,
+    what: str,
+) -> str:
     """Refuse a source that is not laid along this chart's axis; return the axis that is.
 
     The strict gate first, so the three refusals it already tells apart -- nothing registered,
@@ -156,9 +169,13 @@ def resolve_along_axis(chart: "models.Chart", source_system: "core_models.Coordi
             f"Chart '{chart.name}' has no single measured axis to lay {what} along: {refused} "
             "A table's rows can still be drawn here by their values, as POINTS or a DISTRIBUTION."
         ) from refused
-    graph_logic.assert_placeable_in(world, source_system, destination=f"the axis of chart '{chart.name}'")
+    graph_logic.assert_placeable_in(
+        world, source_system, destination=f"the axis of chart '{chart.name}'"
+    )
 
-    condensed = placement.PlacementGraph(world, seed_systems=[source_system.pk]).condensed(source_system)
+    condensed = placement.PlacementGraph(
+        world, seed_systems=[source_system.pk]
+    ).condensed(source_system)
     if condensed is None or not condensed.total:
         raise ValueError(
             f"{what} is registered into the space of chart '{chart.name}', but its registration says nothing about the axis '{axis.name}' the chart is laid out along. "
@@ -173,7 +190,11 @@ def resolve_along_axis(chart: "models.Chart", source_system: "core_models.Coordi
     along = along_axis_of(condensed)
     if along is None:
         coefficients = condensed.matrix[0][:-1]
-        read = [name for name, coefficient in zip(condensed.input_axes, coefficients) if coefficient != 0]
+        read = [
+            name
+            for name, coefficient in zip(condensed.input_axes, coefficients)
+            if coefficient != 0
+        ]
         raise ValueError(
             f"{what} is placed in chart '{chart.name}' by a map that reads its axis '{axis.name}' from {len(read)} of the data's axes ({', '.join(read) or 'none'}). "
             "Data is laid along a chart by exactly one of its axes."
@@ -212,9 +233,13 @@ def assert_trace(lens: "core_models.Lens", along: str) -> None:
     sizes = dict(zip(lens.axis_names, lens.shape_list))
 
     if types[along] not in METRIC_AXIS_TYPES:
-        raise ValueError(f"Lens {lens.pk} is laid along the chart by its axis '{along}', which is of type {types[along]} and does not measure anything. A trace is read along a metric axis.")
+        raise ValueError(
+            f"Lens {lens.pk} is laid along the chart by its axis '{along}', which is of type {types[along]} and does not measure anything. A trace is read along a metric axis."
+        )
     if sizes[along] <= 1:
-        raise ValueError(f"Lens {lens.pk} selects a single position along '{along}', the axis laid along the chart, so there is no trace to draw. Leave '{along}' free.")
+        raise ValueError(
+            f"Lens {lens.pk} selects a single position along '{along}', the axis laid along the chart, so there is no trace to draw. Leave '{along}' free."
+        )
 
     free = [name for name in lens.axis_names if name != along and sizes[name] > 1]
     surfaces = [name for name in free if types[name] not in ENUMERATING_AXIS_TYPES]
@@ -235,12 +260,22 @@ def is_numeric(column: "core_models.Column") -> bool:
     return coords_logic.is_numeric_dtype(column.dtype)
 
 
-def value_candidates(table: "core_models.TableDataset", along: str) -> list["core_models.Column"]:
+def value_candidates(
+    table: "core_models.TableDataset", along: str
+) -> list["core_models.Column"]:
     """The columns of a table that could be a series' value: numeric attributes."""
-    return [column for column in table.columns.all() if column.name != along and column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value and is_numeric(column)]
+    return [
+        column
+        for column in table.columns.all()
+        if column.name != along
+        and column.role == core_enums.ColumnRoleChoices.ATTRIBUTE.value
+        and is_numeric(column)
+    ]
 
 
-def resolve_value_column(table: "core_models.TableDataset", along: str, requested: str | None) -> str:
+def resolve_value_column(
+    table: "core_models.TableDataset", along: str, requested: str | None
+) -> str:
     """The value column of a series: the one named, checked, or the only one there could be.
 
     Inferred only when exactly one column qualifies. With several, picking the first would be
@@ -256,9 +291,13 @@ def resolve_value_column(table: "core_models.TableDataset", along: str, requeste
         return candidates[0].name
 
     if requested == along:
-        raise ValueError(f"Column '{requested}' is the coordinate column table dataset '{table.name}' is laid along the chart by. A series' value is another column.")
+        raise ValueError(
+            f"Column '{requested}' is the coordinate column table dataset '{table.name}' is laid along the chart by. A series' value is another column."
+        )
     if requested not in {column.name for column in candidates}:
-        raise ValueError(f"Column '{requested}' is not a numeric attribute column of table dataset '{table.name}'. A series' value is one of: {', '.join(column.name for column in candidates) or 'none'}.")
+        raise ValueError(
+            f"Column '{requested}' is not a numeric attribute column of table dataset '{table.name}'. A series' value is one of: {', '.join(column.name for column in candidates) or 'none'}."
+        )
     return requested
 
 
@@ -266,28 +305,49 @@ def resolve_value_column(table: "core_models.TableDataset", along: str, requeste
 
 
 #: The roles a grouping column may have: what sorts rows rather than measures them.
-_GROUPING_ROLES = frozenset({core_enums.ColumnRoleChoices.ATTRIBUTE.value, core_enums.ColumnRoleChoices.LABEL.value, core_enums.ColumnRoleChoices.GROUP_ID.value})
+_GROUPING_ROLES = frozenset(
+    {
+        core_enums.ColumnRoleChoices.ATTRIBUTE.value,
+        core_enums.ColumnRoleChoices.LABEL.value,
+        core_enums.ColumnRoleChoices.GROUP_ID.value,
+    }
+)
 
 
-def _column(table: "core_models.TableDataset", name: str, *, role: str) -> "core_models.Column":
-    column = next((column for column in table.columns.all() if column.name == name), None)
+def _column(
+    table: "core_models.TableDataset", name: str, *, role: str
+) -> "core_models.Column":
+    column = next(
+        (column for column in table.columns.all() if column.name == name), None
+    )
     if column is None:
-        raise ValueError(f"Table dataset '{table.name}' has no column '{name}' to read as {role}; its columns are {', '.join(column.name for column in table.columns.all())}.")
+        raise ValueError(
+            f"Table dataset '{table.name}' has no column '{name}' to read as {role}; its columns are {', '.join(column.name for column in table.columns.all())}."
+        )
     return column
 
 
-def numeric_column(table: "core_models.TableDataset", name: str, *, role: str) -> "core_models.Column":
+def numeric_column(
+    table: "core_models.TableDataset", name: str, *, role: str
+) -> "core_models.Column":
     """A column a value layer reads a position from: it exists, and holds numbers."""
     column = _column(table, name, role=role)
     if not is_numeric(column):
-        raise ValueError(f"Column '{name}' of table dataset '{table.name}' holds {column.dtype}, not numbers, so it has no value to draw as {role}. A text column is what a distribution groups by.")
+        raise ValueError(
+            f"Column '{name}' of table dataset '{table.name}' holds {column.dtype}, not numbers, so it has no value to draw as {role}. A text column is what a distribution groups by."
+        )
     return column
 
 
-def grouping_column(table: "core_models.TableDataset", name: str) -> "core_models.Column":
+def grouping_column(
+    table: "core_models.TableDataset", name: str
+) -> "core_models.Column":
     """A column a distribution draws one summary per value of: what sorts rows -- a condition, a cluster -- or a long-form channel."""
     column = _column(table, name, role="the grouping")
-    sorts = column.role in _GROUPING_ROLES and (column.role != core_enums.ColumnRoleChoices.ATTRIBUTE.value or not is_numeric(column))
+    sorts = column.role in _GROUPING_ROLES and (
+        column.role != core_enums.ColumnRoleChoices.ATTRIBUTE.value
+        or not is_numeric(column)
+    )
     channel = column.axis_type == core_enums.AxisTypeChoices.CHANNEL.value
     if not (sorts or channel):
         raise ValueError(
@@ -297,7 +357,9 @@ def grouping_column(table: "core_models.TableDataset", name: str) -> "core_model
     return column
 
 
-def _bindings(kind: str, *, x: str | None, y: str | None, z: str | None, value: str | None) -> dict[str, str | None]:
+def _bindings(
+    kind: str, *, x: str | None, y: str | None, z: str | None, value: str | None
+) -> dict[str, str | None]:
     """The position a value layer reads each of its columns into: a distribution's value is its horizontal axis."""
     if kind == enums.ChartLayerKindChoices.POINTS.value:
         return {"x": x, "y": y, "z": z}
@@ -332,29 +394,47 @@ def assert_value_layer(
     """
     table = lens.table_dataset
     if check_placement:
-        graph_logic.assert_placeable_in(chart.world, lens.coordinate_system, destination=f"the world of chart '{chart.name}' (whose rows it draws)")
+        graph_logic.assert_placeable_in(
+            chart.world,
+            lens.coordinate_system,
+            destination=f"the world of chart '{chart.name}' (whose rows it draws)",
+        )
     if kind == enums.ChartLayerKindChoices.POINTS.value:
         if x is None or y is None:
-            raise ValueError("A POINTS layer places each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth); name both.")
+            raise ValueError(
+                "A POINTS layer places each row at the values of `xColumn` and `yColumn` (and `zColumn` for depth); name both."
+            )
         if value is not None or group is not None or bins is not None:
-            raise ValueError("A POINTS layer reads `xColumn`, `yColumn` and `zColumn`; `valueColumn`, `groupColumn` and `bins` are a distribution's.")
+            raise ValueError(
+                "A POINTS layer reads `xColumn`, `yColumn` and `zColumn`; `valueColumn`, `groupColumn` and `bins` are a distribution's."
+            )
         names = [name for name in (x, y, z) if name is not None]
         if len(set(names)) != len(names):
-            raise ValueError(f"A POINTS layer reads a different column for each position, but names {names}.")
+            raise ValueError(
+                f"A POINTS layer reads a different column for each position, but names {names}."
+            )
     else:
         if value is None:
-            raise ValueError("A DISTRIBUTION summarises the values of one column; name it with `valueColumn`.")
+            raise ValueError(
+                "A DISTRIBUTION summarises the values of one column; name it with `valueColumn`."
+            )
         if x is not None or y is not None or z is not None:
-            raise ValueError("A DISTRIBUTION reads `valueColumn` (and `groupColumn`); `xColumn`, `yColumn` and `zColumn` are points'.")
+            raise ValueError(
+                "A DISTRIBUTION reads `valueColumn` (and `groupColumn`); `xColumn`, `yColumn` and `zColumn` are points'."
+            )
         if bins is not None:
             if mark != enums.ChartMarkChoices.HISTOGRAM.value:
-                raise ValueError(f"`bins` is how a HISTOGRAM is cut; a {mark.upper()} has none.")
+                raise ValueError(
+                    f"`bins` is how a HISTOGRAM is cut; a {mark.upper()} has none."
+                )
             if bins < 1:
                 raise ValueError(f"A histogram has at least one bin, not {bins}.")
         if group is not None:
             grouping_column(table, group)
             if group == value:
-                raise ValueError(f"A distribution of '{value}' is not grouped by '{value}' itself.")
+                raise ValueError(
+                    f"A distribution of '{value}' is not grouped by '{value}' itself."
+                )
 
     bound = _bindings(kind, x=x, y=y, z=z, value=value)
     for position, name in bound.items():
@@ -397,36 +477,75 @@ def create_layer(
     allowed = enums.MARKS.get(kind)
     mark = settings.get("mark")
     if mark is not None and allowed is not None and mark not in allowed:
-        raise ValueError(f"A {kind.upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(mark).upper()}: a look of another kind.")
+        raise ValueError(
+            f"A {kind.upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(mark).upper()}: a look of another kind."
+        )
     if mark is None and allowed is not None:
         settings["mark"] = allowed[0]
 
     values: dict[str, object] = {}
     if kind in enums.VALUE_KINDS:
         if not isinstance(source, core_models.TableLens):
-            raise ValueError(f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns.")
-        values.update(assert_value_layer(chart, kind=kind, lens=source, x=x_column, y=y_column, z=z_column, value=value_column, group=group_column, bins=bins, mark=str(settings["mark"])))
+            raise ValueError(
+                f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns."
+            )
+        values.update(
+            assert_value_layer(
+                chart,
+                kind=kind,
+                lens=source,
+                x=x_column,
+                y=y_column,
+                z=z_column,
+                value=value_column,
+                group=group_column,
+                bins=bins,
+                mark=str(settings["mark"]),
+            )
+        )
     else:
-        if any(binding is not None for binding in (x_column, y_column, z_column, group_column, bins)):
-            raise ValueError(f"A {kind.upper()} layer is placed along the chart's axis by the graph; column bindings are a POINTS or DISTRIBUTION layer's.")
+        if any(
+            binding is not None
+            for binding in (x_column, y_column, z_column, group_column, bins)
+        ):
+            raise ValueError(
+                f"A {kind.upper()} layer is placed along the chart's axis by the graph; column bindings are a POINTS or DISTRIBUTION layer's."
+            )
         along = resolve_along_axis(chart, source.coordinate_system, what=what)
 
     if kind == enums.ChartLayerKindChoices.TRACE.value:
         if not isinstance(source, core_models.ArrayLens):
-            raise ValueError(f"{what} is not an array lens; a trace reads an array along one of its axes.")
+            raise ValueError(
+                f"{what} is not an array lens; a trace reads an array along one of its axes."
+            )
         assert_trace(source, along)
     elif kind == enums.ChartLayerKindChoices.SERIES.value:
         if not isinstance(source, core_models.TableLens):
-            raise ValueError(f"{what} is not a table lens; a series reads a table's value column.")
-        values["value_column"] = resolve_value_column(source.table_dataset, along, value_column)
-    elif kind == enums.ChartLayerKindChoices.ANNOTATION.value and not isinstance(source, core_models.AnnotationLens):
-        raise ValueError(f"{what} is not an annotation lens; an annotation layer draws a collection's marks.")
+            raise ValueError(
+                f"{what} is not a table lens; a series reads a table's value column."
+            )
+        values["value_column"] = resolve_value_column(
+            source.table_dataset, along, value_column
+        )
+    elif kind == enums.ChartLayerKindChoices.ANNOTATION.value and not isinstance(
+        source, core_models.AnnotationLens
+    ):
+        raise ValueError(
+            f"{what} is not an annotation lens; an annotation layer draws a collection's marks."
+        )
 
     if order is None:
         last = chart.layers.order_by("-order").values_list("order", flat=True).first()
         order = 0 if last is None else last + 1
 
-    return models.ChartLayer.objects.create(chart=chart, kind=kind, order=order, **{enums.SOURCE_FIELD[kind]: source}, **values, **settings)
+    return models.ChartLayer.objects.create(
+        chart=chart,
+        kind=kind,
+        order=order,
+        **{enums.SOURCE_FIELD[kind]: source},
+        **values,
+        **settings,
+    )
 
 
 #: The bindings an update may clear, by the kind that has them: each is optional at creation.
@@ -461,17 +580,30 @@ def update_layer(
     kind = str(layer.kind)
     chart = layer.chart
     rebound = source is not None and source.pk != layer.lens_id
-    lens = source if source is not None else core_models.Lens.objects.with_sources().get(pk=layer.lens_id)
+    lens = (
+        source
+        if source is not None
+        else core_models.Lens.objects.with_sources().get(pk=layer.lens_id)
+    )
     what = f"{type(lens).__name__} {lens.pk}"
 
     allowed = enums.MARKS.get(kind)
     mark = settings.get("mark")
     if mark is not None and allowed is not None and mark not in allowed:
-        raise ValueError(f"A {kind.upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(mark).upper()}: a look of another kind.")
+        raise ValueError(
+            f"A {kind.upper()} layer is drawn as one of {', '.join(look.upper() for look in allowed)}, not {str(mark).upper()}: a look of another kind."
+        )
     for field in clear:
         if CLEARABLE.get(field) != kind:
             raise ValueError(f"A {kind.upper()} layer has no `{field}` to clear.")
-    named = {"value_column": value_column, "x_column": x_column, "y_column": y_column, "z_column": z_column, "group_column": group_column, "bins": bins}
+    named = {
+        "value_column": value_column,
+        "x_column": x_column,
+        "y_column": y_column,
+        "z_column": z_column,
+        "group_column": group_column,
+        "bins": bins,
+    }
     for field in clear:
         if named[field] is not None:
             raise ValueError(f"`{field}` is both set and cleared; do one.")
@@ -479,7 +611,9 @@ def update_layer(
     fields: dict[str, object] = {}
     if kind in enums.VALUE_KINDS:
         if not isinstance(lens, core_models.TableLens):
-            raise ValueError(f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns.")
+            raise ValueError(
+                f"{what} is not a table lens; a {kind.upper()} layer reads a table's rows and the values of its columns."
+            )
         merged_mark = str(mark if mark is not None else layer.mark)
 
         def merged(field: str) -> object:
@@ -490,8 +624,15 @@ def update_layer(
 
         merged_bins = merged("bins")
         if merged_mark == enums.ChartMarkChoices.BOX.value and bins is None:
-            merged_bins = None  # a box has no bins: the stored ones go with the histogram
-        changed = rebound or bool(clear) or mark is not None or any(named[field] is not None for field in named)
+            merged_bins = (
+                None  # a box has no bins: the stored ones go with the histogram
+            )
+        changed = (
+            rebound
+            or bool(clear)
+            or mark is not None
+            or any(named[field] is not None for field in named)
+        )
         if changed:
             is_points = kind == enums.ChartLayerKindChoices.POINTS.value
             fields.update(
@@ -510,25 +651,60 @@ def update_layer(
                 )
             )
     else:
-        bound = [field for field in ("x_column", "y_column", "z_column", "group_column", "bins") if named[field] is not None]
+        bound = [
+            field
+            for field in ("x_column", "y_column", "z_column", "group_column", "bins")
+            if named[field] is not None
+        ]
         if bound:
-            raise ValueError(f"A {kind.upper()} layer is placed along the chart's axis by the graph; {', '.join(f'`{field}`' for field in bound)} are a POINTS or DISTRIBUTION layer's.")
-        if value_column is not None and kind != enums.ChartLayerKindChoices.SERIES.value:
-            raise ValueError(f"A {kind.upper()} layer reads no value column; a SERIES does.")
+            raise ValueError(
+                f"A {kind.upper()} layer is placed along the chart's axis by the graph; {', '.join(f'`{field}`' for field in bound)} are a POINTS or DISTRIBUTION layer's."
+            )
+        if (
+            value_column is not None
+            and kind != enums.ChartLayerKindChoices.SERIES.value
+        ):
+            raise ValueError(
+                f"A {kind.upper()} layer reads no value column; a SERIES does."
+            )
         if kind == enums.ChartLayerKindChoices.TRACE.value and rebound:
             if not isinstance(lens, core_models.ArrayLens):
-                raise ValueError(f"{what} is not an array lens; a trace reads an array along one of its axes.")
-            assert_trace(lens, resolve_along_axis(chart, lens.coordinate_system, what=what))
-        elif kind == enums.ChartLayerKindChoices.SERIES.value and (rebound or value_column is not None):
+                raise ValueError(
+                    f"{what} is not an array lens; a trace reads an array along one of its axes."
+                )
+            assert_trace(
+                lens, resolve_along_axis(chart, lens.coordinate_system, what=what)
+            )
+        elif kind == enums.ChartLayerKindChoices.SERIES.value and (
+            rebound or value_column is not None
+        ):
             if not isinstance(lens, core_models.TableLens):
-                raise ValueError(f"{what} is not a table lens; a series reads a table's value column.")
+                raise ValueError(
+                    f"{what} is not a table lens; a series reads a table's value column."
+                )
             along = resolve_along_axis(chart, lens.coordinate_system, what=what)
             # A new table keeps the stored column only if it has one by that name; else the one it can be.
-            requested = value_column if value_column is not None else (layer.value_column if not rebound or any(c.name == layer.value_column for c in lens.table_dataset.columns.all()) else None)
-            fields["value_column"] = resolve_value_column(lens.table_dataset, along, requested)
+            requested = (
+                value_column
+                if value_column is not None
+                else (
+                    layer.value_column
+                    if not rebound
+                    or any(
+                        c.name == layer.value_column
+                        for c in lens.table_dataset.columns.all()
+                    )
+                    else None
+                )
+            )
+            fields["value_column"] = resolve_value_column(
+                lens.table_dataset, along, requested
+            )
         elif kind == enums.ChartLayerKindChoices.ANNOTATION.value and rebound:
             if not isinstance(lens, core_models.AnnotationLens):
-                raise ValueError(f"{what} is not an annotation lens; an annotation layer draws a collection's marks.")
+                raise ValueError(
+                    f"{what} is not an annotation lens; an annotation layer draws a collection's marks."
+                )
             resolve_along_axis(chart, lens.coordinate_system, what=what)
 
     if rebound:
@@ -542,7 +718,9 @@ def update_layer(
     return layer
 
 
-def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: CreationContext) -> "core_models.AnnotationCollection":
+def mint_annotation_collection(
+    chart: "models.Chart", *, name: str | None, ctx: CreationContext
+) -> "core_models.AnnotationCollection":
     """A new drawing surface for a chart: a collection, its space, and the edge that places it.
 
     The space has two axes: the chart's own, by name and type, and a VALUE axis -- so a mark
@@ -556,7 +734,9 @@ def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: 
     """
     axis = world_axis(chart.world)
     if axis is None:
-        raise ValueError(f"Chart '{chart.name}' has no single measured axis to draw marks along. Annotate a chart whose world is one measured axis.")
+        raise ValueError(
+            f"Chart '{chart.name}' has no single measured axis to draw marks along. Annotate a chart whose world is one measured axis."
+        )
     collection = core_models.AnnotationCollection.objects.create(
         name=(name or f"{chart.name}/annotations")[:255],
         creator=ctx.user,
@@ -566,7 +746,12 @@ def mint_annotation_collection(chart: "models.Chart", *, name: str | None, ctx: 
     system = graph_logic.create_collection_system(
         name=f"{collection.name}/drawing"[:255],
         axes=[
-            AxisInputModel(name=axis.name, type=core_enums.AxisType(axis.type), long_name=axis.long_name, description=axis.description),
+            AxisInputModel(
+                name=axis.name,
+                type=core_enums.AxisType(axis.type),
+                long_name=axis.long_name,
+                description=axis.description,
+            ),
             AxisInputModel(name=VALUE_AXIS_NAME, type=core_enums.AxisType.VALUE),
         ],
         owner=collection,
@@ -598,7 +783,9 @@ class Policy:
     nchildren: int = 32
 
 
-def _candidates(world: "core_models.CoordinateSystem", organization: object) -> list[tuple[str, object]]:
+def _candidates(
+    world: "core_models.CoordinateSystem", organization: object
+) -> list[tuple[str, object]]:
     """Everything strictly placed in a space that a chart layer could read, as ``(kind, container)``.
 
     Arrays first, then tables, then drawings -- data under the marks made on it. An array is
@@ -607,16 +794,28 @@ def _candidates(world: "core_models.CoordinateSystem", organization: object) -> 
     """
     placed = graph_logic.placeable_system_ids_in(world) | {world.pk}
     found: list[tuple[str, object]] = []
-    for dataset in core_models.ArrayDataset.objects.filter(organization=organization, coordinate_system__in=placed).order_by("pk"):
+    for dataset in core_models.ArrayDataset.objects.filter(
+        organization=organization, coordinate_system__in=placed
+    ).order_by("pk"):
         found.append((enums.ChartLayerKindChoices.TRACE.value, dataset))
-    for table in core_models.TableDataset.objects.filter(organization=organization, coordinate_system__in=placed).order_by("pk"):
+    for table in core_models.TableDataset.objects.filter(
+        organization=organization, coordinate_system__in=placed
+    ).order_by("pk"):
         found.append((enums.ChartLayerKindChoices.SERIES.value, table))
-    for collection in core_models.AnnotationCollection.objects.filter(organization=organization, coordinate_system__in=placed).order_by("pk"):
+    for collection in core_models.AnnotationCollection.objects.filter(
+        organization=organization, coordinate_system__in=placed
+    ).order_by("pk"):
         found.append((enums.ChartLayerKindChoices.ANNOTATION.value, collection))
     return found
 
 
-def bootstrap_chart_from_system(system: "core_models.CoordinateSystem", *, name: str | None, policy: Policy, ctx: CreationContext) -> "models.Chart":
+def bootstrap_chart_from_system(
+    system: "core_models.CoordinateSystem",
+    *,
+    name: str | None,
+    policy: Policy,
+    ctx: CreationContext,
+) -> "models.Chart":
     """A chart over an existing space, drawing what is already laid along its axis.
 
     Authors no edges. A source becomes a layer exactly when ``create_layer`` would accept it,
@@ -635,7 +834,12 @@ def bootstrap_chart_from_system(system: "core_models.CoordinateSystem", *, name:
                 # poison the transaction the others are written in. The whole lens an array
                 # is drawn through is the dataset's own, shared row -- nothing to take back.
                 with transaction.atomic():
-                    create_layer(chart, kind=kind, source=coordinate_system_logic.whole_lens(container), name=container.name)
+                    create_layer(
+                        chart,
+                        kind=kind,
+                        source=coordinate_system_logic.whole_lens(container),
+                        name=container.name,
+                    )
             except ValueError:
                 continue
             drawn += 1

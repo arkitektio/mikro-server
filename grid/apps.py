@@ -17,4 +17,9 @@ class GridConfig(AppConfig):
         from core.logic import compositions
         from grid import models
 
-        compositions.register_composition(models.Grid, world_relation="grids", noun="grid", lens_relation="layers__lens")
+        compositions.register_composition(
+            models.Grid,
+            world_relation="grids",
+            noun="grid",
+            lens_relation="layers__lens",
+        )

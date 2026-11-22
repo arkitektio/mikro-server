@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 import boto3
 from botocore.config import Config as BotoConfig
-
 from django.db import transaction
 
 from core import models
@@ -70,7 +69,10 @@ def read_footer(location: str) -> TableFooter:
 
     # Bound to a name: the relation needs its connection alive (see `Datalayer.get_parquet_schema`).
     duck = get_current_duck()
-    rows = duck.sql("SELECT sum(num_rows) FROM parquet_file_metadata($location);", params={"location": location}).fetchall()
+    rows = duck.sql(
+        "SELECT sum(num_rows) FROM parquet_file_metadata($location);",
+        params={"location": location},
+    ).fetchall()
     row_count = int(rows[0][0] or 0)
     columns = {
         str(name): ColumnFooter(
@@ -78,7 +80,9 @@ def read_footer(location: str) -> TableFooter:
             maximum=float(maximum) if maximum is not None else None,
             null_count=int(nulls) if nulls is not None else None,
         )
-        for name, minimum, maximum, nulls in duck.sql(_COLUMN_FOOTER_SQL, params={"location": location}).fetchall()
+        for name, minimum, maximum, nulls in duck.sql(
+            _COLUMN_FOOTER_SQL, params={"location": location}
+        ).fetchall()
     }
     return TableFooter(row_count=row_count, columns=columns)
 
@@ -90,12 +94,18 @@ def write_footer(table: "models.TableDataset", footer: TableFooter) -> None:
     no history row and leave the stored descriptors alone.
     """
     with transaction.atomic():
-        models.TableDataset.objects.filter(pk=table.pk).update(row_count=footer.row_count)
+        models.TableDataset.objects.filter(pk=table.pk).update(
+            row_count=footer.row_count
+        )
         for column in table.columns.all():
             facts = footer.columns.get(column.name)
             if facts is None:
                 continue
-            models.Column.objects.filter(pk=column.pk).update(value_min=facts.minimum, value_max=facts.maximum, null_count=facts.null_count)
+            models.Column.objects.filter(pk=column.pk).update(
+                value_min=facts.minimum,
+                value_max=facts.maximum,
+                null_count=facts.null_count,
+            )
     table.row_count = footer.row_count
 
 
@@ -114,12 +124,24 @@ def _object_is_there(layer: "Datalayer", key: str) -> bool:
         aws_session_token=config.session_token or None,
         endpoint_url=config.endpoint_url,
         region_name=config.region,
-        config=BotoConfig(signature_version="s3v4", retries={"max_attempts": 1, "mode": "standard"}, connect_timeout=2, read_timeout=5),
+        config=BotoConfig(
+            signature_version="s3v4",
+            retries={"max_attempts": 1, "mode": "standard"},
+            connect_timeout=2,
+            read_timeout=5,
+        ),
     )
     try:
-        client.head_object(Bucket=layer.get_bucket_config("parquet").bucket, Key=layer.build_object_key("parquet", key))
+        client.head_object(
+            Bucket=layer.get_bucket_config("parquet").bucket,
+            Key=layer.build_object_key("parquet", key),
+        )
     except Exception as error:  # noqa: BLE001 - botocore raises ClientError for a 404 and its own errors for an unreachable endpoint
-        logger.info("Not reading the parquet footer of %s: its object cannot be reached (%s)", key, error)
+        logger.info(
+            "Not reading the parquet footer of %s: its object cannot be reached (%s)",
+            key,
+            error,
+        )
         return False
     return True
 
@@ -140,7 +162,12 @@ def record_footer(table: "models.TableDataset", location: str | None = None) -> 
     try:
         footer = read_footer(location)
     except Exception as error:  # noqa: BLE001 - DuckDB raises its own IO and parser errors, all of them "not readable now"
-        logger.info("Could not read the parquet footer of table %s (%s): %s", table.pk, location, error)
+        logger.info(
+            "Could not read the parquet footer of table %s (%s): %s",
+            table.pk,
+            location,
+            error,
+        )
         return False
     write_footer(table, footer)
     return True

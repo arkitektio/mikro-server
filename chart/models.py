@@ -1,8 +1,8 @@
 """Charts and their layers. Nothing here stores where data sits: that is the graph's answer."""
 
+from arkitekt_service.service.described import Described
 from authentikate.models import Organization
 from django.contrib.auth import get_user_model
-from arkitekt_service.service.described import Described
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import Q
@@ -49,14 +49,25 @@ class Chart(Described):
             "RESTRICT: while a chart is laid out over a space, the space cannot be deleted"
         ),
     )
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, related_name="created_charts")
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="created_charts",
+    )
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
-
     class Meta:
         ordering = ["-created_at"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="chart_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="chart_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            )
+        ]
 
 
 class ChartLayer(models.Model):
@@ -76,37 +87,109 @@ class ChartLayer(models.Model):
     """
 
     chart = models.ForeignKey(Chart, on_delete=models.CASCADE, related_name="layers")
-    kind = TextChoicesField(choices_enum=enums.ChartLayerKindChoices, help_text="What this layer reads. Fixed for the life of the row")
-    name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the layer. Null when nobody has named it")
+    kind = TextChoicesField(
+        choices_enum=enums.ChartLayerKindChoices,
+        help_text="What this layer reads. Fixed for the life of the row",
+    )
+    name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="A human-readable name for the layer. Null when nobody has named it",
+    )
     visible = models.BooleanField(default=True, help_text="Whether the layer is drawn")
-    order = models.IntegerField(default=0, help_text="Explicit drawing order, back to front")
+    order = models.IntegerField(
+        default=0, help_text="Explicit drawing order, back to front"
+    )
     opacity = models.FloatField(default=1.0, help_text="Layer alpha (0..1)")
-    color = models.JSONField(null=True, blank=True, help_text="The colour the layer is drawn in, as RGBA. Null to let the viewer choose")
+    color = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="The colour the layer is drawn in, as RGBA. Null to let the viewer choose",
+    )
 
     # --- the source: one lens, whatever the kind ---
-    lens = models.ForeignKey("core.Lens", on_delete=models.CASCADE, related_name="chart_layers", help_text="The lens this layer reads through: an array lens for a trace, a table lens for a series, an annotation lens for marks")
+    lens = models.ForeignKey(
+        "core.Lens",
+        on_delete=models.CASCADE,
+        related_name="chart_layers",
+        help_text="The lens this layer reads through: an array lens for a trace, a table lens for a series, an annotation lens for marks",
+    )
 
     # --- series, distribution ---
-    value_column = models.CharField(max_length=255, null=True, blank=True, help_text="(series) The numeric column read as the value, against the coordinate the table's placement lays along the chart's axis. (distribution) The numeric column whose values are summarised")
+    value_column = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="(series) The numeric column read as the value, against the coordinate the table's placement lays along the chart's axis. (distribution) The numeric column whose values are summarised",
+    )
 
     # --- points: the columns whose values are the position ---
-    x_column = models.CharField(max_length=255, null=True, blank=True, help_text="(points) The numeric column whose value is a row's horizontal position")
-    y_column = models.CharField(max_length=255, null=True, blank=True, help_text="(points) The numeric column whose value is a row's vertical position")
-    z_column = models.CharField(max_length=255, null=True, blank=True, help_text="(points) The numeric column whose value is a row's depth, for a three-dimensional scatter. Null for a flat one")
+    x_column = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="(points) The numeric column whose value is a row's horizontal position",
+    )
+    y_column = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="(points) The numeric column whose value is a row's vertical position",
+    )
+    z_column = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="(points) The numeric column whose value is a row's depth, for a three-dimensional scatter. Null for a flat one",
+    )
 
     # --- distribution ---
-    group_column = models.CharField(max_length=255, null=True, blank=True, help_text="(distribution) The column whose values split the rows into one summary each -- a condition, a cluster, a long-form channel. Null for one summary over every row")
-    bins = models.PositiveIntegerField(null=True, blank=True, help_text="(distribution, histogram) How many bins. Null lets the viewer choose")
+    group_column = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="(distribution) The column whose values split the rows into one summary each -- a condition, a cluster, a long-form channel. Null for one summary over every row",
+    )
+    bins = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="(distribution, histogram) How many bins. Null lets the viewer choose",
+    )
 
     # --- style (trace, series) ---
-    mark = TextChoicesField(choices_enum=enums.ChartMarkChoices, default=enums.ChartMarkChoices.LINE.value, help_text="(trace/series) How the values are drawn: a line, markers, both, or steps")
-    line_width = models.FloatField(null=True, blank=True, help_text="(trace/series/points/distribution) How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
-    marker_size = models.FloatField(null=True, blank=True, help_text="(trace/series/points) How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose")
-    marker_shape = TextChoicesField(choices_enum=enums.ChartMarkerShapeChoices, null=True, blank=True, help_text="(trace/series/points) The symbol a marker is drawn as. Null to let the viewer choose (a circle)")
+    mark = TextChoicesField(
+        choices_enum=enums.ChartMarkChoices,
+        default=enums.ChartMarkChoices.LINE.value,
+        help_text="(trace/series) How the values are drawn: a line, markers, both, or steps",
+    )
+    line_width = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(trace/series/points/distribution) How thick lines are, as a multiple of the chart's default: 1 is the default, 2 twice as thick, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose",
+    )
+    marker_size = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="(trace/series/points) How big markers are, as a multiple of the chart's default: 1 is the default, 2 twice as big, 0.5 half. Never pixels -- what the default is on screen is the viewer's. Null lets the viewer choose",
+    )
+    marker_shape = TextChoicesField(
+        choices_enum=enums.ChartMarkerShapeChoices,
+        null=True,
+        blank=True,
+        help_text="(trace/series/points) The symbol a marker is drawn as. Null to let the viewer choose (a circle)",
+    )
     # --- value range (every kind) ---
-    value_min = models.FloatField(null=True, blank=True, help_text="The lowest value the layer's value scale shows, in the layer's own values. Null lets the viewer scale to the data")
-    value_max = models.FloatField(null=True, blank=True, help_text="The highest value the layer's value scale shows, in the layer's own values. Null lets the viewer scale to the data")
-
+    value_min = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The lowest value the layer's value scale shows, in the layer's own values. Null lets the viewer scale to the data",
+    )
+    value_max = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The highest value the layer's value scale shows, in the layer's own values. Null lets the viewer scale to the data",
+    )
 
     class Meta:
         ordering = ["order", "id"]
@@ -114,9 +197,29 @@ class ChartLayer(models.Model):
             # Each kind's columns, and only its own: a layer reads what its kind reads.
             models.CheckConstraint(
                 condition=(
-                    (Q(kind="points") & Q(x_column__isnull=False) & Q(y_column__isnull=False) & Q(value_column__isnull=True) & Q(group_column__isnull=True) & Q(bins__isnull=True))
-                    | (Q(kind="distribution") & Q(value_column__isnull=False) & Q(x_column__isnull=True) & Q(y_column__isnull=True) & Q(z_column__isnull=True))
-                    | (~Q(kind__in=["points", "distribution"]) & Q(x_column__isnull=True) & Q(y_column__isnull=True) & Q(z_column__isnull=True) & Q(group_column__isnull=True) & Q(bins__isnull=True))
+                    (
+                        Q(kind="points")
+                        & Q(x_column__isnull=False)
+                        & Q(y_column__isnull=False)
+                        & Q(value_column__isnull=True)
+                        & Q(group_column__isnull=True)
+                        & Q(bins__isnull=True)
+                    )
+                    | (
+                        Q(kind="distribution")
+                        & Q(value_column__isnull=False)
+                        & Q(x_column__isnull=True)
+                        & Q(y_column__isnull=True)
+                        & Q(z_column__isnull=True)
+                    )
+                    | (
+                        ~Q(kind__in=["points", "distribution"])
+                        & Q(x_column__isnull=True)
+                        & Q(y_column__isnull=True)
+                        & Q(z_column__isnull=True)
+                        & Q(group_column__isnull=True)
+                        & Q(bins__isnull=True)
+                    )
                 ),
                 name="chart_layer_columns_per_kind",
             ),

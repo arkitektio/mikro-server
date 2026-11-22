@@ -5,13 +5,13 @@ measured ``size_bytes``, so the "already holds N bytes" state is written straigh
 rows -- the same number ``finish`` would have measured -- rather than uploading gigabytes.
 """
 
+import arkitekt_datalayer.datalayer as datalayer_module
 import pytest
+from arkitekt_datalayer import quota
+from arkitekt_datalayer.models import MediaStore, ZarrStore
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-import arkitekt_datalayer.datalayer as datalayer_module
-from arkitekt_datalayer import quota
-from arkitekt_datalayer.models import MediaStore, ZarrStore
 from mikro_server.schema import schema
 
 GIB = 1024**3
@@ -80,14 +80,28 @@ def viewer_context(db, backend_stack) -> HttpContext:
     from kante.context import UniversalRequest
     from strawberry.http.temporal_response import TemporalResponse
 
-    user, _ = User.objects.get_or_create(sub="4", iss="static_issuer", defaults={"username": "static_issuer_4"})
+    user, _ = User.objects.get_or_create(
+        sub="4", iss="static_issuer", defaults={"username": "static_issuer_4"}
+    )
     client, _ = Client.objects.get_or_create(client_id="oinsoins")
     org, _ = Organization.objects.get_or_create(identifier="static_issuer#static_org")
-    membership, _ = Membership.objects.get_or_create(user=user, organization=org, defaults={"roles": ["viewer"]})
+    membership, _ = Membership.objects.get_or_create(
+        user=user, organization=org, defaults={"roles": ["viewer"]}
+    )
 
-    request = UniversalRequest(_extensions={"token": "viewertest"}, _client=client, _user=user, _organization=org)  # type: ignore
+    request = UniversalRequest(
+        _extensions={"token": "viewertest"},
+        _client=client,  # type: ignore
+        _user=user,  # type: ignore
+        _organization=org,  # type: ignore
+    )
     request.set_membership(membership)  # type: ignore
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer viewertest"}, type="http")
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer viewertest"},
+        type="http",
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -100,7 +114,9 @@ async def test_a_bot_can_upload(db, bot_context: HttpContext, quotas):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_role_outside_upload_roles_cannot_upload(db, viewer_context: HttpContext, quotas):
+async def test_a_role_outside_upload_roles_cannot_upload(
+    db, viewer_context: HttpContext, quotas
+):
     """The default ``upload_roles`` is admin + editor + bot: "viewer" is none of them."""
     quotas()
     result = await schema.execute(REQUEST_ZARR, context_value=viewer_context)
@@ -112,24 +128,37 @@ async def test_a_role_outside_upload_roles_cannot_upload(db, viewer_context: Htt
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_per_upload_quota_is_advertised_and_enforced(db, authenticated_context: HttpContext, quotas):
+async def test_the_per_upload_quota_is_advertised_and_enforced(
+    db, authenticated_context: HttpContext, quotas
+):
     quotas(default={"max_upload_bytes": "500GiB"})
 
     result = await schema.execute(REQUEST_ZARR, context_value=authenticated_context)
     assert not result.errors, result.errors
     assert result.data["requestZarrUpload"]["maxBytes"] == 500 * GIB
 
-    result = await schema.execute(REQUEST_MEDIA, variable_values={"size": 600 * GIB}, context_value=authenticated_context)
+    result = await schema.execute(
+        REQUEST_MEDIA,
+        variable_values={"size": 600 * GIB},
+        context_value=authenticated_context,
+    )
     assert result.errors and "per-upload quota" in _errors(result)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_without_quotas_the_bucket_default_is_advertised(db, authenticated_context: HttpContext, quotas):
+async def test_without_quotas_the_bucket_default_is_advertised(
+    db, authenticated_context: HttpContext, quotas
+):
     quotas()
     result = await schema.execute(REQUEST_ZARR, context_value=authenticated_context)
     assert not result.errors, result.errors
-    assert result.data["requestZarrUpload"]["maxBytes"] == datalayer_module.get_current_datalayer().get_bucket_config("zarr").default_max_bytes
+    assert (
+        result.data["requestZarrUpload"]["maxBytes"]
+        == datalayer_module.get_current_datalayer()
+        .get_bucket_config("zarr")
+        .default_max_bytes
+    )
 
 
 # --- totals ------------------------------------------------------------------
@@ -137,7 +166,9 @@ async def test_without_quotas_the_bucket_default_is_advertised(db, authenticated
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_user_quota_counts_only_that_user(db, authenticated_context: HttpContext, editor_context: HttpContext, quotas):
+async def test_the_user_quota_counts_only_that_user(
+    db, authenticated_context: HttpContext, editor_context: HttpContext, quotas
+):
     quotas(organizations={"static_issuer#static_org": {"max_user_bytes": 10 * GIB}})
     await _hold(authenticated_context, 10 * GIB)
 
@@ -150,21 +181,40 @@ async def test_the_user_quota_counts_only_that_user(db, authenticated_context: H
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_declared_size_counts_toward_the_user_quota(db, authenticated_context: HttpContext, quotas):
+async def test_a_declared_size_counts_toward_the_user_quota(
+    db, authenticated_context: HttpContext, quotas
+):
     quotas(default={"max_user_bytes": 10 * GIB})
     await _hold(authenticated_context, 6 * GIB)
 
-    result = await schema.execute(REQUEST_MEDIA, variable_values={"size": 5 * GIB}, context_value=authenticated_context)
+    result = await schema.execute(
+        REQUEST_MEDIA,
+        variable_values={"size": 5 * GIB},
+        context_value=authenticated_context,
+    )
     assert result.errors and "Your storage quota" in _errors(result)
 
-    result = await schema.execute(REQUEST_MEDIA, variable_values={"size": 3 * GIB}, context_value=authenticated_context)
+    result = await schema.execute(
+        REQUEST_MEDIA,
+        variable_values={"size": 3 * GIB},
+        context_value=authenticated_context,
+    )
     assert not result.errors, result.errors
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_user_override_beats_the_org_limit(db, authenticated_context: HttpContext, quotas):
-    quotas(organizations={"static_issuer#static_org": {"max_user_bytes": 1 * GIB, "users": {"1": {"max_user_bytes": "20GiB"}}}})
+async def test_a_user_override_beats_the_org_limit(
+    db, authenticated_context: HttpContext, quotas
+):
+    quotas(
+        organizations={
+            "static_issuer#static_org": {
+                "max_user_bytes": 1 * GIB,
+                "users": {"1": {"max_user_bytes": "20GiB"}},
+            }
+        }
+    )
     await _hold(authenticated_context, 10 * GIB)
 
     result = await schema.execute(REQUEST_ZARR, context_value=authenticated_context)
@@ -174,7 +224,11 @@ async def test_a_user_override_beats_the_org_limit(db, authenticated_context: Ht
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_org_quota_counts_everyone_and_stays_in_its_org(
-    db, authenticated_context: HttpContext, editor_context: HttpContext, other_org_context: HttpContext, quotas
+    db,
+    authenticated_context: HttpContext,
+    editor_context: HttpContext,
+    other_org_context: HttpContext,
+    quotas,
 ):
     quotas(default={"max_org_bytes": 10 * GIB})
     await _hold(authenticated_context, 6 * GIB)
@@ -189,7 +243,9 @@ async def test_the_org_quota_counts_everyone_and_stays_in_its_org(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_orphaned_store_frees_its_bytes(db, authenticated_context: HttpContext, quotas):
+async def test_an_orphaned_store_frees_its_bytes(
+    db, authenticated_context: HttpContext, quotas
+):
     from django.utils import timezone
 
     quotas(default={"max_user_bytes": 10 * GIB})
@@ -204,12 +260,25 @@ async def test_an_orphaned_store_frees_its_bytes(db, authenticated_context: Http
 
 def test_resolution_is_most_specific_first():
     config = quota.QuotaConfig(
-        default={"max_upload_bytes": "1GiB", "max_user_bytes": "1GiB", "max_org_bytes": "1GiB"},
-        organizations={"lab": {"max_user_bytes": "2GiB", "users": {"alice": {"max_upload_bytes": "3GiB"}}}},
+        default={
+            "max_upload_bytes": "1GiB",
+            "max_user_bytes": "1GiB",
+            "max_org_bytes": "1GiB",
+        },
+        organizations={
+            "lab": {
+                "max_user_bytes": "2GiB",
+                "users": {"alice": {"max_upload_bytes": "3GiB"}},
+            }
+        },
     )
 
     alice = quota.resolve_quota(config, "lab", "alice")
-    assert (alice.max_upload_bytes, alice.max_user_bytes, alice.max_org_bytes) == (3 * GIB, 2 * GIB, GIB)
+    assert (alice.max_upload_bytes, alice.max_user_bytes, alice.max_org_bytes) == (
+        3 * GIB,
+        2 * GIB,
+        GIB,
+    )
 
     bob = quota.resolve_quota(config, "lab", "bob")
     assert (bob.max_upload_bytes, bob.max_user_bytes) == (GIB, 2 * GIB)
@@ -217,4 +286,6 @@ def test_resolution_is_most_specific_first():
     elsewhere = quota.resolve_quota(config, "other", "alice")
     assert (elsewhere.max_upload_bytes, elsewhere.max_user_bytes) == (GIB, GIB)
 
-    assert quota.resolve_quota(quota.QuotaConfig(), "lab", None) == quota.Quota(None, None, None)
+    assert quota.resolve_quota(quota.QuotaConfig(), "lab", None) == quota.Quota(
+        None, None, None
+    )

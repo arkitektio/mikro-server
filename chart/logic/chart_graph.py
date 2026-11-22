@@ -22,7 +22,9 @@ _LOADER_KEY = "chart_graphs"
 LAYER_PLACEMENT_RELATIONS = ("chart__world",)
 
 #: The axes of every space a layer can name as its source: a reverse relation, so a prefetch.
-LAYER_SOURCE_AXIS_PREFETCH = (Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),)
+LAYER_SOURCE_AXIS_PREFETCH = (
+    Prefetch("lens", queryset=core_models.Lens.objects.with_sources()),
+)
 
 
 class ChartGraph(placement.PlacementGraph):
@@ -31,9 +33,17 @@ class ChartGraph(placement.PlacementGraph):
     def __init__(self, chart: "models.Chart", *, loaders: dict | None = None) -> None:
         """Fetch the chart's layers, then the edge universe rooted at its world."""
         self.chart = chart
-        self.layers = list(chart.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(*LAYER_SOURCE_AXIS_PREFETCH))
+        self.layers = list(
+            chart.layers.select_related(*LAYER_PLACEMENT_RELATIONS).prefetch_related(
+                *LAYER_SOURCE_AXIS_PREFETCH
+            )
+        )
 
-        systems = {source.pk for layer in self.layers if (source := chart_logic.layer_source_system(layer)) is not None}
+        systems = {
+            source.pk
+            for layer in self.layers
+            if (source := chart_logic.layer_source_system(layer)) is not None
+        }
         super().__init__(chart.world, seed_systems=systems, loaders=loaders)
 
 

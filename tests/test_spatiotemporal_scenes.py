@@ -53,7 +53,11 @@ query LayerPlacement($id: ID!) {
 
 
 async def _create_scene(ctx: HttpContext, **payload) -> dict:
-    result = await schema.execute(CREATE_SCENE, context_value=ctx, variable_values={"input": {"name": "S", **payload}})
+    result = await schema.execute(
+        CREATE_SCENE,
+        context_value=ctx,
+        variable_values={"input": {"name": "S", **payload}},
+    )
     return result
 
 
@@ -62,7 +66,9 @@ async def _create_scene(ctx: HttpContext, **payload) -> dict:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scene_is_spatio_temporal_by_default(authenticated_context: HttpContext):
+async def test_a_scene_is_spatio_temporal_by_default(
+    authenticated_context: HttpContext,
+):
     """createScene with no axes gives a world with a clock: t, then z, y, x."""
     result = await _create_scene(authenticated_context)
     assert not result.errors, result.errors
@@ -78,7 +84,9 @@ async def test_a_scene_is_spatio_temporal_by_default(authenticated_context: Http
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_purely_spatial_scene_is_still_allowed(authenticated_context: HttpContext):
+async def test_a_purely_spatial_scene_is_still_allowed(
+    authenticated_context: HttpContext,
+):
     """The clock is a default, not a mandate: an explicit axis list still wins."""
     result = await _create_scene(
         authenticated_context,
@@ -88,20 +96,29 @@ async def test_a_purely_spatial_scene_is_still_allowed(authenticated_context: Ht
         ],
     )
     assert not result.errors, result.errors
-    assert [axis["name"] for axis in result.data["createScene"]["worldCoordinateSystem"]["axes"]] == ["y", "x"]
+    assert [
+        axis["name"]
+        for axis in result.data["createScene"]["worldCoordinateSystem"]["axes"]
+    ] == ["y", "x"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_epoch_anchors_scene_time_to_the_wall_clock(authenticated_context: HttpContext):
+async def test_the_epoch_anchors_scene_time_to_the_wall_clock(
+    authenticated_context: HttpContext,
+):
     """`t` is a relative coordinate; the epoch is the one place absolute time enters.
 
     It lives on the *world system*, not the scene: it is the origin of the space's time
     axis, and two compositions over one space cannot disagree about when its clock starts.
     """
-    result = await _create_scene(authenticated_context, epoch="2026-07-14T09:00:00+00:00")
+    result = await _create_scene(
+        authenticated_context, epoch="2026-07-14T09:00:00+00:00"
+    )
     assert not result.errors, result.errors
-    assert result.data["createScene"]["worldCoordinateSystem"]["epoch"].startswith("2026-07-14T09:00:00")
+    assert result.data["createScene"]["worldCoordinateSystem"]["epoch"].startswith(
+        "2026-07-14T09:00:00"
+    )
 
     # And it stays optional: a scene whose acquisition time is unknown still composes.
     unanchored = await _create_scene(authenticated_context)
@@ -113,7 +130,9 @@ async def test_the_epoch_anchors_scene_time_to_the_wall_clock(authenticated_cont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_axis_unit_must_have_its_type_s_dimension(authenticated_context: HttpContext):
+async def test_an_axis_unit_must_have_its_type_s_dimension(
+    authenticated_context: HttpContext,
+):
     """A TIME axis in micrometres is a lie the arithmetic would happily propagate."""
     result = await _create_scene(
         authenticated_context,
@@ -140,7 +159,9 @@ async def test_an_axis_unit_must_have_its_type_s_dimension(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_arbitrary_units_remain_the_escape_hatch(authenticated_context: HttpContext):
+async def test_arbitrary_units_remain_the_escape_hatch(
+    authenticated_context: HttpContext,
+):
     """'a.u.' is for an axis whose unit genuinely is arbitrary, and it survives the check."""
     result = await _create_scene(
         authenticated_context,
@@ -165,7 +186,9 @@ async def test_a_scene_has_at_most_one_clock(authenticated_context: HttpContext)
             {"name": "x", "type": "SPACE", "unit": "micrometer"},
         ],
     )
-    assert result.errors, "a world with two clocks renders one of them and drops the other"
+    assert result.errors, (
+        "a world with two clocks renders one of them and drops the other"
+    )
     assert "at most one TIME axis" in str(result.errors[0])
 
 
@@ -174,7 +197,9 @@ async def test_a_scene_has_at_most_one_clock(authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_rank_mismatched_registration_is_rejected(authenticated_context: HttpContext):
+async def test_a_rank_mismatched_registration_is_rejected(
+    authenticated_context: HttpContext,
+):
     """A scale with the wrong number of entries used to be written, and composed, without complaint.
 
     The dataset is seeded (z,y,x) rather than the default (c,y,x) so that the *only* thing wrong
@@ -182,7 +207,9 @@ async def test_a_rank_mismatched_registration_is_rejected(authenticated_context:
     that name their axes differently is now refused on the names first, and this test is about
     the count.
     """
-    dataset = await seed.create_array_dataset(authenticated_context, "DS", axes=seed.ZYX_AXES)  # (z, y, x)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "DS", axes=seed.ZYX_AXES
+    )  # (z, y, x)
     scene = await seed.create_scene(authenticated_context, "Sc")  # (z, y, x)
 
     def systems():
@@ -204,13 +231,17 @@ async def test_a_rank_mismatched_registration_is_rejected(authenticated_context:
             }
         },
     )
-    assert result.errors, "a scale with the wrong number of entries writes into the homogeneous corner"
+    assert result.errors, (
+        "a scale with the wrong number of entries writes into the homogeneous corner"
+    )
     assert "one entry per input axis" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_by_dimension_places_a_dataset_of_a_different_rank(authenticated_context: HttpContext):
+async def test_by_dimension_places_a_dataset_of_a_different_rank(
+    authenticated_context: HttpContext,
+):
     """The point of the whole design: a (c,y,x) dataset in a (t,z,y,x) world.
 
     The edge names y and x, and says nothing about t, z or c -- which is exactly what is
@@ -219,7 +250,9 @@ async def test_by_dimension_places_a_dataset_of_a_different_rank(authenticated_c
     """
     dataset = await seed.create_array_dataset(authenticated_context, "DS")  # (c, y, x)
 
-    scene_result = await _create_scene(authenticated_context)  # the new default: (t, z, y, x)
+    scene_result = await _create_scene(
+        authenticated_context
+    )  # the new default: (t, z, y, x)
     assert not scene_result.errors, scene_result.errors
     scene_result.data["createScene"]["id"]
     world_id = scene_result.data["createScene"]["worldCoordinateSystem"]["id"]
@@ -236,7 +269,14 @@ async def test_by_dimension_places_a_dataset_of_a_different_rank(authenticated_c
                 "transform": {
                     "kind": "BY_DIMENSION",
                     # 2 rows, 2+1 columns: the part's own axes.
-                    "parts": [{"kind": "AFFINE", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "affine": [[1.0, 0.0, 10.0], [0.0, 1.0, 20.0]]}],
+                    "parts": [
+                        {
+                            "kind": "AFFINE",
+                            "inputAxes": ["y", "x"],
+                            "outputAxes": ["y", "x"],
+                            "affine": [[1.0, 0.0, 10.0], [0.0, 1.0, 20.0]],
+                        }
+                    ],
                 },
             }
         },
@@ -250,11 +290,15 @@ async def test_by_dimension_places_a_dataset_of_a_different_rank(authenticated_c
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_by_dimension_must_name_axes_that_exist(authenticated_context: HttpContext):
+async def test_by_dimension_must_name_axes_that_exist(
+    authenticated_context: HttpContext,
+):
     """The naming IS the map, so a name that does not resolve is not a typo, it is a broken edge."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     scene = await seed.create_scene(authenticated_context, "Sc")
-    intrinsic, world = await sync_to_async(lambda: (dataset.intrinsic_coordinate_system, scene.world))()
+    intrinsic, world = await sync_to_async(
+        lambda: (dataset.intrinsic_coordinate_system, scene.world)
+    )()
 
     result = await schema.execute(
         REGISTER,
@@ -265,7 +309,9 @@ async def test_by_dimension_must_name_axes_that_exist(authenticated_context: Htt
                 "output": str(world.pk),
                 "transform": {
                     "kind": "BY_DIMENSION",
-                    "parts": [{"kind": "IDENTITY", "inputAxes": ["q"], "outputAxes": ["y"]}],
+                    "parts": [
+                        {"kind": "IDENTITY", "inputAxes": ["q"], "outputAxes": ["y"]}
+                    ],
                 },
             }
         },
@@ -279,7 +325,9 @@ async def test_by_dimension_must_name_axes_that_exist(authenticated_context: Htt
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(authenticated_context: HttpContext):
+async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(
+    authenticated_context: HttpContext,
+):
     """`scale`/`translation`/`affine` are ordered by the INPUT system's axes, not the reader's axis names.
 
     A client that indexes them against a layer's axis names misplaces them whenever the two
@@ -289,7 +337,9 @@ async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(authe
     dataset = await seed.create_array_dataset(authenticated_context, "DS")  # (c, y, x)
     # Sliced, so the lens owns a system and a lens->intrinsic edge sits on the path.
     # (An unsliced lens owns no system: its space is the intrinsic space itself.)
-    lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    lens = await seed.create_lens(
+        authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]
+    )
 
     scene_result = await _create_scene(authenticated_context)  # (t, z, y, x)
     scene_id = scene_result.data["createScene"]["id"]
@@ -303,11 +353,20 @@ async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(authe
         }
         """,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
+        variable_values={
+            "input": {
+                "scene": scene_id,
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+            }
+        },
     )
     assert not created.errors, created.errors
 
-    result = await schema.execute(LAYER_PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
+    result = await schema.execute(
+        LAYER_PLACEMENT,
+        context_value=authenticated_context,
+        variable_values={"id": scene_id},
+    )
     assert not result.errors, result.errors
 
     steps = result.data["scene"]["layers"][0]["pathToWorld"]
@@ -328,7 +387,9 @@ async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(authe
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(authenticated_context: HttpContext):
+async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(
+    authenticated_context: HttpContext,
+):
     """A layer whose source has no path to world is refused, with the fix in the error.
 
     Nothing fabricates a placement any more: the registration is authored explicitly --
@@ -347,24 +408,41 @@ async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(
       createIntensityLayer(input: $input) { id placementValidity }
     }
     """
-    variables = {"input": {"scene": scene_id, "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}}
+    variables = {
+        "input": {
+            "scene": scene_id,
+            "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+        }
+    }
 
-    refused = await schema.execute(make, context_value=authenticated_context, variable_values=variables)
+    refused = await schema.execute(
+        make, context_value=authenticated_context, variable_values=variables
+    )
     assert refused.errors, "an unplaced source must be refused, not quietly composed"
-    assert "createTransformation" in str(refused.errors[0]), "the error names the mutation that closes the gap"
+    assert "createTransformation" in str(refused.errors[0]), (
+        "the error names the mutation that closes the gap"
+    )
 
     scene = await sync_to_async(models.Scene.objects.get)(pk=scene_id)
     await seed.register_into_scene(authenticated_context, scene, dataset)
 
-    created = await schema.execute(make, context_value=authenticated_context, variable_values=variables)
+    created = await schema.execute(
+        make, context_value=authenticated_context, variable_values=variables
+    )
     assert not created.errors, created.errors
     assert created.data["createIntensityLayer"]["placementValidity"] == "MANUAL"
 
-    placement = await schema.execute(LAYER_PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
+    placement = await schema.execute(
+        LAYER_PLACEMENT,
+        context_value=authenticated_context,
+        variable_values={"id": scene_id},
+    )
     assert not placement.errors, placement.errors
 
     layer = placement.data["scene"]["layers"][0]
-    assert layer["pathToWorld"] is not None, "a layer placed in a scene is registered into it"
+    assert layer["pathToWorld"] is not None, (
+        "a layer placed in a scene is registered into it"
+    )
 
     registration = layer["pathToWorld"][-1]["transformation"]
     assert registration["kind"] == "BY_DIMENSION"
@@ -375,12 +453,16 @@ async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_creating_a_layer_writes_no_membership_edges(authenticated_context: HttpContext):
+async def test_creating_a_layer_writes_no_membership_edges(
+    authenticated_context: HttpContext,
+):
     """A layer mutation reads the graph, never writes it: the one registration stays the only one."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
     scene = await seed.create_scene(authenticated_context, "Sc")  # (z, y, x)
-    intrinsic, world = await sync_to_async(lambda: (dataset.intrinsic_coordinate_system, scene.world))()
+    intrinsic, world = await sync_to_async(
+        lambda: (dataset.intrinsic_coordinate_system, scene.world)
+    )()
 
     authored = await schema.execute(
         REGISTER,
@@ -390,7 +472,17 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
                 "input": str(intrinsic.pk),
                 "output": str(world.pk),
                 # The space axes onto the world's; the channel onto nothing.
-                "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "TRANSLATION", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"], "translation": [5.0, 0.0]}]},
+                "transform": {
+                    "kind": "BY_DIMENSION",
+                    "parts": [
+                        {
+                            "kind": "TRANSLATION",
+                            "inputAxes": ["y", "x"],
+                            "outputAxes": ["y", "x"],
+                            "translation": [5.0, 0.0],
+                        }
+                    ],
+                },
             }
         },
     )
@@ -403,13 +495,22 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
         }
         """,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}},
+        variable_values={
+            "input": {
+                "scene": str(scene.pk),
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+            }
+        },
     )
     assert not created.errors, created.errors
 
-    edges = await sync_to_async(lambda: list(models.Transformation.objects.filter(output=world)))()
+    edges = await sync_to_async(
+        lambda: list(models.Transformation.objects.filter(output=world))
+    )()
     assert len(edges) == 1, "creating a layer must not add a registration of its own"
-    assert edges[0].kind == enums.TransformKindChoices.BY_DIMENSION.value, "the one edge is the registration authored above"
+    assert edges[0].kind == enums.TransformKindChoices.BY_DIMENSION.value, (
+        "the one edge is the registration authored above"
+    )
 
 
 # --- 6. intensity is a channel, not a clock ---------------------------------
@@ -420,7 +521,9 @@ async def test_creating_a_layer_writes_no_membership_edges(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_context: HttpContext):
+async def test_a_rank_changing_edge_is_not_walked_backwards(
+    authenticated_context: HttpContext,
+):
     """The BFS hands back `inverted: true` steps for the client to undo. That is only
     honest for a map that has an inverse.
 
@@ -431,7 +534,9 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_contex
     """
     # Two levels, so the pyramid still stores a SCALE edge (level 0 no longer has one:
     # its space IS the intrinsic system, and there is nothing to map).
-    dataset = await seed.create_array_dataset(authenticated_context, "DS", shapes=[[3, 64, 64], [3, 32, 32]])  # (c, y, x)
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "DS", shapes=[[3, 64, 64], [3, 32, 32]]
+    )  # (c, y, x)
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
 
     scene_result = await _create_scene(authenticated_context)  # (t, z, y, x)
@@ -440,7 +545,9 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_contex
 
     def place():
         scene = models.Scene.objects.get(pk=scene_id)
-        models.Layer.objects.create(kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens)
+        models.Layer.objects.create(
+            kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens
+        )
         return scene
 
     await sync_to_async(place)()  # placed by ORM, so no auto-registration
@@ -458,31 +565,54 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_contex
                 "transform": {
                     "kind": "AFFINE",
                     # 3 rows (the output's rank), 4+1 columns (the input's rank plus translation)
-                    "affine": [[1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0]],
+                    "affine": [
+                        [1.0, 0.0, 0.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 1.0, 0.0, 0.0],
+                    ],
                 },
             }
         },
     )
     assert not backwards.errors, backwards.errors
 
-    result = await schema.execute(LAYER_PLACEMENT, context_value=authenticated_context, variable_values={"id": scene_id})
+    result = await schema.execute(
+        LAYER_PLACEMENT,
+        context_value=authenticated_context,
+        variable_values={"id": scene_id},
+    )
     assert not result.errors, result.errors
 
     path = result.data["scene"]["layers"][0]["pathToWorld"]
-    assert path is None, "a rank-changing edge has no inverse, so it is not a way back to world"
+    assert path is None, (
+        "a rank-changing edge has no inverse, so it is not a way back to world"
+    )
 
     def rank_verdicts() -> tuple[bool, bool]:
         # The pyramid's level-to-intrinsic edge (a SCALE, or a scale-then-translate SEQUENCE)
         # is equal-rank, so it still inverts fine -- which is why this rule changes no path that
         # resolved before BY_DIMENSION existed (see test_inverted_step_is_flagged). The
         # backwards registration does not.
-        equal_rank = models.Transformation.objects.filter(kind__in=[enums.TransformKindChoices.SCALE.value, enums.TransformKindChoices.SEQUENCE.value]).first()
-        rank_changing = models.Transformation.objects.get(pk=backwards.data["createTransformation"]["id"])
-        return graph_logic.is_reverse_traversable(equal_rank), graph_logic.is_reverse_traversable(rank_changing)
+        equal_rank = models.Transformation.objects.filter(
+            kind__in=[
+                enums.TransformKindChoices.SCALE.value,
+                enums.TransformKindChoices.SEQUENCE.value,
+            ]
+        ).first()
+        rank_changing = models.Transformation.objects.get(
+            pk=backwards.data["createTransformation"]["id"]
+        )
+        return graph_logic.is_reverse_traversable(
+            equal_rank
+        ), graph_logic.is_reverse_traversable(rank_changing)
 
     equal_rank_inverts, rank_changing_inverts = await sync_to_async(rank_verdicts)()
-    assert equal_rank_inverts, "an edge whose two sides have the same rank has an inverse"
-    assert not rank_changing_inverts, "a (t,z,y,x) -> (c,y,x) edge cannot say where t and z came from"
+    assert equal_rank_inverts, (
+        "an edge whose two sides have the same rank has an inverse"
+    )
+    assert not rank_changing_inverts, (
+        "a (t,z,y,x) -> (c,y,x) edge cannot say where t and z came from"
+    )
 
 
 # --- 8. the bounding box the registration must not touch --------------------
@@ -490,7 +620,9 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(authenticated_contex
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(authenticated_context: HttpContext):
+async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(
+    authenticated_context: HttpContext,
+):
     """An ROI's box is expressed against intrinsic pixels, and a registration must not move it.
 
     The walk up to intrinsic took "the first edge out of this system", unordered -- so once
@@ -501,14 +633,20 @@ async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(authenticate
     # (z,y,x), matching the world's names: the registration below is a per-axis TRANSLATION and
     # exists only to hang an edge off the lens' system. What this test is about is which edge the
     # walk follows, not how that edge is spelled.
-    dataset = await seed.create_array_dataset(authenticated_context, "DS", axes=seed.ZYX_AXES)
-    lens = await seed.create_lens(authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "DS", axes=seed.ZYX_AXES
+    )
+    lens = await seed.create_lens(
+        authenticated_context, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]
+    )
     scene = await seed.create_scene(authenticated_context, "Sc")
 
     lens_system = await sync_to_async(lambda: lens.coordinate_system)()
     vectors = [[0.0, 0.0, 0.0], [0.0, 4.0, 4.0]]
 
-    before = await sync_to_async(graph_logic.compute_intrinsic_bbox)(lens_system, vectors)
+    before = await sync_to_async(graph_logic.compute_intrinsic_bbox)(
+        lens_system, vectors
+    )
     assert before is not None
 
     # Register the *lens'* system into world -- an edge out of the very system the walk
@@ -530,13 +668,19 @@ async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(authenticate
     )
     assert not registered.errors, registered.errors
 
-    after = await sync_to_async(graph_logic.compute_intrinsic_bbox)(lens_system, vectors)
-    assert after == before, "the ROI's intrinsic box is a fact about the dataset; a scene registration cannot move it"
+    after = await sync_to_async(graph_logic.compute_intrinsic_bbox)(
+        lens_system, vectors
+    )
+    assert after == before, (
+        "the ROI's intrinsic box is a fact about the dataset; a scene registration cannot move it"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_time_axis_stays_navigable_under_a_single_channel_lens(authenticated_context: HttpContext):
+async def test_a_time_axis_stays_navigable_under_a_single_channel_lens(
+    authenticated_context: HttpContext,
+):
     """There is no axis to name as intensity: a layer draws through a lens pinning one channel, and time is left to the slider.
 
     `intensityAxis: "t"` used to composite every timepoint as a separate channel -- a 16-frame
@@ -549,14 +693,29 @@ async def test_a_time_axis_stays_navigable_under_a_single_channel_lens(authentic
         seed.axis("y", enums.AxisType.SPACE),
         seed.axis("x", enums.AxisType.SPACE),
     ]
-    dataset = await seed.create_array_dataset(authenticated_context, "Timelapse", axes=axes, shapes=[[16, 2, 32, 32]])
+    dataset = await seed.create_array_dataset(
+        authenticated_context, "Timelapse", axes=axes, shapes=[[16, 2, 32, 32]]
+    )
     whole = await seed.create_lens(authenticated_context, dataset, slices=[])
     scene = await seed.create_scene(authenticated_context, "Sc")
     await seed.register_into_scene(authenticated_context, scene, dataset)
     make = "mutation Make($input: CreateIntensityLayerInput!) { createIntensityLayer(input: $input) { id lens { suggestedRenderAxes { t intensity } } } }"
-    both = await schema.execute(make, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(whole.pk)}})
-    assert both.errors and "pin one channel" in str(both.errors[0]), "two detectors in one lens is not one channel"
+    both = await schema.execute(
+        make,
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.pk), "lens": str(whole.pk)}},
+    )
+    assert both.errors and "pin one channel" in str(both.errors[0]), (
+        "two detectors in one lens is not one channel"
+    )
     one = await seed.channel_lens(authenticated_context, whole, 1)
-    accepted = await schema.execute(make, context_value=authenticated_context, variable_values={"input": {"scene": str(scene.pk), "lens": str(one.pk)}})
+    accepted = await schema.execute(
+        make,
+        context_value=authenticated_context,
+        variable_values={"input": {"scene": str(scene.pk), "lens": str(one.pk)}},
+    )
     assert not accepted.errors, accepted.errors
-    assert accepted.data["createIntensityLayer"]["lens"]["suggestedRenderAxes"] == {"t": "t", "intensity": "c"}, "time stays the slider; the channel axis, one position wide, is the intensity"
+    assert accepted.data["createIntensityLayer"]["lens"]["suggestedRenderAxes"] == {
+        "t": "t",
+        "intensity": "c",
+    }, "time stays the slider; the channel axis, one position wide, is the intensity"

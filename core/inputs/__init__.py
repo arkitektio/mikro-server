@@ -5,55 +5,92 @@ Input classes live here (not in ``core.mutations``) so the service layer in
 """
 
 from typing import List
-import strawberry
+
 import kante
+import strawberry
 from pydantic import BaseModel, Field
+
 from core import base_models
 
 
 class AssociateInputModel(BaseModel):
-    selfs: List[str] = Field(description="The IDs of the items to associate")
+    selfs: list[str] = Field(description="The IDs of the items to associate")
     other: str = Field(description="The ID of the target item")
 
 
-@kante.pydantic_input(AssociateInputModel, description="An input for associating a set of items with another item, e.g. putting images into a dataset")
+@kante.pydantic_input(
+    AssociateInputModel,
+    description="An input for associating a set of items with another item, e.g. putting images into a dataset",
+)
 class AssociateInput:
     """Input for associating a set of items with another item"""
 
-    selfs: List[strawberry.ID] = strawberry.field(description="The IDs of the items to associate")
+    selfs: list[strawberry.ID] = strawberry.field(
+        description="The IDs of the items to associate"
+    )
     other: strawberry.ID = strawberry.field(description="The ID of the target item")
 
 
 class DesociateInputModel(BaseModel):
-    selfs: List[str] = Field(description="The IDs of the items to release")
+    selfs: list[str] = Field(description="The IDs of the items to release")
     other: str = Field(description="The ID of the target item")
 
 
-@kante.pydantic_input(DesociateInputModel, description="An input for releasing a set of items from another item, e.g. removing images from a dataset")
+@kante.pydantic_input(
+    DesociateInputModel,
+    description="An input for releasing a set of items from another item, e.g. removing images from a dataset",
+)
 class DesociateInput:
     """Input for releasing a set of items from another item"""
 
-    selfs: List[strawberry.ID] = strawberry.field(description="The IDs of the items to release")
+    selfs: list[strawberry.ID] = strawberry.field(
+        description="The IDs of the items to release"
+    )
     other: strawberry.ID = strawberry.field(description="The ID of the target item")
 
 
-@kante.pydantic_input(base_models.SliceInputModel, description="Input type for a slice along one axis of a dataset")
+@kante.pydantic_input(
+    base_models.SliceInputModel,
+    description="Input type for a slice along one axis of a dataset",
+)
 class SliceInput:
     """Input for a slice along a single axis of a dataset"""
 
-    axis: str = strawberry.field(description="The name of the axis the slice acts on, e.g. 'x', 'y', 'z', 'c', or 't'")
-    start: int | None = strawberry.field(default=None, description="The starting index of the slice, or None to start from the beginning")
-    stop: int | None = strawberry.field(default=None, description="The stopping index of the slice, or None to go to the end")
-    step: int | None = strawberry.field(default=None, description="The step size of the slice, or None to use the default step")
+    axis: str = strawberry.field(
+        description="The name of the axis the slice acts on, e.g. 'x', 'y', 'z', 'c', or 't'"
+    )
+    start: int | None = strawberry.field(
+        default=None,
+        description="The starting index of the slice, or None to start from the beginning",
+    )
+    stop: int | None = strawberry.field(
+        default=None,
+        description="The stopping index of the slice, or None to go to the end",
+    )
+    step: int | None = strawberry.field(
+        default=None,
+        description="The step size of the slice, or None to use the default step",
+    )
 
 
-@kante.pydantic_input(base_models.WindowInputModel, description="Input type for a window along one axis of a container that is not an array: the positions kept, by value")
+@kante.pydantic_input(
+    base_models.WindowInputModel,
+    description="Input type for a window along one axis of a container that is not an array: the positions kept, by value",
+)
 class WindowInput:
     """Input for a value window along a single axis of a table, sparse dataset, mesh, network or annotation collection"""
 
-    axis: str = strawberry.field(description="The name of the axis the window constrains, e.g. 't' for a table's time column")
-    min: float | None = strawberry.field(default=None, description="The smallest position kept, inclusive, or None for no lower bound")
-    max: float | None = strawberry.field(default=None, description="The largest position kept, inclusive, or None for no upper bound")
+    axis: str = strawberry.field(
+        description="The name of the axis the window constrains, e.g. 't' for a table's time column"
+    )
+    min: float | None = strawberry.field(
+        default=None,
+        description="The smallest position kept, inclusive, or None for no lower bound",
+    )
+    max: float | None = strawberry.field(
+        default=None,
+        description="The largest position kept, inclusive, or None for no upper bound",
+    )
 
 
 @kante.pydantic_input(
@@ -61,5 +98,9 @@ class WindowInput:
     description="A box in any coordinate system an array dataset reaches -- micrometres in a physical space, a sibling dataset's grid through a shared world -- as the selection of a lens: the voxels whose cells the box meets, once the box is composed into the dataset's pixel grid",
 )
 class LensBoxInput:
-    coordinate_system: strawberry.ID = strawberry.field(description="The coordinate system the windows are stated in. The dataset's pixel grid must reach it affinely (walking the transformation edges either way)")
-    windows: list[WindowInput] = strawberry.field(description="The box, one window per axis it bounds; a side left open runs to the array's edge, and an axis of the grid the box says nothing about is kept whole. A window may be a plane (min equal to max)")
+    coordinate_system: strawberry.ID = strawberry.field(
+        description="The coordinate system the windows are stated in. The dataset's pixel grid must reach it affinely (walking the transformation edges either way)"
+    )
+    windows: list[WindowInput] = strawberry.field(
+        description="The box, one window per axis it bounds; a side left open runs to the array's edge, and an axis of the grid the box says nothing about is kept whole. A window may be a plane (min equal to max)"
+    )

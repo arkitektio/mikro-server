@@ -8,12 +8,12 @@ writes one -- so each seed helper hands back the coordinate system to register.
 """
 
 import pytest
-
 from asgiref.sync import sync_to_async
-from core import models, enums
+from kante.context import HttpContext
+
+from core import enums, models
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
-from kante.context import HttpContext
 from mikro_server.schema import schema
 from tests import seed
 
@@ -22,37 +22,76 @@ async def _seed_scene(ctx: HttpContext) -> models.Scene:
     return await seed.create_scene(ctx)
 
 
-def _seed_table_dataset_sync(ctx: HttpContext, key: str, *, with_track: bool = False) -> models.TableDataset:
+def _seed_table_dataset_sync(
+    ctx: HttpContext, key: str, *, with_track: bool = False
+) -> models.TableDataset:
     """A table dataset with declared coordinate columns -- the only table a layer draws from.
 
     The dataset is the whole mapping: coordinate columns are its axes, its own system is
     the space, and the roles are the identities. No layer binds a column by name.
     """
-    store = models.ParquetStore.objects.create(path=f"s3://parquet/{key}", bucket="parquet", key=key, organization=ctx.request.organization, populated=True)
-    dataset = models.TableDataset.objects.create(name=key, store=store, organization=ctx.request.organization)
+    store = models.ParquetStore.objects.create(
+        path=f"s3://parquet/{key}",
+        bucket="parquet",
+        key=key,
+        organization=ctx.request.organization,
+        populated=True,
+    )
+    dataset = models.TableDataset.objects.create(
+        name=key, store=store, organization=ctx.request.organization
+    )
     columns = [
-        {"name": "y", "role": enums.ColumnRoleChoices.COORDINATE.value, "axis_type": enums.AxisTypeChoices.SPACE.value},
-        {"name": "x", "role": enums.ColumnRoleChoices.COORDINATE.value, "axis_type": enums.AxisTypeChoices.SPACE.value},
-        {"name": "photons", "role": enums.ColumnRoleChoices.ATTRIBUTE.value, "axis_type": None},
+        {
+            "name": "y",
+            "role": enums.ColumnRoleChoices.COORDINATE.value,
+            "axis_type": enums.AxisTypeChoices.SPACE.value,
+        },
+        {
+            "name": "x",
+            "role": enums.ColumnRoleChoices.COORDINATE.value,
+            "axis_type": enums.AxisTypeChoices.SPACE.value,
+        },
+        {
+            "name": "photons",
+            "role": enums.ColumnRoleChoices.ATTRIBUTE.value,
+            "axis_type": None,
+        },
     ]
     if with_track:
-        columns.append({"name": "track", "role": enums.ColumnRoleChoices.TRACK_ID.value, "axis_type": None})
+        columns.append(
+            {
+                "name": "track",
+                "role": enums.ColumnRoleChoices.TRACK_ID.value,
+                "axis_type": None,
+            }
+        )
     for order, column in enumerate(columns):
-        models.Column.objects.create(table=dataset, order=order, dtype="DOUBLE", **column)
+        models.Column.objects.create(
+            table=dataset, order=order, dtype="DOUBLE", **column
+        )
     # What `createTableDataset` materializes, from the same columns.
-    dataset.stored_spec = [member.value for member in coords_logic.specs_for_columns(dataset.column_specs)]
+    dataset.stored_spec = [
+        member.value for member in coords_logic.specs_for_columns(dataset.column_specs)
+    ]
     dataset.save(update_fields=["stored_spec"])
     graph_logic.create_collection_system(
         name=f"{key}/table",
-        axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         owner=dataset,
         ctx=seed._creation(ctx),
     )
     return dataset
 
 
-async def _seed_table_dataset(ctx: HttpContext, key: str, *, with_track: bool = False) -> tuple[models.TableDataset, models.CoordinateSystem]:
-    dataset = await sync_to_async(_seed_table_dataset_sync)(ctx, key, with_track=with_track)
+async def _seed_table_dataset(
+    ctx: HttpContext, key: str, *, with_track: bool = False
+) -> tuple[models.TableDataset, models.CoordinateSystem]:
+    dataset = await sync_to_async(_seed_table_dataset_sync)(
+        ctx, key, with_track=with_track
+    )
     system = await sync_to_async(lambda: dataset.coordinate_system)()
     return dataset, system
 
@@ -65,14 +104,19 @@ def _seed_mesh_collection_sync(ctx: HttpContext) -> models.MeshCollection:
     )
     graph_logic.create_collection_system(
         name=f"{collection.label}/mesh",
-        axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         owner=collection,
         ctx=seed._creation(ctx),
     )
     return collection
 
 
-async def _seed_mesh_collection(ctx: HttpContext) -> tuple[models.MeshCollection, models.CoordinateSystem]:
+async def _seed_mesh_collection(
+    ctx: HttpContext,
+) -> tuple[models.MeshCollection, models.CoordinateSystem]:
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
     system = await sync_to_async(lambda: collection.coordinate_system)()
     return collection, system
@@ -88,7 +132,10 @@ def _seed_annotation_collection_sync(ctx: HttpContext) -> models.AnnotationColle
     )
     graph_logic.create_collection_system(
         name=f"{collection.name}/drawing",
-        axes=[seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.SPACE)],
+        axes=[
+            seed.axis("y", enums.AxisType.SPACE),
+            seed.axis("x", enums.AxisType.SPACE),
+        ],
         owner=collection,
         ctx=seed._creation(ctx),
     )
@@ -102,7 +149,9 @@ def _seed_annotation_collection_sync(ctx: HttpContext) -> models.AnnotationColle
     return collection
 
 
-async def _seed_annotation_collection(ctx: HttpContext) -> tuple[models.AnnotationCollection, models.CoordinateSystem]:
+async def _seed_annotation_collection(
+    ctx: HttpContext,
+) -> tuple[models.AnnotationCollection, models.CoordinateSystem]:
     collection = await sync_to_async(_seed_annotation_collection_sync)(ctx)
     system = await sync_to_async(lambda: collection.coordinate_system)()
     return collection, system
@@ -130,7 +179,14 @@ async def test_create_annotation_layer(db, authenticated_context: HttpContext):
     result = await schema.execute(
         mutation,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.AnnotationCollection, str(collection.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(
+                    models.AnnotationCollection, str(collection.id)
+                ),
+            }
+        },
     )
     assert not result.errors, result.errors
     data = result.data["createAnnotationLayer"]
@@ -142,7 +198,9 @@ async def test_create_annotation_layer(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unregistered_annotation_layer_is_rejected(db, authenticated_context: HttpContext):
+async def test_an_unregistered_annotation_layer_is_rejected(
+    db, authenticated_context: HttpContext
+):
     """The collection's system has no path to this world, so the layer is refused with the fix named."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -151,7 +209,14 @@ async def test_an_unregistered_annotation_layer_is_rejected(db, authenticated_co
     result = await schema.execute(
         "mutation Create($input: CreateAnnotationLayerInput!) { createAnnotationLayer(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.AnnotationCollection, str(collection.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(
+                    models.AnnotationCollection, str(collection.id)
+                ),
+            }
+        },
     )
     assert result.errors, "an unplaced collection system must be refused"
     assert "createTransformation" in str(result.errors[0])
@@ -159,7 +224,9 @@ async def test_an_unregistered_annotation_layer_is_rejected(db, authenticated_co
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_annotation_layer_appears_in_scene_layers(db, authenticated_context: HttpContext):
+async def test_annotation_layer_appears_in_scene_layers(
+    db, authenticated_context: HttpContext
+):
     """An AnnotationLayer is returned polymorphically through Scene.layers."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -170,7 +237,14 @@ async def test_annotation_layer_appears_in_scene_layers(db, authenticated_contex
     result = await schema.execute(
         create,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.AnnotationCollection, str(collection.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(
+                    models.AnnotationCollection, str(collection.id)
+                ),
+            }
+        },
     )
     assert not result.errors, result.errors
 
@@ -185,7 +259,9 @@ async def test_annotation_layer_appears_in_scene_layers(db, authenticated_contex
             }
         }
     """
-    result = await schema.execute(query, context_value=ctx, variable_values={"id": str(scene.id)})
+    result = await schema.execute(
+        query, context_value=ctx, variable_values={"id": str(scene.id)}
+    )
     assert not result.errors, result.errors
     layers = result.data["scene"]["layers"]
     assert len(layers) == 1
@@ -216,7 +292,13 @@ async def test_create_point_layer(db, authenticated_context: HttpContext):
     result = await schema.execute(
         mutation,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id)), "pointSize": 5.0}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id)),
+                "pointSize": 5.0,
+            }
+        },
     )
     assert not result.errors, result.errors
     data = result.data["createPointLayer"]
@@ -229,7 +311,9 @@ async def test_create_point_layer(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_track_layer_needs_a_track_id_column(db, authenticated_context: HttpContext):
+async def test_a_track_layer_needs_a_track_id_column(
+    db, authenticated_context: HttpContext
+):
     """The track identity is the dataset's TRACK_ID role: a table without one has no tracks to draw."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -239,7 +323,12 @@ async def test_a_track_layer_needs_a_track_id_column(db, authenticated_context: 
     result = await schema.execute(
         "mutation Create($input: CreateTrackLayerInput!) { createTrackLayer(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id)),
+            }
+        },
     )
     assert result.errors, "no TRACK_ID column, no tracks"
     assert "TRACK_ID" in str(result.errors[0])
@@ -267,12 +356,19 @@ async def test_create_track_layer(db, authenticated_context: HttpContext):
     result = await schema.execute(
         mutation,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id)),
+            }
+        },
     )
     assert not result.errors, result.errors
     data = result.data["createTrackLayer"]
     assert data["__typename"] == "TrackLayer"
-    assert data["trackIdColumn"] == "track", "the track identity is the dataset's TRACK_ID column, resolved by role"
+    assert data["trackIdColumn"] == "track", (
+        "the track identity is the dataset's TRACK_ID column, resolved by role"
+    )
     assert data["lineWidth"] == 1.0
     assert data["tableDataset"]["id"] == str(dataset.id)
 
@@ -294,7 +390,12 @@ async def test_update_track_layer(db, authenticated_context: HttpContext):
     created = await schema.execute(
         "mutation Create($input: CreateTrackLayerInput!) { createTrackLayer(input: $input) { id lineWidth } }",
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id)),
+            }
+        },
     )
     assert not created.errors, created.errors
     layer_id = created.data["createTrackLayer"]["id"]
@@ -352,7 +453,9 @@ async def test_update_track_layer(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_track_layer_refuses_another_kind(db, authenticated_context: HttpContext):
+async def test_update_track_layer_refuses_another_kind(
+    db, authenticated_context: HttpContext
+):
     """A point layer has no line width to set, and says so rather than patching one on."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -362,14 +465,21 @@ async def test_update_track_layer_refuses_another_kind(db, authenticated_context
     created = await schema.execute(
         "mutation Create($input: CreatePointLayerInput!) { createPointLayer(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(models.TableDataset, str(dataset.id)),
+            }
+        },
     )
     assert not created.errors, created.errors
 
     result = await schema.execute(
         "mutation Update($input: UpdateTrackLayerInput!) { updateTrackLayer(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"id": created.data["createPointLayer"]["id"], "lineWidth": 2.0}},
+        variable_values={
+            "input": {"id": created.data["createPointLayer"]["id"], "lineWidth": 2.0}
+        },
     )
     assert result.errors, "a point layer is not a track layer"
     assert "not a track layer" in str(result.errors[0])
@@ -399,7 +509,15 @@ async def test_create_mesh_layer(db, authenticated_context: HttpContext):
     result = await schema.execute(
         mutation,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.id)), "wireframe": True}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(
+                    models.MeshCollection, str(collection.id)
+                ),
+                "wireframe": True,
+            }
+        },
     )
     assert not result.errors, result.errors
     data = result.data["createMeshLayer"]
@@ -412,7 +530,9 @@ async def test_create_mesh_layer(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unregistered_mesh_layer_is_rejected(db, authenticated_context: HttpContext):
+async def test_an_unregistered_mesh_layer_is_rejected(
+    db, authenticated_context: HttpContext
+):
     """The collection's own system has no path to this world, so the layer is refused."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -421,7 +541,14 @@ async def test_an_unregistered_mesh_layer_is_rejected(db, authenticated_context:
     result = await schema.execute(
         "mutation Create($input: CreateMeshLayerInput!) { createMeshLayer(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(
+                    models.MeshCollection, str(collection.id)
+                ),
+            }
+        },
     )
     assert result.errors, "an unplaced collection must be refused"
     assert "createTransformation" in str(result.errors[0])
@@ -434,19 +561,63 @@ async def test_heterogeneous_scene_layers(db, authenticated_context: HttpContext
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
     annotation_collection, annotation_system = await _seed_annotation_collection(ctx)
-    table_dataset, table_system = await _seed_table_dataset(ctx, "hetero", with_track=True)
+    table_dataset, table_system = await _seed_table_dataset(
+        ctx, "hetero", with_track=True
+    )
     collection, mesh_system = await _seed_mesh_collection(ctx)
     await seed.register_into_scene(ctx, scene, system=annotation_system)
     await seed.register_into_scene(ctx, scene, system=table_system)
     await seed.register_into_scene(ctx, scene, system=mesh_system)
 
     for mutation, variables in [
-        ("mutation M($i: CreateAnnotationLayerInput!){ createAnnotationLayer(input:$i){ id } }", {"i": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.AnnotationCollection, str(annotation_collection.id))}}),
-        ("mutation M($i: CreatePointLayerInput!){ createPointLayer(input:$i){ id } }", {"i": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(table_dataset.id))}}),
-        ("mutation M($i: CreateTrackLayerInput!){ createTrackLayer(input:$i){ id } }", {"i": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.TableDataset, str(table_dataset.id))}}),
-        ("mutation M($i: CreateMeshLayerInput!){ createMeshLayer(input:$i){ id } }", {"i": {"scene": str(scene.id), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.id))}}),
+        (
+            "mutation M($i: CreateAnnotationLayerInput!){ createAnnotationLayer(input:$i){ id } }",
+            {
+                "i": {
+                    "scene": str(scene.id),
+                    "lens": await seed.whole_lens_id(
+                        models.AnnotationCollection, str(annotation_collection.id)
+                    ),
+                }
+            },
+        ),
+        (
+            "mutation M($i: CreatePointLayerInput!){ createPointLayer(input:$i){ id } }",
+            {
+                "i": {
+                    "scene": str(scene.id),
+                    "lens": await seed.whole_lens_id(
+                        models.TableDataset, str(table_dataset.id)
+                    ),
+                }
+            },
+        ),
+        (
+            "mutation M($i: CreateTrackLayerInput!){ createTrackLayer(input:$i){ id } }",
+            {
+                "i": {
+                    "scene": str(scene.id),
+                    "lens": await seed.whole_lens_id(
+                        models.TableDataset, str(table_dataset.id)
+                    ),
+                }
+            },
+        ),
+        (
+            "mutation M($i: CreateMeshLayerInput!){ createMeshLayer(input:$i){ id } }",
+            {
+                "i": {
+                    "scene": str(scene.id),
+                    "lens": await seed.whole_lens_id(
+                        models.MeshCollection, str(collection.id)
+                    ),
+                }
+            },
+        ),
     ]:
-        made = await schema.execute(mutation, context_value=ctx, variable_values=variables)
+        made = await schema.execute(
+            mutation, context_value=ctx, variable_values=variables
+        )
         assert not made.errors, made.errors
 
     query = """
@@ -462,7 +633,9 @@ async def test_heterogeneous_scene_layers(db, authenticated_context: HttpContext
             }
         }
     """
-    result = await schema.execute(query, context_value=ctx, variable_values={"id": str(scene.id)})
+    result = await schema.execute(
+        query, context_value=ctx, variable_values={"id": str(scene.id)}
+    )
     assert not result.errors, result.errors
     typenames = {layer["__typename"] for layer in result.data["scene"]["layers"]}
     assert typenames == {"AnnotationLayer", "PointLayer", "TrackLayer", "MeshLayer"}
@@ -474,17 +647,48 @@ async def test_heterogeneous_scene_layers(db, authenticated_context: HttpContext
 #: reach it -- a fifth source kind added without its gate should show up as a missing row here,
 #: not as four tests nobody thought to copy.
 _UNPLACED_SOURCES = [
-    ("createAnnotationLayer", "CreateAnnotationLayerInput", _seed_annotation_collection, models.AnnotationCollection),
-    ("createPointLayer", "CreatePointLayerInput", lambda ctx: _seed_table_dataset(ctx, "unplaced-points"), models.TableDataset),
-    ("createTrackLayer", "CreateTrackLayerInput", lambda ctx: _seed_table_dataset(ctx, "unplaced-tracks", with_track=True), models.TableDataset),
-    ("createMeshLayer", "CreateMeshLayerInput", _seed_mesh_collection, models.MeshCollection),
+    (
+        "createAnnotationLayer",
+        "CreateAnnotationLayerInput",
+        _seed_annotation_collection,
+        models.AnnotationCollection,
+    ),
+    (
+        "createPointLayer",
+        "CreatePointLayerInput",
+        lambda ctx: _seed_table_dataset(ctx, "unplaced-points"),
+        models.TableDataset,
+    ),
+    (
+        "createTrackLayer",
+        "CreateTrackLayerInput",
+        lambda ctx: _seed_table_dataset(ctx, "unplaced-tracks", with_track=True),
+        models.TableDataset,
+    ),
+    (
+        "createMeshLayer",
+        "CreateMeshLayerInput",
+        _seed_mesh_collection,
+        models.MeshCollection,
+    ),
 ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mutation_name,input_name,seed_source,container_model", _UNPLACED_SOURCES, ids=[row[0] for row in _UNPLACED_SOURCES])
-async def test_every_source_kind_is_refused_when_nothing_places_it(db, authenticated_context: HttpContext, mutation_name, input_name, seed_source, container_model):
+@pytest.mark.parametrize(
+    "mutation_name,input_name,seed_source,container_model",
+    _UNPLACED_SOURCES,
+    ids=[row[0] for row in _UNPLACED_SOURCES],
+)
+async def test_every_source_kind_is_refused_when_nothing_places_it(
+    db,
+    authenticated_context: HttpContext,
+    mutation_name,
+    input_name,
+    seed_source,
+    container_model,
+):
     """The gate is not the lens path's alone. Skip the registration and each of these refuses.
 
     Every other test in this file registers the source first, which is right -- they are about
@@ -502,7 +706,12 @@ async def test_every_source_kind_is_refused_when_nothing_places_it(db, authentic
     result = await schema.execute(
         f"mutation Create($input: {input_name}!) {{ {mutation_name}(input: $input) {{ id }} }}",
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.id), "lens": await seed.whole_lens_id(container_model, str(source.id))}},
+        variable_values={
+            "input": {
+                "scene": str(scene.id),
+                "lens": await seed.whole_lens_id(container_model, str(source.id)),
+            }
+        },
     )
     assert result.errors, f"{mutation_name} composed a layer the graph does not place"
     assert "createTransformation" in str(result.errors[0]), result.errors[0]

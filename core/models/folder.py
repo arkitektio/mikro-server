@@ -1,22 +1,27 @@
+from arkitekt_datalayer.models import BigFileStore
 from arkitekt_service.service.described import Described
+from authentikate.models import Membership, Organization
+from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
-from django.contrib.auth import get_user_model
 from django_choices_field import TextChoicesField
 from koherent.fields import ProvenanceField
-from authentikate.models import Organization, Membership
 from taggit.managers import TaggableManager
-from arkitekt_datalayer.models import BigFileStore
-from embeddings.models import EmbeddedDescriptionMixin
 
 from core import enums
 from core.creation import CreationContext
+from embeddings.models import EmbeddedDescriptionMixin
 
 
 class FolderManager(models.Manager):
     def get_current_default(self, ctx: CreationContext) -> "Folder":
         """Get (creating on first use) the user's default folder in the organization."""
-        potential = self.filter(creator=ctx.user, organization=ctx.organization, membership=ctx.membership, is_default=True).first()
+        potential = self.filter(
+            creator=ctx.user,
+            organization=ctx.organization,
+            membership=ctx.membership,
+            is_default=True,
+        ).first()
         if not potential:
             return self.create(
                 creator=ctx.user,
@@ -44,10 +49,16 @@ class Folder(EmbeddedDescriptionMixin, models.Model):
         related_name="created_folders",
         help_text="The user that created the folder",
     )
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time the folder was created")
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time the folder was created"
+    )
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="children"
+    )
     name = models.CharField(max_length=200, help_text="The name of the folder")
-    membership = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name="folders")
+    membership = models.ForeignKey(
+        Membership, on_delete=models.CASCADE, related_name="folders"
+    )
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     description = models.CharField(
         max_length=1000,
@@ -108,7 +119,9 @@ class File(Described):
     # Nullable, and SET_NULL: deleting a folder unfiles what is in it and destroys nothing.
     # It was CASCADE and NOT NULL, which made `releaseFilesFromFolder` an IntegrityError --
     # it sets this to None and the column would not take it.
-    folder = models.ForeignKey(Folder, on_delete=models.SET_NULL, null=True, blank=True, related_name="files")
+    folder = models.ForeignKey(
+        Folder, on_delete=models.SET_NULL, null=True, blank=True, related_name="files"
+    )
     store = models.ForeignKey(
         BigFileStore,
         on_delete=models.CASCADE,
@@ -116,7 +129,9 @@ class File(Described):
         blank=True,
         help_text="The store of the file",
     )
-    name = models.CharField(max_length=1000, help_text="The name of the file", default="")
+    name = models.CharField(
+        max_length=1000, help_text="The name of the file", default=""
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True)
     organization = models.ForeignKey(
@@ -124,9 +139,15 @@ class File(Described):
         on_delete=models.CASCADE,
         related_name="files",
     )
-    size = models.BigIntegerField(help_text="The size of the file in bytes", null=True, blank=True)
-    content_type = models.CharField(max_length=1000, help_text="The content type of the file", null=True, blank=True)
-    membership = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name="files")
+    size = models.BigIntegerField(
+        help_text="The size of the file in bytes", null=True, blank=True
+    )
+    content_type = models.CharField(
+        max_length=1000, help_text="The content type of the file", null=True, blank=True
+    )
+    membership = models.ForeignKey(
+        Membership, on_delete=models.CASCADE, related_name="files"
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -148,9 +169,15 @@ class File(Described):
 
     class Meta:
         indexes = [
-            GinIndex(fields=["stored_descriptors"], name="file_desc_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="file_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
             # Newest first per organization: the `roots` walk reads it in order and stops early.
-            models.Index(fields=["organization", "-created_at"], name="file_org_newest_idx"),
+            models.Index(
+                fields=["organization", "-created_at"], name="file_org_newest_idx"
+            ),
         ]
 
 
@@ -175,7 +202,12 @@ class FileLink(Described):
     enumerates the table's rows, and a file's bytes are indexed by nothing the graph asks about.
     """
 
-    file = models.ForeignKey(File, on_delete=models.CASCADE, related_name="links", help_text="The file side of the link")
+    file = models.ForeignKey(
+        File,
+        on_delete=models.CASCADE,
+        related_name="links",
+        help_text="The file side of the link",
+    )
 
     # Exactly one is set, the same fan-of-nullable-FKs shape `Layer` uses for its sources, and
     # enforced the same way `Layer` enforces it: in the mutations, not by a CheckConstraint.
@@ -190,10 +222,38 @@ class FileLink(Described):
     # call site that builds a `FileLink` directly can therefore set two FKs and nothing will
     # object. That is the cost of having no constraint; if it ever bites, the fix is a
     # `CheckConstraint` here rather than a fourth copy of the check.
-    dataset = models.ForeignKey("ArrayDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="file_links", help_text="(DATASET) The array dataset side of the link")
-    table_dataset = models.ForeignKey("TableDataset", on_delete=models.CASCADE, null=True, blank=True, related_name="file_links", help_text="(TABLE_DATASET) The table dataset side of the link")
-    mesh_collection = models.ForeignKey("MeshCollection", on_delete=models.CASCADE, null=True, blank=True, related_name="file_links", help_text="(MESH_COLLECTION) The mesh collection side of the link")
-    annotation_collection = models.ForeignKey("AnnotationCollection", on_delete=models.CASCADE, null=True, blank=True, related_name="file_links", help_text="(ANNOTATION_COLLECTION) The annotation collection side of the link")
+    dataset = models.ForeignKey(
+        "ArrayDataset",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="file_links",
+        help_text="(DATASET) The array dataset side of the link",
+    )
+    table_dataset = models.ForeignKey(
+        "TableDataset",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="file_links",
+        help_text="(TABLE_DATASET) The table dataset side of the link",
+    )
+    mesh_collection = models.ForeignKey(
+        "MeshCollection",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="file_links",
+        help_text="(MESH_COLLECTION) The mesh collection side of the link",
+    )
+    annotation_collection = models.ForeignKey(
+        "AnnotationCollection",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="file_links",
+        help_text="(ANNOTATION_COLLECTION) The annotation collection side of the link",
+    )
 
     direction = TextChoicesField(
         choices_enum=enums.FileLinkDirectionChoices,
@@ -217,8 +277,16 @@ class FileLink(Described):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="file_links")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="file_links")
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="file_links",
+    )
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="file_links"
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -263,9 +331,20 @@ class FileLink(Described):
                 name="unique_file_link_per_mesh_collection",
             ),
             models.UniqueConstraint(
-                fields=["file", "annotation_collection", "direction", "series_identifier"],
+                fields=[
+                    "file",
+                    "annotation_collection",
+                    "direction",
+                    "series_identifier",
+                ],
                 condition=models.Q(annotation_collection__isnull=False),
                 name="unique_file_link_per_annotation_collection",
             ),
         ]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="file_link_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="file_link_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            )
+        ]

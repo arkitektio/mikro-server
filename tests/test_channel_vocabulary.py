@@ -50,7 +50,9 @@ def test_a_recorded_fluorophore_decides_its_hue(label: str, expected: "enums.Col
         ("561", enums.ColorMap.RED),
     ],
 )
-def test_a_wavelength_in_the_name_decides_the_hue(label: str, expected: "enums.ColorMap"):
+def test_a_wavelength_in_the_name_decides_the_hue(
+    label: str, expected: "enums.ColorMap"
+):
     """Half the world names a channel after its laser line, and that is as good as a fluorophore."""
     assert channels.colormap_for(label) == expected
 
@@ -71,13 +73,18 @@ def test_an_uninformative_name_decides_nothing_except_when_it_does(label):
         assert channels.colormap_for(label) is None
 
 
-@pytest.mark.parametrize("label", ["Brightfield", "bright field", "BF", "DIC", "Phase contrast", "TL", "label-free"])
+@pytest.mark.parametrize(
+    "label",
+    ["Brightfield", "bright field", "BF", "DIC", "Phase contrast", "TL", "label-free"],
+)
 def test_transmitted_light_is_told_apart(label: str):
     """Not for the colour: for the blend. Brightfield summed into fluorescence washes a scene out."""
     assert channels.is_transmitted(label) is True
 
 
-@pytest.mark.parametrize("label", ["GFP", "DAPI", "channel 0", "", None, "TRITC", "BFP"])
+@pytest.mark.parametrize(
+    "label", ["GFP", "DAPI", "channel 0", "", None, "TRITC", "BFP"]
+)
 def test_a_fluorophore_is_not_transmitted_light(label):
     """The two-letter aliases are the risk here: `bf` and `tl` must not fire inside a real name.
 
@@ -89,12 +96,20 @@ def test_a_fluorophore_is_not_transmitted_light(label):
 
 def test_three_channels_named_red_green_blue_are_a_photograph():
     """The whole set, and the indices come from the labels rather than from position."""
-    assert channels.rgb_components({0: "Red", 1: "Green", 2: "Blue"}, 3) == {"red": 0, "green": 1, "blue": 2}
+    assert channels.rgb_components({0: "Red", 1: "Green", 2: "Blue"}, 3) == {
+        "red": 0,
+        "green": 1,
+        "blue": 2,
+    }
 
 
 def test_the_components_are_read_in_the_order_the_converter_wrote_them():
     """Several converters write (blue, green, red). Assuming 0, 1, 2 inverts the picture."""
-    assert channels.rgb_components({0: "blue", 1: "green", 2: "red"}, 3) == {"red": 2, "green": 1, "blue": 0}
+    assert channels.rgb_components({0: "blue", 1: "green", 2: "red"}, 3) == {
+        "red": 2,
+        "green": 1,
+        "blue": 0,
+    }
 
 
 @pytest.mark.parametrize(
@@ -114,6 +129,8 @@ def test_the_components_are_read_in_the_order_the_converter_wrote_them():
         ({0: "red", 1: "red", 2: "blue"}, 3),
     ],
 )
-def test_anything_less_than_the_whole_set_is_not_a_photograph(labels: dict, channel_count: int):
+def test_anything_less_than_the_whole_set_is_not_a_photograph(
+    labels: dict, channel_count: int
+):
     """All three, over an axis of exactly three, or none of it."""
     assert channels.rgb_components(labels, channel_count) is None

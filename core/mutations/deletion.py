@@ -10,10 +10,14 @@ from core.scoping import get_for_org
 from core.types.lineage import LineageNodeKind
 
 
-@strawberry.input(description="What to delete the derived data of: one object the lineage walk can stand on, by kind and id")
+@strawberry.input(
+    description="What to delete the derived data of: one object the lineage walk can stand on, by kind and id"
+)
 class DeleteDerivedInput:
     kind: LineageNodeKind = strawberry.field(description="What it is")
-    id: strawberry.ID = strawberry.field(description="Its ID, as its own query takes it")
+    id: strawberry.ID = strawberry.field(
+        description="Its ID, as its own query takes it"
+    )
 
 
 def delete_derived(info: Info, input: DeleteDerivedInput) -> list[strawberry.ID]:

@@ -38,9 +38,13 @@ query DerivedFrom($id: ID!) {
 """
 
 
-async def _mesh_object(ctx: HttpContext, collection: models.MeshCollection, object_id: int) -> dict:
+async def _mesh_object(
+    ctx: HttpContext, collection: models.MeshCollection, object_id: int
+) -> dict:
     result = await schema.execute(
-        MESH_OBJECT, context_value=_fresh_request(ctx), variable_values={"collection": str(collection.pk), "object": object_id}
+        MESH_OBJECT,
+        context_value=_fresh_request(ctx),
+        variable_values={"collection": str(collection.pk), "object": object_id},
     )
     assert not result.errors, result.errors
     return result.data["meshObject"]
@@ -48,11 +52,15 @@ async def _mesh_object(ctx: HttpContext, collection: models.MeshCollection, obje
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_names_the_mesh_object_it_was_computed_from(authenticated_context: HttpContext):
+async def test_a_dataset_names_the_mesh_object_it_was_computed_from(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
     system = await sync_to_async(lambda: collection.coordinate_system)()
-    source = await seed.create_array_dataset(ctx, "Raw", axes=seed.YX_AXES, shapes=[[6, 8]])
+    source = await seed.create_array_dataset(
+        ctx, "Raw", axes=seed.YX_AXES, shapes=[[6, 8]]
+    )
     lens = await seed.create_lens(ctx, source, slices=[])
 
     made = await _derive(
@@ -62,30 +70,46 @@ async def test_a_dataset_names_the_mesh_object_it_was_computed_from(authenticate
         shape=[6, 8],
         entries=[
             {"kind": "LENS", "lens": str(lens.pk), "transform": {"kind": "IDENTITY"}},
-            {"kind": "MESH_OBJECT", "meshCollection": str(collection.pk), "meshObject": 7},
+            {
+                "kind": "MESH_OBJECT",
+                "meshCollection": str(collection.pk),
+                "meshObject": 7,
+            },
         ],
     )
     assert not made.errors, made.errors
     cell = made.data["createArrayDataset"]["id"]
 
-    derived = await schema.execute(DERIVED_FROM, context_value=_fresh_request(ctx), variable_values={"id": cell})
+    derived = await schema.execute(
+        DERIVED_FROM, context_value=_fresh_request(ctx), variable_values={"id": cell}
+    )
     assert not derived.errors, derived.errors
     _, by_object = derived.data["arrayDataset"]["derivedFrom"]
     assert by_object["kind"] == "UNMAPPABLE", "naming an object claims no geometry"
-    assert by_object["output"]["id"] == str(system.pk), "it lands where a collection derivation lands: the vertex space"
+    assert by_object["output"]["id"] == str(system.pk), (
+        "it lands where a collection derivation lands: the vertex space"
+    )
 
     seven = await _mesh_object(ctx, collection, 7)
     assert seven["id"] == f"{collection.pk}:7"
-    assert seven["derivedResidents"] == [{"__typename": "ArrayDataset", "id": cell, "name": "Cell 7"}]
-    assert (await _mesh_object(ctx, collection, 8))["derivedResidents"] == [], "the collection is shared, the lineage is the object's"
+    assert seven["derivedResidents"] == [
+        {"__typename": "ArrayDataset", "id": cell, "name": "Cell 7"}
+    ]
+    assert (await _mesh_object(ctx, collection, 8))["derivedResidents"] == [], (
+        "the collection is shared, the lineage is the object's"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_objects_of_one_collection_are_two_sources(authenticated_context: HttpContext):
+async def test_two_objects_of_one_collection_are_two_sources(
+    authenticated_context: HttpContext,
+):
     ctx = authenticated_context
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
-    source = await seed.create_array_dataset(ctx, "Raw", axes=seed.YX_AXES, shapes=[[6, 8]])
+    source = await seed.create_array_dataset(
+        ctx, "Raw", axes=seed.YX_AXES, shapes=[[6, 8]]
+    )
     lens = await seed.create_lens(ctx, source, slices=[])
 
     both = await _derive(
@@ -95,14 +119,26 @@ async def test_two_objects_of_one_collection_are_two_sources(authenticated_conte
         shape=[6, 8],
         entries=[
             {"kind": "LENS", "lens": str(lens.pk), "transform": {"kind": "IDENTITY"}},
-            {"kind": "MESH_OBJECT", "meshCollection": str(collection.pk), "meshObject": 1},
-            {"kind": "MESH_OBJECT", "meshCollection": str(collection.pk), "meshObject": 2},
+            {
+                "kind": "MESH_OBJECT",
+                "meshCollection": str(collection.pk),
+                "meshObject": 1,
+            },
+            {
+                "kind": "MESH_OBJECT",
+                "meshCollection": str(collection.pk),
+                "meshObject": 2,
+            },
         ],
     )
     assert not both.errors, both.errors
     contact = both.data["createArrayDataset"]["id"]
-    assert [r["id"] for r in (await _mesh_object(ctx, collection, 1))["derivedResidents"]] == [contact]
-    assert [r["id"] for r in (await _mesh_object(ctx, collection, 2))["derivedResidents"]] == [contact]
+    assert [
+        r["id"] for r in (await _mesh_object(ctx, collection, 1))["derivedResidents"]
+    ] == [contact]
+    assert [
+        r["id"] for r in (await _mesh_object(ctx, collection, 2))["derivedResidents"]
+    ] == [contact]
 
     twice = await _derive(
         ctx,
@@ -111,11 +147,21 @@ async def test_two_objects_of_one_collection_are_two_sources(authenticated_conte
         shape=[6, 8],
         entries=[
             {"kind": "LENS", "lens": str(lens.pk), "transform": {"kind": "IDENTITY"}},
-            {"kind": "MESH_OBJECT", "meshCollection": str(collection.pk), "meshObject": 1},
-            {"kind": "MESH_OBJECT", "meshCollection": str(collection.pk), "meshObject": 1},
+            {
+                "kind": "MESH_OBJECT",
+                "meshCollection": str(collection.pk),
+                "meshObject": 1,
+            },
+            {
+                "kind": "MESH_OBJECT",
+                "meshCollection": str(collection.pk),
+                "meshObject": 1,
+            },
         ],
     )
-    assert twice.errors and "distinct source" in str(twice.errors[0]), "one object named twice is one source"
+    assert twice.errors and "distinct source" in str(twice.errors[0]), (
+        "one object named twice is one source"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -123,7 +169,9 @@ async def test_two_objects_of_one_collection_are_two_sources(authenticated_conte
 async def test_a_mesh_object_arm_needs_its_object(authenticated_context: HttpContext):
     ctx = authenticated_context
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
-    source = await seed.create_array_dataset(ctx, "Raw", axes=seed.YX_AXES, shapes=[[6, 8]])
+    source = await seed.create_array_dataset(
+        ctx, "Raw", axes=seed.YX_AXES, shapes=[[6, 8]]
+    )
     lens = await seed.create_lens(ctx, source, slices=[])
     made = await _derive(
         ctx,

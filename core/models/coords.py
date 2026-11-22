@@ -57,12 +57,12 @@ writer translates them back to ``{path, name}`` on serialization. The API shape
 and the on-disk shape are deliberately not the same document.
 """
 
-from django.contrib.auth import get_user_model
 from arkitekt_service.service.described import Described
+from authentikate.models import Organization
+from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django_choices_field import TextChoicesField
-from authentikate.models import Organization
 from koherent.fields import ProvenanceField
 
 from core import enums
@@ -143,14 +143,32 @@ class CoordinateSystem(Described):
     # path to follow and every scoped read would raise LookupError without this column. It
     # was already required when the owner FKs existed, because all seven were nullable and
     # that walk follows only required ones.
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this coordinate space belongs to")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this coordinate space")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this coordinate space was created")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this coordinate space belongs to",
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The user that created this coordinate space",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this coordinate space was created"
+    )
 
     provenance = ProvenanceField()
 
     class Meta:
-        indexes = [GinIndex(fields=["stored_descriptors"], name="coord_system_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="coord_system_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            )
+        ]
         constraints = [
             # Two constraints, not one over all three columns: a unique index treats NULLs as
             # distinct, so `(org, reference, NULL)` would never collide with itself and two
@@ -162,7 +180,9 @@ class CoordinateSystem(Described):
             ),
             models.UniqueConstraint(
                 fields=["organization", "reference_app", "reference"],
-                condition=models.Q(reference__isnull=False, reference_app__isnull=False),
+                condition=models.Q(
+                    reference__isnull=False, reference_app__isnull=False
+                ),
                 name="one_space_per_app_reference",
             ),
         ]
@@ -203,9 +223,19 @@ class Axis(models.Model):
     the store's shape, and every writer assigns ``order`` by enumeration.
     """
 
-    coordinate_system = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="axes", help_text="The coordinate system this axis belongs to")
-    order = models.PositiveSmallIntegerField(help_text="This axis' position in the system's canonical axis order. For an array-backed system it is the index into the array shape; for a table system it is the order of the coordinate columns")
-    name = models.CharField(max_length=255, help_text="The name of the axis, e.g. 'z', 'c' or 'tau'. Free-form; as long as a table column's name, because a table's coordinate columns name its axes")
+    coordinate_system = models.ForeignKey(
+        CoordinateSystem,
+        on_delete=models.CASCADE,
+        related_name="axes",
+        help_text="The coordinate system this axis belongs to",
+    )
+    order = models.PositiveSmallIntegerField(
+        help_text="This axis' position in the system's canonical axis order. For an array-backed system it is the index into the array shape; for a table system it is the order of the coordinate columns"
+    )
+    name = models.CharField(
+        max_length=255,
+        help_text="The name of the axis, e.g. 'z', 'c' or 'tau'. Free-form; as long as a table column's name, because a table's coordinate columns name its axes",
+    )
     type = TextChoicesField(
         choices_enum=enums.AxisTypeChoices,
         default=enums.AxisTypeChoices.SPACE.value,
@@ -228,14 +258,27 @@ class Axis(models.Model):
     )
     # Kept beside `description` on purpose: this is the short label a picker searches and a
     # UI prints, that one is prose about what the axis measures. Folding them would cost the label.
-    long_name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the axis")
-    description = models.CharField(max_length=1000, null=True, blank=True, help_text="A free-form description of what the axis measures, e.g. 'distance from the coverslip'")
+    long_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="A human-readable name for the axis",
+    )
+    description = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="A free-form description of what the axis measures, e.g. 'distance from the coverslip'",
+    )
 
     class Meta:
         """Meta options for the axis."""
 
         ordering = ["order"]
-        unique_together = [("coordinate_system", "order"), ("coordinate_system", "name")]
+        unique_together = [
+            ("coordinate_system", "order"),
+            ("coordinate_system", "name"),
+        ]
         constraints = [
             # A system carries at most one clock. Two TIME axes are otherwise legal --
             # they share an ordering rank, so nothing complains -- and the render-axis
@@ -313,18 +356,38 @@ class Transformation(Described):
         default=enums.TransformKindChoices.IDENTITY.value,
         help_text="The kind of transformation, which fixes how `params` is interpreted",
     )
-    name = models.TextField(null=True, blank=True, help_text="The name of the transformation")
+    name = models.TextField(
+        null=True, blank=True, help_text="The name of the transformation"
+    )
 
-    input = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps from")
-    output = models.ForeignKey(CoordinateSystem, on_delete=models.CASCADE, related_name="+", help_text="The coordinate system this transformation maps to")
+    input = models.ForeignKey(
+        CoordinateSystem,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The coordinate system this transformation maps from",
+    )
+    output = models.ForeignKey(
+        CoordinateSystem,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The coordinate system this transformation maps to",
+    )
 
     # MAP_AXIS and BY_DIMENSION: which axes this edge acts on, by NAME. RFC-5's
     # transformation table says List[str] while its byDimension prose says
     # integer indices into the axes; the two contradict. Names are
     # self-documenting and survive a reordering, so we use names. On a BY_DIMENSION
     # they are its parts' axes, concatenated in part order: what the edge states.
-    input_axes = models.JSONField(null=True, blank=True, help_text="(MAP_AXIS, BY_DIMENSION) The names of the input axes this edge acts on, e.g. ['z', 'y', 'x']")
-    output_axes = models.JSONField(null=True, blank=True, help_text="(MAP_AXIS, BY_DIMENSION) The names of the output axes this edge produces")
+    input_axes = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="(MAP_AXIS, BY_DIMENSION) The names of the input axes this edge acts on, e.g. ['z', 'y', 'x']",
+    )
+    output_axes = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="(MAP_AXIS, BY_DIMENSION) The names of the output axes this edge produces",
+    )
 
     params = models.JSONField(
         default=dict,
@@ -402,7 +465,10 @@ class Transformation(Described):
     @property
     def step_pairs(self) -> tuple[tuple[str, dict], ...]:
         """The steps as the ``(kind, params)`` pairs every composer reads; empty off a SEQUENCE."""
-        return tuple((str(step["kind"]), dict(step.get("params") or {})) for step in self.steps or [])
+        return tuple(
+            (str(step["kind"]), dict(step.get("params") or {}))
+            for step in self.steps or []
+        )
 
     # **Where along an axis this edge applies.** Null -- and almost always null -- for an edge
     # that holds everywhere, which is every edge the model had before this column.
@@ -485,9 +551,21 @@ class Transformation(Described):
     )
 
     # See CoordinateSystem.organization.
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this transformation belongs to")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this transformation")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this transformation was created")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this transformation belongs to",
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The user that created this transformation",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this transformation was created"
+    )
 
     provenance = ProvenanceField()
 
@@ -495,7 +573,13 @@ class Transformation(Described):
         """Meta options for the transformation."""
 
         ordering = ["id"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="transformation_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="transformation_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            )
+        ]
 
     def __str__(self) -> str:
         """The transformation's kind and endpoints."""
@@ -515,14 +599,31 @@ class TransformationField(models.Model):
     `Transformation.field_of`.
     """
 
-    transformation = models.ForeignKey(Transformation, on_delete=models.CASCADE, related_name="field_links", help_text="The edge whose part reads this array")
-    field = models.ForeignKey(CoordinateSystem, on_delete=models.PROTECT, related_name="fields_of", help_text="The coordinate system of the array whose values are the part's map")
-    part = models.PositiveSmallIntegerField(help_text="The index of the part in the edge's `parts` that reads this array")
+    transformation = models.ForeignKey(
+        Transformation,
+        on_delete=models.CASCADE,
+        related_name="field_links",
+        help_text="The edge whose part reads this array",
+    )
+    field = models.ForeignKey(
+        CoordinateSystem,
+        on_delete=models.PROTECT,
+        related_name="fields_of",
+        help_text="The coordinate system of the array whose values are the part's map",
+    )
+    part = models.PositiveSmallIntegerField(
+        help_text="The index of the part in the edge's `parts` that reads this array"
+    )
 
     class Meta:
         """Meta options for the link."""
 
-        constraints = [models.UniqueConstraint(fields=["transformation", "part"], name="transformation_field_part_unique")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["transformation", "part"],
+                name="transformation_field_part_unique",
+            )
+        ]
 
     def __str__(self) -> str:
         """The edge, the part and the array."""
@@ -560,7 +661,11 @@ class MeshCollection(Described):
     # No `version`: a collection is immutable, and its identity is its store; what changed between
     # two extractions is their provenance. No `spec_version` either: the store read it from the
     # manifest, and a second copy here could only disagree with the bytes (see `spec_version`).
-    name = models.TextField(null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
+    name = models.TextField(
+        null=True,
+        blank=True,
+        help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key",
+    )
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`.
     folder = models.ForeignKey(
@@ -574,8 +679,14 @@ class MeshCollection(Described):
 
     # cellSize is IN VOXELS, so that the octree aligns to the label grid it was
     # extracted from rather than to an arbitrary physical box.
-    grid = models.JSONField(default=dict, help_text="The octree grid, as read from the store's manifest: {'cellSize': [128, 128, 64], 'levels': 3, 'sortKey': 'MORTON'}. cellSize is in voxels, one size per vertex component")
-    encoding = models.JSONField(default=dict, help_text="The geometry encoding, as read from the store's manifest: how positions, normals and indices are packed and compressed")
+    grid = models.JSONField(
+        default=dict,
+        help_text="The octree grid, as read from the store's manifest: {'cellSize': [128, 128, 64], 'levels': 3, 'sortKey': 'MORTON'}. cellSize is in voxels, one size per vertex component",
+    )
+    encoding = models.JSONField(
+        default=dict,
+        help_text="The geometry encoding, as read from the store's manifest: how positions, normals and indices are packed and compressed",
+    )
     # **The collection is its store**: one fabriks prefix holding `fabriks.json`, both catalogs
     # and every octree level. `fill_info` reads that manifest at registration, so the grid and
     # the encoding above record what the writer wrote rather than what a caller retyped.
@@ -588,7 +699,10 @@ class MeshCollection(Described):
         related_name="mesh_collections",
         help_text="The fabriks store holding this collection: one prefix with its manifest, both catalogs and every octree level. Its manifest is where the grid and the encoding come from",
     )
-    provenance_metadata = models.JSONField(default=dict, help_text="How this collection was produced (the extraction run, its parameters and its inputs)")
+    provenance_metadata = models.JSONField(
+        default=dict,
+        help_text="How this collection was produced (the extraction run, its parameters and its inputs)",
+    )
 
     coordinate_system = models.ForeignKey(
         "CoordinateSystem",
@@ -602,9 +716,21 @@ class MeshCollection(Described):
         help_text="The coordinate system this collection's vertices are expressed in. An edge relates it to whatever the meshes were extracted from -- an identity when the grids agree, a scale when they do not",
     )
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this mesh collection belongs to")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this mesh collection")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this mesh collection was created")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this mesh collection belongs to",
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The user that created this mesh collection",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this mesh collection was created"
+    )
 
     provenance = ProvenanceField()
 
@@ -618,9 +744,15 @@ class MeshCollection(Described):
         # uniqueness on edges anywhere else either.
         ordering = ["-created_at"]
         indexes = [
-            GinIndex(fields=["stored_descriptors"], name="mesh_coll_desc_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="mesh_coll_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
             # Newest first per organization: the `roots` walk reads it in order and stops early.
-            models.Index(fields=["organization", "-created_at"], name="mesh_coll_org_newest_idx"),
+            models.Index(
+                fields=["organization", "-created_at"], name="mesh_coll_org_newest_idx"
+            ),
         ]
 
     @property
@@ -663,7 +795,11 @@ class NetworkCollection(Described):
     """
 
     # As on `MeshCollection`: no `version`, no `spec_version`; a name, optionally.
-    name = models.TextField(null=True, blank=True, help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key")
+    name = models.TextField(
+        null=True,
+        blank=True,
+        help_text="What someone called this collection. Optional: a collection is identified by its store, and labelled by this or, failing that, by the store's key",
+    )
 
     folder = models.ForeignKey(
         "Folder",
@@ -676,15 +812,24 @@ class NetworkCollection(Described):
 
     # cellSize is IN VOXELS, so that the octree aligns to the grid the network was traced in
     # rather than to an arbitrary physical box.
-    grid = models.JSONField(default=dict, help_text="The octree grid, as read from the store's manifest: {'cellSize': [128, 128, 64], 'levels': 1, 'sortKey': 'MORTON'}. cellSize is in voxels, one size per position component. `levels: 1` is the common case, not a degenerate one")
-    encoding = models.JSONField(default=dict, help_text="The geometry encoding, as read from the store's manifest: how positions, edges, node ids, radii and ghosts are packed, and which coarsening operations ran")
+    grid = models.JSONField(
+        default=dict,
+        help_text="The octree grid, as read from the store's manifest: {'cellSize': [128, 128, 64], 'levels': 1, 'sortKey': 'MORTON'}. cellSize is in voxels, one size per position component. `levels: 1` is the common case, not a degenerate one",
+    )
+    encoding = models.JSONField(
+        default=dict,
+        help_text="The geometry encoding, as read from the store's manifest: how positions, edges, node ids, radii and ghosts are packed, and which coarsening operations ran",
+    )
     store = models.ForeignKey(
         "datalayer.KonnektionStore",
         on_delete=models.CASCADE,
         related_name="network_collections",
         help_text="The konnektion store holding this collection: one prefix with its manifest, both catalogs and every octree level. Its manifest is where the grid and the encoding come from",
     )
-    provenance_metadata = models.JSONField(default=dict, help_text="How this collection was produced (the tracing run, its parameters and its inputs)")
+    provenance_metadata = models.JSONField(
+        default=dict,
+        help_text="How this collection was produced (the tracing run, its parameters and its inputs)",
+    )
 
     coordinate_system = models.ForeignKey(
         "CoordinateSystem",
@@ -695,9 +840,21 @@ class NetworkCollection(Described):
         help_text="The coordinate system this collection's node positions are expressed in. An edge relates it to whatever the network was traced out of",
     )
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this network collection belongs to")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this network collection")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this network collection was created")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this network collection belongs to",
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The user that created this network collection",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this network collection was created"
+    )
 
     provenance = ProvenanceField()
 
@@ -706,9 +863,16 @@ class NetworkCollection(Described):
 
         ordering = ["-created_at"]
         indexes = [
-            GinIndex(fields=["stored_descriptors"], name="network_coll_desc_gin", opclasses=["jsonb_path_ops"]),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="network_coll_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
             # Newest first per organization: the `roots` walk reads it in order and stops early.
-            models.Index(fields=["organization", "-created_at"], name="network_coll_org_newest_idx"),
+            models.Index(
+                fields=["organization", "-created_at"],
+                name="network_coll_org_newest_idx",
+            ),
         ]
 
     @property
@@ -719,7 +883,9 @@ class NetworkCollection(Described):
     @property
     def spec_version(self) -> str | None:
         """The network format version, read off the store's manifest and namespaced -- never stated twice."""
-        return f"konnektion/{self.store.spec_version}" if self.store.spec_version else None
+        return (
+            f"konnektion/{self.store.spec_version}" if self.store.spec_version else None
+        )
 
     def __str__(self) -> str:
         """The collection's label."""
@@ -745,7 +911,11 @@ class Fixture(Described):
     it is placed by an ordinary registration edge from its space into a world.
     """
 
-    name = models.TextField(null=True, blank=True, help_text="What someone called this model. Optional: a model is identified by its file, and labelled by this or, failing that, by the file's original name")
+    name = models.TextField(
+        null=True,
+        blank=True,
+        help_text="What someone called this model. Optional: a model is identified by its file, and labelled by this or, failing that, by the file's original name",
+    )
 
     folder = models.ForeignKey(
         "Folder",
@@ -770,7 +940,10 @@ class Fixture(Described):
         default=None,
         help_text="The model's axis-aligned bounding box in its own space, as {'min': [x, y, z], 'max': [x, y, z]}, copied from its kulisse store at registration. Null when the file declares none",
     )
-    provenance_metadata = models.JSONField(default=dict, help_text="How this model was produced (the CAD source, the exporter and its settings)")
+    provenance_metadata = models.JSONField(
+        default=dict,
+        help_text="How this model was produced (the CAD source, the exporter and its settings)",
+    )
 
     coordinate_system = models.ForeignKey(
         "CoordinateSystem",
@@ -781,9 +954,21 @@ class Fixture(Described):
         help_text="The unit-carrying coordinate system this model's vertices are expressed in. A registration edge relates it to the world the model is placed in",
     )
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this fixture belongs to")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, help_text="The user that created this fixture")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this fixture was created")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this fixture belongs to",
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The user that created this fixture",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this fixture was created"
+    )
 
     provenance = ProvenanceField()
 
@@ -792,8 +977,14 @@ class Fixture(Described):
 
         ordering = ["-created_at"]
         indexes = [
-            GinIndex(fields=["stored_descriptors"], name="fixture_desc_gin", opclasses=["jsonb_path_ops"]),
-            models.Index(fields=["organization", "-created_at"], name="fixture_org_newest_idx"),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="fixture_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
+            models.Index(
+                fields=["organization", "-created_at"], name="fixture_org_newest_idx"
+            ),
         ]
 
     @property

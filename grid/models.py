@@ -38,13 +38,25 @@ class Grid(Described):
             "compositions can share it, it outlives each of them, and deleting a grid never deletes it. RESTRICT: while a grid is laid out over a space, it cannot be deleted"
         ),
     )
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, related_name="created_grids")
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="created_grids",
+    )
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="grid_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="grid_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            )
+        ]
 
 
 class GridLayer(models.Model):
@@ -56,27 +68,60 @@ class GridLayer(models.Model):
     """
 
     grid = models.ForeignKey(Grid, on_delete=models.CASCADE, related_name="layers")
-    kind = TextChoicesField(choices_enum=enums.GridLayerKindChoices, help_text="What this layer reads. Fixed for the life of the row")
-    name = models.CharField(max_length=255, null=True, blank=True, help_text="A human-readable name for the layer. Null when nobody has named it")
+    kind = TextChoicesField(
+        choices_enum=enums.GridLayerKindChoices,
+        help_text="What this layer reads. Fixed for the life of the row",
+    )
+    name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="A human-readable name for the layer. Null when nobody has named it",
+    )
     visible = models.BooleanField(default=True, help_text="Whether the layer is drawn")
-    order = models.IntegerField(default=0, help_text="Explicit drawing order, back to front")
+    order = models.IntegerField(
+        default=0, help_text="Explicit drawing order, back to front"
+    )
     opacity = models.FloatField(default=1.0, help_text="Layer alpha (0..1)")
 
-    lens = models.ForeignKey("core.Lens", on_delete=models.CASCADE, related_name="grid_layers", help_text="The lens this layer reads through: an array or sparse lens for a heatmap, a table lens for cells")
+    lens = models.ForeignKey(
+        "core.Lens",
+        on_delete=models.CASCADE,
+        related_name="grid_layers",
+        help_text="The lens this layer reads through: an array or sparse lens for a heatmap, a table lens for cells",
+    )
 
     # --- cells ---
-    value_column = models.CharField(max_length=255, null=True, blank=True, help_text="(cells) The numeric column whose value colours each row's cell")
+    value_column = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="(cells) The numeric column whose value colours each row's cell",
+    )
 
     # --- colour ---
-    colormap = TextChoicesField(choices_enum=core_enums.ColorMapChoices, default=core_enums.ColorMapChoices.VIRIDIS.value, help_text="How a value becomes a colour")
-    min = models.FloatField(null=True, blank=True, help_text="The value drawn at the bottom of the colormap. Null lets the viewer choose")
-    max = models.FloatField(null=True, blank=True, help_text="The value drawn at the top of the colormap. Null lets the viewer choose")
+    colormap = TextChoicesField(
+        choices_enum=core_enums.ColorMapChoices,
+        default=core_enums.ColorMapChoices.VIRIDIS.value,
+        help_text="How a value becomes a colour",
+    )
+    min = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The value drawn at the bottom of the colormap. Null lets the viewer choose",
+    )
+    max = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="The value drawn at the top of the colormap. Null lets the viewer choose",
+    )
 
     class Meta:
         ordering = ["order", "id"]
         constraints = [
             models.CheckConstraint(
-                condition=(Q(kind="cells") & Q(value_column__isnull=False)) | (Q(kind="heatmap") & Q(value_column__isnull=True)),
+                condition=(Q(kind="cells") & Q(value_column__isnull=False))
+                | (Q(kind="heatmap") & Q(value_column__isnull=True)),
                 name="grid_layer_value_column_per_kind",
             ),
         ]

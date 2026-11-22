@@ -25,24 +25,57 @@ from tests.seed import _seed_parquet_store_sync, create_folder
 QUERY = "detect cells"
 
 
-async def _folder(ctx: HttpContext, name: str, description: str | None = None) -> Folder:
+async def _folder(
+    ctx: HttpContext, name: str, description: str | None = None
+) -> Folder:
     return await create_folder(ctx, name, description=description)
 
 
-async def _array_dataset(ctx: HttpContext, name: str, description: str | None = None) -> ArrayDataset:
-    return await ArrayDataset.objects.acreate(name=name, description=description, creator=ctx.request.user, organization=ctx.request.organization)
+async def _array_dataset(
+    ctx: HttpContext, name: str, description: str | None = None
+) -> ArrayDataset:
+    return await ArrayDataset.objects.acreate(
+        name=name,
+        description=description,
+        creator=ctx.request.user,
+        organization=ctx.request.organization,
+    )
 
 
-async def _table_dataset(ctx: HttpContext, name: str, description: str | None = None) -> TableDataset:
+async def _table_dataset(
+    ctx: HttpContext, name: str, description: str | None = None
+) -> TableDataset:
     store = await sync_to_async(_seed_parquet_store_sync)(ctx, key=f"{name}.parquet")
-    return await TableDataset.objects.acreate(name=name, description=description, store=store, creator=ctx.request.user, organization=ctx.request.organization)
+    return await TableDataset.objects.acreate(
+        name=name,
+        description=description,
+        store=store,
+        creator=ctx.request.user,
+        organization=ctx.request.organization,
+    )
 
 
 # (model, seed, GraphQL list field, its filter and order input names)
 MODELS = [
-    pytest.param(Folder, _folder, "folders", "FolderFilter", "FolderOrder", id="folder"),
-    pytest.param(ArrayDataset, _array_dataset, "arrayDatasets", "ArrayDatasetFilter", "ArrayDatasetOrder", id="array_dataset"),
-    pytest.param(TableDataset, _table_dataset, "tableDatasets", "TableDatasetFilter", "TableDatasetOrder", id="table_dataset"),
+    pytest.param(
+        Folder, _folder, "folders", "FolderFilter", "FolderOrder", id="folder"
+    ),
+    pytest.param(
+        ArrayDataset,
+        _array_dataset,
+        "arrayDatasets",
+        "ArrayDatasetFilter",
+        "ArrayDatasetOrder",
+        id="array_dataset",
+    ),
+    pytest.param(
+        TableDataset,
+        _table_dataset,
+        "tableDatasets",
+        "TableDatasetFilter",
+        "TableDatasetOrder",
+        id="table_dataset",
+    ),
 ]
 
 
@@ -56,32 +89,57 @@ def _unit_orthogonal(e0: np.ndarray) -> np.ndarray:
 def _vec(e0: np.ndarray, distance: float) -> list[float]:
     """A unit vector at cosine distance ``distance`` from ``e0``."""
     theta = math.acos(1.0 - distance)
-    return (math.cos(theta) * e0 + math.sin(theta) * _unit_orthogonal(e0)).astype(float).tolist()
+    return (
+        (math.cos(theta) * e0 + math.sin(theta) * _unit_orthogonal(e0))
+        .astype(float)
+        .tolist()
+    )
 
 
 async def _pin(model, row, e0: np.ndarray, distance: float | None) -> None:
     """Overwrite a seeded row's vector with one at ``distance`` from ``e0`` (``None``: no vector)."""
-    await model.objects.filter(pk=row.pk).aupdate(embedding=_vec(e0, distance) if distance is not None else None)
+    await model.objects.filter(pk=row.pk).aupdate(
+        embedding=_vec(e0, distance) if distance is not None else None
+    )
 
 
-async def _names(ctx: HttpContext, field: str, filter_name: str, order_name: str, search: str, ordering: list | None = None) -> list[str]:
+async def _names(
+    ctx: HttpContext,
+    field: str,
+    filter_name: str,
+    order_name: str,
+    search: str,
+    ordering: list | None = None,
+) -> list[str]:
     query = f"""
         query Search($filters: {filter_name}, $ordering: [{order_name}!]! = []) {{
             {field}(filters: $filters, ordering: $ordering) {{ name }}
         }}
     """
-    result = await schema.execute(query, context_value=ctx, variable_values={"filters": {"search": search}, "ordering": ordering or []})
+    result = await schema.execute(
+        query,
+        context_value=ctx,
+        variable_values={"filters": {"search": search}, "ordering": ordering or []},
+    )
     assert not result.errors, result.errors
     return [row["name"] for row in result.data[field]]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
-async def test_semantic_match_without_lexical_overlap(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
+@pytest.mark.parametrize(
+    ("model", "seed", "field", "filter_name", "order_name"), MODELS
+)
+async def test_semantic_match_without_lexical_overlap(
+    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+) -> None:
     """A description that means the query is found although no word of the query is in the name."""
     ctx = authenticated_context
-    await seed(ctx, "Segmented nuclei", "Find cell nuclei in a fluorescence image and detect every cell")
+    await seed(
+        ctx,
+        "Segmented nuclei",
+        "Find cell nuclei in a fluorescence image and detect every cell",
+    )
     await seed(ctx, "Spreadsheet export", "A table written to an xlsx file on disk")
 
     names = await _names(ctx, field, filter_name, order_name, QUERY)
@@ -92,8 +150,12 @@ async def test_semantic_match_without_lexical_overlap(db, authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
-async def test_lexical_only_when_disabled(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
+@pytest.mark.parametrize(
+    ("model", "seed", "field", "filter_name", "order_name"), MODELS
+)
+async def test_lexical_only_when_disabled(
+    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+) -> None:
     """With embeddings off the filter is exactly the old lexical match."""
     ctx = authenticated_context
     await seed(ctx, "Detect cells", None)
@@ -107,8 +169,12 @@ async def test_lexical_only_when_disabled(db, authenticated_context: HttpContext
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
-async def test_ranking_lexical_first_then_by_distance(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
+@pytest.mark.parametrize(
+    ("model", "seed", "field", "filter_name", "order_name"), MODELS
+)
+async def test_ranking_lexical_first_then_by_distance(
+    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+) -> None:
     """Lexical hits first (even without a vector), then semantic hits nearest first, far ones cut."""
     ctx = authenticated_context
     e0 = np.asarray(engine.embed_query(QUERY))
@@ -118,13 +184,22 @@ async def test_ranking_lexical_first_then_by_distance(db, authenticated_context:
     await _pin(model, await seed(ctx, "Beyond", None), e0, 0.7)
     await _pin(model, await seed(ctx, "Detect cells here", None), e0, None)
 
-    assert await _names(ctx, field, filter_name, order_name, QUERY) == ["Detect cells here", "Near", "Mid", "Far"]
+    assert await _names(ctx, field, filter_name, order_name, QUERY) == [
+        "Detect cells here",
+        "Near",
+        "Mid",
+        "Far",
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
-async def test_name_tiers_rank_before_distance(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
+@pytest.mark.parametrize(
+    ("model", "seed", "field", "filter_name", "order_name"), MODELS
+)
+async def test_name_tiers_rank_before_distance(
+    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+) -> None:
     """Exact name, then prefix, then lexical hits by trigram similarity, then semantic-only; distance never lifts a tier."""
     ctx = authenticated_context
     e0 = np.asarray(engine.embed_query(QUERY))
@@ -134,13 +209,23 @@ async def test_name_tiers_rank_before_distance(db, authenticated_context: HttpCo
     await _pin(model, await seed(ctx, "Detect cells in stacks", None), e0, 0.4)
     await _pin(model, await seed(ctx, "Detect Cells", None), e0, 0.5)
 
-    assert await _names(ctx, field, filter_name, order_name, QUERY) == ["Detect Cells", "Detect cells in stacks", "Do detect cells", "Fast detect cells in 3D stacks", "Near"]
+    assert await _names(ctx, field, filter_name, order_name, QUERY) == [
+        "Detect Cells",
+        "Detect cells in stacks",
+        "Do detect cells",
+        "Fast detect cells in 3D stacks",
+        "Near",
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("model", "seed", "field", "filter_name", "order_name"), MODELS)
-async def test_explicit_ordering_replaces_the_ranking(db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name) -> None:
+@pytest.mark.parametrize(
+    ("model", "seed", "field", "filter_name", "order_name"), MODELS
+)
+async def test_explicit_ordering_replaces_the_ranking(
+    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+) -> None:
     """A client's ``ordering`` wins over the distance ranking."""
     ctx = authenticated_context
     e0 = np.asarray(engine.embed_query(QUERY))
@@ -148,12 +233,16 @@ async def test_explicit_ordering_replaces_the_ranking(db, authenticated_context:
     await _pin(model, await seed(ctx, "Alpha", None), e0, 0.4)
 
     assert await _names(ctx, field, filter_name, order_name, QUERY) == ["Zeta", "Alpha"]
-    assert await _names(ctx, field, filter_name, order_name, QUERY, ordering=[{"name": "ASC"}]) == ["Alpha", "Zeta"]
+    assert await _names(
+        ctx, field, filter_name, order_name, QUERY, ordering=[{"name": "ASC"}]
+    ) == ["Alpha", "Zeta"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_unloadable_model_degrades_to_lexical(db, authenticated_context: HttpContext, tmp_path, monkeypatch) -> None:
+async def test_unloadable_model_degrades_to_lexical(
+    db, authenticated_context: HttpContext, tmp_path, monkeypatch
+) -> None:
     """When the weights cannot be loaded the query still answers, lexical-only."""
     ctx = authenticated_context
     e0 = np.asarray(engine.embed_query(QUERY))
@@ -164,7 +253,9 @@ async def test_unloadable_model_degrades_to_lexical(db, authenticated_context: H
     monkeypatch.setattr(engine, "MODEL_PATH", str(tmp_path))
     engine.reset()
     try:
-        assert await _names(ctx, "folders", "FolderFilter", "FolderOrder", QUERY) == ["Detect cells"]
+        assert await _names(ctx, "folders", "FolderFilter", "FolderOrder", QUERY) == [
+            "Detect cells"
+        ]
     finally:
         monkeypatch.undo()
         engine.reset()
@@ -177,7 +268,9 @@ def test_nested_search_stays_lexical() -> None:
     from embeddings.search import hybrid_search
 
     lexical = Q(folder__name__search="detect")
-    queryset, predicate = hybrid_search(Folder.objects.all(), "folder__", "detect", lexical, "name")
+    queryset, predicate = hybrid_search(
+        Folder.objects.all(), "folder__", "detect", lexical, "name"
+    )
 
     assert predicate == lexical
     assert not queryset.query.annotations

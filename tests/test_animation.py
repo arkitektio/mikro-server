@@ -70,7 +70,9 @@ mutation CreateScene($input: CreateSceneInput!) {
 
 def _waypoint(z: float, name: str | None = None, **kwargs) -> dict:
     """A pose on the seeded world, whose axes are z, y, x."""
-    payload = {"camera": {"position": {"z": z, "y": 32.0, "x": 32.0}, "crossSectionScale": 1.5}}
+    payload = {
+        "camera": {"position": {"z": z, "y": 32.0, "x": 32.0}, "crossSectionScale": 1.5}
+    }
     if name is not None:
         payload["name"] = name
     payload.update(kwargs)
@@ -78,7 +80,13 @@ def _waypoint(z: float, name: str | None = None, **kwargs) -> dict:
 
 
 async def _create(ctx: HttpContext, scene, waypoints, name="Tour"):
-    result = await schema.execute(CREATE, context_value=ctx, variable_values={"input": {"scene": str(scene.pk), "name": name, "waypoints": waypoints}})
+    result = await schema.execute(
+        CREATE,
+        context_value=ctx,
+        variable_values={
+            "input": {"scene": str(scene.pk), "name": name, "waypoints": waypoints}
+        },
+    )
     return result
 
 
@@ -89,7 +97,11 @@ async def test_order_is_written_by_enumeration(db, authenticated_context: HttpCo
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
 
-    result = await _create(ctx, scene, [_waypoint(0, "Start"), _waypoint(10, "Middle"), _waypoint(20, "End")])
+    result = await _create(
+        ctx,
+        scene,
+        [_waypoint(0, "Start"), _waypoint(10, "Middle"), _waypoint(20, "End")],
+    )
     assert not result.errors, result.errors
 
     waypoints = result.data["createAnimation"]["waypoints"]
@@ -107,7 +119,15 @@ async def test_camera_round_trips(db, authenticated_context: HttpContext):
     result = await _create(
         ctx,
         scene,
-        [{"camera": {"position": {"z": 4.0, "y": 1.0, "x": 2.0}, "crossSectionScale": 0.25, "projectionOrientation": [0.0, 0.0, 0.0, 1.0]}}],
+        [
+            {
+                "camera": {
+                    "position": {"z": 4.0, "y": 1.0, "x": 2.0},
+                    "crossSectionScale": 0.25,
+                    "projectionOrientation": [0.0, 0.0, 0.0, 1.0],
+                }
+            }
+        ],
     )
     assert not result.errors, result.errors
 
@@ -123,7 +143,9 @@ async def test_timing_defaults_and_overrides(db, authenticated_context: HttpCont
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
 
-    result = await _create(ctx, scene, [_waypoint(0), _waypoint(5, durationMs=250, easing="LINEAR")])
+    result = await _create(
+        ctx, scene, [_waypoint(0), _waypoint(5, durationMs=250, easing="LINEAR")]
+    )
     assert not result.errors, result.errors
 
     waypoints = result.data["createAnimation"]["waypoints"]
@@ -133,7 +155,9 @@ async def test_timing_defaults_and_overrides(db, authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_position_on_an_axis_the_world_lacks_is_rejected(db, authenticated_context: HttpContext):
+async def test_a_position_on_an_axis_the_world_lacks_is_rejected(
+    db, authenticated_context: HttpContext
+):
     """A keyed position makes a typo silent -- so it is caught where it is authored."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -143,28 +167,47 @@ async def test_a_position_on_an_axis_the_world_lacks_is_rejected(db, authenticat
     message = str(result.errors[0])
     assert "zz" in message, "the error must name the offending axis"
     assert "'x'" in message and "'z'" in message, "and the axes that do exist"
-    assert not await models.Animation.objects.filter(scene=scene).aexists(), "nothing is written"
+    assert not await models.Animation.objects.filter(scene=scene).aexists(), (
+        "nothing is written"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_three_component_orientation_is_rejected(db, authenticated_context: HttpContext):
+async def test_a_three_component_orientation_is_rejected(
+    db, authenticated_context: HttpContext
+):
     """The plausible mistake: an euler triple where a quaternion belongs."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
 
-    result = await _create(ctx, scene, [{"camera": {"position": {"z": 1.0}, "projectionOrientation": [0.0, 0.0, 0.0]}}])
+    result = await _create(
+        ctx,
+        scene,
+        [
+            {
+                "camera": {
+                    "position": {"z": 1.0},
+                    "projectionOrientation": [0.0, 0.0, 0.0],
+                }
+            }
+        ],
+    )
     assert result.errors, "a three-component orientation is not a quaternion"
     assert "quaternion" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_replaces_the_stops_and_re_enumerates(db, authenticated_context: HttpContext):
+async def test_update_replaces_the_stops_and_re_enumerates(
+    db, authenticated_context: HttpContext
+):
     """Replacing, not merging: a tour is a sequence, and reordering is re-authoring it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
-    created = await _create(ctx, scene, [_waypoint(0, "A"), _waypoint(10, "B"), _waypoint(20, "C")])
+    created = await _create(
+        ctx, scene, [_waypoint(0, "A"), _waypoint(10, "B"), _waypoint(20, "C")]
+    )
     assert not created.errors, created.errors
     animation_id = created.data["createAnimation"]["id"]
 
@@ -172,29 +215,53 @@ async def test_update_replaces_the_stops_and_re_enumerates(db, authenticated_con
     result = await schema.execute(
         UPDATE,
         context_value=ctx,
-        variable_values={"input": {"id": animation_id, "waypoints": [_waypoint(20, "C"), _waypoint(0, "A")]}},
+        variable_values={
+            "input": {
+                "id": animation_id,
+                "waypoints": [_waypoint(20, "C"), _waypoint(0, "A")],
+            }
+        },
     )
     assert not result.errors, result.errors
-    assert [(w["order"], w["name"]) for w in result.data["updateAnimation"]["waypoints"]] == [(0, "C"), (1, "A")]
-    assert await models.AnimationWaypoint.objects.filter(animation_id=animation_id).acount() == 2
+    assert [
+        (w["order"], w["name"]) for w in result.data["updateAnimation"]["waypoints"]
+    ] == [(0, "C"), (1, "A")]
+    assert (
+        await models.AnimationWaypoint.objects.filter(
+            animation_id=animation_id
+        ).acount()
+        == 2
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_leaves_omitted_fields_alone(db, authenticated_context: HttpContext):
+async def test_update_leaves_omitted_fields_alone(
+    db, authenticated_context: HttpContext
+):
     """An omitted field means 'leave it', never 'clear it'."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
     created = await schema.execute(
         CREATE,
         context_value=ctx,
-        variable_values={"input": {"scene": str(scene.pk), "name": "Tour", "waypoints": [_waypoint(0, "A")]}},
+        variable_values={
+            "input": {
+                "scene": str(scene.pk),
+                "name": "Tour",
+                "waypoints": [_waypoint(0, "A")],
+            }
+        },
     )
     assert not created.errors, created.errors
     animation_id = created.data["createAnimation"]["id"]
 
     # Rename only: the stops must survive untouched.
-    result = await schema.execute(UPDATE, context_value=ctx, variable_values={"input": {"id": animation_id, "name": "Renamed"}})
+    result = await schema.execute(
+        UPDATE,
+        context_value=ctx,
+        variable_values={"input": {"id": animation_id, "name": "Renamed"}},
+    )
     assert not result.errors, result.errors
     assert result.data["updateAnimation"]["name"] == "Renamed"
     assert [w["name"] for w in result.data["updateAnimation"]["waypoints"]] == ["A"]
@@ -202,7 +269,9 @@ async def test_update_leaves_omitted_fields_alone(db, authenticated_context: Htt
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_scene_deletes_the_tour_and_its_stops(db, authenticated_context: HttpContext):
+async def test_deleting_the_scene_deletes_the_tour_and_its_stops(
+    db, authenticated_context: HttpContext
+):
     """Both hops cascade: a tour of a composition means nothing once the composition is gone."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -212,7 +281,9 @@ async def test_deleting_the_scene_deletes_the_tour_and_its_stops(db, authenticat
 
     await sync_to_async(scene.delete)()
     assert not await models.Animation.objects.filter(pk=animation_id).aexists()
-    assert not await models.AnimationWaypoint.objects.filter(animation_id=animation_id).aexists()
+    assert not await models.AnimationWaypoint.objects.filter(
+        animation_id=animation_id
+    ).aexists()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -223,7 +294,9 @@ async def test_scene_viewer_preferences(db, authenticated_context: HttpContext):
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
 
-    data = await schema.execute(SCENE, context_value=ctx, variable_values={"id": str(scene.pk)})
+    data = await schema.execute(
+        SCENE, context_value=ctx, variable_values={"id": str(scene.pk)}
+    )
     assert not data.errors, data.errors
     assert data.data["scene"]["preferredView"] == "AUTO"
     assert data.data["scene"]["backgroundColor"] is None
@@ -231,7 +304,13 @@ async def test_scene_viewer_preferences(db, authenticated_context: HttpContext):
     result = await schema.execute(
         UPDATE_SCENE,
         context_value=ctx,
-        variable_values={"input": {"id": str(scene.pk), "preferredView": "THREE_D", "backgroundColor": [0.0, 0.0, 0.0, 1.0]}},
+        variable_values={
+            "input": {
+                "id": str(scene.pk),
+                "preferredView": "THREE_D",
+                "backgroundColor": [0.0, 0.0, 0.0, 1.0],
+            }
+        },
     )
     assert not result.errors, result.errors
     assert result.data["updateScene"]["preferredView"] == "THREE_D"
@@ -242,37 +321,63 @@ async def test_scene_viewer_preferences(db, authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_create_scene_sets_the_preference(db, authenticated_context: HttpContext):
     ctx = authenticated_context
-    result = await schema.execute(CREATE_SCENE, context_value=ctx, variable_values={"input": {"name": "Volumetric", "preferredView": "THREE_D"}})
+    result = await schema.execute(
+        CREATE_SCENE,
+        context_value=ctx,
+        variable_values={"input": {"name": "Volumetric", "preferredView": "THREE_D"}},
+    )
     assert not result.errors, result.errors
     assert result.data["createScene"]["preferredView"] == "THREE_D"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_scene_leaves_omitted_preferences_alone(db, authenticated_context: HttpContext):
+async def test_update_scene_leaves_omitted_preferences_alone(
+    db, authenticated_context: HttpContext
+):
     """Setting the background must not silently reset the view preference to null."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
-    await schema.execute(UPDATE_SCENE, context_value=ctx, variable_values={"input": {"id": str(scene.pk), "preferredView": "THREE_D"}})
+    await schema.execute(
+        UPDATE_SCENE,
+        context_value=ctx,
+        variable_values={"input": {"id": str(scene.pk), "preferredView": "THREE_D"}},
+    )
 
-    result = await schema.execute(UPDATE_SCENE, context_value=ctx, variable_values={"input": {"id": str(scene.pk), "backgroundColor": [1.0, 1.0, 1.0, 1.0]}})
+    result = await schema.execute(
+        UPDATE_SCENE,
+        context_value=ctx,
+        variable_values={
+            "input": {"id": str(scene.pk), "backgroundColor": [1.0, 1.0, 1.0, 1.0]}
+        },
+    )
     assert not result.errors, result.errors
-    assert result.data["updateScene"]["preferredView"] == "THREE_D", "an omitted field is left alone, not cleared"
+    assert result.data["updateScene"]["preferredView"] == "THREE_D", (
+        "an omitted field is left alone, not cleared"
+    )
     assert result.data["updateScene"]["backgroundColor"] == [1.0, 1.0, 1.0, 1.0]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_scene_refuses_another_organizations_scene(db, authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_update_scene_refuses_another_organizations_scene(
+    db, authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """get_for_org is the whole gate here -- Scene has no creator to guard on."""
     theirs = await seed.create_scene(other_org_context, "Theirs")
-    result = await schema.execute(UPDATE_SCENE, context_value=authenticated_context, variable_values={"input": {"id": str(theirs.pk), "preferredView": "THREE_D"}})
+    result = await schema.execute(
+        UPDATE_SCENE,
+        context_value=authenticated_context,
+        variable_values={"input": {"id": str(theirs.pk), "preferredView": "THREE_D"}},
+    )
     assert result.errors, "another organization's scene is not ours to configure"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_guard(db, authenticated_context: HttpContext, bot_context: HttpContext):
+async def test_delete_guard(
+    db, authenticated_context: HttpContext, bot_context: HttpContext
+):
     """Run as the bot: `assert_can_delete` short-circuits for org admins, and
     `authenticated_context` is one, so a guard test written with it proves nothing."""
     ctx = authenticated_context
@@ -280,25 +385,44 @@ async def test_delete_guard(db, authenticated_context: HttpContext, bot_context:
 
     mine = await _create(bot_context, scene, [_waypoint(0)], name="Mine")
     assert not mine.errors, mine.errors
-    result = await schema.execute(DELETE, context_value=bot_context, variable_values={"input": {"id": mine.data["createAnimation"]["id"]}})
+    result = await schema.execute(
+        DELETE,
+        context_value=bot_context,
+        variable_values={"input": {"id": mine.data["createAnimation"]["id"]}},
+    )
     assert not result.errors, result.errors
 
     theirs = await _create(ctx, scene, [_waypoint(0)], name="Theirs")
     assert not theirs.errors, theirs.errors
-    result = await schema.execute(DELETE, context_value=bot_context, variable_values={"input": {"id": theirs.data["createAnimation"]["id"]}})
+    result = await schema.execute(
+        DELETE,
+        context_value=bot_context,
+        variable_values={"input": {"id": theirs.data["createAnimation"]["id"]}},
+    )
     assert result.errors, "a non-admin must not delete another user's tour"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_list_is_scoped_to_the_organization(db, authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_the_list_is_scoped_to_the_organization(
+    db, authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """A bare list field returns every row in the table until get_queryset scopes it."""
     ctx = authenticated_context
-    await _create(ctx, await seed.create_scene(ctx, "Ours"), [_waypoint(0)], name="Ours")
-    await _create(other_org_context, await seed.create_scene(other_org_context, "Theirs"), [_waypoint(0)], name="Theirs")
+    await _create(
+        ctx, await seed.create_scene(ctx, "Ours"), [_waypoint(0)], name="Ours"
+    )
+    await _create(
+        other_org_context,
+        await seed.create_scene(other_org_context, "Theirs"),
+        [_waypoint(0)],
+        name="Theirs",
+    )
 
     async def names(context):
-        result = await schema.execute(LIST, context_value=context, variable_values={"filters": {}})
+        result = await schema.execute(
+            LIST, context_value=context, variable_values={"filters": {}}
+        )
         assert not result.errors, result.errors
         return {row["name"] for row in result.data["animations"]}
 

@@ -42,14 +42,24 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
 
-        shapes = dict(models.DataArray.objects.filter(level=0).values_list("dataset_id", "shape"))
+        shapes = dict(
+            models.DataArray.objects.filter(level=0).values_list("dataset_id", "shape")
+        )
         corrected = 0
         unreadable = 0
-        for dataset in models.ArrayDataset.objects.exclude(coordinate_system=None).order_by("pk").iterator():
+        for dataset in (
+            models.ArrayDataset.objects.exclude(coordinate_system=None)
+            .order_by("pk")
+            .iterator()
+        ):
             shape = shapes.get(dataset.pk)
             axes = [
                 coords_logic.AxisSpec(name=name, type=axis_type)
-                for name, axis_type in models.Axis.objects.filter(coordinate_system_id=dataset.coordinate_system_id).order_by("order").values_list("name", "type")
+                for name, axis_type in models.Axis.objects.filter(
+                    coordinate_system_id=dataset.coordinate_system_id
+                )
+                .order_by("order")
+                .values_list("name", "type")
             ]
             if not isinstance(shape, list) or len(shape) != len(axes):
                 unreadable += 1
@@ -59,9 +69,17 @@ class Command(BaseCommand):
             if spec == dataset.stored_spec:
                 continue
             corrected += 1
-            self.stdout.write(f"  dataset {dataset.pk} ({dataset.name}): {dataset.stored_spec} -> {spec}")
+            self.stdout.write(
+                f"  dataset {dataset.pk} ({dataset.name}): {dataset.stored_spec} -> {spec}"
+            )
             if not dry_run:
-                models.ArrayDataset.objects.filter(pk=dataset.pk).update(stored_spec=spec)
+                models.ArrayDataset.objects.filter(pk=dataset.pk).update(
+                    stored_spec=spec
+                )
 
         verb = "would be corrected" if dry_run else "corrected"
-        self.stdout.write(self.style.SUCCESS(f"{corrected} dataset(s) {verb}; {unreadable} with no level-0 shape to read left as they are."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"{corrected} dataset(s) {verb}; {unreadable} with no level-0 shape to read left as they are."
+            )
+        )

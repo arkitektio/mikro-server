@@ -38,7 +38,9 @@ def coordinate_graph(
         direction=direction,
     )
 
-    return types.CoordinateGraph(root=root, systems=systems, transformations=transformations)
+    return types.CoordinateGraph(
+        root=root, systems=systems, transformations=transformations
+    )
 
 
 def lineage_graph(
@@ -82,7 +84,12 @@ def _sample_step(sample: "attribute_plans_logic.SampleSpec") -> types.SampleStep
     coordinate, a fabriks means a collection whose geometry already carries the id -- so
     there is no second field saying which, free to disagree with it.
     """
-    shared = {"system": sample.system, "consumes": sample.consumes, "produces": sample.produces, "passthrough": sample.passthrough}
+    shared = {
+        "system": sample.system,
+        "consumes": sample.consumes,
+        "produces": sample.produces,
+        "passthrough": sample.passthrough,
+    }
     if isinstance(sample.store, models.FabriksStore):
         return types.MeshSample(store=sample.store, **shared)
     if isinstance(sample.store, models.KonnektionStore):
@@ -95,13 +102,18 @@ def _lookup_step(lookup: "attribute_plans_logic.LookupSpec") -> types.LookupStep
     return types.LookupStep(
         kind=lookup.kind,
         store=lookup.store,
-        key_columns=[types.PlanKeyColumn(axis=key.axis, column=key.column) for key in lookup.key_columns],
+        key_columns=[
+            types.PlanKeyColumn(axis=key.axis, column=key.column)
+            for key in lookup.key_columns
+        ],
         attributes=lookup.attributes,
         sparse_array=lookup.sparse_array,
         key_axis=lookup.key_axis,
         key_held=lookup.key_held,
         value_axes=lookup.value_axes,
-        key_map=None if lookup.key_map is None else types.KeyMap(scale=lookup.key_map.scale, offset=lookup.key_map.offset),
+        key_map=None
+        if lookup.key_map is None
+        else types.KeyMap(scale=lookup.key_map.scale, offset=lookup.key_map.offset),
     )
 
 
@@ -111,16 +123,30 @@ def _hop(hop: "attribute_plans_logic.HopSpec") -> types.Hop:
         index=hop.index,
         parent=hop.parent,
         cardinality=hop.cardinality,
-        via=None if hop.parent is None else types.HopVia(column=hop.via_column, axis=hop.via_axis, direction=enums.HopDirection(hop.direction)),
+        via=None
+        if hop.parent is None
+        else types.HopVia(
+            column=hop.via_column,
+            axis=hop.via_axis,
+            direction=enums.HopDirection(hop.direction),
+        ),
         table=hop.table,
         sparse_dataset=hop.sparse_dataset,
         array_dataset=hop.array_dataset,
         lookup=_lookup_step(hop.lookup),
-        join_path=[types.ColumnOptionJoinStep(table=table, column=column) for table, column in hop.join_path],
+        join_path=[
+            types.ColumnOptionJoinStep(table=table, column=column)
+            for table, column in hop.join_path
+        ],
     )
 
 
-def attribute_plans(info: Info, system: strawberry.ID, max_depth: int | None = None, max_join_depth: int = 1) -> list[types.AttributePlan]:
+def attribute_plans(
+    info: Info,
+    system: strawberry.ID,
+    max_depth: int | None = None,
+    max_join_depth: int = 1,
+) -> list[types.AttributePlan]:
     """Every attribute plan reachable from one system: one per FIELD edge landing on a table or a matrix.
 
     The server returns a plan; a worker executes it. The plan names the array to sample,
@@ -146,7 +172,10 @@ def attribute_plans(info: Info, system: strawberry.ID, max_depth: int | None = N
     return [
         types.AttributePlan(
             edge=spec.edge,
-            path=[types.PlacementStep(transformation=step.edge, inverted=step.inverted) for step in spec.path],
+            path=[
+                types.PlacementStep(transformation=step.edge, inverted=step.inverted)
+                for step in spec.path
+            ],
             sample=_sample_step(spec.sample),
             hops=[_hop(hop) for hop in spec.hops],
         )
@@ -154,7 +183,9 @@ def attribute_plans(info: Info, system: strawberry.ID, max_depth: int | None = N
     ]
 
 
-def row_plan(info: Info, table: strawberry.ID, max_join_depth: int = 1) -> types.RowPlan:
+def row_plan(
+    info: Info, table: strawberry.ID, max_join_depth: int = 1
+) -> types.RowPlan:
     """What a picked row of a table reaches: its own row, then every hop the schema allows from it.
 
     A chart of values draws rows, and a picked point holds its row's id -- so the plan has no

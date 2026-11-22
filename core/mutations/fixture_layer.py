@@ -6,15 +6,15 @@ layer's two surface settings, read differently -- a null ``materialColor`` keeps
 own materials rather than meaning white.
 """
 
-from kante.types import Info
+import kante
 import strawberry
+from kante.types import Info
 from pydantic import BaseModel
 
-from core import types, models, enums
-import kante
-from core.logic import graph as graph_logic
+from core import enums, models, types
 from core.input_unions import prose_errors
 from core.inputs.validators import Alpha
+from core.logic import graph as graph_logic
 from core.mutations._sources import lens_of_kind
 from core.mutations.layer import assert_kind
 from core.scoping import get_for_org
@@ -35,26 +35,59 @@ class CreateFixtureLayerInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateFixtureLayerInputModel, description="Create a layer that renders a fixture in a scene. The model's own coordinate system is the layer's space, so it must already have a path to the scene's world")
+@kante.pydantic_input(
+    CreateFixtureLayerInputModel,
+    description="Create a layer that renders a fixture in a scene. The model's own coordinate system is the layer's space, so it must already have a path to the scene's world",
+)
 class CreateFixtureLayerInput:
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene to place the layer in")
-    lens: strawberry.ID = strawberry.field(description="The fixture lens to draw through. A model's whole lens is its `fullLens`")
-    material_color: list[int] | None = strawberry.field(default=None, description=f"{_MATERIAL_DESCRIPTION} (the default)")
-    wireframe: bool | None = strawberry.field(default=None, description="Whether to draw the model as a wireframe (default false)")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode (default 'normal', i.e. alpha-over)")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha, from 0 (transparent) to 1 (opaque). Default 1.0")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing (default true)")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing (default 0)")
-    name: str | None = strawberry.field(default=None, description="What to call the layer. Null leaves it to the model's label")
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene to place the layer in"
+    )
+    lens: strawberry.ID = strawberry.field(
+        description="The fixture lens to draw through. A model's whole lens is its `fullLens`"
+    )
+    material_color: list[int] | None = strawberry.field(
+        default=None, description=f"{_MATERIAL_DESCRIPTION} (the default)"
+    )
+    wireframe: bool | None = strawberry.field(
+        default=None,
+        description="Whether to draw the model as a wireframe (default false)",
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Layer-level blend mode (default 'normal', i.e. alpha-over)",
+    )
+    opacity: float | None = strawberry.field(
+        default=None,
+        description="Layer alpha, from 0 (transparent) to 1 (opaque). Default 1.0",
+    )
+    visible: bool | None = strawberry.field(
+        default=None,
+        description="Whether the layer participates in compositing (default true)",
+    )
+    order: int | None = strawberry.field(
+        default=None,
+        description="Explicit z-index for back-to-front compositing (default 0)",
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="What to call the layer. Null leaves it to the model's label",
+    )
 
 
-def create_fixture_layer(info: Info, input: CreateFixtureLayerInput) -> types.FixtureLayer:
+def create_fixture_layer(
+    info: Info, input: CreateFixtureLayerInput
+) -> types.FixtureLayer:
     """Place a fixture in a scene, refusing one with no path into its world."""
     model = input.to_pydantic()
 
     scene = get_for_org(models.Scene, info, id=model.scene)
     lens = lens_of_kind(info, kind=models.FixtureLens, lens=model.lens)
-    graph_logic.assert_placeable_in(scene.world, getattr(lens.fixture, "coordinate_system", None), destination=f"the world of scene '{scene.name}'")
+    graph_logic.assert_placeable_in(
+        scene.world,
+        getattr(lens.fixture, "coordinate_system", None),
+        destination=f"the world of scene '{scene.name}'",
+    )
 
     return models.Layer.objects.create(
         kind=enums.LayerKind.FIXTURE,
@@ -87,13 +120,28 @@ class UpdateFixtureLayerInputModel(BaseModel):
 class UpdateFixtureLayerInput:
     """Plain `@strawberry.input`, for `UpdateMeshLayerInput`'s reason: an `UNSET` must survive to tell an omitted colour from a cleared one."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the fixture layer to update")
-    material_color: list[int] | None = strawberry.field(default=strawberry.UNSET, description=f"{_MATERIAL_DESCRIPTION}. Omit to keep the current one")
-    wireframe: bool | None = strawberry.field(default=None, description="Whether to draw the model as a wireframe")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Layer-level blend mode")
-    opacity: float | None = strawberry.field(default=None, description="Layer alpha, from 0 (transparent) to 1 (opaque)")
-    visible: bool | None = strawberry.field(default=None, description="Whether the layer participates in compositing")
-    order: int | None = strawberry.field(default=None, description="Explicit z-index for back-to-front compositing")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the fixture layer to update"
+    )
+    material_color: list[int] | None = strawberry.field(
+        default=strawberry.UNSET,
+        description=f"{_MATERIAL_DESCRIPTION}. Omit to keep the current one",
+    )
+    wireframe: bool | None = strawberry.field(
+        default=None, description="Whether to draw the model as a wireframe"
+    )
+    blending: enums.Blending | None = strawberry.field(
+        default=None, description="Layer-level blend mode"
+    )
+    opacity: float | None = strawberry.field(
+        default=None, description="Layer alpha, from 0 (transparent) to 1 (opaque)"
+    )
+    visible: bool | None = strawberry.field(
+        default=None, description="Whether the layer participates in compositing"
+    )
+    order: int | None = strawberry.field(
+        default=None, description="Explicit z-index for back-to-front compositing"
+    )
 
     def to_pydantic(self) -> UpdateFixtureLayerInputModel:
         """Drop what the caller did not name, so `model_fields_set` records what it did."""
@@ -106,10 +154,18 @@ class UpdateFixtureLayerInput:
             "visible": self.visible,
             "order": self.order,
         }
-        return UpdateFixtureLayerInputModel(**{name: value for name, value in supplied.items() if value is not strawberry.UNSET})
+        return UpdateFixtureLayerInputModel(
+            **{
+                name: value
+                for name, value in supplied.items()
+                if value is not strawberry.UNSET
+            }
+        )
 
 
-def update_fixture_layer(info: Info, input: UpdateFixtureLayerInput) -> types.FixtureLayer:
+def update_fixture_layer(
+    info: Info, input: UpdateFixtureLayerInput
+) -> types.FixtureLayer:
     """Patch a fixture layer's settings, leaving the ones not named alone."""
     model = input.to_pydantic()
     layer = get_for_org(models.Layer, info, id=model.id)

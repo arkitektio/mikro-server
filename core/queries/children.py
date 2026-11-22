@@ -1,14 +1,25 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Annotated, Union
+from typing import Annotated
 
 import strawberry
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
-from django.db.models import BigIntegerField, Expression, F, FloatField, IntegerField, QuerySet, TextField, Value
+from django.db.models import (
+    BigIntegerField,
+    Expression,
+    F,
+    FloatField,
+    IntegerField,
+    QuerySet,
+    TextField,
+    Value,
+)
 from django.db.models.functions import Cast, Coalesce
 from kante.types import Info
 
-from core import enums, filters as f, models, pagination as p, types
+from core import enums, models, types
+from core import filters as f
+from core import pagination as p
 from core.logic import sizes
 from core.scoping import get_for_org, scope_queryset
 
@@ -40,18 +51,19 @@ class ChildrenOrder:
 #: Named explicitly -- an anonymous union takes its SDL name from its members concatenated,
 #: which for nine members is unusable.
 FolderChild = Annotated[
-    Union[
-        types.Folder,
-        types.File,
-        types.ArrayDataset,
-        types.TableDataset,
-        types.SparseDataset,
-        types.MeshCollection,
-        types.NetworkCollection,
-        types.AnnotationCollection,
-        types.Fixture,
-    ],
-    strawberry.union("FolderChild", description="Anything filed in a folder: a sub-folder, a file, or one of the containers"),
+    types.Folder
+    | types.File
+    | types.ArrayDataset
+    | types.TableDataset
+    | types.SparseDataset
+    | types.MeshCollection
+    | types.NetworkCollection
+    | types.AnnotationCollection
+    | types.Fixture,
+    strawberry.union(
+        "FolderChild",
+        description="Anything filed in a folder: a sub-folder, a file, or one of the containers",
+    ),
 ]
 
 
@@ -83,14 +95,58 @@ class _ChildSource:
 _CHILD_SOURCES: list[_ChildSource] = [
     _ChildSource(enums.FolderChildKind.FOLDER, "children", "description", False),
     _ChildSource(enums.FolderChildKind.FILE, "files", None, False, size="file"),
-    _ChildSource(enums.FolderChildKind.ARRAY_DATASET, "array_datasets", "description", True, size="array"),
-    _ChildSource(enums.FolderChildKind.TABLE_DATASET, "table_datasets", "description", True, size="store__size_bytes"),
+    _ChildSource(
+        enums.FolderChildKind.ARRAY_DATASET,
+        "array_datasets",
+        "description",
+        True,
+        size="array",
+    ),
+    _ChildSource(
+        enums.FolderChildKind.TABLE_DATASET,
+        "table_datasets",
+        "description",
+        True,
+        size="store__size_bytes",
+    ),
     # Not a container a `FileLink` names, so nothing hides a sparse matrix or a network as converted.
-    _ChildSource(enums.FolderChildKind.SPARSE_DATASET, "sparse_datasets", "description", False, size="sparse"),
-    _ChildSource(enums.FolderChildKind.MESH_COLLECTION, "mesh_collections", None, True, label_fallbacks=("store__key",), size="store__size_bytes"),
-    _ChildSource(enums.FolderChildKind.NETWORK_COLLECTION, "network_collections", None, False, label_fallbacks=("store__key",), size="store__size_bytes"),
-    _ChildSource(enums.FolderChildKind.ANNOTATION_COLLECTION, "annotation_collections", "description", True),
-    _ChildSource(enums.FolderChildKind.FIXTURE, "fixtures", None, False, label_fallbacks=("store__original_file_name", "store__key"), size="store__size_bytes"),
+    _ChildSource(
+        enums.FolderChildKind.SPARSE_DATASET,
+        "sparse_datasets",
+        "description",
+        False,
+        size="sparse",
+    ),
+    _ChildSource(
+        enums.FolderChildKind.MESH_COLLECTION,
+        "mesh_collections",
+        None,
+        True,
+        label_fallbacks=("store__key",),
+        size="store__size_bytes",
+    ),
+    _ChildSource(
+        enums.FolderChildKind.NETWORK_COLLECTION,
+        "network_collections",
+        None,
+        False,
+        label_fallbacks=("store__key",),
+        size="store__size_bytes",
+    ),
+    _ChildSource(
+        enums.FolderChildKind.ANNOTATION_COLLECTION,
+        "annotation_collections",
+        "description",
+        True,
+    ),
+    _ChildSource(
+        enums.FolderChildKind.FIXTURE,
+        "fixtures",
+        None,
+        False,
+        label_fallbacks=("store__original_file_name", "store__key"),
+        size="store__size_bytes",
+    ),
 ]
 
 _KIND_INDEX = {source.kind: index for index, source in enumerate(_CHILD_SOURCES)}
@@ -116,24 +172,40 @@ def _sources(filters: f.FolderChildrenFilter) -> list[_ChildSource]:
     return [source for source in _CHILD_SOURCES if source.kind in wanted]
 
 
-def _filtered(folder: models.Folder, source: _ChildSource, filters: f.FolderChildrenFilter, info: Info, search_query: SearchQuery | None) -> QuerySet:
+def _filtered(
+    folder: models.Folder,
+    source: _ChildSource,
+    filters: f.FolderChildrenFilter,
+    info: Info,
+    search_query: SearchQuery | None,
+) -> QuerySet:
     # Scoped again per accessor: the folder is ours, but a row filed into it from another
     # organization (possible before `createFolder` scoped its parent) must not ride along.
     queryset = scope_queryset(getattr(folder, source.accessor).all(), info)
     if source.label_fallbacks:
         # `output_field`: the name is text and the key a varchar, and Django will not pick between them.
-        queryset = queryset.annotate(sort_label=Coalesce("name", *source.label_fallbacks, output_field=TextField()))
+        queryset = queryset.annotate(
+            sort_label=Coalesce(
+                "name", *source.label_fallbacks, output_field=TextField()
+            )
+        )
 
     # A container converted from a file is that file again in another form, and the file is
     # already in the listing. Only a SOURCE link says so: a RENDITION is a file written
     # *out of* the container, and a container is not hidden for having been exported.
     if source.is_container and not filters.show_converted:
-        queryset = queryset.exclude(file_links__direction=enums.FileLinkDirectionChoices.SOURCE)
+        queryset = queryset.exclude(
+            file_links__direction=enums.FileLinkDirectionChoices.SOURCE
+        )
 
     if search_query is not None:
-        fields = [source.name_field] + ([source.description_field] if source.description_field else [])
+        fields = [source.name_field] + (
+            [source.description_field] if source.description_field else []
+        )
         vector = SearchVector(*fields)
-        queryset = queryset.annotate(search=vector, rank=SearchRank(vector, search_query)).filter(search=search_query)
+        queryset = queryset.annotate(
+            search=vector, rank=SearchRank(vector, search_query)
+        ).filter(search=search_query)
     else:
         queryset = queryset.annotate(rank=Value(0.0, output_field=FloatField()))
     return queryset
@@ -204,12 +276,26 @@ def children(
 
     combined = keyed[0].union(*keyed[1:], all=True) if len(keyed) > 1 else keyed[0]
     if by_rank:
-        ordering = [F("rank").desc(), F("child_kind").asc(), F("child_name").asc(nulls_last=True), F("child_key").asc()]
+        ordering = [
+            F("rank").desc(),
+            F("child_kind").asc(),
+            F("child_name").asc(nulls_last=True),
+            F("child_key").asc(),
+        ]
     else:
-        primary = F("child_sort").desc(nulls_last=True) if descending else F("child_sort").asc(nulls_last=True)
+        primary = (
+            F("child_sort").desc(nulls_last=True)
+            if descending
+            else F("child_sort").asc(nulls_last=True)
+        )
         # Ties (and everything under KIND) fall back to the name, then the key, so a page never
         # shuffles between two requests.
-        ordering = [primary, F("child_kind").asc(), F("child_name").asc(nulls_last=True), F("child_key").asc()]
+        ordering = [
+            primary,
+            F("child_kind").asc(),
+            F("child_name").asc(nulls_last=True),
+            F("child_key").asc(),
+        ]
     page = list(combined.order_by(*ordering)[offset : offset + limit])
 
     by_kind: dict[int, list[str]] = {}
@@ -219,23 +305,37 @@ def children(
     loaded: dict[tuple[int, str], object] = {}
     for kind_index, keys in by_kind.items():
         source = _CHILD_SOURCES[kind_index]
-        rows = scope_queryset(getattr(folder, source.accessor).filter(pk__in=keys), info)
+        rows = scope_queryset(
+            getattr(folder, source.accessor).filter(pk__in=keys), info
+        )
         for row in rows:
             loaded[(kind_index, str(row.pk))] = row
 
-    return [loaded[(kind_index, key)] for kind_index, key, _sort, _name, _rank in page if (kind_index, key) in loaded]
+    return [
+        loaded[(kind_index, key)]
+        for kind_index, key, _sort, _name, _rank in page
+        if (kind_index, key) in loaded
+    ]
 
 
-@strawberry.type(description="How many of one kind of thing a folder holds, under the same filter as `children`")
+@strawberry.type(
+    description="How many of one kind of thing a folder holds, under the same filter as `children`"
+)
 class FolderChildKindCount:
     kind: enums.FolderChildKind
     count: int
 
 
-@strawberry.type(description="How much a folder holds, under the same filter as `children`: the total, and per kind")
+@strawberry.type(
+    description="How much a folder holds, under the same filter as `children`: the total, and per kind"
+)
 class FolderChildCounts:
-    total: int = strawberry.field(description="Everything `children` would page through with this filter")
-    kinds: list[FolderChildKindCount] = strawberry.field(description="One entry per kind the filter admits, zeros included, in the order KIND sorts them")
+    total: int = strawberry.field(
+        description="Everything `children` would page through with this filter"
+    )
+    kinds: list[FolderChildKindCount] = strawberry.field(
+        description="One entry per kind the filter admits, zeros included, in the order KIND sorts them"
+    )
 
 
 def children_counts(
@@ -248,5 +348,11 @@ def children_counts(
         filters = f.FolderChildrenFilter()
     folder = get_for_org(models.Folder, info, id=parent)
     search_query = _search_query(filters)
-    kinds = [FolderChildKindCount(kind=source.kind, count=_filtered(folder, source, filters, info, search_query).count()) for source in _sources(filters)]
+    kinds = [
+        FolderChildKindCount(
+            kind=source.kind,
+            count=_filtered(folder, source, filters, info, search_query).count(),
+        )
+        for source in _sources(filters)
+    ]
     return FolderChildCounts(total=sum(entry.count for entry in kinds), kinds=kinds)

@@ -14,13 +14,12 @@ the shape.
 import uuid
 
 from arkitekt_service.service.described import Described
-from django.db import models
+from authentikate.models import Organization
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex, GistIndex
-
-from authentikate.models import Organization
-from koherent.fields import ProvenanceField
+from django.db import models
 from django_choices_field import TextChoicesField
+from koherent.fields import ProvenanceField
 
 from core import enums
 from core.fields import CubeField
@@ -48,7 +47,11 @@ class AnnotationCollection(Described):
     """
 
     name = models.TextField(help_text="The name of this annotation collection")
-    description = models.TextField(null=True, blank=True, help_text="A free-form description of this annotation collection")
+    description = models.TextField(
+        null=True,
+        blank=True,
+        help_text="A free-form description of this annotation collection",
+    )
 
     # Filing, not placement -- see the note on `ArrayDataset.folder`. Distinct from `scene`
     # below, which is also bookkeeping but answers a different question: `scene` says which
@@ -117,7 +120,9 @@ class AnnotationCollection(Described):
         """
         return self.bbox_system or self.coordinate_system_or_none
 
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this annotation collection was created")
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="The time this annotation collection was created"
+    )
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
@@ -126,7 +131,11 @@ class AnnotationCollection(Described):
         related_name="annotation_collections",
         help_text="The user that created this annotation collection",
     )
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization this annotation collection belongs to")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization this annotation collection belongs to",
+    )
     created_through = models.ForeignKey(
         "koherent.Task",
         on_delete=models.SET_NULL,
@@ -149,7 +158,13 @@ class AnnotationCollection(Described):
         """Meta options for the annotation collection."""
 
         ordering = ["-created_at"]
-        indexes = [GinIndex(fields=["stored_descriptors"], name="annotation_coll_desc_gin", opclasses=["jsonb_path_ops"])]
+        indexes = [
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="annotation_coll_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            )
+        ]
 
     def __str__(self) -> str:
         """The collection's name."""
@@ -203,7 +218,10 @@ class Annotation(Described):
         help_text="The discrete coordinates this annotation is pinned to, keyed by coordinate name, e.g. {'t': 0, 'c': 0}. A coordinate the annotation does not pin is one it spans",
         default=dict,
     )
-    vectors = models.JSONField(help_text="A list of the annotation's vectors (specific for each kind), in the collection's coordinate system's own units", default=list)
+    vectors = models.JSONField(
+        help_text="A list of the annotation's vectors (specific for each kind), in the collection's coordinate system's own units",
+        default=list,
+    )
     intrinsic_bbox = models.JSONField(
         null=True,
         blank=True,
@@ -226,10 +244,25 @@ class Annotation(Described):
 
     # Per-shape styling lives here, not on the layer: the layer is one per
     # collection, and shapes within one collection may differ visually.
-    stroke_color = models.JSONField(default=None, null=True, blank=True, help_text="The stroke (outline) color of the geometry (RGBA)")
-    fill_color = models.JSONField(default=None, null=True, blank=True, help_text="The fill color of the geometry (RGBA), or null for no fill")
-    stroke_width = models.FloatField(default=1.0, help_text="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale (RFC-8)")
-    filled = models.BooleanField(default=False, help_text="Whether the geometry is filled with fill_color")
+    stroke_color = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text="The stroke (outline) color of the geometry (RGBA)",
+    )
+    fill_color = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text="The fill color of the geometry (RGBA), or null for no fill",
+    )
+    stroke_width = models.FloatField(
+        default=1.0,
+        help_text="The stroke width of the geometry, in the drawing space's units. One number for every direction, so it is a well-defined length only where that space's axes share a scale (RFC-8)",
+    )
+    filled = models.BooleanField(
+        default=False, help_text="Whether the geometry is filled with fill_color"
+    )
 
     # Metadata only, like the creator: which data the person was looking at when they drew,
     # e.g. the channel a neurite was traced on. Never a pin (that is `coordinates`) and never
@@ -270,7 +303,12 @@ class Annotation(Described):
     # Nullable: a shape drawn before the column existed has the time its first history row
     # records (migration 0014), and none when it has no such row (a bulk draw writes none) --
     # never the migration's.
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, help_text="The time this annotation was drawn")
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True,
+        help_text="The time this annotation was drawn",
+    )
 
     provenance = ProvenanceField()
 
@@ -286,8 +324,14 @@ class Annotation(Described):
             GinIndex(fields=["coordinates"], name="annotation_coords_gin"),
             GistIndex(fields=["bbox_cube"], name="annotation_bbox_gist"),
             # A picker asking for the paths (or the boxes) of a collection.
-            models.Index(fields=["collection", "kind"], name="annotation_collection_kind_idx"),
-            GinIndex(fields=["stored_descriptors"], name="annotation_desc_gin", opclasses=["jsonb_path_ops"]),
+            models.Index(
+                fields=["collection", "kind"], name="annotation_collection_kind_idx"
+            ),
+            GinIndex(
+                fields=["stored_descriptors"],
+                name="annotation_desc_gin",
+                opclasses=["jsonb_path_ops"],
+            ),
         ]
 
     def __str__(self) -> str:
@@ -318,19 +362,51 @@ class AnnotationDerivation(models.Model):
     their collection does. The child's own CASCADE removes the row with it.
     """
 
-    child = models.ForeignKey(Annotation, on_delete=models.CASCADE, related_name="derived_from_links", help_text="The shape that was made")
+    child = models.ForeignKey(
+        Annotation,
+        on_delete=models.CASCADE,
+        related_name="derived_from_links",
+        help_text="The shape that was made",
+    )
     source = models.ForeignKey(
         Annotation,
         on_delete=models.RESTRICT,
         related_name="derived_links",
         help_text="The shape it was made from. It cannot be deleted while this shape stands, unless the delete cascades to it",
     )
-    relation = TextChoicesField(choices_enum=enums.AnnotationRelationChoices, help_text="How the child came from the source: refined, converted, split or merged")
-    reason = models.TextField(null=True, blank=True, help_text="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, help_text="The organization the child belongs to, denormalized for the lineage walk's org filter")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="When the child was made from the source")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="annotation_derivations", help_text="Who made the child")
-    created_through = models.ForeignKey("koherent.Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="annotation_derivations", help_text="The task the child was made under, if any")
+    relation = TextChoicesField(
+        choices_enum=enums.AnnotationRelationChoices,
+        help_text="How the child came from the source: refined, converted, split or merged",
+    )
+    reason = models.TextField(
+        null=True,
+        blank=True,
+        help_text="A free-form note on why or how, e.g. 'smoothed with a 3 px window'. The algorithm itself is the creating task's",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        help_text="The organization the child belongs to, denormalized for the lineage walk's org filter",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, help_text="When the child was made from the source"
+    )
+    creator = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="annotation_derivations",
+        help_text="Who made the child",
+    )
+    created_through = models.ForeignKey(
+        "koherent.Task",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="annotation_derivations",
+        help_text="The task the child was made under, if any",
+    )
     created_through_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
@@ -344,8 +420,14 @@ class AnnotationDerivation(models.Model):
         """One row per (child, source); pk order is the declared order."""
 
         ordering = ["id"]
-        constraints = [models.UniqueConstraint(fields=["child", "source"], name="annotation_derived_once")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["child", "source"], name="annotation_derived_once"
+            )
+        ]
 
     def __str__(self) -> str:
         """The child and the source it was made from."""
-        return f"annotation {self.child_id} <- {self.relation} annotation {self.source_id}"
+        return (
+            f"annotation {self.child_id} <- {self.relation} annotation {self.source_id}"
+        )

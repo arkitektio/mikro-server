@@ -23,11 +23,22 @@ from collections.abc import Sequence
 from enum import Enum
 
 import strawberry
-from django.db.models import BooleanField, F, Func, JSONField, Q, QuerySet, TextField, Value
+from django.db.models import (
+    BooleanField,
+    F,
+    Func,
+    JSONField,
+    Q,
+    QuerySet,
+    TextField,
+    Value,
+)
 from strawberry.scalars import JSON
 
 
-@strawberry.enum(description="How a descriptor constraint compares the object's value with the stated one. The operators a rekuest port's `requires` and `provides` are written in, with the same meaning.")
+@strawberry.enum(
+    description="How a descriptor constraint compares the object's value with the stated one. The operators a rekuest port's `requires` and `provides` are written in, with the same meaning."
+)
 class DescriptorOperator(str, Enum):
     """The comparison of one constraint."""
 
@@ -51,12 +62,24 @@ class DescriptorOperator(str, Enum):
 class DescriptorConstraintInput:
     """One ``{key, operator, value}`` constraint."""
 
-    key: str = strawberry.field(description="The descriptor key, e.g. `@mikro/n_space_axes`")
-    operator: DescriptorOperator = strawberry.field(description="How the object's value is compared with `value`. MATCHES is equality, as EQUALS is")
-    value: JSON | None = strawberry.field(default=None, description="The value compared against: a number for GTE and LTE, a list for IN and NOT_IN, true or false for EXISTS, the member looked for with CONTAINS")
+    key: str = strawberry.field(
+        description="The descriptor key, e.g. `@mikro/n_space_axes`"
+    )
+    operator: DescriptorOperator = strawberry.field(
+        description="How the object's value is compared with `value`. MATCHES is equality, as EQUALS is"
+    )
+    value: JSON | None = strawberry.field(
+        default=None,
+        description="The value compared against: a number for GTE and LTE, a list for IN and NOT_IN, true or false for EXISTS, the member looked for with CONTAINS",
+    )
 
 
-def requires(model: type, queryset: QuerySet, constraints: Sequence[DescriptorConstraintInput], prefix: str = "") -> tuple[QuerySet, Q]:
+def requires(
+    model: type,
+    queryset: QuerySet,
+    constraints: Sequence[DescriptorConstraintInput],
+    prefix: str = "",
+) -> tuple[QuerySet, Q]:
     """The rows of ``model`` satisfying every one of these constraints. No constraints ask nothing."""
     from mikro_server.service import service  # it binds the models this module filters
 
@@ -73,7 +96,10 @@ class FitsConstraintInput:
     """One compiled ``Fits`` and the hardware of its agent."""
 
     path: str = strawberry.field(description="The formula as a PostgreSQL jsonpath.")
-    agent: JSON | None = strawberry.field(default=None, description="The agent's hardware the path reads as `$agent`: numbers by name.")
+    agent: JSON | None = strawberry.field(
+        default=None,
+        description="The agent's hardware the path reads as `$agent`: numbers by name.",
+    )
 
 
 _MAX_PATH_LENGTH = 2000
@@ -103,22 +129,40 @@ def _check_fits_path(path: str, declared: set[str]) -> None:
     while position < len(path):
         token = _FITS_TOKEN.match(path, position)
         if token is None:
-            raise ValueError(f"A fits path only compares numbers: refused at {path[position:position + 20]!r}.")
+            raise ValueError(
+                f"A fits path only compares numbers: refused at {path[position : position + 20]!r}."
+            )
         if token["key"] is not None and json.loads(token["key"][2:]) not in declared:
-            raise ValueError(f"{json.loads(token['key'][2:])!r} is not a descriptor here: the structure declares {sorted(declared)}.")
+            raise ValueError(
+                f"{json.loads(token['key'][2:])!r} is not a descriptor here: the structure declares {sorted(declared)}."
+            )
         if token["hardware"] is not None and token["hardware"] not in _AGENT_HARDWARE:
-            raise ValueError(f"$agent.{token['hardware']} is not a hardware value: {sorted(_AGENT_HARDWARE)}.")
+            raise ValueError(
+                f"$agent.{token['hardware']} is not a hardware value: {sorted(_AGENT_HARDWARE)}."
+            )
         position = token.end()
 
 
 def _agent_vars(agent: JSON | None) -> dict:
     hardware = agent or {}
-    if not isinstance(hardware, dict) or any(key not in _AGENT_HARDWARE or (value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)))) for key, value in hardware.items()):
+    if not isinstance(hardware, dict) or any(
+        key not in _AGENT_HARDWARE
+        or (
+            value is not None
+            and (isinstance(value, bool) or not isinstance(value, (int, float)))
+        )
+        for key, value in hardware.items()
+    ):
         raise ValueError(f"$agent is numbers by name: {sorted(_AGENT_HARDWARE)}.")
     return {"agent": hardware}
 
 
-def fits(model: type, queryset: QuerySet, constraints: Sequence[FitsConstraintInput], prefix: str = "") -> tuple[QuerySet, Q]:
+def fits(
+    model: type,
+    queryset: QuerySet,
+    constraints: Sequence[FitsConstraintInput],
+    prefix: str = "",
+) -> tuple[QuerySet, Q]:
     """The rows at least one of these implementations can handle. No constraints ask nothing."""
     from mikro_server.service import service  # it binds the models this module filters
 
@@ -126,14 +170,23 @@ def fits(model: type, queryset: QuerySet, constraints: Sequence[FitsConstraintIn
         return queryset, Q()
     if len(constraints) > _MAX_FITS:
         raise ValueError(f"At most {_MAX_FITS} fits constraints.")
-    declared = {key for structure in service.structures.values() if isinstance(structure.model, type) and issubclass(structure.model, model) for key in structure.keys}
+    declared = {
+        key
+        for structure in service.structures.values()
+        if isinstance(structure.model, type) and issubclass(structure.model, model)
+        for key in structure.keys
+    }
     condition = Q()
     for constraint in constraints:
         _check_fits_path(constraint.path, declared)
         condition |= Q(
             Func(
                 F(f"{prefix}stored_descriptors"),
-                Func(Value(constraint.path), template="%(expressions)s::jsonpath", output_field=TextField()),
+                Func(
+                    Value(constraint.path),
+                    template="%(expressions)s::jsonpath",
+                    output_field=TextField(),
+                ),
                 Value(_agent_vars(constraint.agent), output_field=JSONField()),
                 Value(True),
                 function="jsonb_path_match",

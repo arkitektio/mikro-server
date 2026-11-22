@@ -30,16 +30,24 @@ mutation Create($input: CreateMeshCollectionInput!) {
 }
 """
 
-AXES = [{"name": "z", "type": "SPACE"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]
+AXES = [
+    {"name": "z", "type": "SPACE"},
+    {"name": "y", "type": "SPACE"},
+    {"name": "x", "type": "SPACE"},
+]
 
 
 async def _create(ctx: HttpContext, payload: dict):
-    return await schema.execute(CREATE, context_value=ctx, variable_values={"input": payload})
+    return await schema.execute(
+        CREATE, context_value=ctx, variable_values={"input": payload}
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(authenticated_context: HttpContext):
+async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(
+    authenticated_context: HttpContext,
+):
     """The whole point of a self-describing artifact, end to end.
 
     The call names a store and its axes. It does not name a grid, an encoding, a format version, a
@@ -47,13 +55,20 @@ async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(authen
     They come back off the API anyway, because a renderer configures its decoder from what it
     queries, so what is stored is what the writer wrote rather than what nobody typed.
     """
-    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in AXES])
+    store = await seed.create_fabriks_store(
+        authenticated_context, axes=[axis["name"] for axis in AXES]
+    )
 
-    result = await _create(authenticated_context, {"name": "v20260814-fabriks", "axes": AXES, "store": str(store.pk)})
+    result = await _create(
+        authenticated_context,
+        {"name": "v20260814-fabriks", "axes": AXES, "store": str(store.pk)},
+    )
     assert not result.errors, result.errors
 
     collection = result.data["createMeshCollection"]
-    assert collection["specVersion"] == "fabriks/1", "namespaced, so the format's version is never confused for the collection's own"
+    assert collection["specVersion"] == "fabriks/1", (
+        "namespaced, so the format's version is never confused for the collection's own"
+    )
     assert collection["grid"] == seed.FABRIKS_GRID
     assert collection["encoding"] == seed.FABRIKS_ENCODING
     assert collection["store"]["id"] == str(store.pk)
@@ -61,7 +76,9 @@ async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(authen
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_geometry_cannot_be_described_through_the_api_at_all(authenticated_context: HttpContext):
+async def test_the_geometry_cannot_be_described_through_the_api_at_all(
+    authenticated_context: HttpContext,
+):
     """Not merely ignored -- absent from the schema.
 
     A second statement of the same fact is free to disagree with the bytes, and nothing
@@ -69,10 +86,25 @@ async def test_the_geometry_cannot_be_described_through_the_api_at_all(authentic
     this" is having nowhere to declare it, so the fields are gone rather than validated.
     """
     sdl = schema.as_str()
-    input_def = sdl[sdl.find("input CreateMeshCollectionInput ") : sdl.find("\n}", sdl.find("input CreateMeshCollectionInput "))]
+    input_def = sdl[
+        sdl.find("input CreateMeshCollectionInput ") : sdl.find(
+            "\n}", sdl.find("input CreateMeshCollectionInput ")
+        )
+    ]
 
-    for gone in ("catalog", "objectCatalog", "geometry", "shards", "grid", "encoding", "specVersion", "validateStores"):
-        assert f"\n  {gone}" not in input_def, f"`{gone}` is stated by the store's manifest, so the API must not offer a second place to state it"
+    for gone in (
+        "catalog",
+        "objectCatalog",
+        "geometry",
+        "shards",
+        "grid",
+        "encoding",
+        "specVersion",
+        "validateStores",
+    ):
+        assert f"\n  {gone}" not in input_def, (
+            f"`{gone}` is stated by the store's manifest, so the API must not offer a second place to state it"
+        )
 
     assert "\n  store" in input_def
     assert "MeshGeometryShard" not in sdl
@@ -87,16 +119,22 @@ async def test_an_unfinished_store_is_refused(authenticated_context: HttpContext
     so a store that never reached it is a half-written upload as far as anything here can tell.
     Registering it would record a collection whose grid and encoding are simply unknown.
     """
-    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in AXES], populated=False)
+    store = await seed.create_fabriks_store(
+        authenticated_context, axes=[axis["name"] for axis in AXES], populated=False
+    )
 
-    result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)})
+    result = await _create(
+        authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)}
+    )
     assert result.errors
     assert "has not been finished" in str(result.errors[0])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_declared_axes_are_checked_against_the_manifest(authenticated_context: HttpContext):
+async def test_declared_axes_are_checked_against_the_manifest(
+    authenticated_context: HttpContext,
+):
     """The transposition trap.
 
     An axis order the server cannot check is a claim nothing tests: the rank matches, the
@@ -106,39 +144,67 @@ async def test_declared_axes_are_checked_against_the_manifest(authenticated_cont
     A manifest that states no axes is not a disagreement -- nothing in the format decodes
     through them, so a writer that never claimed an order is simply not answering the question.
     """
-    disagreeing = await seed.create_fabriks_store(authenticated_context, axes=["x", "y", "z"])
-    result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(disagreeing.pk)})
+    disagreeing = await seed.create_fabriks_store(
+        authenticated_context, axes=["x", "y", "z"]
+    )
+    result = await _create(
+        authenticated_context,
+        {"name": "v1", "axes": AXES, "store": str(disagreeing.pk)},
+    )
     assert result.errors
     assert "draw transposed" in str(result.errors[0])
 
-    agreeing = await seed.create_fabriks_store(authenticated_context, axes=["z", "y", "x"])
-    assert not (await _create(authenticated_context, {"name": "v2", "axes": AXES, "store": str(agreeing.pk)})).errors
+    agreeing = await seed.create_fabriks_store(
+        authenticated_context, axes=["z", "y", "x"]
+    )
+    assert not (
+        await _create(
+            authenticated_context,
+            {"name": "v2", "axes": AXES, "store": str(agreeing.pk)},
+        )
+    ).errors
 
     silent = await seed.create_fabriks_store(authenticated_context, axes=None)
-    assert not (await _create(authenticated_context, {"name": "v3", "axes": AXES, "store": str(silent.pk)})).errors, "a manifest that claims no axis order does not contradict one"
+    assert not (
+        await _create(
+            authenticated_context, {"name": "v3", "axes": AXES, "store": str(silent.pk)}
+        )
+    ).errors, "a manifest that claims no axis order does not contradict one"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_store_from_another_organization_is_not_registerable(authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_a_store_from_another_organization_is_not_registerable(
+    authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """Org scoping, on the one id this mutation now takes.
 
     Worth its own test because the surface shrank to a single store reference: if that one
     lookup were unscoped, a collection could point at another organization's bytes and the
     access grant would follow.
     """
-    foreign = await seed.create_fabriks_store(other_org_context, axes=[axis["name"] for axis in AXES])
+    foreign = await seed.create_fabriks_store(
+        other_org_context, axes=[axis["name"] for axis in AXES]
+    )
 
-    result = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(foreign.pk)})
+    result = await _create(
+        authenticated_context, {"name": "v1", "axes": AXES, "store": str(foreign.pk)}
+    )
     assert result.errors
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_a_collection_leaves_its_store_collectable(authenticated_context: HttpContext):
+async def test_deleting_a_collection_leaves_its_store_collectable(
+    authenticated_context: HttpContext,
+):
     """One collection, one prefix -- and the sweep needs no special case for it."""
-    store = await seed.create_fabriks_store(authenticated_context, axes=[axis["name"] for axis in AXES])
-    created = await _create(authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)})
+    store = await seed.create_fabriks_store(
+        authenticated_context, axes=[axis["name"] for axis in AXES]
+    )
+    created = await _create(
+        authenticated_context, {"name": "v1", "axes": AXES, "store": str(store.pk)}
+    )
     assert not created.errors, created.errors
 
     result = await schema.execute(
@@ -154,7 +220,9 @@ async def test_deleting_a_collection_leaves_its_store_collectable(authenticated_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_organization_wide_read_access_covers_the_fabriks_bucket(authenticated_context: HttpContext):
+async def test_organization_wide_read_access_covers_the_fabriks_bucket(
+    authenticated_context: HttpContext,
+):
     """`requestGeneralFabriksAccess` is reachable and returns usable credentials.
 
     There is no single `requestGeneralAccess` -- the grants are per logical bucket, each naming
@@ -177,7 +245,9 @@ async def test_organization_wide_read_access_covers_the_fabriks_bucket(authentic
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticated_context: HttpContext) -> None:
+async def test_a_collection_without_a_name_is_labelled_by_its_store(
+    authenticated_context: HttpContext,
+) -> None:
     """A collection is identified by its store, so its store's key is the label it falls back to.
 
     `name` is optional and `specVersion` is read off the store rather than stored again; both
@@ -185,7 +255,9 @@ async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticate
     write a typed version: the collection's own system, the derivation edge, the refusal prose.
     """
     ctx = authenticated_context
-    dataset = await seed.create_array_dataset(ctx, "Source", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]])
+    dataset = await seed.create_array_dataset(
+        ctx, "Source", axes=seed.ZYX_AXES, shapes=[[8, 64, 64]]
+    )
     store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in AXES])
 
     result = await schema.execute(
@@ -198,28 +270,59 @@ async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticate
         }
         """,
         context_value=ctx,
-        variable_values={"input": {"axes": AXES, "store": str(store.pk), "derivedFrom": [{"kind": "DATASET", "dataset": str(dataset.pk), "transform": {"kind": "IDENTITY"}}]}},
+        variable_values={
+            "input": {
+                "axes": AXES,
+                "store": str(store.pk),
+                "derivedFrom": [
+                    {
+                        "kind": "DATASET",
+                        "dataset": str(dataset.pk),
+                        "transform": {"kind": "IDENTITY"},
+                    }
+                ],
+            }
+        },
     )
     assert not result.errors, result.errors
     collection = result.data["createMeshCollection"]
     assert collection["name"] is None
     assert collection["label"] == store.key, "no name: the store's key is the label"
-    assert collection["specVersion"] == "fabriks/1", "read off the store, not stored again"
+    assert collection["specVersion"] == "fabriks/1", (
+        "read off the store, not stored again"
+    )
     assert collection["coordinateSystem"]["name"] == f"{store.key}/mesh"
-    derivation = await models.Transformation.objects.aget(input_id=collection["coordinateSystem"]["id"], output_id=await sync_to_async(lambda: dataset.coordinate_system_id)())
-    assert derivation.name == f"{store.key} <- Source", "the derivation edge is named by the label too"
+    derivation = await models.Transformation.objects.aget(
+        input_id=collection["coordinateSystem"]["id"],
+        output_id=await sync_to_async(lambda: dataset.coordinate_system_id)(),
+    )
+    assert derivation.name == f"{store.key} <- Source", (
+        "the derivation edge is named by the label too"
+    )
 
     konnektion = await seed.create_konnektion_store(ctx, axes=["x", "y", "z"])
     network = await schema.execute(
         "mutation Create($input: CreateNetworkCollectionInput!) { createNetworkCollection(input: $input) { name label specVersion coordinateSystem { name } } }",
         context_value=ctx,
-        variable_values={"input": {"axes": [{"name": "x", "type": "SPACE"}, {"name": "y", "type": "SPACE"}, {"name": "z", "type": "SPACE"}], "store": str(konnektion.pk)}},
+        variable_values={
+            "input": {
+                "axes": [
+                    {"name": "x", "type": "SPACE"},
+                    {"name": "y", "type": "SPACE"},
+                    {"name": "z", "type": "SPACE"},
+                ],
+                "store": str(konnektion.pk),
+            }
+        },
     )
     assert not network.errors, network.errors
     assert network.data["createNetworkCollection"]["name"] is None
     assert network.data["createNetworkCollection"]["label"] == konnektion.key
     assert network.data["createNetworkCollection"]["specVersion"] == "konnektion/1"
-    assert network.data["createNetworkCollection"]["coordinateSystem"]["name"] == f"{konnektion.key}/network"
+    assert (
+        network.data["createNetworkCollection"]["coordinateSystem"]["name"]
+        == f"{konnektion.key}/network"
+    )
 
     searched = await schema.execute(
         "query S($search: String!) { meshCollections(filters: { search: $search }) { id } }",
@@ -227,4 +330,6 @@ async def test_a_collection_without_a_name_is_labelled_by_its_store(authenticate
         variable_values={"search": store.key[:12]},
     )
     assert not searched.errors, searched.errors
-    assert [row["id"] for row in searched.data["meshCollections"]] == [collection["id"]], "an unnamed collection is found by its key"
+    assert [row["id"] for row in searched.data["meshCollections"]] == [
+        collection["id"]
+    ], "an unnamed collection is found by its key"

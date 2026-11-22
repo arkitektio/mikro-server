@@ -7,7 +7,6 @@ registered in the schema's ``types=`` list or they are dropped from the SDL.
 
 from core.render.layer import types
 
-
 layer_render_node_types = [
     types.ChannelSourceNode,
     types.BlendNode,

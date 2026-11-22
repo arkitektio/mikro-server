@@ -20,8 +20,8 @@ from django.db.backends import utils as db_utils
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
 
-from core.logic import coordinate_system as coordinate_system_logic
 from core import enums, models
+from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import scene_graph, space_graph
 from mikro_server.schema import schema
 from tests import seed
@@ -41,7 +41,9 @@ def _fresh_request(ctx: HttpContext) -> HttpContext:
         _organization=ctx.request._organization,
     )
     request.set_membership(ctx.request._membership)  # type: ignore[arg-type]
-    return HttpContext(request=request, response=TemporalResponse(), headers=ctx.headers, type="http")
+    return HttpContext(
+        request=request, response=TemporalResponse(), headers=ctx.headers, type="http"
+    )
 
 
 class QueryCounter:
@@ -143,8 +145,16 @@ async def _seed_scene(ctx: HttpContext, *, layer_count: int) -> models.Scene:
     one layer at a time is a query per layer -- exactly the N+1 these tests exist to catch,
     on a path they would otherwise never touch.
     """
-    datasets = [await seed.create_array_dataset(ctx, f"Placed{index}", shapes=_SHAPES) for index in range(2)]
-    lenses = [await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]) for dataset in datasets]
+    datasets = [
+        await seed.create_array_dataset(ctx, f"Placed{index}", shapes=_SHAPES)
+        for index in range(2)
+    ]
+    lenses = [
+        await seed.create_lens(
+            ctx, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]
+        )
+        for dataset in datasets
+    ]
     scene = await seed.create_scene(ctx, "Composition")
 
     def setup() -> None:
@@ -158,12 +168,23 @@ async def _seed_scene(ctx: HttpContext, *, layer_count: int) -> models.Scene:
 
         # The collection owns its drawing system; an identity edge anchors it to the
         # dataset's intrinsic grid, like the mesh collection below.
-        annotation_collection = models.AnnotationCollection.objects.create(name="Regions", organization=ctx.request.organization)
-        annotation_system = models.CoordinateSystem.objects.create(name="Regions/drawing", organization=ctx.request.organization)
+        annotation_collection = models.AnnotationCollection.objects.create(
+            name="Regions", organization=ctx.request.organization
+        )
+        annotation_system = models.CoordinateSystem.objects.create(
+            name="Regions/drawing", organization=ctx.request.organization
+        )
         annotation_collection.coordinate_system = annotation_system
         annotation_collection.save(update_fields=["coordinate_system"])
-        for index, axis in enumerate(datasets[0].intrinsic_coordinate_system.axes.all().order_by("order")):
-            models.Axis.objects.create(coordinate_system=annotation_system, order=index, name=axis.name, type=axis.type)
+        for index, axis in enumerate(
+            datasets[0].intrinsic_coordinate_system.axes.all().order_by("order")
+        ):
+            models.Axis.objects.create(
+                coordinate_system=annotation_system,
+                order=index,
+                name=axis.name,
+                type=axis.type,
+            )
         models.Transformation.objects.create(
             kind=enums.TransformKindChoices.IDENTITY.value,
             input=annotation_system,
@@ -176,22 +197,41 @@ async def _seed_scene(ctx: HttpContext, *, layer_count: int) -> models.Scene:
             kind=enums.AnnotationKindChoices.RECTANGLE.value,
             vectors=[[0.0, 0.0, 0.0], [0.0, 8.0, 8.0]],
         )
-        models.Layer.objects.create(kind=enums.LayerKindChoices.ANNOTATION.value, scene=scene, lens=coordinate_system_logic.whole_lens(annotation_collection))
+        models.Layer.objects.create(
+            kind=enums.LayerKindChoices.ANNOTATION.value,
+            scene=scene,
+            lens=coordinate_system_logic.whole_lens(annotation_collection),
+        )
 
         store = seed._seed_fabriks_store_sync(ctx, axes=None, populated=True)
-        collection = models.MeshCollection.objects.create(name="v1", store=store, organization=ctx.request.organization)
-        mesh_system = models.CoordinateSystem.objects.create(name="v1/mesh", organization=ctx.request.organization)
+        collection = models.MeshCollection.objects.create(
+            name="v1", store=store, organization=ctx.request.organization
+        )
+        mesh_system = models.CoordinateSystem.objects.create(
+            name="v1/mesh", organization=ctx.request.organization
+        )
         collection.coordinate_system = mesh_system
         collection.save(update_fields=["coordinate_system"])
-        for index, axis in enumerate(datasets[0].intrinsic_coordinate_system.axes.all().order_by("order")):
-            models.Axis.objects.create(coordinate_system=mesh_system, order=index, name=axis.name, type=axis.type)
+        for index, axis in enumerate(
+            datasets[0].intrinsic_coordinate_system.axes.all().order_by("order")
+        ):
+            models.Axis.objects.create(
+                coordinate_system=mesh_system,
+                order=index,
+                name=axis.name,
+                type=axis.type,
+            )
         models.Transformation.objects.create(
             kind=enums.TransformKindChoices.IDENTITY.value,
             input=mesh_system,
             output=datasets[0].intrinsic_coordinate_system,
             organization=ctx.request.organization,
         )
-        models.Layer.objects.create(kind=enums.LayerKindChoices.MESH.value, scene=scene, lens=coordinate_system_logic.whole_lens(collection))
+        models.Layer.objects.create(
+            kind=enums.LayerKindChoices.MESH.value,
+            scene=scene,
+            lens=coordinate_system_logic.whole_lens(collection),
+        )
 
         # Authoring the edge into the world is the placement (one truth per space):
         # nothing to add to any scene.
@@ -226,7 +266,9 @@ async def _execute(ctx: HttpContext, query: str) -> tuple[dict, int]:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_scene_placements_are_flat_in_layer_count(authenticated_context: HttpContext):
+async def test_scene_placements_are_flat_in_layer_count(
+    authenticated_context: HttpContext,
+):
     """Asking a scene for its layers' placements costs the same at 7 layers as at 3."""
     await _seed_scene(authenticated_context, layer_count=3)
     small_data, small_queries = await _execute(authenticated_context, SCENE_PLACEMENTS)
@@ -237,7 +279,9 @@ async def test_scene_placements_are_flat_in_layer_count(authenticated_context: H
 
     assert len(small_data["scenes"][0]["layers"]) == 3
     assert len(large_data["scenes"][0]["layers"]) == 7
-    assert large_queries == small_queries, f"the placement query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"
+    assert large_queries == small_queries, (
+        f"the placement query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -253,7 +297,9 @@ async def test_root_layers_are_flat_in_layer_count(authenticated_context: HttpCo
 
     assert len(small_data["layers"]) == 3
     assert len(large_data["layers"]) == 7
-    assert large_queries == small_queries, f"the root layer query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"
+    assert large_queries == small_queries, (
+        f"the root layer query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"
+    )
 
 
 SPACE_PLACED = """
@@ -267,7 +313,9 @@ query SpaceBoth { coordinateSystems { id placedSystems { id } annotations { id }
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_spaces_placeable_set_is_walked_once_per_request(authenticated_context: HttpContext):
+async def test_a_spaces_placeable_set_is_walked_once_per_request(
+    authenticated_context: HttpContext,
+):
     """`placedSystems` and `annotations` answer from one walk of the space, not one each.
 
     Both derive from `placeable_system_ids_in`, which is a registrations fetch, a residence
@@ -279,14 +327,20 @@ async def test_a_spaces_placeable_set_is_walked_once_per_request(authenticated_c
     would be pinning how many queries annotations themselves take, which is not the point.
     """
     for index in range(3):
-        dataset = await seed.create_array_dataset(authenticated_context, f"Placed{index}")
+        dataset = await seed.create_array_dataset(
+            authenticated_context, f"Placed{index}"
+        )
         scene = await seed.create_scene(authenticated_context, f"Scene{index}")
         await seed.register_into_scene(authenticated_context, scene, dataset)
 
     _one_data, one_queries = await _execute(authenticated_context, SPACE_PLACED)
-    both_data, both_queries = await _execute(authenticated_context, SPACE_PLACED_AND_ANNOTATED)
+    both_data, both_queries = await _execute(
+        authenticated_context, SPACE_PLACED_AND_ANNOTATED
+    )
 
-    assert len(both_data["coordinateSystems"]) >= 6, "the fixture must cover several spaces, or N walks and one look alike"
+    assert len(both_data["coordinateSystems"]) >= 6, (
+        "the fixture must cover several spaces, or N walks and one look alike"
+    )
     extra = both_queries - one_queries
     assert extra <= len(both_data["coordinateSystems"]), (
         f"adding `annotations` cost {extra} queries over {len(both_data['coordinateSystems'])} spaces: "
@@ -296,7 +350,9 @@ async def test_a_spaces_placeable_set_is_walked_once_per_request(authenticated_c
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_scenes_over_one_world_share_the_root_edge_fetch(authenticated_context: HttpContext):
+async def test_two_scenes_over_one_world_share_the_root_edge_fetch(
+    authenticated_context: HttpContext,
+):
     """The world's edges are fetched once per request, not once per scene composing over it.
 
     A scene's searchable universe is its world's edges plus its layers' datasets' facts, and
@@ -313,17 +369,31 @@ async def test_two_scenes_over_one_world_share_the_root_edge_fetch(authenticated
     await seed.register_into_scene(authenticated_context, scene_a, dataset)
 
     def check() -> None:
-        scene_b = models.Scene.objects.create(name="B", world=scene_a.world, organization=authenticated_context.request.organization)
+        scene_b = models.Scene.objects.create(
+            name="B",
+            world=scene_a.world,
+            organization=authenticated_context.request.organization,
+        )
         loaders: dict = {}
 
         a = scene_graph.SceneGraph(scene_a, loaders=loaders)
         b = scene_graph.SceneGraph(scene_b, loaders=loaders)
-        assert a.universe.root_edges is b.universe.root_edges, "two scenes over one world must share the world's edge fetch"
+        assert a.universe.root_edges is b.universe.root_edges, (
+            "two scenes over one world must share the world's edge fetch"
+        )
         assert len(loaders["space_root_edges"]) == 1
 
-        scoped = space_graph.SpaceGraph(scene_a.world, organization=authenticated_context.request.organization, loaders=loaders)
-        assert scoped.universe.root_edges is not a.universe.root_edges, "an organization-scoped fetch is a different set of rows"
-        assert len(loaders["space_root_edges"]) == 2, "so it gets its own key rather than reusing the unscoped one"
+        scoped = space_graph.SpaceGraph(
+            scene_a.world,
+            organization=authenticated_context.request.organization,
+            loaders=loaders,
+        )
+        assert scoped.universe.root_edges is not a.universe.root_edges, (
+            "an organization-scoped fetch is a different set of rows"
+        )
+        assert len(loaders["space_root_edges"]) == 2, (
+            "so it gets its own key rather than reusing the unscoped one"
+        )
 
     await sync_to_async(check)()
 
@@ -337,7 +407,9 @@ mutation Make($input: CreateIntensityLayerInput!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_creating_a_layer_is_flat_in_scene_size(authenticated_context: HttpContext):
+async def test_creating_a_layer_is_flat_in_scene_size(
+    authenticated_context: HttpContext,
+):
     """Placing one more layer costs the same in a 7-layer scene as in a 3-layer one.
 
     The placement check a layer mutation runs (is this source placeable in this scene?)
@@ -350,15 +422,24 @@ async def test_creating_a_layer_is_flat_in_scene_size(authenticated_context: Htt
         scene = await _seed_scene(authenticated_context, layer_count=layer_count)
         # A fresh dataset, registered as its own seed step: the measured mutation is the
         # layer creation alone, and its placement check runs the full BFS in both scenes.
-        dataset = await seed.create_array_dataset(authenticated_context, f"Incoming{layer_count}", shapes=_SHAPES)
+        dataset = await seed.create_array_dataset(
+            authenticated_context, f"Incoming{layer_count}", shapes=_SHAPES
+        )
         lens = await seed.create_lens(authenticated_context, dataset, slices=[])
         await seed.register_into_scene(authenticated_context, scene, dataset)
 
-        variables = {"input": {"scene": str(scene.pk), "lens": str((await seed.channel_lens(authenticated_context, lens)).pk)}}
+        variables = {
+            "input": {
+                "scene": str(scene.pk),
+                "lens": str((await seed.channel_lens(authenticated_context, lens)).pk),
+            }
+        }
 
         counted = _fresh_request(authenticated_context)
         with QueryCounter() as counter:
-            result = await schema.execute(CREATE_LAYER, context_value=counted, variable_values=variables)
+            result = await schema.execute(
+                CREATE_LAYER, context_value=counted, variable_values=variables
+            )
         assert not result.errors, result.errors
         return len(counter)
 
@@ -372,7 +453,9 @@ async def test_creating_a_layer_is_flat_in_scene_size(authenticated_context: Htt
     await models.ArrayDataset.objects.all().adelete()
 
     large_queries = await measure(7)
-    assert large_queries == small_queries, f"creating a layer costs more in a bigger scene: {small_queries} queries at 3 layers, {large_queries} at 7"
+    assert large_queries == small_queries, (
+        f"creating a layer costs more in a bigger scene: {small_queries} queries at 3 layers, {large_queries} at 7"
+    )
 
 
 SCENE_LENSES = """
@@ -391,7 +474,9 @@ query SceneLenses {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scenes_lenses_are_flat_in_layer_count(authenticated_context: HttpContext):
+async def test_a_scenes_lenses_are_flat_in_layer_count(
+    authenticated_context: HttpContext,
+):
     """Reading each layer's lens -- the selection, its space and its dataset -- costs the same at 7 layers as at 3.
 
     The lens is reached across a polymorphic foreign key the optimizer cannot follow to the
@@ -406,5 +491,14 @@ async def test_a_scenes_lenses_are_flat_in_layer_count(authenticated_context: Ht
 
     assert len(small_data["scenes"][0]["layers"]) == 3
     assert len(large_data["scenes"][0]["layers"]) == 7
-    assert sum(1 for layer in large_data["scenes"][0]["layers"] if layer.get("lens", {}).get("shape")) >= 3, "the image layers answered their lens"
-    assert large_queries == small_queries, f"the lens query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"
+    assert (
+        sum(
+            1
+            for layer in large_data["scenes"][0]["layers"]
+            if layer.get("lens", {}).get("shape")
+        )
+        >= 3
+    ), "the image layers answered their lens"
+    assert large_queries == small_queries, (
+        f"the lens query count grows with the layers: {small_queries} for 3 layers, {large_queries} for 7"
+    )

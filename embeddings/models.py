@@ -50,7 +50,9 @@ class EmbeddedDescriptionMixin(models.Model):
         abstract = True
 
     @classmethod
-    def from_db(cls, db: str | None, field_names: Any, values: Any) -> EmbeddedDescriptionMixin:
+    def from_db(
+        cls, db: str | None, field_names: Any, values: Any
+    ) -> EmbeddedDescriptionMixin:
         """Remember the source text as loaded, so ``save()`` can tell whether it changed."""
         instance = super().from_db(db, field_names, values)
         instance._embedding_source_seen = instance._embedding_source_if_loaded()
@@ -65,7 +67,9 @@ class EmbeddedDescriptionMixin(models.Model):
 
     def embedding_source_text(self) -> str | None:
         """The text this row embeds (name + description)."""
-        return engine.source_text(*(getattr(self, field, None) for field in self.embedding_source_fields))
+        return engine.source_text(
+            *(getattr(self, field, None) for field in self.embedding_source_fields)
+        )
 
     def embedding_needs_refresh(self) -> bool:
         """Whether ``save()`` should recompute the vector: the row is new, or its text changed."""
@@ -89,9 +93,16 @@ class EmbeddedDescriptionMixin(models.Model):
         """
         source = self.embedding_source_text()
         try:
-            self.embedding = engine.embed_texts([source])[0] if source is not None else None
+            self.embedding = (
+                engine.embed_texts([source])[0] if source is not None else None
+            )
         except engine.EmbeddingsUnavailable as e:
-            logger.warning("Could not embed %s %s (%s); saving it without a vector", type(self).__name__, self.pk, e)
+            logger.warning(
+                "Could not embed %s %s (%s); saving it without a vector",
+                type(self).__name__,
+                self.pk,
+                e,
+            )
             self.embedding = None
             return
         self._embedding_source_seen = source
@@ -99,11 +110,15 @@ class EmbeddedDescriptionMixin(models.Model):
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Embed before writing whenever the source text may have changed."""
         update_fields = kwargs.get("update_fields")
-        touches_source = update_fields is None or any(field in update_fields for field in self.embedding_source_fields)
+        touches_source = update_fields is None or any(
+            field in update_fields for field in self.embedding_source_fields
+        )
         if engine.enabled() and touches_source and self.embedding_needs_refresh():
             self.refresh_embedding()
             if update_fields is not None:
-                kwargs["update_fields"] = list(dict.fromkeys([*update_fields, *EMBEDDING_FIELDS]))
+                kwargs["update_fields"] = list(
+                    dict.fromkeys([*update_fields, *EMBEDDING_FIELDS])
+                )
         super().save(*args, **kwargs)
         if update_fields is None or touches_source:
             self._embedding_source_seen = self.embedding_source_text()

@@ -39,16 +39,29 @@ class Composition:
 
 _COMPOSITIONS: list[Composition] = []
 
-_DELETE_GUARDS: dict[type[django_models.Model], list[Callable[[django_models.Model], None]]] = {}
+_DELETE_GUARDS: dict[
+    type[django_models.Model], list[Callable[[django_models.Model], None]]
+] = {}
 
 
-def register_composition(model: type[django_models.Model], *, world_relation: str, noun: str, lens_relation: str | None = None) -> None:
+def register_composition(
+    model: type[django_models.Model],
+    *,
+    world_relation: str,
+    noun: str,
+    lens_relation: str | None = None,
+) -> None:
     """Declare a composition model and the relation by which a space knows it is its world.
 
     Idempotent, because ``ready()`` can run more than once in a process (the autoreloader,
     a test runner re-populating the app registry).
     """
-    composition = Composition(model=model, world_relation=world_relation, noun=noun, lens_relation=lens_relation)
+    composition = Composition(
+        model=model,
+        world_relation=world_relation,
+        noun=noun,
+        lens_relation=lens_relation,
+    )
     if composition not in _COMPOSITIONS:
         _COMPOSITIONS.append(composition)
 
@@ -58,10 +71,17 @@ def compositions() -> tuple[Composition, ...]:
     return tuple(_COMPOSITIONS)
 
 
-def drawing(lens_ids: "list[int]") -> list[tuple[Composition, "django_models.QuerySet"]]:
+def drawing(
+    lens_ids: "list[int]",
+) -> list[tuple[Composition, "django_models.QuerySet"]]:
     """Every registered composition kind, with its rows that draw through any of these lenses."""
     return [
-        (composition, composition.model.objects.filter(**{f"{composition.lens_relation}__in": lens_ids}).distinct())
+        (
+            composition,
+            composition.model.objects.filter(
+                **{f"{composition.lens_relation}__in": lens_ids}
+            ).distinct(),
+        )
         for composition in _COMPOSITIONS
         if composition.lens_relation is not None
     ]
@@ -74,7 +94,9 @@ def no_composition_over() -> dict[str, bool]:
     the resident half. Read when the sweep runs, never at import, so an app registered after
     ``core`` was imported is still asked about.
     """
-    return {f"{composition.world_relation}__isnull": True for composition in _COMPOSITIONS}
+    return {
+        f"{composition.world_relation}__isnull": True for composition in _COMPOSITIONS
+    }
 
 
 def assert_no_composition_over(system: django_models.Model) -> None:
@@ -92,7 +114,9 @@ def assert_no_composition_over(system: django_models.Model) -> None:
             )
 
 
-def register_delete_guard(model: type[django_models.Model], guard: Callable[[django_models.Model], None]) -> None:
+def register_delete_guard(
+    model: type[django_models.Model], guard: Callable[[django_models.Model], None]
+) -> None:
     """Declare a check that must pass before a row of ``model`` is deleted, whoever asks.
 
     The PROTECT half of a delete where the dependency is not a foreign key: a composition's

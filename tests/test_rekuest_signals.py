@@ -13,14 +13,17 @@ from unittest.mock import patch
 
 import pytest
 from arkitekt_datalayer.models import ZarrStore
+from arkitekt_service import trust
+from joserfc.jwk import OKPKey
 from kante.context import HttpContext
 
 from core.descriptors import array_descriptors
 from mikro_server.schema import schema
-from joserfc.jwk import OKPKey
-
-from arkitekt_service import trust
-from tests.test_task_provenance import attach_provenance, clear_provenance, make_provenance
+from tests.test_task_provenance import (
+    attach_provenance,
+    clear_provenance,
+    make_provenance,
+)
 
 MIKRO_KEY = OKPKey.generate_key("Ed25519")
 REKUEST_KEY = OKPKey.generate_key("Ed25519")
@@ -45,7 +48,9 @@ class _Intake:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):  # noqa: N802
                 body = self.rfile.read(int(self.headers["Content-Length"]))
-                intake.received.append({"path": self.path, "headers": dict(self.headers), "body": body})
+                intake.received.append(
+                    {"path": self.path, "headers": dict(self.headers), "body": body}
+                )
                 self.send_response(202)
                 self.end_headers()
 
@@ -72,10 +77,15 @@ def _dataset_created(intake) -> dict:
     while time.monotonic() < deadline:
         for received in intake.received:
             body = json.loads(received["body"])
-            if body["identifier"] == "@mikro/arraydataset" and body["kind"] == "CREATED":
+            if (
+                body["identifier"] == "@mikro/arraydataset"
+                and body["kind"] == "CREATED"
+            ):
                 return received
         time.sleep(0.05)
-    raise AssertionError(f"no @mikro/arraydataset CREATED among {[json.loads(r['body'])['identifier'] for r in intake.received]}")
+    raise AssertionError(
+        f"no @mikro/arraydataset CREATED among {[json.loads(r['body'])['identifier'] for r in intake.received]}"
+    )
 
 
 @pytest.fixture
@@ -91,7 +101,9 @@ def intake(settings):
 
 
 def test_descriptors_follow_the_client_vocabulary():
-    assert array_descriptors(["TIME", "CHANNEL", "SPACE", "SPACE", "SPACE"], [10, 3, 5, 64, 64]) == {
+    assert array_descriptors(
+        ["TIME", "CHANNEL", "SPACE", "SPACE", "SPACE"], [10, 3, 5, 64, 64]
+    ) == {
         "@mikro/size": 614400,
         "@mikro/n_space_axes": 3,
         "@mikro/n_time_axes": 1,
@@ -111,12 +123,32 @@ CREATE = """
 
 
 async def _create(ctx: HttpContext, name: str) -> str:
-    store = await ZarrStore.objects.acreate(organization=ctx.request.organization, key=name, bucket="zarr", shape=[2, 32, 32], chunks=[2, 32, 32], version="3", dtype="uint8", populated=True)
+    store = await ZarrStore.objects.acreate(
+        organization=ctx.request.organization,
+        key=name,
+        bucket="zarr",
+        shape=[2, 32, 32],
+        chunks=[2, 32, 32],
+        version="3",
+        dtype="uint8",
+        populated=True,
+    )
     with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
         result = await schema.execute(
             CREATE,
             context_value=ctx,
-            variable_values={"input": {"name": name, "data": str(store.id), "scales": [], "axes": [{"name": "c", "type": "CHANNEL"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]}},
+            variable_values={
+                "input": {
+                    "name": name,
+                    "data": str(store.id),
+                    "scales": [],
+                    "axes": [
+                        {"name": "c", "type": "CHANNEL"},
+                        {"name": "y", "type": "SPACE"},
+                        {"name": "x", "type": "SPACE"},
+                    ],
+                }
+            },
         )
     assert not result.errors, result.errors
     return result.data["createArrayDataset"]["id"]
@@ -124,7 +156,9 @@ async def _create(ctx: HttpContext, name: str) -> str:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_created_dataset_is_signalled_with_its_task_token(intake, authenticated_context: HttpContext):
+async def test_a_created_dataset_is_signalled_with_its_task_token(
+    intake, authenticated_context: HttpContext
+):
     attach_provenance(authenticated_context, make_provenance(task_id="57"))
     dataset_id = await _create(authenticated_context, "signalled")
     clear_provenance(authenticated_context)
@@ -132,18 +166,35 @@ async def test_a_created_dataset_is_signalled_with_its_task_token(intake, authen
     received = _dataset_created(intake)
     assert received["path"] == "/agi/signal/mikro"
     # Checked the way rekuest checks it: signed with mikro's instance key, for rekuest, for this path and body.
-    verified = trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="rekuest")
+    verified = trust.verify(
+        "POST",
+        received["path"],
+        received["body"],
+        received["headers"]["Authorization"],
+        audience="rekuest",
+    )
     assert verified.issuer == "mikro"
     body = json.loads(received["body"])
-    assert (body["kind"], body["identifier"], body["object"]) == ("CREATED", "@mikro/arraydataset", dataset_id)
+    assert (body["kind"], body["identifier"], body["object"]) == (
+        "CREATED",
+        "@mikro/arraydataset",
+        dataset_id,
+    )
     assert body["organization"] == authenticated_context.request.organization.identifier
-    assert body["descriptors"]["@mikro/n_channels"] == 2 and body["descriptors"]["@mikro/n_space_axes"] == 2
-    assert body["provenance"] == "raw-provenance-token"  # forwarded untouched; rekuest verifies it
+    assert (
+        body["descriptors"]["@mikro/n_channels"] == 2
+        and body["descriptors"]["@mikro/n_space_axes"] == 2
+    )
+    assert (
+        body["provenance"] == "raw-provenance-token"
+    )  # forwarded untouched; rekuest verifies it
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_without_a_task_the_signal_carries_no_token(intake, authenticated_context: HttpContext):
+async def test_without_a_task_the_signal_carries_no_token(
+    intake, authenticated_context: HttpContext
+):
     await _create(authenticated_context, "untasked")
     received = _dataset_created(intake)
     assert json.loads(received["body"])["provenance"] is None
@@ -151,7 +202,9 @@ async def test_without_a_task_the_signal_carries_no_token(intake, authenticated_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_nothing_is_sent_when_rekuest_is_not_configured(intake, settings, authenticated_context: HttpContext):
+async def test_nothing_is_sent_when_rekuest_is_not_configured(
+    intake, settings, authenticated_context: HttpContext
+):
     settings.REKUEST_SERVICE = None
     await _create(authenticated_context, "unconfigured")
     time.sleep(0.5)
@@ -160,17 +213,36 @@ async def test_nothing_is_sent_when_rekuest_is_not_configured(intake, settings, 
 
 def test_the_manifest_declares_every_key_mikro_sends(settings):
     """A signal is declared with every key of its structure: the client's seven array keys, the value kind, the element type, the spec and whether it is whole -- all computed, none merely stated."""
-    from mikro_server.vocabulary import ARRAY_DESCRIPTORS, DSIZE, DTYPE, IS_WHOLE, SPEC, VALUE_KIND
-
     from django.test import Client as HttpClient
     from django.urls import reverse
 
+    from mikro_server.vocabulary import (
+        ARRAY_DESCRIPTORS,
+        DSIZE,
+        DTYPE,
+        IS_WHOLE,
+        SPEC,
+        VALUE_KIND,
+    )
+
     settings.REKUEST_SERVICE = {"REKUEST_URL": "http://127.0.0.1:9", "SERVICE": "mikro"}
     settings.INSTANCE = INSTANCE
-    url = reverse("rekuest_service_manifest")  # loads the URLconf, which registers the declarations
-    authorization = trust.sign("GET", url, b"", issuer="rekuest", audience="mikro", key=REKUEST_KEY)
+    url = reverse(
+        "rekuest_service_manifest"
+    )  # loads the URLconf, which registers the declarations
+    authorization = trust.sign(
+        "GET", url, b"", issuer="rekuest", audience="mikro", key=REKUEST_KEY
+    )
     response = HttpClient().get(url, headers={"Authorization": authorization})
-    (declared,) = [s for s in response.json()["signals"] if s["identifier"] == "@mikro/arraydataset"]
+    (declared,) = [
+        s
+        for s in response.json()["signals"]
+        if s["identifier"] == "@mikro/arraydataset"
+    ]
     assert declared["kinds"] == ["CREATED", "UPDATED", "DELETED"]
     counted = set(array_descriptors(["CHANNEL", "SPACE"], [2, 8]))
-    assert set(declared["descriptors"]) == {descriptor.key for descriptor in ARRAY_DESCRIPTORS} == counted | {VALUE_KIND, DTYPE, DSIZE, SPEC, IS_WHOLE}
+    assert (
+        set(declared["descriptors"])
+        == {descriptor.key for descriptor in ARRAY_DESCRIPTORS}
+        == counted | {VALUE_KIND, DTYPE, DSIZE, SPEC, IS_WHOLE}
+    )

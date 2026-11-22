@@ -15,9 +15,16 @@ from core.derived import AnchorSet, Derivation, deriver, envelope, project
 WINDOW = "core.AcquisitionWindow"
 
 
-def window(anchors: AnchorSet) -> Derivation[tuple[datetime.datetime, datetime.datetime]]:
+def window(
+    anchors: AnchorSet,
+) -> Derivation[tuple[datetime.datetime, datetime.datetime]]:
     """The span every acquisition window of the container falls in, checked once for both ends."""
-    return anchors.memo(WINDOW, lambda: envelope(anchors.statements(WINDOW, lambda spoke: (spoke.start, spoke.end))))
+    return anchors.memo(
+        WINDOW,
+        lambda: envelope(
+            anchors.statements(WINDOW, lambda spoke: (spoke.start, spoke.end))
+        ),
+    )
 
 
 @deriver(sources=(WINDOW,))

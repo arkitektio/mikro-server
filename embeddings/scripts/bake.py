@@ -45,10 +45,14 @@ def check() -> None:
     sys.path.insert(0, os.getcwd())
     from embeddings import engine
 
-    assert (engine.MODEL_PATH, engine.MODEL_ID_FILENAME) == (TARGET, STAMP), f"this script bakes into {TARGET}/{STAMP}, but the service reads {engine.MODEL_PATH}/{engine.MODEL_ID_FILENAME}"
+    assert (engine.MODEL_PATH, engine.MODEL_ID_FILENAME) == (TARGET, STAMP), (
+        f"this script bakes into {TARGET}/{STAMP}, but the service reads {engine.MODEL_PATH}/{engine.MODEL_ID_FILENAME}"
+    )
     with open(os.path.join(TARGET, STAMP), encoding="utf-8") as stamp:
         baked = stamp.read().strip()
-    assert baked == engine.MODEL, f"the image bakes {baked!r} but embeddings.engine.MODEL is {engine.MODEL!r}"
+    assert baked == engine.MODEL, (
+        f"the image bakes {baked!r} but embeddings.engine.MODEL is {engine.MODEL!r}"
+    )
 
 
 def main(arguments: list[str]) -> int:

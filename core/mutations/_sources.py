@@ -15,7 +15,13 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.scoping import for_org, get_for_org
 
 
-def lens_of_kind(info: Info, *, kind: type[models.Lens], lens: str, role: str = "this layer draws through") -> models.Lens:
+def lens_of_kind(
+    info: Info,
+    *,
+    kind: type[models.Lens],
+    lens: str,
+    role: str = "this layer draws through",
+) -> models.Lens:
     """The lens of one kind a layer draws through, refused in prose when the id names a lens of another kind."""
     # Asked of the caller's organization only: another organization's lens does not exist here,
     # whatever kind it is.
@@ -23,7 +29,9 @@ def lens_of_kind(info: Info, *, kind: type[models.Lens], lens: str, role: str = 
         found = for_org(models.Lens, info).filter(pk=lens).first()
         if found is None:
             raise ValueError(f"Lens {lens} does not exist.")
-        raise ValueError(f"Lens {lens} is a {type(found).KIND.lower()} lens; {role} a {kind.KIND.lower()} lens. Pass a {kind.KIND.lower()} lens -- a container's whole lens is its `fullLens`.")
+        raise ValueError(
+            f"Lens {lens} is a {type(found).KIND.lower()} lens; {role} a {kind.KIND.lower()} lens. Pass a {kind.KIND.lower()} lens -- a container's whole lens is its `fullLens`."
+        )
     return get_for_org(kind, info, id=lens)
 
 
@@ -39,7 +47,11 @@ def resolve_source_lens(
 ) -> models.Lens:
     """The lens a selection is cut from, from exactly one of ``lens`` and ``container``: what the create-lens mutations take, where a container is where a selection is first named."""
     if (lens is None) == (container is None):
-        raise ValueError(f"Name exactly one of `lens` (a {kind.KIND.lower()} lens) or `{what}` (the container, through its whole lens).")
+        raise ValueError(
+            f"Name exactly one of `lens` (a {kind.KIND.lower()} lens) or `{what}` (the container, through its whole lens)."
+        )
     if lens is not None:
         return lens_of_kind(info, kind=kind, lens=lens, role=role)
-    return coordinate_system_logic.whole_lens(get_for_org(container_model, info, id=container))
+    return coordinate_system_logic.whole_lens(
+        get_for_org(container_model, info, id=container)
+    )

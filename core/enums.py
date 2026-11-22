@@ -1,6 +1,7 @@
-from django.db.models import TextChoices
-import strawberry
 from enum import Enum, EnumMeta
+
+import strawberry
+from django.db.models import TextChoices
 
 
 def _describe(enum_cls: EnumMeta, **descriptions: str) -> None:
@@ -60,7 +61,9 @@ class ScaleMethodChoices(TextChoices):
 #: does not exist. MAX and MIN return a real id but not the *right* one -- they bias every
 #: boundary toward whichever object happens to sort higher -- so they are excluded too: a
 #: label downsample has to answer "which object is here", and only NEAREST and MODE do.
-LABEL_COMPLIANT_SCALE_METHODS = frozenset({ScaleMethodChoices.NEAREST.value, ScaleMethodChoices.MODE.value})
+LABEL_COMPLIANT_SCALE_METHODS = frozenset(
+    {ScaleMethodChoices.NEAREST.value, ScaleMethodChoices.MODE.value}
+)
 
 
 class FileLinkDirectionChoices(TextChoices):
@@ -98,7 +101,10 @@ class TransformKindChoices(TextChoices):
 class ColumnRoleChoices(TextChoices):
     """What a table dataset's column is for: a coordinate that places the row, or data hanging off it."""
 
-    COORDINATE = "COORDINATE", "Coordinate (a spatial/temporal column that becomes an axis of the table's space)"
+    COORDINATE = (
+        "COORDINATE",
+        "Coordinate (a spatial/temporal column that becomes an axis of the table's space)",
+    )
     ATTRIBUTE = "ATTRIBUTE", "Attribute (a measurement or property column; data only)"
     ID = "ID", "Id (a per-row identifier)"
     TRACK_ID = "TRACK_ID", "Track id (groups rows into a trajectory)"
@@ -125,8 +131,14 @@ class AxisTypeChoices(TextChoices):
     MICROTIME = "MICROTIME", "Microtime (FLIM arrival-time bin)"
     SPECTRUM = "SPECTRUM", "Spectrum (wavelength bin)"
     INDEX = "INDEX", "Index (an enumeration with no metric: an object id, a row number)"
-    VALUE = "VALUE", "Value (the direction values are drawn along, in a drawing space only)"
-    CATEGORY = "CATEGORY", "Category (an enumeration whose positions are the values a column holds)"
+    VALUE = (
+        "VALUE",
+        "Value (the direction values are drawn along, in a drawing space only)",
+    )
+    CATEGORY = (
+        "CATEGORY",
+        "Category (an enumeration whose positions are the values a column holds)",
+    )
 
 
 class ColorMapChoices(TextChoices):
@@ -282,8 +294,12 @@ class AnnotationRelationChoices(TextChoices):
     MERGED = "MERGED", "Merged (one shape joined from several sources)"
 
 
-@strawberry.enum(description="The color space format used to interpret color component values.")
-@strawberry.enum(description="The colormap used to map intensity values of a channel to display colors.")
+@strawberry.enum(
+    description="The color space format used to interpret color component values."
+)
+@strawberry.enum(
+    description="The colormap used to map intensity values of a channel to display colors."
+)
 class ColorMap(str, Enum):
     """The colormap used to map intensity values of a channel to display colors."""
 
@@ -325,7 +341,9 @@ class ColorMap(str, Enum):
 #: differ only in saturation and value, and the names are the viewer's own
 #: (`orkestrator-next`'s `INSTANCE_COLORMAPS`), so a palette named here is a palette it already
 #: draws.
-QUALITATIVE_COLORMAPS = frozenset({ColorMap.HUES, ColorMap.DISTINCT, ColorMap.PASTEL, ColorMap.VIVID})
+QUALITATIVE_COLORMAPS = frozenset(
+    {ColorMap.HUES, ColorMap.DISTINCT, ColorMap.PASTEL, ColorMap.VIVID}
+)
 
 
 _describe(
@@ -359,7 +377,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The blending mode used to combine multiple channels or layers into a composite image.")
+@strawberry.enum(
+    description="The blending mode used to combine multiple channels or layers into a composite image."
+)
 class Blending(str, Enum):
     """The blending mode used to combine multiple channels or layers into a composite image."""
 
@@ -376,7 +396,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="How a viewer should open a scene: flat, volumetric, or its own choice.")
+@strawberry.enum(
+    description="How a viewer should open a scene: flat, volumetric, or its own choice."
+)
 class PreferredView(str, Enum):
     """How a viewer should open a scene.
 
@@ -401,7 +423,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="How a viewer eases the camera along the travel into an animation waypoint.")
+@strawberry.enum(
+    description="How a viewer eases the camera along the travel into an animation waypoint."
+)
 class Easing(str, Enum):
     """How a viewer eases the camera along the travel into a waypoint.
 
@@ -423,7 +447,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The kind of a layer, discriminating which data source it renders and which rendering settings apply.")
+@strawberry.enum(
+    description="The kind of a layer, discriminating which data source it renders and which rendering settings apply."
+)
 class LayerKind(str, Enum):
     """The kind of a layer, discriminating which data source it renders and which rendering settings apply.
 
@@ -471,7 +497,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="How a vector layer draws one sampled vector. Every glyph is real triangle geometry, never a sprite -- a sprite is not an occluder in a volume pass, so it would vanish behind data it sits in front of.")
+@strawberry.enum(
+    description="How a vector layer draws one sampled vector. Every glyph is real triangle geometry, never a sprite -- a sprite is not an occluder in a volume pass, so it would vanish behind data it sits in front of."
+)
 class VectorGlyph(str, Enum):
     """How a vector layer draws one sampled vector."""
 
@@ -542,7 +570,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="How a mesh surface is lit. Vocabulary a mesh needs and an image has no use for: a raster has no normals to shade with, which is why this sits on the mesh layer rather than anywhere near a render graph.")
+@strawberry.enum(
+    description="How a mesh surface is lit. Vocabulary a mesh needs and an image has no use for: a raster has no normals to shade with, which is why this sits on the mesh layer rather than anywhere near a render graph."
+)
 class MeshShading(str, Enum):
     """How a mesh surface is lit."""
 
@@ -563,7 +593,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The render recipe an image layer carries: which default graph createSceneFromCoordinateSystem builds, via `ScenePolicyInput.kind`.")
+@strawberry.enum(
+    description="The render recipe an image layer carries: which default graph createSceneFromCoordinateSystem builds, via `ScenePolicyInput.kind`."
+)
 class BootstrapLayerKind(str, Enum):
     """The render recipe an image layer carries.
 
@@ -603,7 +635,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="What a lens selects over: an array (by index slices, re-indexing into a space of its own), or a table, a sparse dataset, a mesh collection, a network collection, an annotation collection or a fixture (by value windows, in the container's own space).")
+@strawberry.enum(
+    description="What a lens selects over: an array (by index slices, re-indexing into a space of its own), or a table, a sparse dataset, a mesh collection, a network collection, an annotation collection or a fixture (by value windows, in the container's own space)."
+)
 class LensKind(str, Enum):
     """The container kind a lens is a selection over. Derived from the row's concrete model, never stored."""
 
@@ -616,7 +650,9 @@ class LensKind(str, Enum):
     FIXTURE = "FIXTURE"
 
 
-@strawberry.enum(description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation; an array lens answers the same vocabulary over the shape its slices cut out, so one plane of a stack is an IMAGE and one row of an image a TRACE. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds; the others are modifiers: one per non-spatial axis type the dataset has more than one position along, and TRACE for a dataset that is a curve along one measured axis.")
+@strawberry.enum(
+    description="What a dataset structurally is, materialized from the axes of its intrinsic coordinate system at creation; an array lens answers the same vocabulary over the shape its slices cut out, so one plane of a stack is an IMAGE and one row of an image a TRACE. Specs stack: a 3D timelapse is VOLUME, TIMESERIES and MULTICHANNEL at once. Exactly one spatial member (SCALAR/PROFILE/IMAGE/VOLUME/HYPERVOLUME) ever holds; the others are modifiers: one per non-spatial axis type the dataset has more than one position along, and TRACE for a dataset that is a curve along one measured axis."
+)
 class ArrayDatasetSpec(str, Enum):
     """What a dataset structurally is, materialized from its axes at creation.
 
@@ -668,7 +704,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="What a table structurally is, materialized from its declared columns at creation; a table lens answers the same vocabulary over what its windows leave free -- a coordinate column a window pins to one value (min == max) no longer counts, so one frame of a tracking result is not TIMED. Specs stack: a tracking result is POINTS_2D, TIMED and TRACKED at once. Exactly one placement member (RECORDS/POINTS_1D/POINTS_2D/POINTS_3D/POINTS_ND) ever holds; the others are modifiers, one per fact the schema declares, and SERIES for a table that is one value against one measured coordinate. Declared, not measured: where an array's spec counts an axis only when it has more than one position, a table's is read off its schema alone, because the server never scans the rows.")
+@strawberry.enum(
+    description="What a table structurally is, materialized from its declared columns at creation; a table lens answers the same vocabulary over what its windows leave free -- a coordinate column a window pins to one value (min == max) no longer counts, so one frame of a tracking result is not TIMED. Specs stack: a tracking result is POINTS_2D, TIMED and TRACKED at once. Exactly one placement member (RECORDS/POINTS_1D/POINTS_2D/POINTS_3D/POINTS_ND) ever holds; the others are modifiers, one per fact the schema declares, and SERIES for a table that is one value against one measured coordinate. Declared, not measured: where an array's spec counts an axis only when it has more than one position, a table's is read off its schema alone, because the server never scans the rows."
+)
 class TableDatasetSpec(str, Enum):
     """What a table structurally is, materialized from its declared columns at creation.
 
@@ -714,7 +752,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="What a sparse matrix structurally is, read off its axes, its shape and the layouts its store holds; a sparse lens answers the same vocabulary over what its windows leave free. Exactly one rank member (SCALAR/VECTOR/MATRIX/TENSOR) ever holds, by how many axes still have more than one position: an axis of a single position does not count, and neither does one a window pins to one position (min == max). SLICE is what the whole amounts to when a picker can read it.")
+@strawberry.enum(
+    description="What a sparse matrix structurally is, read off its axes, its shape and the layouts its store holds; a sparse lens answers the same vocabulary over what its windows leave free. Exactly one rank member (SCALAR/VECTOR/MATRIX/TENSOR) ever holds, by how many axes still have more than one position: an axis of a single position does not count, and neither does one a window pins to one position (min == max). SLICE is what the whole amounts to when a picker can read it."
+)
 class SparseDatasetSpec(str, Enum):
     """What a sparse matrix, or a selection over one, structurally is.
 
@@ -744,7 +784,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The 3D projection / rendering mode applied to a volumetric (z-stacked) render, whether that is an IMAGE layer's projection node or an INTENSITY layer's `projectionMode`.")
+@strawberry.enum(
+    description="The 3D projection / rendering mode applied to a volumetric (z-stacked) render, whether that is an IMAGE layer's projection node or an INTENSITY layer's `projectionMode`."
+)
 class ProjectionMode(str, Enum):
     """The 3D projection / rendering mode applied to a volumetric (z-stacked) render.
 
@@ -814,7 +856,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="What a table dataset's column is for: a coordinate that places the row, or data hanging off it.")
+@strawberry.enum(
+    description="What a table dataset's column is for: a coordinate that places the row, or data hanging off it."
+)
 class ColumnRole(str, Enum):
     """What a table dataset's column is for."""
 
@@ -839,7 +883,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The semantic kind of an axis. Axes are declared in the order the data has them -- for an array, its store's dimension order; for a table, its coordinate columns as declared -- and no ordering by type is required of them: the time, channel and phasor axes are found by type rather than by position. What the render axes are derived from is the relative order of the SPACE axes, the last being x.")
+@strawberry.enum(
+    description="The semantic kind of an axis. Axes are declared in the order the data has them -- for an array, its store's dimension order; for a table, its coordinate columns as declared -- and no ordering by type is required of them: the time, channel and phasor axes are found by type rather than by position. What the render axes are derived from is the relative order of the SPACE axes, the last being x."
+)
 class AxisType(str, Enum):
     """The semantic kind of an axis, inspired by RFC-5."""
 
@@ -870,7 +916,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The kind of a coordinate transformation, discriminating how its parameters are interpreted. Direction is always forward: input -> output.")
+@strawberry.enum(
+    description="The kind of a coordinate transformation, discriminating how its parameters are interpreted. Direction is always forward: input -> output."
+)
 class TransformKind(str, Enum):
     """The kind of a coordinate transformation, discriminating how its parameters are interpreted."""
 
@@ -899,7 +947,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The kind of a transformation a client can author directly: the discriminator of `TransformInput`. SEQUENCE is absent on purpose -- it is the edge the ingest writes with its steps (pyramid levels, stepped lenses), never authored.")
+@strawberry.enum(
+    description="The kind of a transformation a client can author directly: the discriminator of `TransformInput`. SEQUENCE is absent on purpose -- it is the edge the ingest writes with its steps (pyramid levels, stepped lenses), never authored."
+)
 class CreatableTransformKind(str, Enum):
     """The directly-creatable subset of :class:`TransformKind`, used only by inputs."""
 
@@ -926,7 +976,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="The kind of one part of a BY_DIMENSION: how it maps its own input axes onto its own output axes.")
+@strawberry.enum(
+    description="The kind of one part of a BY_DIMENSION: how it maps its own input axes onto its own output axes."
+)
 class PartKind(str, Enum):
     """The kind of one BY_DIMENSION part."""
 
@@ -1100,7 +1152,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="How much a transformation edge's map is actually known: guessed, inferred from metadata, authored by someone, or validated against the data. A layer's validity is derived from it, never stored: the weakest edge on its path to world.")
+@strawberry.enum(
+    description="How much a transformation edge's map is actually known: guessed, inferred from metadata, authored by someone, or validated against the data. A layer's validity is derived from it, never stored: the weakest edge on its path to world."
+)
 class PlacementValidity(str, Enum):
     """How much a transformation edge's map is actually known."""
 
@@ -1119,7 +1173,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="What a derivation did to the values -- the axis the spatial kind says nothing about. A threshold is spatially IDENTITY with categorized values; a crop is value-identical. Stated on the derivation edge (one event, one row, two orthogonal statements); the algorithm and its parameters belong to task provenance, not here.")
+@strawberry.enum(
+    description="What a derivation did to the values -- the axis the spatial kind says nothing about. A threshold is spatially IDENTITY with categorized values; a crop is value-identical. Stated on the derivation edge (one event, one row, two orthogonal statements); the algorithm and its parameters belong to task provenance, not here."
+)
 class ValueRelation(str, Enum):
     """What a derivation did to the values, orthogonal to its spatial kind."""
 
@@ -1128,7 +1184,9 @@ class ValueRelation(str, Enum):
     CATEGORIZED = "CATEGORIZED"
 
 
-@strawberry.enum(description="How a pyramid level's voxels were computed from the level above it. Stated, never derived -- nothing about two arrays says whether one was averaged or picked out of the other -- and it matters because over an array of object ids only NEAREST and MODE are allowed: every other method returns numbers that were not in the input, and an invented id is an object that does not exist.")
+@strawberry.enum(
+    description="How a pyramid level's voxels were computed from the level above it. Stated, never derived -- nothing about two arrays says whether one was averaged or picked out of the other -- and it matters because over an array of object ids only NEAREST and MODE are allowed: every other method returns numbers that were not in the input, and an invented id is an object that does not exist."
+)
 class ScaleMethod(str, Enum):
     """How a pyramid level's voxels were computed from the level above it."""
 
@@ -1199,7 +1257,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="Which way a walk over the coordinate graph follows an edge")
+@strawberry.enum(
+    description="Which way a walk over the coordinate graph follows an edge"
+)
 class GraphDirection(str, Enum):
     """The direction a graph walk follows edges in."""
 
@@ -1216,7 +1276,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="What sort of thing a folder holds: a sub-folder, a file, or one of the containers. The order here is the order a KIND sort lists them in")
+@strawberry.enum(
+    description="What sort of thing a folder holds: a sub-folder, a file, or one of the containers. The order here is the order a KIND sort lists them in"
+)
 class FolderChildKind(str, Enum):
     """One kind of thing filed in a folder."""
 
@@ -1233,7 +1295,7 @@ class FolderChildKind(str, Enum):
 
 @strawberry.enum(
     description=(
-        "A coarse bucket for what sort of thing a file holds, for a picker that wants \"just the images\". **Derived at query time from the file's extension, never stored** -- "
+        'A coarse bucket for what sort of thing a file holds, for a picker that wants "just the images". **Derived at query time from the file\'s extension, never stored** -- '
         "so it cannot drift from the file it describes, and it is a filter only. Classified by extension rather than by `contentType` on purpose: a CZI, LIF or ND2 is uploaded "
         "as `application/octet-stream`, so a content-type rule would file every vendor image under OTHER, which is precisely the case worth finding. `contentType` is the "
         "fallback when the extension is unknown. It is a curated list, not an authority: filter on `name` or `contentType` directly when you need an exact answer"
@@ -1271,7 +1333,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="Whether a layer has a place in its scene's world, and if not, why not. Derived, never stored.")
+@strawberry.enum(
+    description="Whether a layer has a place in its scene's world, and if not, why not. Derived, never stored."
+)
 class PlacementState(str, Enum):
     """Whether a layer has a place in its scene's world, and if not, why not."""
 
@@ -1290,7 +1354,9 @@ _describe(
 )
 
 
-@strawberry.enum(description="Whether the server can state where a source sits in a space, and if not, why not. Derived, never stored.")
+@strawberry.enum(
+    description="Whether the server can state where a source sits in a space, and if not, why not. Derived, never stored."
+)
 class ExtentState(str, Enum):
     """Whether a source's extent in a space is computable, and if not, why not.
 
@@ -1316,12 +1382,24 @@ _describe(
 )
 
 
-@strawberry.enum(description="The physical unit used to express spatial dimensions, e.g. of pixel sizes or stage positions.")
-@strawberry.enum(description="The physical unit used to express temporal dimensions, e.g. of time-lapse intervals.")
-@strawberry.enum(description="The data type of a column in a DuckDB table, as used by tabular data stored alongside images.")
-@strawberry.enum(description="The axis traversal order of a continuous scan, i.e. the order in which rows, columns and slices are acquired.")
-@strawberry.enum(description="The geometric kind of a region of interest (ROI), defining how its vectors are interpreted.")
-@strawberry.enum(description="The shape an annotation is drawn as. Unlike `RoiKind`, which this replaced, the members name geometry only: which axes a shape spans is a property of the coordinate system it is drawn in, not of the shape")
+@strawberry.enum(
+    description="The physical unit used to express spatial dimensions, e.g. of pixel sizes or stage positions."
+)
+@strawberry.enum(
+    description="The physical unit used to express temporal dimensions, e.g. of time-lapse intervals."
+)
+@strawberry.enum(
+    description="The data type of a column in a DuckDB table, as used by tabular data stored alongside images."
+)
+@strawberry.enum(
+    description="The axis traversal order of a continuous scan, i.e. the order in which rows, columns and slices are acquired."
+)
+@strawberry.enum(
+    description="The geometric kind of a region of interest (ROI), defining how its vectors are interpreted."
+)
+@strawberry.enum(
+    description="The shape an annotation is drawn as. Unlike `RoiKind`, which this replaced, the members name geometry only: which axes a shape spans is a property of the coordinate system it is drawn in, not of the shape"
+)
 class AnnotationKind(str, Enum):
     """The geometric kind of an annotation, defining how its vectors are read."""
 

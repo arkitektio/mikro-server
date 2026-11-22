@@ -17,7 +17,9 @@ def test_minimum_vertex_table_is_keyed_on_the_live_annotation_kinds() -> None:
 
     live = {member.value for member in AnnotationKindChoices}
     unreachable = sorted(set(_MINIMUM_VERTICES) - live)
-    assert not unreachable, f"_MINIMUM_VERTICES keys no annotation kind can reach: {unreachable}"
+    assert not unreachable, (
+        f"_MINIMUM_VERTICES keys no annotation kind can reach: {unreachable}"
+    )
 
 
 def test_every_model_that_owns_a_coordinate_system_is_a_registered_container() -> None:
@@ -69,7 +71,11 @@ def test_every_model_that_owns_a_coordinate_system_is_a_registered_container() -
         )
     }
 
-    missing = sorted(model.__name__ for model in owners - registered if model.__name__ not in not_containers)
+    missing = sorted(
+        model.__name__
+        for model in owners - registered
+        if model.__name__ not in not_containers
+    )
     assert not missing, (
         f"{', '.join(missing)} own a coordinate system but are not in `CONTAINERS`, so their "
         f"spaces will key as uninhabited worlds and vanish from `residents` and `LineageGraph`."
@@ -102,7 +108,9 @@ def test_every_registered_container_is_a_member_of_the_resident_union() -> None:
         for container in CONTAINERS
         if container.model.__name__ not in members
     )
-    assert not missing, f"{', '.join(missing)} are containers but not members of `Resident`: {sorted(members)}"
+    assert not missing, (
+        f"{', '.join(missing)} are containers but not members of `Resident`: {sorted(members)}"
+    )
 
 
 def test_every_layer_kind_is_in_the_refusal_vocabulary() -> None:
@@ -122,8 +130,12 @@ def test_every_layer_kind_is_in_the_refusal_vocabulary() -> None:
     from core import enums
     from core.mutations.layer import _KIND_VOCABULARY
 
-    missing = sorted(kind.value for kind in enums.LayerKind if kind.value not in _KIND_VOCABULARY)
-    assert not missing, f"{', '.join(missing)} are layer kinds with no entry in `_KIND_VOCABULARY`"
+    missing = sorted(
+        kind.value for kind in enums.LayerKind if kind.value not in _KIND_VOCABULARY
+    )
+    assert not missing, (
+        f"{', '.join(missing)} are layer kinds with no entry in `_KIND_VOCABULARY`"
+    )
 
 
 def test_every_picker_column_is_guarded() -> None:
@@ -162,12 +174,18 @@ def test_every_picker_column_is_guarded() -> None:
         f"to `core.logic.pickers._PICKER_COLUMNS`."
     )
     stale = [name for name in _PICKER_COLUMNS if name not in stored]
-    assert not stale, f"{', '.join(stale)} are guarded columns the Layer model does not have -- a rename left the guard behind"
+    assert not stale, (
+        f"{', '.join(stale)} are guarded columns the Layer model does not have -- a rename left the guard behind"
+    )
 
     # The label pickers live inside the `label_render` blob rather than in columns of their
     # own, so their keys are held to the render model instead.
-    missing_keys = [key for key in _LABEL_PICKER_KEYS if key not in LabelRenderModel.model_fields]
-    assert not missing_keys, f"{', '.join(missing_keys)} are guarded label_render keys the render model does not carry"
+    missing_keys = [
+        key for key in _LABEL_PICKER_KEYS if key not in LabelRenderModel.model_fields
+    ]
+    assert not missing_keys, (
+        f"{', '.join(missing_keys)} are guarded label_render keys the render model does not carry"
+    )
 
 
 def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
@@ -198,7 +216,9 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
     claims: dict[str, list[str]] = {kind.value: [] for kind in enums.LayerKind}
     for layer_type in layer_types:
         name = layer_type.__name__
-        assert f"type {name} implements Layer" in sdl, f"{name} is registered but absent from the SDL"
+        assert f"type {name} implements Layer" in sdl, (
+            f"{name} is registered but absent from the SDL"
+        )
         for kind in enums.LayerKind:
             if layer_type.is_type_of(models.Layer(kind=kind.value), None):
                 claims[kind.value].append(name)
@@ -210,7 +230,9 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
     )
 
     ambiguous = {kind: names for kind, names in claims.items() if len(names) > 1}
-    assert not ambiguous, f"more than one concrete type claims the same kind: {ambiguous}"
+    assert not ambiguous, (
+        f"more than one concrete type claims the same kind: {ambiguous}"
+    )
 
 
 def _query_fields_reading_rows():
@@ -245,7 +267,11 @@ def test_every_query_field_is_scoped_to_the_organization() -> None:
     from core.scoping import organization_path
 
     sentinel = 987654321
-    info = SimpleNamespace(context=SimpleNamespace(request=SimpleNamespace(organization=Organization(pk=sentinel))))
+    info = SimpleNamespace(
+        context=SimpleNamespace(
+            request=SimpleNamespace(organization=Organization(pk=sentinel))
+        )
+    )
 
     unscoped = []
     for name, django_type, model in _query_fields_reading_rows():
@@ -255,9 +281,13 @@ def test_every_query_field_is_scoped_to_the_organization() -> None:
             continue
         sql = str(get_queryset(model.objects.all(), info).query)
         if organization_path(model) is None or str(sentinel) not in sql:
-            unscoped.append(f"{name} ({django_type.__name__}.get_queryset does not filter by organization)")
+            unscoped.append(
+                f"{name} ({django_type.__name__}.get_queryset does not filter by organization)"
+            )
 
-    assert not unscoped, "Query fields readable across organizations:\n  " + "\n  ".join(unscoped)
+    assert not unscoped, (
+        "Query fields readable across organizations:\n  " + "\n  ".join(unscoped)
+    )
 
 
 def test_no_string_prefetch_hint_crosses_a_scoped_relation() -> None:
@@ -281,11 +311,21 @@ def test_no_string_prefetch_hint_crosses_a_scoped_relation() -> None:
 
     clashes = set()
     for graphql_type in schema._schema.type_map.values():
-        definition = (getattr(graphql_type, "extensions", None) or {}).get("strawberry-definition")
-        if definition is None or not hasattr(definition, "fields") or not get_django_definition(definition.origin):
+        definition = (getattr(graphql_type, "extensions", None) or {}).get(
+            "strawberry-definition"
+        )
+        if (
+            definition is None
+            or not hasattr(definition, "fields")
+            or not get_django_definition(definition.origin)
+        ):
             continue
         # Relations left to the optimizer: plain Django fields, no resolver of their own.
-        optimized = {field.django_name: field for field in definition.fields if isinstance(field, StrawberryDjangoField) and field.base_resolver is None}
+        optimized = {
+            field.django_name: field
+            for field in definition.fields
+            if isinstance(field, StrawberryDjangoField) and field.base_resolver is None
+        }
         for field in definition.fields:
             store = getattr(field, "store", None)
             for hint in store.prefetch_related if store else ():
@@ -294,8 +334,16 @@ def test_no_string_prefetch_hint_crosses_a_scoped_relation() -> None:
                 relation = optimized.get(hint.split("__", 1)[0])
                 if relation is None:
                     continue
-                targets = [target.origin for target in get_possible_type_definitions(relation.type)]
+                targets = [
+                    target.origin
+                    for target in get_possible_type_definitions(relation.type)
+                ]
                 if any(hasattr(target, "get_queryset") for target in targets):
-                    clashes.add(f"{definition.origin.__name__}.{field.python_name} hints {hint!r} across `{relation.python_name}`, which the optimizer prefetches scoped")
+                    clashes.add(
+                        f"{definition.origin.__name__}.{field.python_name} hints {hint!r} across `{relation.python_name}`, which the optimizer prefetches scoped"
+                    )
 
-    assert not clashes, "String prefetch hints that clash with a scoped relation's Prefetch:\n  " + "\n  ".join(sorted(clashes))
+    assert not clashes, (
+        "String prefetch hints that clash with a scoped relation's Prefetch:\n  "
+        + "\n  ".join(sorted(clashes))
+    )

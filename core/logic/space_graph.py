@@ -31,9 +31,8 @@ from collections.abc import Iterator, Set
 from dataclasses import dataclass
 
 from authentikate.models import Organization
-from kante.types import Info
-
 from django.db.models import Q
+from kante.types import Info
 
 from core import enums, models
 from core.logic import coords as coords_logic
@@ -68,7 +67,9 @@ class Hit:
     anchors: list["models.CoordinateAnchor"]
 
 
-def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[float], list[float]] | None:
+def _resident_box(
+    resident: object, shapes: dict[int, list[int]]
+) -> tuple[list[float], list[float]] | None:
     """A resident's extent in the space it lives in, half-open around the voxel centre.
 
     Asked of the **data**, not of the space -- a space has no extent of its own, and under
@@ -111,7 +112,13 @@ def _resident_box(resident: object, shapes: dict[int, list[int]]) -> tuple[list[
 class SpaceGraph:
     """Every source registered into one space, with the edges that place them, fetched up front."""
 
-    def __init__(self, space: "models.CoordinateSystem", *, organization, loaders: dict | None = None) -> None:
+    def __init__(
+        self,
+        space: "models.CoordinateSystem",
+        *,
+        organization,
+        loaders: dict | None = None,
+    ) -> None:
         """Fetch the space's residents, then the edge universe rooted at the space."""
         self.space = space
         self.organization = organization
@@ -131,19 +138,44 @@ class SpaceGraph:
         self._residents: list[object] = []
         if self._candidate_ids:
             for model in (container.model for container in graph_logic.CONTAINERS):
-                query = model.objects.filter(coordinate_system_id__in=self._candidate_ids, organization=organization) if hasattr(model, "organization") else model.objects.filter(coordinate_system_id__in=self._candidate_ids)
-                self._residents.extend(query.select_related("coordinate_system").prefetch_related("coordinate_system__axes"))
+                query = (
+                    model.objects.filter(
+                        coordinate_system_id__in=self._candidate_ids,
+                        organization=organization,
+                    )
+                    if hasattr(model, "organization")
+                    else model.objects.filter(
+                        coordinate_system_id__in=self._candidate_ids
+                    )
+                )
+                self._residents.extend(
+                    query.select_related("coordinate_system").prefetch_related(
+                        "coordinate_system__axes"
+                    )
+                )
 
         # Seeded by dataset id, not by space: a hundred tiles share one stage space, and
         # `residence_map` would collapse them to one resident and lose ninety-nine. The
         # resident rows carry the ids already, so there is nothing to look up.
-        dataset_ids = {resident.pk if isinstance(resident, models.ArrayDataset) else getattr(resident, "dataset_id", None) for resident in self._residents}
+        dataset_ids = {
+            resident.pk
+            if isinstance(resident, models.ArrayDataset)
+            else getattr(resident, "dataset_id", None)
+            for resident in self._residents
+        }
         dataset_ids.discard(None)
 
         # A collection seeds by its own system, like any other container. It used to go in
         # through a separate `collection_systems` argument, because the universe could only
         # resolve it by fetching its derivation edge first.
-        collection_systems = {resident.coordinate_system_id for resident in self._residents if isinstance(resident, tuple(c.model for c in graph_logic.COLLECTION_CONTAINERS)) and resident.coordinate_system_id}
+        collection_systems = {
+            resident.coordinate_system_id
+            for resident in self._residents
+            if isinstance(
+                resident, tuple(c.model for c in graph_logic.COLLECTION_CONTAINERS)
+            )
+            and resident.coordinate_system_id
+        }
 
         self.universe = edge_universe.EdgeUniverse(
             space,
@@ -154,10 +186,18 @@ class SpaceGraph:
         )
 
         self._shapes: dict[int, list[int]] | None = None
-        self._anchors: dict[tuple[str, int], list[models.CoordinateAnchor]] | None = None
+        self._anchors: dict[tuple[str, int], list[models.CoordinateAnchor]] | None = (
+            None
+        )
         self._sources: list[Source] | None = None
 
-    def adjacency(self, container_key: tuple | None, *, at: dict[str, int] | None = None, admit_scoped: bool = False) -> dict:
+    def adjacency(
+        self,
+        container_key: tuple | None,
+        *,
+        at: dict[str, int] | None = None,
+        admit_scoped: bool = False,
+    ) -> dict:
         """The searchable universe for one container: its lineage's facts plus this space's claims."""
         return self.universe.adjacency(container_key, at=at, admit_scoped=admit_scoped)
 
@@ -168,11 +208,19 @@ class SpaceGraph:
         and would make the cost of this whole graph grow with its source count.
         """
         if self._shapes is None:
-            rows = models.DataArray.objects.filter(dataset_id__in=self.universe.dataset_ids, level=0).values_list("dataset_id", "shape") if self.universe.dataset_ids else []
+            rows = (
+                models.DataArray.objects.filter(
+                    dataset_id__in=self.universe.dataset_ids, level=0
+                ).values_list("dataset_id", "shape")
+                if self.universe.dataset_ids
+                else []
+            )
             self._shapes = {dataset_id: shape for dataset_id, shape in rows}
         return self._shapes
 
-    def _anchors_of(self, kind: str, container_id: int) -> list["models.CoordinateAnchor"]:
+    def _anchors_of(
+        self, kind: str, container_id: int
+    ) -> list["models.CoordinateAnchor"]:
         """One container's anchors, from the anchors of every reachable dataset and every table and sparse dataset living here, loaded once and only once anyone asks.
 
         Lazy on purpose: a 1000-timepoint four-channel dataset has thousands of anchor rows,
@@ -182,20 +230,38 @@ class SpaceGraph:
         """
         if self._anchors is None:
             self._anchors = {}
-            table_ids = {resident.pk for resident in self._residents if isinstance(resident, models.TableDataset)}
-            sparse_ids = {resident.pk for resident in self._residents if isinstance(resident, models.SparseDataset)}
-            query = Q(dataset_id__in=self.universe.dataset_ids) if self.universe.dataset_ids else Q(pk__in=[])
+            table_ids = {
+                resident.pk
+                for resident in self._residents
+                if isinstance(resident, models.TableDataset)
+            }
+            sparse_ids = {
+                resident.pk
+                for resident in self._residents
+                if isinstance(resident, models.SparseDataset)
+            }
+            query = (
+                Q(dataset_id__in=self.universe.dataset_ids)
+                if self.universe.dataset_ids
+                else Q(pk__in=[])
+            )
             if table_ids:
                 query |= Q(table_id__in=table_ids)
             if sparse_ids:
                 query |= Q(sparse_id__in=sparse_ids)
             for anchor in models.CoordinateAnchor.objects.filter(query):
                 if anchor.dataset_id is not None:
-                    self._anchors.setdefault(("ArrayDataset", anchor.dataset_id), []).append(anchor)
+                    self._anchors.setdefault(
+                        ("ArrayDataset", anchor.dataset_id), []
+                    ).append(anchor)
                 elif anchor.table_id is not None:
-                    self._anchors.setdefault(("TableDataset", anchor.table_id), []).append(anchor)
+                    self._anchors.setdefault(
+                        ("TableDataset", anchor.table_id), []
+                    ).append(anchor)
                 elif anchor.sparse_id is not None:
-                    self._anchors.setdefault(("SparseDataset", anchor.sparse_id), []).append(anchor)
+                    self._anchors.setdefault(
+                        ("SparseDataset", anchor.sparse_id), []
+                    ).append(anchor)
         return self._anchors.get((kind, container_id), [])
 
     def sources(self) -> list[Source]:
@@ -232,28 +298,49 @@ class SpaceGraph:
                 dataset_id = None
 
             key = (type(resident).__name__, resident.pk)
-            candidate = Source(container=resident, system=system, dataset_id=dataset_id, container_key=self.universe.container_of(system.pk))
+            candidate = Source(
+                container=resident,
+                system=system,
+                dataset_id=dataset_id,
+                container_key=self.universe.container_of(system.pk),
+            )
             # A dataset's own levels and lenses live in its grid too, and reporting each of
             # them as a separate thing in view would return the same pixels several times.
             # The dataset itself is the thing a client asked about; a level or a lens counts
             # only where no dataset of its own is in the set.
-            if isinstance(resident, (models.ArrayLens, models.DataArray)) and ("ArrayDataset", dataset_id) in by_container:
+            if (
+                isinstance(resident, (models.ArrayLens, models.DataArray))
+                and ("ArrayDataset", dataset_id) in by_container
+            ):
                 continue
             by_container[key] = candidate
 
         # Drop the levels and lenses a dataset in the set already speaks for.
         dataset_pks = {pk for kind, pk in by_container if kind == "ArrayDataset"}
         self._sources = sorted(
-            (source for key, source in by_container.items() if not (key[0] in ("ArrayLens", "DataArray") and source.dataset_id in dataset_pks)),
+            (
+                source
+                for key, source in by_container.items()
+                if not (
+                    key[0] in ("ArrayLens", "DataArray")
+                    and source.dataset_id in dataset_pks
+                )
+            ),
             key=lambda source: (type(source.container).__name__, source.container.pk),
         )
         return self._sources
 
-    def path(self, source: Source, *, at: dict[str, int] | None = None) -> list[tuple["models.Transformation", bool]] | None:
+    def path(
+        self, source: Source, *, at: dict[str, int] | None = None
+    ) -> list[tuple["models.Transformation", bool]] | None:
         """The path of edges from a source's system into the space, or None when there is none."""
-        return graph_logic._bfs_path(self.adjacency(source.container_key, at=at), source.system.pk, self.space.pk)
+        return graph_logic._bfs_path(
+            self.adjacency(source.container_key, at=at), source.system.pk, self.space.pk
+        )
 
-    def conditional_path(self, source: Source, *, at: dict[str, int] | None = None) -> list[tuple["models.Transformation", bool]] | None:
+    def conditional_path(
+        self, source: Source, *, at: dict[str, int] | None = None
+    ) -> list[tuple["models.Transformation", bool]] | None:
         """The path a source has only through its selector-scoped edges, if it has one.
 
         Asked exactly when :meth:`path` found nothing. A source registered per channel *is* in
@@ -271,7 +358,9 @@ class SpaceGraph:
             self.space.pk,
         )
 
-    def _forms(self, source: Source, path: list[tuple["models.Transformation", bool]]) -> dict[str, coords_logic.AxedForm] | None:
+    def _forms(
+        self, source: Source, path: list[tuple["models.Transformation", bool]]
+    ) -> dict[str, coords_logic.AxedForm] | None:
         """The composed functionals from a source's frame into the space, or None when there are none."""
         if any(inverted for _, inverted in path):
             return None
@@ -279,7 +368,13 @@ class SpaceGraph:
         source_axes = [axis.name for axis in source.system.axes.all()]
         return coords_logic.compose_forms(steps, source_axes)
 
-    def placement(self, source: Source, region: dict[str, list[float]], *, at: dict[str, int] | None = None) -> Hit | None:
+    def placement(
+        self,
+        source: Source,
+        region: dict[str, list[float]],
+        *,
+        at: dict[str, int] | None = None,
+    ) -> Hit | None:
         """One source's placement in the space, or None when it is not in view.
 
         The states are ordered, and the order is a precedence: a source whose geometry the
@@ -298,27 +393,65 @@ class SpaceGraph:
             conditional = self.conditional_path(source, at=at)
             if conditional is None:
                 return None
-            return Hit(source=source, extent=None, extent_state=enums.ExtentState.CONDITIONAL.value, path=conditional, anchors=[])
+            return Hit(
+                source=source,
+                extent=None,
+                extent_state=enums.ExtentState.CONDITIONAL.value,
+                path=conditional,
+                anchors=[],
+            )
 
         box = _resident_box(source.container, self.shapes())
         if box is None:
-            return Hit(source=source, extent=None, extent_state=enums.ExtentState.UNREADABLE.value, path=path, anchors=[])
+            return Hit(
+                source=source,
+                extent=None,
+                extent_state=enums.ExtentState.UNREADABLE.value,
+                path=path,
+                anchors=[],
+            )
 
         forms = self._forms(source, path)
         if forms is None:
-            return Hit(source=source, extent=None, extent_state=enums.ExtentState.INVERTED.value, path=path, anchors=[])
+            return Hit(
+                source=source,
+                extent=None,
+                extent_state=enums.ExtentState.INVERTED.value,
+                path=path,
+                anchors=[],
+            )
 
         try:
-            extent = coords_logic.bounded_axes(coords_logic.axed_bbox(box[0], box[1], forms))
+            extent = coords_logic.bounded_axes(
+                coords_logic.axed_bbox(box[0], box[1], forms)
+            )
         except coords_logic.NonAffineTransformError:
-            return Hit(source=source, extent=None, extent_state=enums.ExtentState.NON_AFFINE.value, path=path, anchors=[])
+            return Hit(
+                source=source,
+                extent=None,
+                extent_state=enums.ExtentState.NON_AFFINE.value,
+                path=path,
+                anchors=[],
+            )
 
         if not coords_logic.boxes_overlap(extent, region):
             return None
 
-        return Hit(source=source, extent=extent, extent_state=enums.ExtentState.KNOWN.value, path=path, anchors=[])
+        return Hit(
+            source=source,
+            extent=extent,
+            extent_state=enums.ExtentState.KNOWN.value,
+            path=path,
+            anchors=[],
+        )
 
-    def anchors_in(self, source: Source, region: dict[str, list[float]], *, at: dict[str, int] | None = None) -> list["models.CoordinateAnchor"]:
+    def anchors_in(
+        self,
+        source: Source,
+        region: dict[str, list[float]],
+        *,
+        at: dict[str, int] | None = None,
+    ) -> list["models.CoordinateAnchor"]:
         """The source's anchors whose slab overlaps the region.
 
         An anchor is already a slab rather than a point: ``coordinates`` pins some axes to
@@ -347,7 +480,11 @@ class SpaceGraph:
         if not anchors:
             return []
 
-        dataset = source.container if isinstance(source.container, models.ArrayDataset) else None
+        dataset = (
+            source.container
+            if isinstance(source.container, models.ArrayDataset)
+            else None
+        )
         intrinsic = dataset.intrinsic_coordinate_system if dataset is not None else None
         if intrinsic is None:
             return []
@@ -360,7 +497,9 @@ class SpaceGraph:
         # the space, which is a map, so it may not ride a scoped edge the question did not fix.
         # A source whose only route is scoped therefore reports no anchors until `at` is given,
         # which matches its CONDITIONAL extent -- both are the same missing coordinate.
-        path = graph_logic._bfs_path(self.adjacency(source.container_key, at=at), intrinsic.pk, self.space.pk)
+        path = graph_logic._bfs_path(
+            self.adjacency(source.container_key, at=at), intrinsic.pk, self.space.pk
+        )
         if path is None or any(inverted for _, inverted in path):
             return []
 
@@ -376,7 +515,9 @@ class SpaceGraph:
             return []
 
         try:
-            forms = coords_logic.compose_forms([graph_logic._edge_step(edge) for edge, _ in path], axis_names)
+            forms = coords_logic.compose_forms(
+                [graph_logic._edge_step(edge) for edge, _ in path], axis_names
+            )
         except coords_logic.NonAffineTransformError:
             return []
 
@@ -396,52 +537,88 @@ class SpaceGraph:
                     # always real; it used to fall back to a fabricated 0.5.
                     mins.append(-0.5)
                     maxs.append(float(shape[index]) - 0.5)
-            if coords_logic.boxes_overlap(coords_logic.axed_bbox(mins, maxs, forms), region):
+            if coords_logic.boxes_overlap(
+                coords_logic.axed_bbox(mins, maxs, forms), region
+            ):
                 in_view.append(anchor)
         return in_view
 
-    def _value_anchors_in(self, source: Source, region: dict[str, list[float]], *, at: dict[str, int] | None = None) -> list["models.CoordinateAnchor"]:
+    def _value_anchors_in(
+        self,
+        source: Source,
+        region: dict[str, list[float]],
+        *,
+        at: dict[str, int] | None = None,
+    ) -> list["models.CoordinateAnchor"]:
         """A table's or sparse dataset's anchors whose pinned values, pushed into the space, fall in the region."""
         anchors = self._anchors_of(type(source.container).__name__, source.container.pk)
         if not anchors:
             return []
-        path = graph_logic._bfs_path(self.adjacency(source.container_key, at=at), source.system.pk, self.space.pk)
+        path = graph_logic._bfs_path(
+            self.adjacency(source.container_key, at=at), source.system.pk, self.space.pk
+        )
         if path is None or any(inverted for _, inverted in path):
             return []
         axis_names = [axis.name for axis in source.system.axes.all()]
         try:
-            forms = coords_logic.compose_forms([graph_logic._edge_step(edge) for edge, _ in path], axis_names)
+            forms = coords_logic.compose_forms(
+                [graph_logic._edge_step(edge) for edge, _ in path], axis_names
+            )
         except coords_logic.NonAffineTransformError:
             return []
         in_view: list[models.CoordinateAnchor] = []
         for anchor in anchors:
             coordinates = anchor.coordinates or {}
-            mins = [float(coordinates[name]) if name in coordinates else -math.inf for name in axis_names]
-            maxs = [float(coordinates[name]) if name in coordinates else math.inf for name in axis_names]
-            if coords_logic.boxes_overlap(coords_logic.bounded_axes(coords_logic.axed_bbox(mins, maxs, forms)), region):
+            mins = [
+                float(coordinates[name]) if name in coordinates else -math.inf
+                for name in axis_names
+            ]
+            maxs = [
+                float(coordinates[name]) if name in coordinates else math.inf
+                for name in axis_names
+            ]
+            if coords_logic.boxes_overlap(
+                coords_logic.bounded_axes(coords_logic.axed_bbox(mins, maxs, forms)),
+                region,
+            ):
                 in_view.append(anchor)
         return in_view
 
-    def extent_of(self, system: "models.CoordinateSystem", mins: list[float], maxs: list[float]) -> dict[str, list[float]] | None:
+    def extent_of(
+        self, system: "models.CoordinateSystem", mins: list[float], maxs: list[float]
+    ) -> dict[str, list[float]] | None:
         """A box given in one of this space's placeable systems, pushed into the space.
 
         None wherever :meth:`placement` would refuse a number: no unconditional route, a route
         walked against an edge, or a step with no closed form.
         """
-        path = graph_logic._bfs_path(self.adjacency(self.universe.container_of(system.pk)), system.pk, self.space.pk)
+        path = graph_logic._bfs_path(
+            self.adjacency(self.universe.container_of(system.pk)),
+            system.pk,
+            self.space.pk,
+        )
         if path is None or any(inverted for _, inverted in path):
             return None
         try:
-            forms = coords_logic.compose_forms([graph_logic._edge_step(edge) for edge, _ in path], [axis.name for axis in system.axes.all()])
+            forms = coords_logic.compose_forms(
+                [graph_logic._edge_step(edge) for edge, _ in path],
+                [axis.name for axis in system.axes.all()],
+            )
             return coords_logic.bounded_axes(coords_logic.axed_bbox(mins, maxs, forms))
         except coords_logic.NonAffineTransformError:
             return None
 
     def lens_ids(self) -> set[int]:
         """Every lens living in a space placeable here: the candidates `lens_extents` bounds, without bounding them. No query."""
-        return {resident.pk for resident in self._residents if isinstance(resident, models.Lens)}
+        return {
+            resident.pk
+            for resident in self._residents
+            if isinstance(resident, models.Lens)
+        }
 
-    def lens_extents(self, *, skip: Set[int] = frozenset()) -> dict[int, dict[str, list[float]] | None]:
+    def lens_extents(
+        self, *, skip: Set[int] = frozenset()
+    ) -> dict[int, dict[str, list[float]] | None]:
         """Every lens living in a space placeable here, with its own extent in this space.
 
         Per *lens*, which :meth:`sources` deliberately is not: it folds a lens into its dataset
@@ -463,7 +640,9 @@ class SpaceGraph:
                     # No array, or axes that do not describe it: nothing to bound, as in `anchors_in`.
                     extents[resident.pk] = None
                     continue
-                mins, maxs = coords_logic.lens_voxel_box(dataset_shape, names, resident.slices_list)
+                mins, maxs = coords_logic.lens_voxel_box(
+                    dataset_shape, names, resident.slices_list
+                )
             else:
                 # A windowed lens is bounded on the axes it windows and on no other; a whole
                 # one on none, which reads as "nothing bounded", like an array lens with no shape.
@@ -472,7 +651,13 @@ class SpaceGraph:
             extents[resident.pk] = extent or None
         return extents
 
-    def in_view(self, region: dict[str, list[float]], *, with_anchors: bool, at: dict[str, int] | None = None) -> list[Hit]:
+    def in_view(
+        self,
+        region: dict[str, list[float]],
+        *,
+        with_anchors: bool,
+        at: dict[str, int] | None = None,
+    ) -> list[Hit]:
         """Every source whose extent meets the region, each with its in-view anchors.
 
         ``at`` is where the caller is standing, and it does for this query what it does for a
@@ -486,12 +671,20 @@ class SpaceGraph:
             if hit is None:
                 continue
             if with_anchors:
-                hit = Hit(source=hit.source, extent=hit.extent, extent_state=hit.extent_state, path=hit.path, anchors=self.anchors_in(source, region, at=at))
+                hit = Hit(
+                    source=hit.source,
+                    extent=hit.extent,
+                    extent_state=hit.extent_state,
+                    path=hit.path,
+                    anchors=self.anchors_in(source, region, at=at),
+                )
             hits.append(hit)
         return hits
 
 
-def region_from_bounds(space: "models.CoordinateSystem", mins: list[float], maxs: list[float]) -> dict[str, list[float]]:
+def region_from_bounds(
+    space: "models.CoordinateSystem", mins: list[float], maxs: list[float]
+) -> dict[str, list[float]]:
     """A positional region keyed against the space's axes, as a leading prefix.
 
     A region shorter than the system constrains only its leading axes and says nothing about
@@ -500,16 +693,25 @@ def region_from_bounds(space: "models.CoordinateSystem", mins: list[float], maxs
     ``[0, 0]`` and culls away everything off the first plane.
     """
     if len(mins) != len(maxs):
-        raise ValueError(f"A region's `min` and `max` must have the same number of entries, got {len(mins)} and {len(maxs)}")
+        raise ValueError(
+            f"A region's `min` and `max` must have the same number of entries, got {len(mins)} and {len(maxs)}"
+        )
 
     axis_names = [axis.name for axis in space.axes.all()]
     if len(mins) > len(axis_names):
-        raise ValueError(f"A region of {len(mins)} axes was asked of '{space.name}', whose axes are {axis_names}. A region names a leading prefix of the system's axes; it cannot name more than it has.")
+        raise ValueError(
+            f"A region of {len(mins)} axes was asked of '{space.name}', whose axes are {axis_names}. A region names a leading prefix of the system's axes; it cannot name more than it has."
+        )
 
-    return {name: [float(low), float(high)] for name, low, high in zip(axis_names, mins, maxs)}
+    return {
+        name: [float(low), float(high)]
+        for name, low, high in zip(axis_names, mins, maxs)
+    }
 
 
-def _meeting_spaces(system: "models.CoordinateSystem", organization: Organization) -> list[tuple["models.CoordinateSystem", int]]:
+def _meeting_spaces(
+    system: "models.CoordinateSystem", organization: Organization
+) -> list[tuple["models.CoordinateSystem", int]]:
     """Every space a system composes forward into, nearest first, each with its hop count.
 
     The spaces an annotation and a lens can be compared in: both sides push *with* the edges,
@@ -523,7 +725,9 @@ def _meeting_spaces(system: "models.CoordinateSystem", organization: Organizatio
     while frontier:
         depth += 1
         edges = (
-            models.Transformation.objects.filter(input_id__in=frontier, output__isnull=False, organization=organization)
+            models.Transformation.objects.filter(
+                input_id__in=frontier, output__isnull=False, organization=organization
+            )
             .select_related("output")
             .prefetch_related("output__axes")
         )
@@ -531,7 +735,11 @@ def _meeting_spaces(system: "models.CoordinateSystem", organization: Organizatio
         for edge in edges:
             if edge.output_id in seen:
                 continue
-            if not graph_logic.selector_admits(edge, None) or not graph_logic.is_traversable(edge) or not graph_logic.is_condensable(edge):
+            if (
+                not graph_logic.selector_admits(edge, None)
+                or not graph_logic.is_traversable(edge)
+                or not graph_logic.is_condensable(edge)
+            ):
                 continue
             seen.add(edge.output_id)
             spaces.append((edge.output, depth))
@@ -539,7 +747,9 @@ def _meeting_spaces(system: "models.CoordinateSystem", organization: Organizatio
     return spaces
 
 
-def _populated_meeting_spaces(info: "Info", system: "models.CoordinateSystem") -> "Iterator[tuple[models.CoordinateSystem, int, SpaceGraph]]":
+def _populated_meeting_spaces(
+    info: "Info", system: "models.CoordinateSystem"
+) -> "Iterator[tuple[models.CoordinateSystem, int, SpaceGraph]]":
     """The spaces a drawing space composes forward into that can hold a lens, nearest first, each with its hop count and its graph.
 
     What "co-registered with an annotation" is walked over, shared by the two questions that
@@ -550,7 +760,13 @@ def _populated_meeting_spaces(info: "Info", system: "models.CoordinateSystem") -
         # A drawing space nothing is registered into holds no lens but the collection's own,
         # and that is nearly every one of them; asking first saves the whole graph. A window
         # over the collection itself lives there, and is the one lens that makes it worth it.
-        if depth == 0 and not models.Transformation.objects.filter(output=space).exists() and not models.AnnotationLens.objects.filter(coordinate_system=space).exclude(windows=[]).exists():
+        if (
+            depth == 0
+            and not models.Transformation.objects.filter(output=space).exists()
+            and not models.AnnotationLens.objects.filter(coordinate_system=space)
+            .exclude(windows=[])
+            .exists()
+        ):
             continue
         yield space, depth, for_request(info, space)
 
@@ -571,7 +787,11 @@ def lenses_reachable_from(info: "Info", annotation: "models.Annotation") -> set[
     if system is None:
         return set()
     # Asked directly: the walk below skips a drawing space nothing is registered into.
-    reachable: set[int] = set(models.Lens.objects.filter(coordinate_system_id=system.pk).values_list("pk", flat=True))
+    reachable: set[int] = set(
+        models.Lens.objects.filter(coordinate_system_id=system.pk).values_list(
+            "pk", flat=True
+        )
+    )
     for _space, _depth, graph in _populated_meeting_spaces(info, system):
         reachable |= graph.lens_ids()
     return reachable
@@ -601,7 +821,9 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
         return set()
 
     names = [axis.name for axis in system.axes.all()]
-    pins = {name: float(value) for name, value in (annotation.coordinates or {}).items()}
+    pins = {
+        name: float(value) for name, value in (annotation.coordinates or {}).items()
+    }
     # The shape's box in its drawing space: its vertices half a voxel padded on the axes they
     # span, its pins as centres (the overlap test is inclusive, and a cell would touch both of
     # its neighbours), and an axis it says nothing about left open.
@@ -633,7 +855,11 @@ def lenses_overlapping(info: "Info", annotation: "models.Annotation") -> set[int
             # on the row after the shape ends shares a face with it and no voxel. And only
             # on an axis both bound: a lens windowed on `t` alone says nothing about where
             # a rectangle lies in (y, x), and a vacuous conjunction is not an overlap shown.
-            if extent is not None and coords_logic.shares_a_bounded_axis(extent, box) and coords_logic.boxes_overlap(extent, box, closed=False):
+            if (
+                extent is not None
+                and coords_logic.shares_a_bounded_axis(extent, box)
+                and coords_logic.boxes_overlap(extent, box, closed=False)
+            ):
                 overlapping.add(lens_id)
     return overlapping
 

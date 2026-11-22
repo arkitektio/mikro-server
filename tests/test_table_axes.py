@@ -33,21 +33,44 @@ mutation Create($input: CreateTableDatasetInput!) {
 """
 
 _LOCALIZATIONS = [
-    {"name": "y", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE", "unit": "nanometer"},
-    {"name": "x", "dtype": "DOUBLE", "role": "COORDINATE", "axisType": "SPACE", "unit": "nanometer"},
+    {
+        "name": "y",
+        "dtype": "DOUBLE",
+        "role": "COORDINATE",
+        "axisType": "SPACE",
+        "unit": "nanometer",
+    },
+    {
+        "name": "x",
+        "dtype": "DOUBLE",
+        "role": "COORDINATE",
+        "axisType": "SPACE",
+        "unit": "nanometer",
+    },
     {"name": "photons", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
 ]
 
 
-async def _parquet(ctx: HttpContext, key: str, columns: list[dict]) -> models.ParquetStore:
+async def _parquet(
+    ctx: HttpContext, key: str, columns: list[dict]
+) -> models.ParquetStore:
     """A finished store carrying exactly the columns these tests declare over."""
     return await sync_to_async(models.ParquetStore.objects.create)(
-        path=f"s3://parquet/{key}", bucket="parquet", key=key, organization=ctx.request.organization, populated=True,
-        columns=[{"name": name, "type": dtype, "nullable": True} for name, dtype in seed.split_declaration(columns)[0]],
+        path=f"s3://parquet/{key}",
+        bucket="parquet",
+        key=key,
+        organization=ctx.request.organization,
+        populated=True,
+        columns=[
+            {"name": name, "type": dtype, "nullable": True}
+            for name, dtype in seed.split_declaration(columns)[0]
+        ],
     )
 
 
-async def _create(ctx: HttpContext, name: str, columns: list[dict], declared: list[dict] | None = None):
+async def _create(
+    ctx: HttpContext, name: str, columns: list[dict], declared: list[dict] | None = None
+):
     """Create over a store matching ``columns``; ``declared`` overrides the wire columns."""
     store = await _parquet(ctx, name.replace(" ", "-"), columns)
     payload = {
@@ -55,7 +78,9 @@ async def _create(ctx: HttpContext, name: str, columns: list[dict], declared: li
         "data": str(store.pk),
         "columns": seed.flat_columns(columns) if declared is None else declared,
     }
-    return await schema.execute(CREATE, context_value=ctx, variable_values={"input": payload})
+    return await schema.execute(
+        CREATE, context_value=ctx, variable_values={"input": payload}
+    )
 
 
 # --- the space is the axis-typed columns, in file order ----------------------
@@ -76,13 +101,17 @@ async def test_the_axis_order_is_the_column_order(authenticated_context: HttpCon
     assert not result.errors, result.errors
     table = result.data["createTableDataset"]
 
-    assert [axis["name"] for axis in table["coordinateSystem"]["axes"]] == ["y", "x"], "the axis-typed columns, in file order"
+    assert [axis["name"] for axis in table["coordinateSystem"]["axes"]] == ["y", "x"], (
+        "the axis-typed columns, in file order"
+    )
     assert [column["name"] for column in table["columns"]] == ["y", "x", "photons"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_column_without_axis_type_is_an_ordinary_column(authenticated_context: HttpContext):
+async def test_a_column_without_axis_type_is_an_ordinary_column(
+    authenticated_context: HttpContext,
+):
     """`axisType` is the ONLY thing that makes a column an axis.
 
     A column without one is simply a column, inferred from the file as an ATTRIBUTE; there is
@@ -91,7 +120,9 @@ async def test_a_column_without_axis_type_is_an_ordinary_column(authenticated_co
     declared = seed.flat_columns(_LOCALIZATIONS)
     # Only `y` stays an axis; `x` becomes a plain declared column.
     declared[1] = {"name": "x", "dtype": "DOUBLE"}
-    result = await _create(authenticated_context, "molecules", _LOCALIZATIONS, declared=declared)
+    result = await _create(
+        authenticated_context, "molecules", _LOCALIZATIONS, declared=declared
+    )
 
     assert not result.errors, result.errors
     table = result.data["createTableDataset"]
@@ -111,7 +142,9 @@ async def test_axis_type_beside_a_role_is_refused(authenticated_context: HttpCon
     """
     declared = seed.flat_columns(_LOCALIZATIONS)
     declared[0]["role"] = "ID"
-    result = await _create(authenticated_context, "molecules", _LOCALIZATIONS, declared=declared)
+    result = await _create(
+        authenticated_context, "molecules", _LOCALIZATIONS, declared=declared
+    )
 
     assert result.errors
     assert "declares both `axisType` and `role`" in str(result.errors[0])
@@ -122,7 +155,9 @@ async def test_axis_type_beside_a_role_is_refused(authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(authenticated_context: HttpContext):
+async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(
+    authenticated_context: HttpContext,
+):
     """Item 7's product space, on the flat declaration.
 
     An INDEX axis' values are already ids, so naming the table it enumerates is not a second
@@ -133,7 +168,12 @@ async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(authen
         authenticated_context,
         "cells",
         [
-            {"name": "cell_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
+            {
+                "name": "cell_id",
+                "dtype": "BIGINT",
+                "role": "COORDINATE",
+                "axisType": "INDEX",
+            },
             {"name": "area", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
         ],
     )
@@ -141,8 +181,18 @@ async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(authen
     cell_table = cells.data["createTableDataset"]["id"]
 
     contacts_columns = [
-        {"name": "nucleus_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
-        {"name": "cell_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
+        {
+            "name": "nucleus_id",
+            "dtype": "BIGINT",
+            "role": "COORDINATE",
+            "axisType": "INDEX",
+        },
+        {
+            "name": "cell_id",
+            "dtype": "BIGINT",
+            "role": "COORDINATE",
+            "axisType": "INDEX",
+        },
         {"name": "overlap", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
     ]
     contacts = await _create(
@@ -156,8 +206,13 @@ async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(authen
     )
     assert not contacts.errors, contacts.errors
 
-    references = {c["name"]: c["references"] for c in contacts.data["createTableDataset"]["columns"]}
-    assert references["cell_id"] == {"id": cell_table}, "it lands on the column, as it always did"
+    references = {
+        c["name"]: c["references"]
+        for c in contacts.data["createTableDataset"]["columns"]
+    }
+    assert references["cell_id"] == {"id": cell_table}, (
+        "it lands on the column, as it always did"
+    )
     assert references["nucleus_id"] is None
 
 
@@ -174,7 +229,12 @@ async def test_a_data_column_may_reference_a_table(authenticated_context: HttpCo
         authenticated_context,
         "tracks",
         [
-            {"name": "track_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
+            {
+                "name": "track_id",
+                "dtype": "BIGINT",
+                "role": "COORDINATE",
+                "axisType": "INDEX",
+            },
             {"name": "speed", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
         ],
     )
@@ -182,7 +242,12 @@ async def test_a_data_column_may_reference_a_table(authenticated_context: HttpCo
     track_table = tracks.data["createTableDataset"]["id"]
 
     columns = [
-        {"name": "object", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
+        {
+            "name": "object",
+            "dtype": "BIGINT",
+            "role": "COORDINATE",
+            "axisType": "INDEX",
+        },
         {"name": "track", "dtype": "BIGINT", "role": "ID"},
         {"name": "area", "dtype": "DOUBLE", "role": "ATTRIBUTE"},
     ]
@@ -190,19 +255,25 @@ async def test_a_data_column_may_reference_a_table(authenticated_context: HttpCo
         authenticated_context,
         "objects",
         columns,
-        declared=seed.flat_columns(columns, identified_by={"track": [{"kind": "TABLE", "table": track_table}]}),
+        declared=seed.flat_columns(
+            columns, identified_by={"track": [{"kind": "TABLE", "table": track_table}]}
+        ),
     )
     assert not result.errors, result.errors
 
     table = result.data["createTableDataset"]
     references = {c["name"]: c["references"] for c in table["columns"]}
     assert references["track"] == {"id": track_table}, "the FK, on a plain data column"
-    assert [axis["name"] for axis in table["coordinateSystem"]["axes"]] == ["object"], "referencing did not make it an axis"
+    assert [axis["name"] for axis in table["coordinateSystem"]["axes"]] == ["object"], (
+        "referencing did not make it an axis"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_keying_source_on_a_data_column_is_refused(authenticated_context: HttpContext):
+async def test_a_keying_source_on_a_data_column_is_refused(
+    authenticated_context: HttpContext,
+):
     """A FIELD edge produces an axis, so it cannot land on a column that is not one.
 
     Under the two-list shape this was unstateable (identifications lived on axes); flat, it
@@ -210,14 +281,22 @@ async def test_a_keying_source_on_a_data_column_is_refused(authenticated_context
     """
     mask = await seed.create_array_dataset(authenticated_context, "mask")
     columns = [
-        {"name": "object", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
+        {
+            "name": "object",
+            "dtype": "BIGINT",
+            "role": "COORDINATE",
+            "axisType": "INDEX",
+        },
         {"name": "other_id", "dtype": "BIGINT", "role": "ID"},
     ]
     result = await _create(
         authenticated_context,
         "objects",
         columns,
-        declared=seed.flat_columns(columns, identified_by={"other_id": [{"kind": "DATASET", "dataset": str(mask.pk)}]}),
+        declared=seed.flat_columns(
+            columns,
+            identified_by={"other_id": [{"kind": "DATASET", "dataset": str(mask.pk)}]},
+        ),
     )
 
     assert result.errors
@@ -228,7 +307,9 @@ async def test_a_keying_source_on_a_data_column_is_refused(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_identification_on_a_space_axis_is_refused(authenticated_context: HttpContext):
+async def test_a_table_identification_on_a_space_axis_is_refused(
+    authenticated_context: HttpContext,
+):
     """A position in nanometres and a row id are different things.
 
     Under the two-list shape this rule guarded only the identification door while
@@ -238,7 +319,14 @@ async def test_a_table_identification_on_a_space_axis_is_refused(authenticated_c
     cells = await _create(
         authenticated_context,
         "cells",
-        [{"name": "cell_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"}],
+        [
+            {
+                "name": "cell_id",
+                "dtype": "BIGINT",
+                "role": "COORDINATE",
+                "axisType": "INDEX",
+            }
+        ],
     )
     assert not cells.errors, cells.errors
 
@@ -248,7 +336,11 @@ async def test_a_table_identification_on_a_space_axis_is_refused(authenticated_c
         _LOCALIZATIONS,
         declared=seed.flat_columns(
             _LOCALIZATIONS,
-            identified_by={"x": [{"kind": "TABLE", "table": cells.data["createTableDataset"]["id"]}]},
+            identified_by={
+                "x": [
+                    {"kind": "TABLE", "table": cells.data["createTableDataset"]["id"]}
+                ]
+            },
         ),
     )
 
@@ -256,12 +348,16 @@ async def test_a_table_identification_on_a_space_axis_is_refused(authenticated_c
     message = str(result.errors[0])
     assert "SPACE axis" in message
     assert "positions rather than ids" in message
-    assert not await sync_to_async(models.TableDataset.objects.filter(name="molecules").exists)()
+    assert not await sync_to_async(
+        models.TableDataset.objects.filter(name="molecules").exists
+    )()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_axis_identified_by_two_tables_is_refused(authenticated_context: HttpContext):
+async def test_an_axis_identified_by_two_tables_is_refused(
+    authenticated_context: HttpContext,
+):
     """Fan-in is only meaningful for the kinds that author an edge.
 
     Two masks keying one axis are two edges, each standing on its own. Two *tables* would be
@@ -269,14 +365,39 @@ async def test_an_axis_identified_by_two_tables_is_refused(authenticated_context
     `references`, so only one of them could even be recorded.
     """
     first = await _create(
-        authenticated_context, "cells", [{"name": "cell_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"}]
+        authenticated_context,
+        "cells",
+        [
+            {
+                "name": "cell_id",
+                "dtype": "BIGINT",
+                "role": "COORDINATE",
+                "axisType": "INDEX",
+            }
+        ],
     )
     second = await _create(
-        authenticated_context, "nuclei", [{"name": "nucleus_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"}]
+        authenticated_context,
+        "nuclei",
+        [
+            {
+                "name": "nucleus_id",
+                "dtype": "BIGINT",
+                "role": "COORDINATE",
+                "axisType": "INDEX",
+            }
+        ],
     )
     assert not first.errors and not second.errors
 
-    columns = [{"name": "thing_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"}]
+    columns = [
+        {
+            "name": "thing_id",
+            "dtype": "BIGINT",
+            "role": "COORDINATE",
+            "axisType": "INDEX",
+        }
+    ]
     result = await _create(
         authenticated_context,
         "contacts",
@@ -302,7 +423,9 @@ async def test_an_axis_identified_by_two_tables_is_refused(authenticated_context
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_axis_with_no_identification_is_ordinary(authenticated_context: HttpContext):
+async def test_an_axis_with_no_identification_is_ordinary(
+    authenticated_context: HttpContext,
+):
     """`identifiedBy` defaults to empty, and that is the common case.
 
     A localization table's `x` axis is identified by nothing: its values are positions, and a

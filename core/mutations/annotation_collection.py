@@ -8,22 +8,27 @@ scene -- goes through ``createAnnotation``, which mints the scene's collection
 on first use.
 """
 
+import kante
+import strawberry
 from django.db import transaction
 from kante.types import Info
-import strawberry
 from pydantic import BaseModel, Field
 
-import kante
 from core import models, types
 from core.creation import CreationContext
 from core.input_unions import prose_errors
+from core.inputs.coords import (
+    AxisInput,
+    AxisInputModel,
+    DerivedFromInput,
+    DerivedFromSpec,
+)
 from core.inputs.file_link import SourceFileInput, SourceFileInputModel
-from core.inputs.coords import AxisInput, AxisInputModel, DerivedFromInput, DerivedFromSpec
 from core.logic import coordinate_system as coordinate_system_logic
+from core.logic import deletion as deletion_logic
 from core.logic import file_link as file_link_logic
 from core.logic import folder as folder_logic
 from core.logic import graph as graph_logic
-from core.logic import deletion as deletion_logic
 from core.mutations._generic import make_delete, self_owner
 
 
@@ -36,7 +41,6 @@ class CreateAnnotationCollectionInputModel(BaseModel):
     source_files: list[SourceFileInputModel] | None = None
 
 
-
 @prose_errors
 @kante.pydantic_input(
     CreateAnnotationCollectionInputModel,
@@ -46,8 +50,12 @@ class CreateAnnotationCollectionInput:
     """Input for creating an annotation collection."""
 
     name: str = strawberry.field(description="The name of the annotation collection")
-    description: str | None = strawberry.field(default=None, description="A free-form description of the collection")
-    axes: list[AxisInput] = strawberry.field(description="The axes of the collection's own coordinate system, in order. Required: the collection owns its space, and a derivation no longer implies an identity to copy axes across")
+    description: str | None = strawberry.field(
+        default=None, description="A free-form description of the collection"
+    )
+    axes: list[AxisInput] = strawberry.field(
+        description="The axes of the collection's own coordinate system, in order. Required: the collection owns its space, and a derivation no longer implies an identity to copy axes across"
+    )
     folder: strawberry.ID | None = strawberry.field(
         default=None,
         description="The folder to file this annotation collection in. Organisational only -- distinct from `scene`, and it says nothing about the space the shapes are drawn in. Defaults to the user's default folder",
@@ -62,7 +70,9 @@ class CreateAnnotationCollectionInput:
     )
 
 
-def create_annotation_collection(info: Info, input: CreateAnnotationCollectionInput) -> types.AnnotationCollection:
+def create_annotation_collection(
+    info: Info, input: CreateAnnotationCollectionInput
+) -> types.AnnotationCollection:
     """Create an annotation collection, in a coordinate system of its own.
 
     The same shape as ``create_mesh_collection``: the collection owns its system, and an
@@ -83,7 +93,9 @@ def create_annotation_collection(info: Info, input: CreateAnnotationCollectionIn
         collection = models.AnnotationCollection.objects.create(
             name=model.name,
             description=model.description,
-            folder=folder_logic.folder_for_new_container(info, ctx, model.folder, model.derived_from),
+            folder=folder_logic.folder_for_new_container(
+                info, ctx, model.folder, model.derived_from
+            ),
             creator=ctx.user,
             organization=ctx.organization,
             **ctx.provenance_kwargs(),
@@ -99,8 +111,16 @@ def create_annotation_collection(info: Info, input: CreateAnnotationCollectionIn
         )
 
         # Optional on purpose: a collection in some absolute space is drawn over nothing.
-        coordinate_system_logic.write_derivation_edges(info, name=collection.name, own_system=system, derived_from=model.derived_from or [], ctx=ctx)
-        file_link_logic.write_file_links(info, container=collection, source_files=model.source_files or [], ctx=ctx)
+        coordinate_system_logic.write_derivation_edges(
+            info,
+            name=collection.name,
+            own_system=system,
+            derived_from=model.derived_from or [],
+            ctx=ctx,
+        )
+        file_link_logic.write_file_links(
+            info, container=collection, source_files=model.source_files or [], ctx=ctx
+        )
         # Once the derivation exists, because it is what decides the answer: a composable one
         # means the boxes are stored in the source's grid, and this is where the collection
         # says so. Inside the transaction with it -- a frame naming an edge that rolled back
@@ -117,12 +137,24 @@ class DeleteAnnotationCollectionInputModel(BaseModel):
     cascade: bool = Field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
 
 
-@kante.pydantic_input(DeleteAnnotationCollectionInputModel, description="Input for deleting an annotation collection by ID")
+@kante.pydantic_input(
+    DeleteAnnotationCollectionInputModel,
+    description="Input for deleting an annotation collection by ID",
+)
 class DeleteAnnotationCollectionInput:
     """Input for deleting an annotation collection by ID."""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the annotation collection to delete. Its coordinate system, its annotations and its layers cascade with it")
-    cascade: bool = strawberry.field(default=False, description=deletion_logic.CASCADE_DESCRIPTION)
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the annotation collection to delete. Its coordinate system, its annotations and its layers cascade with it"
+    )
+    cascade: bool = strawberry.field(
+        default=False, description=deletion_logic.CASCADE_DESCRIPTION
+    )
 
 
-delete_annotation_collection = make_delete(models.AnnotationCollection, DeleteAnnotationCollectionInput, owner=self_owner, lineage_kind="annotationcollection")
+delete_annotation_collection = make_delete(
+    models.AnnotationCollection,
+    DeleteAnnotationCollectionInput,
+    owner=self_owner,
+    lineage_kind="annotationcollection",
+)

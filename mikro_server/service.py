@@ -15,13 +15,13 @@ That is all a service is. What can be *done* in this process is not declared her
 agent's to say (``mikro_server.hook_agent``), a different thing with its own configuration.
 """
 
+from arkitekt_datalayer import models as datalayer_models
+from arkitekt_service.collaborations import items as collaboration_items
+from arkitekt_service.service import Service, organization_of
+from django.db.models.signals import post_save
 
 from chart import models as chart_models
 from chart.logic import chart as chart_logic
-from grid import models as grid_models
-from grid.logic import grid as grid_logic
-from metric import logic as metric_logic
-from metric import models as metric_models
 from core import models
 from core.descriptors import (
     annotation_descriptors,
@@ -31,23 +31,26 @@ from core.descriptors import (
     dataset_descriptors,
     file_descriptors,
     file_link_descriptors,
+    fixture_descriptors,
     lens_descriptors,
     mesh_descriptors,
     network_descriptors,
-    fixture_descriptors,
     scene_descriptors,
     sparse_descriptors,
     table_descriptors,
     transformation_descriptors,
 )
-from arkitekt_service.service import Service, organization_of
-from arkitekt_service.collaborations import items as collaboration_items
-from arkitekt_datalayer import models as datalayer_models
-from django.db.models.signals import post_save
-
+from grid import models as grid_models
+from grid.logic import grid as grid_logic
+from metric import logic as metric_logic
+from metric import models as metric_models
 from mikro_server.contract import contract
 
-service = Service("mikro", hosts=contract.description.hosts, description="Microscopy data: datasets, their coordinate graph and files.")
+service = Service(
+    "mikro",
+    hosts=contract.description.hosts,
+    description="Microscopy data: datasets, their coordinate graph and files.",
+)
 
 
 # --- Structures: what mikro hosts -----------------------------------------------------
@@ -57,21 +60,44 @@ service = Service("mikro", hosts=contract.description.hosts, description="Micros
 # annotations) is in a collaboration with it by itself. These name the rest: what it points at to render.
 
 #: The field by which each lens kind names the container it selects from.
-_CONTAINERS = ("dataset", "table_dataset", "sparse_dataset", "mesh_collection", "network_collection", "annotation_collection", "fixture")
+_CONTAINERS = (
+    "dataset",
+    "table_dataset",
+    "sparse_dataset",
+    "mesh_collection",
+    "network_collection",
+    "annotation_collection",
+    "fixture",
+)
 
 
 def _container_of(lens: models.Lens) -> object:
     """The container a lens selects from: the lens's whole, and what puts it in a collaboration."""
     real = lens.get_real_instance() if hasattr(lens, "get_real_instance") else lens
-    return next((getattr(real, name) for name in _CONTAINERS if getattr(real, name, None) is not None), real)
+    return next(
+        (
+            getattr(real, name)
+            for name in _CONTAINERS
+            if getattr(real, name, None) is not None
+        ),
+        real,
+    )
 
 
 def _scene_needs(scene: models.Scene) -> list[object]:
     """A scene's world, the container behind each layer's lenses, its snapshots' images and its drawing surface."""
     needed: list[object] = [scene.world]
-    for layer in scene.layers.select_related("lens", "red_lens", "green_lens", "blue_lens"):
-        needed.extend(_container_of(lens) for lens in (layer.lens, layer.red_lens, layer.green_lens, layer.blue_lens) if lens is not None)
-    needed.extend(snapshot.store for snapshot in scene.snapshots.select_related("store"))
+    for layer in scene.layers.select_related(
+        "lens", "red_lens", "green_lens", "blue_lens"
+    ):
+        needed.extend(
+            _container_of(lens)
+            for lens in (layer.lens, layer.red_lens, layer.green_lens, layer.blue_lens)
+            if lens is not None
+        )
+    needed.extend(
+        snapshot.store for snapshot in scene.snapshots.select_related("store")
+    )
     needed.extend(models.AnnotationCollection.objects.filter(scene=scene))
     return needed
 
@@ -79,12 +105,19 @@ def _scene_needs(scene: models.Scene) -> list[object]:
 def _dataset_needs(dataset: models.ArrayDataset) -> list[object]:
     """A dataset's grid, and each array's store and collaboration."""
     arrays = dataset.data_arrays.select_related("store", "coordinate_system")
-    return [dataset.coordinate_system, *(array.store for array in arrays), *(array.coordinate_system for array in arrays)]
+    return [
+        dataset.coordinate_system,
+        *(array.store for array in arrays),
+        *(array.coordinate_system for array in arrays),
+    ]
 
 
 def _stored_needs(container: object) -> list[object]:
     """A table's, a mesh's or a network's store, and the collaboration it is drawn in."""
-    return [getattr(container, "store", None), getattr(container, "coordinate_system", None)]
+    return [
+        getattr(container, "store", None),
+        getattr(container, "coordinate_system", None),
+    ]
 
 
 def _collection_needs(collection: models.AnnotationCollection) -> list[object]:
@@ -92,17 +125,38 @@ def _collection_needs(collection: models.AnnotationCollection) -> list[object]:
     return [collection.coordinate_system, getattr(collection, "bbox_system", None)]
 
 
-arraydataset = service.structure(models.ArrayDataset, "@mikro/arraydataset", describe=dataset_descriptors, depends=_dataset_needs)
+arraydataset = service.structure(
+    models.ArrayDataset,
+    "@mikro/arraydataset",
+    describe=dataset_descriptors,
+    depends=_dataset_needs,
+)
 # One structure per lens kind, so a port typed on pixels is never handed rows. Each kind
 # describes itself in its container's vocabulary, over what it selects.
-arraylens = service.structure(models.ArrayLens, "@mikro/arraylens", describe=lens_descriptors)
-tablelens = service.structure(models.TableLens, "@mikro/tablelens", describe=lens_descriptors)
-sparselens = service.structure(models.SparseLens, "@mikro/sparselens", describe=lens_descriptors)
-meshlens = service.structure(models.MeshLens, "@mikro/meshlens", describe=lens_descriptors)
-networklens = service.structure(models.NetworkLens, "@mikro/networklens", describe=lens_descriptors)
-annotationlens = service.structure(models.AnnotationLens, "@mikro/annotationlens", describe=lens_descriptors)
-fixturelens = service.structure(models.FixtureLens, "@mikro/fixturelens", describe=lens_descriptors)
-scene = service.structure(models.Scene, "@mikro/scene", describe=scene_descriptors, depends=_scene_needs)
+arraylens = service.structure(
+    models.ArrayLens, "@mikro/arraylens", describe=lens_descriptors
+)
+tablelens = service.structure(
+    models.TableLens, "@mikro/tablelens", describe=lens_descriptors
+)
+sparselens = service.structure(
+    models.SparseLens, "@mikro/sparselens", describe=lens_descriptors
+)
+meshlens = service.structure(
+    models.MeshLens, "@mikro/meshlens", describe=lens_descriptors
+)
+networklens = service.structure(
+    models.NetworkLens, "@mikro/networklens", describe=lens_descriptors
+)
+annotationlens = service.structure(
+    models.AnnotationLens, "@mikro/annotationlens", describe=lens_descriptors
+)
+fixturelens = service.structure(
+    models.FixtureLens, "@mikro/fixturelens", describe=lens_descriptors
+)
+scene = service.structure(
+    models.Scene, "@mikro/scene", describe=scene_descriptors, depends=_scene_needs
+)
 
 
 def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
@@ -113,34 +167,85 @@ def _chart_descriptors(chart: chart_models.Chart) -> dict[str, str]:
     return {"@mikro/axis_type": str(axis.type), "@mikro/axis_unit": str(axis.unit)}
 
 
-chart = service.structure(chart_models.Chart, "@mikro/chart", describe=_chart_descriptors)
+chart = service.structure(
+    chart_models.Chart, "@mikro/chart", describe=_chart_descriptors
+)
 
 
 def _grid_descriptors(grid: grid_models.Grid) -> dict[str, str]:
     """A grid's descriptors: what its rows and columns enumerate."""
     axes = grid_logic.grid_axes(grid.world)
-    return {"@mikro/row_axis_type": str(axes[0].type), "@mikro/column_axis_type": str(axes[1].type) if len(axes) > 1 else "None"}
+    return {
+        "@mikro/row_axis_type": str(axes[0].type),
+        "@mikro/column_axis_type": str(axes[1].type) if len(axes) > 1 else "None",
+    }
 
 
 grid = service.structure(grid_models.Grid, "@mikro/grid", describe=_grid_descriptors)
 scenesnapshot = service.structure(models.SceneSnapshot, "@mikro/scenesnapshot")
-tabledataset = service.structure(models.TableDataset, "@mikro/tabledataset", describe=table_descriptors, depends=_stored_needs)
-meshcollection = service.structure(models.MeshCollection, "@mikro/meshcollection", describe=mesh_descriptors, depends=_stored_needs)
-networkcollection = service.structure(models.NetworkCollection, "@mikro/networkcollection", describe=network_descriptors, depends=_stored_needs)
-fixture = service.structure(models.Fixture, "@mikro/fixture", describe=fixture_descriptors, depends=_stored_needs)
+tabledataset = service.structure(
+    models.TableDataset,
+    "@mikro/tabledataset",
+    describe=table_descriptors,
+    depends=_stored_needs,
+)
+meshcollection = service.structure(
+    models.MeshCollection,
+    "@mikro/meshcollection",
+    describe=mesh_descriptors,
+    depends=_stored_needs,
+)
+networkcollection = service.structure(
+    models.NetworkCollection,
+    "@mikro/networkcollection",
+    describe=network_descriptors,
+    depends=_stored_needs,
+)
+fixture = service.structure(
+    models.Fixture,
+    "@mikro/fixture",
+    describe=fixture_descriptors,
+    depends=_stored_needs,
+)
 file = service.structure(models.File, "@mikro/file", describe=file_descriptors)
 folder = service.structure(models.Folder, "@mikro/folder")
-annotationcollection = service.structure(models.AnnotationCollection, "@mikro/annotationcollection", describe=annotation_descriptors, depends=_collection_needs)
-annotation = service.structure(models.Annotation, "@mikro/annotation", describe=annotation_shape_descriptors)
+annotationcollection = service.structure(
+    models.AnnotationCollection,
+    "@mikro/annotationcollection",
+    describe=annotation_descriptors,
+    depends=_collection_needs,
+)
+annotation = service.structure(
+    models.Annotation, "@mikro/annotation", describe=annotation_shape_descriptors
+)
 animation = service.structure(models.Animation, "@mikro/animation")
-sparsedataset = service.structure(models.SparseDataset, "@mikro/sparsedataset", describe=sparse_descriptors, depends=_stored_needs)
-metric = service.structure(metric_models.Metric, "@mikro/metric", describe=metric_logic.describe)
+sparsedataset = service.structure(
+    models.SparseDataset,
+    "@mikro/sparsedataset",
+    describe=sparse_descriptors,
+    depends=_stored_needs,
+)
+metric = service.structure(
+    metric_models.Metric, "@mikro/metric", describe=metric_logic.describe
+)
 # The coordinate graph, the links and schemas beside the data, and the stores under it. Per
 # concrete store kind, for the reason a lens is: `post_save` never fires for the polymorphic base.
-coordinatesystem = service.structure(models.CoordinateSystem, "@mikro/coordinatesystem", describe=coordinate_system_descriptors)
-transformation = service.structure(models.Transformation, "@mikro/transformation", describe=transformation_descriptors)
-coordinateanchor = service.structure(models.CoordinateAnchor, "@mikro/coordinateanchor", describe=coordinate_anchor_descriptors)
-filelink = service.structure(models.FileLink, "@mikro/filelink", describe=file_link_descriptors)
+coordinatesystem = service.structure(
+    models.CoordinateSystem,
+    "@mikro/coordinatesystem",
+    describe=coordinate_system_descriptors,
+)
+transformation = service.structure(
+    models.Transformation, "@mikro/transformation", describe=transformation_descriptors
+)
+coordinateanchor = service.structure(
+    models.CoordinateAnchor,
+    "@mikro/coordinateanchor",
+    describe=coordinate_anchor_descriptors,
+)
+filelink = service.structure(
+    models.FileLink, "@mikro/filelink", describe=file_link_descriptors
+)
 metaschema = service.structure(models.MetaSchema, "@mikro/metaschema")
 bigfilestore = service.structure(datalayer_models.BigFileStore, "@mikro/bigfilestore")
 mediastore = service.structure(datalayer_models.MediaStore, "@mikro/mediastore")
@@ -148,7 +253,9 @@ zarrstore = service.structure(datalayer_models.ZarrStore, "@mikro/zarrstore")
 parquetstore = service.structure(datalayer_models.ParquetStore, "@mikro/parquetstore")
 fabriksstore = service.structure(datalayer_models.FabriksStore, "@mikro/fabriksstore")
 kulissestore = service.structure(datalayer_models.KulisseStore, "@mikro/kulissestore")
-konnektionstore = service.structure(datalayer_models.KonnektionStore, "@mikro/konnektionstore")
+konnektionstore = service.structure(
+    datalayer_models.KonnektionStore, "@mikro/konnektionstore"
+)
 sparsestore = service.structure(datalayer_models.SparseStore, "@mikro/sparsestore")
 
 
@@ -179,7 +286,9 @@ service.model_signal(file, organization=org)
 service.model_signal(folder, organization=org)
 service.model_signal(annotationcollection, organization=org)
 # A shape carries no organization of its own: it is its collection's.
-service.model_signal(annotation, organization=organization_of("collection.organization"))
+service.model_signal(
+    annotation, organization=organization_of("collection.organization")
+)
 service.model_signal(animation, organization=org)
 service.model_signal(sparsedataset, organization=org)
 # A metric recorded on its own; a batch (`createMetrics`) is a bulk insert and sends none -- the
@@ -209,10 +318,14 @@ service.not_part_of(grid_models.GridLayer, "lens")
 service.not_part_of(models.Transformation, "output")
 
 
-def _layer_saved(sender: object, instance: models.Layer, raw: bool = False, **_: object) -> None:
+def _layer_saved(
+    sender: object, instance: models.Layer, raw: bool = False, **_: object
+) -> None:
     """A layer added to (or changed in) a scene in a collaboration brings what it draws into that collaboration."""
     if not raw:
         collaboration_items.refresh(instance.scene)
 
 
-post_save.connect(_layer_saved, sender=models.Layer, dispatch_uid="mikro-collaborations-layer")
+post_save.connect(
+    _layer_saved, sender=models.Layer, dispatch_uid="mikro-collaborations-layer"
+)

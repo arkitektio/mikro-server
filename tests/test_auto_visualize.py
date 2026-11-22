@@ -32,7 +32,9 @@ mutation Auto($input: AutoVisualizeInput!) {
 
 CREATE_SYSTEM = "mutation M($input: CreateCoordinateSystemInput!) { createCoordinateSystem(input: $input) { id } }"
 REGISTER = "mutation R($input: CreateTransformationInput!) { createTransformation(input: $input) { id } }"
-CREATE_SCENE = "mutation S($input: CreateSceneInput!) { createScene(input: $input) { id } }"
+CREATE_SCENE = (
+    "mutation S($input: CreateSceneInput!) { createScene(input: $input) { id } }"
+)
 
 VISUALIZATIONS = """
 query Space($id: ID!) {
@@ -60,41 +62,77 @@ def _fresh(ctx: HttpContext) -> HttpContext:
         _organization=ctx.request._organization,
     )
     request.set_membership(ctx.request._membership)  # type: ignore[arg-type]
-    return HttpContext(request=request, response=TemporalResponse(), headers=ctx.headers, type="http")
+    return HttpContext(
+        request=request, response=TemporalResponse(), headers=ctx.headers, type="http"
+    )
 
 
-async def _run(ctx: HttpContext, document: str, input: dict | None = None, **variables: object):
+async def _run(
+    ctx: HttpContext, document: str, input: dict | None = None, **variables: object
+):
     if input is not None:
         variables["input"] = input
-    return await schema.execute(document, context_value=_fresh(ctx), variable_values=variables or None)
+    return await schema.execute(
+        document, context_value=_fresh(ctx), variable_values=variables or None
+    )
 
 
-async def _ok(ctx: HttpContext, document: str, input: dict | None = None, **variables: object) -> dict:
+async def _ok(
+    ctx: HttpContext, document: str, input: dict | None = None, **variables: object
+) -> dict:
     result = await _run(ctx, document, input, **variables)
     assert not result.errors, result.errors
     return result.data
 
 
 async def _space(ctx: HttpContext, name: str, axes: list[dict]) -> str:
-    return (await _ok(ctx, CREATE_SYSTEM, {"name": name, "axes": axes}))["createCoordinateSystem"]["id"]
+    return (await _ok(ctx, CREATE_SYSTEM, {"name": name, "axes": axes}))[
+        "createCoordinateSystem"
+    ]["id"]
 
 
 async def _auto(ctx: HttpContext, system: object, name: str | None = None) -> dict:
-    return (await _ok(ctx, AUTO, {"coordinateSystem": str(system), "name": name}))["autoVisualize"]
+    return (await _ok(ctx, AUTO, {"coordinateSystem": str(system), "name": name}))[
+        "autoVisualize"
+    ]
 
 
 async def _compositions() -> tuple[int, int]:
-    return await sync_to_async(models.Scene.objects.count)(), await sync_to_async(chart_models.Chart.objects.count)()
+    return await sync_to_async(models.Scene.objects.count)(), await sync_to_async(
+        chart_models.Chart.objects.count
+    )()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_it(authenticated_context: HttpContext):
+async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_it(
+    authenticated_context: HttpContext,
+):
     """One micrometre axis and a profile registered onto it: a chart, with the profile as its trace."""
     ctx = authenticated_context
     world = await _space(ctx, "distance", [_MICROMETRES])
-    profile = await seed.create_array_dataset(ctx, "Profile", axes=[seed.axis("d", enums.AxisType.SPACE)], shapes=[[64]])
-    await _ok(ctx, REGISTER, {"input": str(profile.coordinate_system_id), "output": world, "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "AFFINE", "inputAxes": ["d"], "outputAxes": ["d"], "affine": [[0.25, 0.0]]}]}})
+    profile = await seed.create_array_dataset(
+        ctx, "Profile", axes=[seed.axis("d", enums.AxisType.SPACE)], shapes=[[64]]
+    )
+    await _ok(
+        ctx,
+        REGISTER,
+        {
+            "input": str(profile.coordinate_system_id),
+            "output": world,
+            "transform": {
+                "kind": "BY_DIMENSION",
+                "parts": [
+                    {
+                        "kind": "AFFINE",
+                        "inputAxes": ["d"],
+                        "outputAxes": ["d"],
+                        "affine": [[0.25, 0.0]],
+                    }
+                ],
+            },
+        },
+    )
     edges = await sync_to_async(models.Transformation.objects.count)()
 
     shown = await _auto(ctx, world)
@@ -103,8 +141,12 @@ async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_i
     assert shown["name"] == "distance", "unnamed, it takes the space's name"
     assert shown["worldCoordinateSystem"]["id"] == world
     assert shown["axis"] == {"name": "d"}
-    assert [(layer["__typename"], layer["name"]) for layer in shown["layers"]] == [("TraceChartLayer", "Profile")]
-    assert await sync_to_async(models.Transformation.objects.count)() == edges, "showing a space authors no edges"
+    assert [(layer["__typename"], layer["name"]) for layer in shown["layers"]] == [
+        ("TraceChartLayer", "Profile")
+    ]
+    assert await sync_to_async(models.Transformation.objects.count)() == edges, (
+        "showing a space authors no edges"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -118,16 +160,24 @@ async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_i
     ],
     ids=["time", "microtime", "spectrum"],
 )
-async def test_any_single_metric_axis_is_a_chart_even_one_a_scene_would_accept(authenticated_context: HttpContext, axis: dict):
+async def test_any_single_metric_axis_is_a_chart_even_one_a_scene_would_accept(
+    authenticated_context: HttpContext, axis: dict
+):
     """A lone time axis could carry a scene too; it is read as an axis before it is read as a place."""
-    shown = await _auto(authenticated_context, await _space(authenticated_context, "axis", [axis]))
+    shown = await _auto(
+        authenticated_context, await _space(authenticated_context, "axis", [axis])
+    )
     assert shown["__typename"] == "Chart"
-    assert shown["layers"] == [], "nothing resides here, and an empty chart is still the answer"
+    assert shown["layers"] == [], (
+        "nothing resides here, and an empty chart is still the answer"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_s_own_pixel_grid_is_staged_as_a_scene_of_its_data(authenticated_context: HttpContext):
+async def test_a_dataset_s_own_pixel_grid_is_staged_as_a_scene_of_its_data(
+    authenticated_context: HttpContext,
+):
     """A unitless grid is no axis to read values off. The image living in it becomes the layers."""
     ctx = authenticated_context
     image = await seed.create_array_dataset(ctx, "Cells")  # (c, y, x)
@@ -142,12 +192,40 @@ async def test_a_dataset_s_own_pixel_grid_is_staged_as_a_scene_of_its_data(authe
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered_into_it(authenticated_context: HttpContext):
+async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered_into_it(
+    authenticated_context: HttpContext,
+):
     """Two micrometre axes are a place: the image registered into it is drawn there."""
     ctx = authenticated_context
-    atlas = await _space(ctx, "atlas", [{"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}])
-    image = await seed.create_array_dataset(ctx, "Section", axes=seed.YX_AXES, shapes=[[64, 64]])
-    await _ok(ctx, REGISTER, {"input": str(image.coordinate_system_id), "output": atlas, "transform": {"kind": "BY_DIMENSION", "parts": [{"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]}]}})
+    atlas = await _space(
+        ctx,
+        "atlas",
+        [
+            {"name": "y", "type": "SPACE", "unit": "micrometer"},
+            {"name": "x", "type": "SPACE", "unit": "micrometer"},
+        ],
+    )
+    image = await seed.create_array_dataset(
+        ctx, "Section", axes=seed.YX_AXES, shapes=[[64, 64]]
+    )
+    await _ok(
+        ctx,
+        REGISTER,
+        {
+            "input": str(image.coordinate_system_id),
+            "output": atlas,
+            "transform": {
+                "kind": "BY_DIMENSION",
+                "parts": [
+                    {
+                        "kind": "IDENTITY",
+                        "inputAxes": ["y", "x"],
+                        "outputAxes": ["y", "x"],
+                    }
+                ],
+            },
+        },
+    )
 
     shown = await _auto(ctx, atlas)
 
@@ -155,34 +233,61 @@ async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered
     assert len(shown["layers"]) == 1
 
     # And with nothing registered, the scene is empty rather than refused.
-    empty = await _auto(ctx, await _space(ctx, "bare", [{"name": "y", "type": "SPACE", "unit": "micrometer"}, {"name": "x", "type": "SPACE", "unit": "micrometer"}]))
+    empty = await _auto(
+        ctx,
+        await _space(
+            ctx,
+            "bare",
+            [
+                {"name": "y", "type": "SPACE", "unit": "micrometer"},
+                {"name": "x", "type": "SPACE", "unit": "micrometer"},
+            ],
+        ),
+    )
     assert (empty["__typename"], empty["layers"]) == ("Scene", [])
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_space_no_composition_can_show_is_refused_and_nothing_is_made(authenticated_context: HttpContext):
+async def test_a_space_no_composition_can_show_is_refused_and_nothing_is_made(
+    authenticated_context: HttpContext,
+):
     """Three enumerating axes: more than a chart's one and a grid's two, and no time or space to navigate."""
     ctx = authenticated_context
     system = await _space(
         ctx,
         "labels",
-        [{"name": "c", "type": "CHANNEL", "unit": "a.u."}, {"name": "object", "type": "INDEX", "unit": "a.u."}, {"name": "gene", "type": "INDEX", "unit": "a.u."}],
+        [
+            {"name": "c", "type": "CHANNEL", "unit": "a.u."},
+            {"name": "object", "type": "INDEX", "unit": "a.u."},
+            {"name": "gene", "type": "INDEX", "unit": "a.u."},
+        ],
     )
     before = await _compositions()
 
     refused = await _run(ctx, AUTO, {"coordinateSystem": system})
 
-    assert refused.errors and "neither a chart, a grid nor a scene" in str(refused.errors[0]), refused.errors
+    assert refused.errors and "neither a chart, a grid nor a scene" in str(
+        refused.errors[0]
+    ), refused.errors
     assert await _compositions() == before
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_enumerating_axes_are_shown_as_a_grid(authenticated_context: HttpContext):
+async def test_two_enumerating_axes_are_shown_as_a_grid(
+    authenticated_context: HttpContext,
+):
     """Channels against objects: members against members, which a grid lays out. It was refused before grids."""
     ctx = authenticated_context
-    system = await _space(ctx, "labels", [{"name": "c", "type": "CHANNEL", "unit": "a.u."}, {"name": "object", "type": "INDEX", "unit": "a.u."}])
+    system = await _space(
+        ctx,
+        "labels",
+        [
+            {"name": "c", "type": "CHANNEL", "unit": "a.u."},
+            {"name": "object", "type": "INDEX", "unit": "a.u."},
+        ],
+    )
     shown = await _run(ctx, AUTO, {"coordinateSystem": system})
     assert not shown.errors, shown.errors
     assert shown.data["autoVisualize"]["__typename"] == "Grid"
@@ -190,21 +295,36 @@ async def test_two_enumerating_axes_are_shown_as_a_grid(authenticated_context: H
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_space_lists_its_scenes_and_charts_together_as_visualizations(authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_a_space_lists_its_scenes_and_charts_together_as_visualizations(
+    authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """One space, a scene made by hand and a chart made automatically: both are over it, and it says so."""
     ctx = authenticated_context
     world = await _space(ctx, "distance", [_MICROMETRES])
-    scene_id = (await _ok(ctx, CREATE_SCENE, {"name": "By hand", "coordinateSystem": world}))["createScene"]["id"]
+    scene_id = (
+        await _ok(ctx, CREATE_SCENE, {"name": "By hand", "coordinateSystem": world})
+    )["createScene"]["id"]
     chart = await _auto(ctx, world, name="Automatic")
 
-    listed = (await _ok(ctx, VISUALIZATIONS, id=world))["coordinateSystem"]["visualizations"]
-    assert [(shown["__typename"], shown["id"], shown["name"]) for shown in listed] == [("Scene", scene_id, "By hand"), ("Chart", chart["id"], "Automatic")]
+    listed = (await _ok(ctx, VISUALIZATIONS, id=world))["coordinateSystem"][
+        "visualizations"
+    ]
+    assert [(shown["__typename"], shown["id"], shown["name"]) for shown in listed] == [
+        ("Scene", scene_id, "By hand"),
+        ("Chart", chart["id"], "Automatic"),
+    ]
     assert {shown["worldCoordinateSystem"]["id"] for shown in listed} == {world}
 
     # Either is read through the one interface, by a fragment that names neither.
     both = await _ok(ctx, AS_VISUALIZATION, scene=scene_id, chart=chart["id"])
-    assert both["scene"]["__typename"] == "Scene" and both["chart"]["__typename"] == "Chart"
-    assert both["chart"]["descriptors"] == {"@mikro/axis_type": "SPACE", "@mikro/axis_unit": "micrometer"}
+    assert (
+        both["scene"]["__typename"] == "Scene"
+        and both["chart"]["__typename"] == "Chart"
+    )
+    assert both["chart"]["descriptors"] == {
+        "@mikro/axis_type": "SPACE",
+        "@mikro/axis_unit": "micrometer",
+    }
     assert "@mikro/blending" in both["scene"]["descriptors"]
 
     # Another organization cannot show a space it cannot see.
@@ -219,51 +339,78 @@ async def test_a_space_lists_its_scenes_and_charts_together_as_visualizations(au
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_crop_is_staged_as_a_scene_of_the_cut_and_becomes_what_the_lens_opens_on(authenticated_context: HttpContext):
+async def test_a_crop_is_staged_as_a_scene_of_the_cut_and_becomes_what_the_lens_opens_on(
+    authenticated_context: HttpContext,
+):
     """Showing a crop's *space* draws its whole dataset; naming the lens draws the crop."""
     ctx = authenticated_context
     image = await seed.create_array_dataset(ctx, "Cells")  # (c, y, x)
-    crop = await seed.create_lens(ctx, image, slices=[{"axis": "y", "start": 4, "stop": 20, "step": None}])
+    crop = await seed.create_lens(
+        ctx, image, slices=[{"axis": "y", "start": 4, "stop": 20, "step": None}]
+    )
 
     shown = (await _ok(ctx, AUTO, {"lens": str(crop.pk)}))["autoVisualize"]
 
     assert shown["__typename"] == "Scene"
-    assert shown["worldCoordinateSystem"]["id"] == str(image.coordinate_system_id), "composed in the dataset's grid, where the crop was cut from"
+    assert shown["worldCoordinateSystem"]["id"] == str(image.coordinate_system_id), (
+        "composed in the dataset's grid, where the crop was cut from"
+    )
     assert shown["layers"], "a layer per channel"
-    assert all(layer["lens"]["shape"][-2] == 16 for layer in shown["layers"]), "every layer reads the cut, not the whole array"
-    assert str((await sync_to_async(models.Lens.objects.get)(pk=crop.pk)).default_scene_id) == shown["id"], "nominated, as createSceneFromLens does"
+    assert all(layer["lens"]["shape"][-2] == 16 for layer in shown["layers"]), (
+        "every layer reads the cut, not the whole array"
+    )
+    assert (
+        str((await sync_to_async(models.Lens.objects.get)(pk=crop.pk)).default_scene_id)
+        == shown["id"]
+    ), "nominated, as createSceneFromLens does"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_window_over_a_table_along_one_metric_column_is_charted_as_that_window(authenticated_context: HttpContext):
+async def test_a_window_over_a_table_along_one_metric_column_is_charted_as_that_window(
+    authenticated_context: HttpContext,
+):
     """The table's own space is one unit-carrying axis: a chart, whose one layer reads the window."""
     from tests.test_charts import _MEASUREMENTS, _table
 
     ctx = authenticated_context
     made = await _table(ctx, "measurements", _MEASUREMENTS)
     table = await sync_to_async(models.TableDataset.objects.get)(pk=made["id"])
-    window = await seed.create_windowed_lens(ctx, table, [{"axis": "x", "min": 0.0, "max": 10.0}])
+    window = await seed.create_windowed_lens(
+        ctx, table, [{"axis": "x", "min": 0.0, "max": 10.0}]
+    )
 
     shown = (await _ok(ctx, AUTO, {"lens": str(window.pk)}))["autoVisualize"]
 
     assert shown["__typename"] == "Chart"
     assert shown["name"] == "measurements"
     assert shown["worldCoordinateSystem"]["id"] == made["coordinateSystem"]["id"]
-    assert [(layer["__typename"], layer["lens"]["id"]) for layer in shown["layers"]] == [("SeriesChartLayer", str(window.pk))]
+    assert [
+        (layer["__typename"], layer["lens"]["id"]) for layer in shown["layers"]
+    ] == [("SeriesChartLayer", str(window.pk))]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("both", [True, False], ids=["both", "neither"])
-async def test_a_space_and_a_lens_together_or_neither_is_refused_and_nothing_is_made(authenticated_context: HttpContext, both: bool):
+async def test_a_space_and_a_lens_together_or_neither_is_refused_and_nothing_is_made(
+    authenticated_context: HttpContext, both: bool
+):
     """The two inputs are two questions: what resides in a space, or what one lens selects."""
     ctx = authenticated_context
     image = await seed.create_array_dataset(ctx, "Cells")
     lens = await seed.create_lens(ctx, image)
     before = await _compositions()
 
-    refused = await _run(ctx, AUTO, {"coordinateSystem": str(image.coordinate_system_id), "lens": str(lens.pk)} if both else {})
+    refused = await _run(
+        ctx,
+        AUTO,
+        {"coordinateSystem": str(image.coordinate_system_id), "lens": str(lens.pk)}
+        if both
+        else {},
+    )
 
-    assert refused.errors and "exactly one of `coordinateSystem`" in str(refused.errors[0]), refused.errors
+    assert refused.errors and "exactly one of `coordinateSystem`" in str(
+        refused.errors[0]
+    ), refused.errors
     assert await _compositions() == before

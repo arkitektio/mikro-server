@@ -7,20 +7,36 @@ the same commit, and no installer has to learn of it.
 
 from __future__ import annotations
 
-from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Role, Scope, Signal, Start, Structure, blocks
+from arkitekt_service.contract import (
+    JSON,
+    Contract,
+    Description,
+    Descriptor,
+    Facts,
+    Hosts,
+    Job,
+    Needs,
+    Offers,
+    Role,
+    Scope,
+    Signal,
+    Start,
+    Structure,
+    blocks,
+)
 
 from mikro_server.configuration import Settings
 from mikro_server.vocabulary import (
     ANNOTATION_DESCRIPTORS,
     ANNOTATION_SHAPE_DESCRIPTORS,
     ARRAY_DESCRIPTORS,
-    FIXTURE_DESCRIPTORS,
     CHART_DESCRIPTORS,
-    GRID_DESCRIPTORS,
     COORDINATE_ANCHOR_DESCRIPTORS,
     COORDINATE_SYSTEM_DESCRIPTORS,
     FILE_DESCRIPTORS,
     FILE_LINK_DESCRIPTORS,
+    FIXTURE_DESCRIPTORS,
+    GRID_DESCRIPTORS,
     MESH_DESCRIPTORS,
     METRIC_DESCRIPTORS,
     NETWORK_DESCRIPTORS,
@@ -33,18 +49,45 @@ from mikro_server.vocabulary import (
 #: What an app may do here on a user's behalf: defined at the coordination server when the hub
 #: enrols. Every root field of the schema asks for one of them (`AuthExtension(scopes=...)`).
 SCOPES = [
-    Scope(key="mikro_read", description="See images, datasets, scenes, lenses, tables, annotations and their files."),
-    Scope(key="mikro_write", description="Upload and change images, datasets, scenes, lenses, charts, layers, folders, transformations and metrics."),
-    Scope(key="mikro_annotate", description="Draw and change annotations on images, and nothing else."),
-    Scope(key="mikro_share", description="Share images and datasets with people outside your organization through collaborations."),
-    Scope(key="mikro_all", description="Do everything in Mikro on your behalf.", is_all_scope=True),
+    Scope(
+        key="mikro_read",
+        description="See images, datasets, scenes, lenses, tables, annotations and their files.",
+    ),
+    Scope(
+        key="mikro_write",
+        description="Upload and change images, datasets, scenes, lenses, charts, layers, folders, transformations and metrics.",
+    ),
+    Scope(
+        key="mikro_annotate",
+        description="Draw and change annotations on images, and nothing else.",
+    ),
+    Scope(
+        key="mikro_share",
+        description="Share images and datasets with people outside your organization through collaborations.",
+    ),
+    Scope(
+        key="mikro_all",
+        description="Do everything in Mikro on your behalf.",
+        is_all_scope=True,
+    ),
 ]
 
 #: What a member of an organization may do here.
 ROLES = [
-    Role(key="mikro_admin", description="Full control of Mikro in this organization.", is_admin_role=True),
-    Role(key="mikro_editor", description="Upload and change images and datasets, and share them.", is_default_role=True),
-    Role(key="mikro_annotator", description="Annotate images, also as a guest in a collaboration."),
+    Role(
+        key="mikro_admin",
+        description="Full control of Mikro in this organization.",
+        is_admin_role=True,
+    ),
+    Role(
+        key="mikro_editor",
+        description="Upload and change images and datasets, and share them.",
+        is_default_role=True,
+    ),
+    Role(
+        key="mikro_annotator",
+        description="Annotate images, also as a guest in a collaboration.",
+    ),
 ]
 
 #: The role every write asks for, and the one that annotates without it.
@@ -483,7 +526,9 @@ HOSTS = Hosts(
 def render(facts: Facts) -> dict[str, JSON]:
     """This release's config for the hub ``facts`` describes."""
     document: dict[str, JSON] = blocks.server(facts)
-    document["datalayer"] = blocks.datalayer(facts, "media", "zarr", "parquet", "bigfile")
+    document["datalayer"] = blocks.datalayer(
+        facts, "media", "zarr", "parquet", "bigfile"
+    )
     document["instance"] = blocks.instance(facts)
     hook = blocks.rekuest_hook(facts)
     if hook is not None:
@@ -496,11 +541,27 @@ contract = Contract(
         name="mikro",
         identifier="live.arkitekt.mikro",
         summary="Images and their metadata.",
-        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "zarr", "parquet", "bigfile", "fabriks", "konnektion", "kulisse"], instance_key=True, peers=["rekuest"]),
+        needs=Needs(
+            scopes=SCOPES,
+            roles=ROLES,
+            storage=[
+                "media",
+                "zarr",
+                "parquet",
+                "bigfile",
+                "fabriks",
+                "konnektion",
+                "kulisse",
+            ],
+            instance_key=True,
+            peers=["rekuest"],
+        ),
         # No `rekuest_hook`: the hook agent (`mikro_server.hook_agent`) has no action in this
         # release, and an agent with nothing to do is not offered to a hub.
         # `feed`: the change feed of metrics, read by kraph with its instance key (internal network only).
-        offers=Offers(endpoints={"rekuest_service": "_rekuest/service", "feed": "_feed"}),
+        offers=Offers(
+            endpoints={"rekuest_service": "_rekuest/service", "feed": "_feed"}
+        ),
         requires={"rekuest": ">=6"},
         hosts=HOSTS,
     ),
@@ -508,17 +569,51 @@ contract = Contract(
     render=render,
     # How this service is started: there is no script beside it. `arkitekt-service serve`
     # (and `debug`) become these, so they get the container's signals themselves.
-    serve=Start(("daphne", "-b", "0.0.0.0", "-p", "80", "--websocket_timeout", "-1", "mikro_server.asgi:application")),
+    serve=Start(
+        (
+            "daphne",
+            "-b",
+            "0.0.0.0",
+            "-p",
+            "80",
+            "--websocket_timeout",
+            "-1",
+            "mikro_server.asgi:application",
+        )
+    ),
     debug=Start(("python", "manage.py", "runserver", "0.0.0.0:80")),
     jobs={
-        "ensureadmin": Job(("ensureadmin",), "Create the operator account the config names"),
-        "purge_orphaned_stores": Job(("purge_orphaned_stores",), "Delete the stored objects of data that was deleted, after the grace period"),
-        "respec_datasets": Job(("respec_datasets",), "Recompute the spec of datasets created before an axis of one position stopped counting"),
-        "backfill_parquet_schemas": Job(("backfill_parquet_schemas",), "Record the columns of parquet stores finished before they were recorded"),
-        "record_table_stats": Job(("record_table_stats",), "Read the row count and column ranges off the parquet footer of tables made before they were recorded"),
-        "merge_duplicate_lenses": Job(("merge_duplicate_lenses",), "Normalize stored lens selections, give every container of every kind its whole lens, merge duplicate lenses onto one row, and state every lens' spec"),
-        "restore_descriptors": Job(("restore_descriptors",), "Store the descriptors of every row that misses one its structure declares (--all: of every row)"),
-        "prune_organizations": Job(("prune_organizations",), "Delete all data of the organizations named (--only) or not named (--keep), and keep the organizations; a dry run without --yes"),
+        "ensureadmin": Job(
+            ("ensureadmin",), "Create the operator account the config names"
+        ),
+        "purge_orphaned_stores": Job(
+            ("purge_orphaned_stores",),
+            "Delete the stored objects of data that was deleted, after the grace period",
+        ),
+        "respec_datasets": Job(
+            ("respec_datasets",),
+            "Recompute the spec of datasets created before an axis of one position stopped counting",
+        ),
+        "backfill_parquet_schemas": Job(
+            ("backfill_parquet_schemas",),
+            "Record the columns of parquet stores finished before they were recorded",
+        ),
+        "record_table_stats": Job(
+            ("record_table_stats",),
+            "Read the row count and column ranges off the parquet footer of tables made before they were recorded",
+        ),
+        "merge_duplicate_lenses": Job(
+            ("merge_duplicate_lenses",),
+            "Normalize stored lens selections, give every container of every kind its whole lens, merge duplicate lenses onto one row, and state every lens' spec",
+        ),
+        "restore_descriptors": Job(
+            ("restore_descriptors",),
+            "Store the descriptors of every row that misses one its structure declares (--all: of every row)",
+        ),
+        "prune_organizations": Job(
+            ("prune_organizations",),
+            "Delete all data of the organizations named (--only) or not named (--keep), and keep the organizations; a dry run without --yes",
+        ),
     },
     # `merge_duplicate_lenses` runs for every build, before the release serves: a lens row spelled
     # the old way would otherwise escape the lookup `createLens` makes and mint a duplicate.

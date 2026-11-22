@@ -8,7 +8,6 @@ the ``layer_render_node_types`` registration in ``core/render/layer/constants.py
 
 from core import types
 
-
 layer_types = [
     types.ImageLayer,
     types.IntensityLayer,

@@ -1,34 +1,48 @@
-from kante.types import Info
-from core import scalars
-import strawberry
 import kante
+import strawberry
+from kante.types import Info
 from pydantic import BaseModel, Field
-from core import types, models
+
+from core import models, scalars, types
 from core.creation import CreationContext
-from core.scoping import get_for_org
 from core.mutations._generic import make_delete, make_pin, self_owner
+from core.scoping import get_for_org
 
 
 class SceneSnapshotInputModel(BaseModel):
-    file: str = Field(description="The uploaded media file store containing the rendered image")
+    file: str = Field(
+        description="The uploaded media file store containing the rendered image"
+    )
     scene: str = Field(description="The ID of the scene this is a picture of")
     name: str | None = Field(default=None, description="The name of the snapshot")
 
 
-@kante.pydantic_input(SceneSnapshotInputModel, description="Input for creating a snapshot (a pre-rendered picture) of a scene from an already-uploaded media file")
+@kante.pydantic_input(
+    SceneSnapshotInputModel,
+    description="Input for creating a snapshot (a pre-rendered picture) of a scene from an already-uploaded media file",
+)
 class SceneSnapshotInput:
     """Input for creating a snapshot (a pre-rendered picture) of a scene from an already-uploaded media file"""
 
-    file: scalars.ImageFileLike = strawberry.field(description="The uploaded media file store containing the rendered image. Upload it first with requestMediaUpload / finishMediaUpload; this only adopts it")
-    scene: strawberry.ID = strawberry.field(description="The ID of the scene this is a picture of")
-    name: str | None = strawberry.field(default=None, description="The name of the snapshot")
+    file: scalars.ImageFileLike = strawberry.field(
+        description="The uploaded media file store containing the rendered image. Upload it first with requestMediaUpload / finishMediaUpload; this only adopts it"
+    )
+    scene: strawberry.ID = strawberry.field(
+        description="The ID of the scene this is a picture of"
+    )
+    name: str | None = strawberry.field(
+        default=None, description="The name of the snapshot"
+    )
 
 
 class DeleteSceneSnapshotInputModel(BaseModel):
     id: str = Field(description="The ID of the snapshot to delete")
 
 
-@kante.pydantic_input(DeleteSceneSnapshotInputModel, description="Input for deleting a lens snapshot by ID")
+@kante.pydantic_input(
+    DeleteSceneSnapshotInputModel,
+    description="Input for deleting a lens snapshot by ID",
+)
 class DeleteSceneSnapshotInput:
     """Input for deleting a lens snapshot by ID"""
 
@@ -40,21 +54,30 @@ class PinSceneSnapshotInputModel(BaseModel):
     pin: bool = Field(description="True to pin, false to unpin")
 
 
-@kante.pydantic_input(PinSceneSnapshotInputModel, description="Input for pinning or unpinning a lens snapshot for quick access")
+@kante.pydantic_input(
+    PinSceneSnapshotInputModel,
+    description="Input for pinning or unpinning a lens snapshot for quick access",
+)
 class PinSceneSnapshotInput:
     """Input for pinning or unpinning a lens snapshot for quick access"""
 
-    id: strawberry.ID = strawberry.field(description="The ID of the snapshot to pin or unpin")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the snapshot to pin or unpin"
+    )
     pin: bool = strawberry.field(description="True to pin, false to unpin")
 
 
-pin_scene_snapshot = make_pin(models.SceneSnapshot, PinSceneSnapshotInput, types.SceneSnapshot)
+pin_scene_snapshot = make_pin(
+    models.SceneSnapshot, PinSceneSnapshotInput, types.SceneSnapshot
+)
 
 
 # self_owner, not creator_owner: this model declares created_through_by. The test is
 # whether the column is there, not whether the model is provenance-tracked -- a
 # ProvenanceField does not add it.
-delete_scene_snapshot = make_delete(models.SceneSnapshot, DeleteSceneSnapshotInput, owner=self_owner)
+delete_scene_snapshot = make_delete(
+    models.SceneSnapshot, DeleteSceneSnapshotInput, owner=self_owner
+)
 
 
 def create_scene_snapshot(

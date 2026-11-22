@@ -7,17 +7,21 @@ Each save goes to a real local HTTP server standing in for rekuest's signal inta
 import json
 
 import pytest
+from arkitekt_service import trust
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
 from mikro_server.schema import schema
 from mikro_server.service import service
-from arkitekt_service import trust
 from tests import seed
 from tests.test_rekuest_signals import intake  # noqa: F401  the fixture
 from tests.test_scene_snapshot import _snapshot
-from tests.test_task_provenance import attach_provenance, clear_provenance, make_provenance
+from tests.test_task_provenance import (
+    attach_provenance,
+    clear_provenance,
+    make_provenance,
+)
 from tests.test_windowed_lenses import _CONTAINERS, _create
 
 EXPECTED = {
@@ -87,15 +91,25 @@ def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
     assert hosted["@mikro/folder"]["label"] == "Folder"
     array_keys = [d["key"] for d in hosted["@mikro/arraydataset"]["descriptors"]]
     assert array_keys == [d["key"] for d in hosted["@mikro/arraylens"]["descriptors"]]
-    assert {"key": "@mikro/n_channels", "type": "INT", "description": "Its total extent along its CHANNEL axes"} in hosted["@mikro/arraydataset"]["descriptors"]
+    assert {
+        "key": "@mikro/n_channels",
+        "type": "INT",
+        "description": "Its total extent along its CHANNEL axes",
+    } in hosted["@mikro/arraydataset"]["descriptors"]
     # A container and the lens kind over it read one vocabulary.
-    assert [d["key"] for d in hosted["@mikro/tabledataset"]["descriptors"]] == [d["key"] for d in hosted["@mikro/tablelens"]["descriptors"]] != []
+    assert (
+        [d["key"] for d in hosted["@mikro/tabledataset"]["descriptors"]]
+        == [d["key"] for d in hosted["@mikro/tablelens"]["descriptors"]]
+        != []
+    )
     assert hosted["@mikro/folder"]["descriptors"] == []
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_new_scene_is_signalled_with_its_descriptors(intake, authenticated_context: HttpContext):  # noqa: F811
+async def test_a_new_scene_is_signalled_with_its_descriptors(
+    intake, authenticated_context: HttpContext
+):  # noqa: F811
     scene = await seed.create_scene(authenticated_context, "Signalled scene")
 
     (received,) = _of(intake, "@mikro/scene")
@@ -103,7 +117,16 @@ async def test_a_new_scene_is_signalled_with_its_descriptors(intake, authenticat
     assert (body["kind"], body["object"]) == ("CREATED", str(scene.pk))
     assert body["organization"] == authenticated_context.request.organization.identifier
     assert set(body["descriptors"]) == {"@mikro/blending", "@mikro/preferred_view"}
-    assert trust.verify("POST", received["path"], received["body"], received["headers"]["Authorization"], audience="rekuest").issuer == "mikro"
+    assert (
+        trust.verify(
+            "POST",
+            received["path"],
+            received["body"],
+            received["headers"]["Authorization"],
+            audience="rekuest",
+        ).issuer
+        == "mikro"
+    )
 
     await sync_to_async(lambda: models.Scene.objects.get(pk=scene.pk).delete())()
     kinds = [r["json"]["kind"] for r in _of(intake, "@mikro/scene", 2)]
@@ -112,26 +135,49 @@ async def test_a_new_scene_is_signalled_with_its_descriptors(intake, authenticat
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_coordinate_graph_and_the_stores_under_the_data_are_announced(intake, authenticated_context: HttpContext):  # noqa: F811
+async def test_the_coordinate_graph_and_the_stores_under_the_data_are_announced(
+    intake, authenticated_context: HttpContext
+):  # noqa: F811
     dataset = await seed.create_array_dataset(authenticated_context, "Announced")
 
-    systems = {r["json"]["object"] for r in _of(intake, "@mikro/coordinatesystem") if r["json"]["kind"] == "CREATED"}
+    systems = {
+        r["json"]["object"]
+        for r in _of(intake, "@mikro/coordinatesystem")
+        if r["json"]["kind"] == "CREATED"
+    }
     assert str(dataset.coordinate_system_id) in systems, "the grid the data lives in"
-    store = await seed.create_parquet_store(authenticated_context, key="announced.parquet")
-    stores = {r["json"]["object"]: r["json"]["organization"] for r in _of(intake, "@mikro/parquetstore")}
-    assert stores == {str(store.pk): authenticated_context.request.organization.identifier}
+    store = await seed.create_parquet_store(
+        authenticated_context, key="announced.parquet"
+    )
+    stores = {
+        r["json"]["object"]: r["json"]["organization"]
+        for r in _of(intake, "@mikro/parquetstore")
+    }
+    assert stores == {
+        str(store.pk): authenticated_context.request.organization.identifier
+    }
 
     scene = await seed.create_scene(authenticated_context, "Placed")
     elsewhere = await models.Transformation.objects.acreate(
-        kind=enums.TransformKindChoices.TRANSLATION, input_id=dataset.coordinate_system_id, output_id=scene.world_id, params={"translation": [0.0, 0.0, 0.0]}, organization=authenticated_context.request.organization
+        kind=enums.TransformKindChoices.TRANSLATION,
+        input_id=dataset.coordinate_system_id,
+        output_id=scene.world_id,
+        params={"translation": [0.0, 0.0, 0.0]},
+        organization=authenticated_context.request.organization,
     )
-    (edge,) = [r["json"] for r in _of(intake, "@mikro/transformation") if r["json"]["object"] == str(elsewhere.pk)]
+    (edge,) = [
+        r["json"]
+        for r in _of(intake, "@mikro/transformation")
+        if r["json"]["object"] == str(elsewhere.pk)
+    ]
     assert edge["kind"] == "CREATED"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_snapshot_made_in_a_task_carries_that_tasks_token(intake, authenticated_context: HttpContext):  # noqa: F811
+async def test_a_snapshot_made_in_a_task_carries_that_tasks_token(
+    intake, authenticated_context: HttpContext
+):  # noqa: F811
     scene = await seed.create_scene(authenticated_context, "Rendered")
     attach_provenance(authenticated_context, make_provenance(task_id="88"))
     snapshot = await _snapshot(authenticated_context, scene, "render.png")
@@ -140,53 +186,101 @@ async def test_a_snapshot_made_in_a_task_carries_that_tasks_token(intake, authen
     (received,) = _of(intake, "@mikro/scenesnapshot")
     body = received["json"]
     assert (body["kind"], body["object"]) == ("CREATED", str(snapshot["id"]))
-    assert body["provenance"] == "raw-provenance-token"  # rekuest makes triggered runs children of task 88
+    assert (
+        body["provenance"] == "raw-provenance-token"
+    )  # rekuest makes triggered runs children of task 88
     assert json.loads(received["body"])["identifier"] == "@mikro/scenesnapshot"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_crop_is_signalled_with_its_descriptors(intake, authenticated_context: HttpContext):  # noqa: F811
+async def test_a_crop_is_signalled_with_its_descriptors(
+    intake, authenticated_context: HttpContext
+):  # noqa: F811
     """The whole lens arrives with its dataset; a crop on its own, saying it is not whole; naming the channel it pins renames it, and a delete follows it."""
     ctx = authenticated_context
-    dataset = await seed.create_array_dataset(ctx, "Signalled", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]])
-    crop = await seed.create_lens(ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}])
+    dataset = await seed.create_array_dataset(
+        ctx, "Signalled", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]
+    )
+    crop = await seed.create_lens(
+        ctx, dataset, slices=[{"axis": "c", "start": 0, "stop": 1}]
+    )
 
-    whole_created, crop_created = [r["json"] for r in _of(intake, "@mikro/arraylens", 2)]
-    assert (whole_created["kind"], whole_created["descriptors"]["@mikro/is_whole"], whole_created["descriptors"]["@mikro/n_channels"]) == ("CREATED", True, 3)
-    assert (crop_created["kind"], crop_created["object"], crop_created["descriptors"]["@mikro/is_whole"], crop_created["descriptors"]["@mikro/n_channels"]) == ("CREATED", str(crop.pk), False, 1)
+    whole_created, crop_created = [
+        r["json"] for r in _of(intake, "@mikro/arraylens", 2)
+    ]
+    assert (
+        whole_created["kind"],
+        whole_created["descriptors"]["@mikro/is_whole"],
+        whole_created["descriptors"]["@mikro/n_channels"],
+    ) == ("CREATED", True, 3)
+    assert (
+        crop_created["kind"],
+        crop_created["object"],
+        crop_created["descriptors"]["@mikro/is_whole"],
+        crop_created["descriptors"]["@mikro/n_channels"],
+    ) == ("CREATED", str(crop.pk), False, 1)
     row = await models.Lens.objects.with_sources().aget(pk=crop.pk)
-    assert crop_created["descriptors"] == await sync_to_async(service.describe)(row), "the signal carries what the field answers"
+    assert crop_created["descriptors"] == await sync_to_async(service.describe)(row), (
+        "the signal carries what the field answers"
+    )
 
     rename = "mutation R($input: SetPositionLabelInput!) { setPositionLabel(input: $input) { id } }"
-    result = await schema.execute(rename, context_value=ctx, variable_values={"input": {"lens": str(crop.pk), "label": "nucleus"}})
+    result = await schema.execute(
+        rename,
+        context_value=ctx,
+        variable_values={"input": {"lens": str(crop.pk), "label": "nucleus"}},
+    )
     assert not result.errors, result.errors
     delete = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) }"
-    result = await schema.execute(delete, context_value=ctx, variable_values={"input": {"id": str(crop.pk)}})
+    result = await schema.execute(
+        delete, context_value=ctx, variable_values={"input": {"id": str(crop.pk)}}
+    )
     assert not result.errors, result.errors
 
-    about_crop = [r["json"]["kind"] for r in _of(intake, "@mikro/arraylens", 4) if r["json"]["object"] == str(crop.pk)]
+    about_crop = [
+        r["json"]["kind"]
+        for r in _of(intake, "@mikro/arraylens", 4)
+        if r["json"]["object"] == str(crop.pk)
+    ]
     assert about_crop == ["CREATED", "UPDATED", "DELETED"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
-async def test_a_windowed_lens_is_signalled_and_goes_with_its_container(intake, authenticated_context: HttpContext, kind: str):  # noqa: F811
+async def test_a_windowed_lens_is_signalled_and_goes_with_its_container(
+    intake, authenticated_context: HttpContext, kind: str
+):  # noqa: F811
     """A window is announced in its kind's vocabulary; deleting the container announces the lens gone, described while its container still stands."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]
     container_id, mutation, field = await make(ctx)
     identifier = f"@mikro/{model.__name__.lower()}"
-    windowed = await _create(ctx, mutation, field, container_id, [{"axis": axis, "min": 0, "max": 5}])
+    windowed = await _create(
+        ctx, mutation, field, container_id, [{"axis": axis, "min": 0, "max": 5}]
+    )
 
     created = [r["json"] for r in _of(intake, identifier, 2)]
     by_object = {body["object"]: body for body in created}
-    assert by_object[windowed["id"]]["kind"] == "CREATED" and by_object[windowed["id"]]["descriptors"]["@mikro/is_whole"] is False
-    assert any(body["descriptors"]["@mikro/is_whole"] is True for body in created), "the whole lens arrived with its container"
+    assert (
+        by_object[windowed["id"]]["kind"] == "CREATED"
+        and by_object[windowed["id"]]["descriptors"]["@mikro/is_whole"] is False
+    )
+    assert any(body["descriptors"]["@mikro/is_whole"] is True for body in created), (
+        "the whole lens arrived with its container"
+    )
 
-    container = await sync_to_async(lambda: models.Lens.objects.get(pk=windowed["id"]).container)()
+    container = await sync_to_async(
+        lambda: models.Lens.objects.get(pk=windowed["id"]).container
+    )()
     await sync_to_async(container.delete)()
-    gone = [r["json"] for r in _of(intake, identifier, 4) if r["json"]["kind"] == "DELETED"]
-    assert {body["object"] for body in gone} == {body["object"] for body in created}, "the whole lens and the window both went with the container"
-    assert all(body["descriptors"] != {} for body in gone), "described at delete time, before the cascade reaches the container"
+    gone = [
+        r["json"] for r in _of(intake, identifier, 4) if r["json"]["kind"] == "DELETED"
+    ]
+    assert {body["object"] for body in gone} == {body["object"] for body in created}, (
+        "the whole lens and the window both went with the container"
+    )
+    assert all(body["descriptors"] != {} for body in gone), (
+        "described at delete time, before the cascade reaches the container"
+    )

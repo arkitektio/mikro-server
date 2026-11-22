@@ -21,19 +21,17 @@ nothing looks exactly like an empty store.
 import json
 import logging
 
-import pytest
-from django.conf import settings
-
 import arkitekt_datalayer.datalayer as datalayer_module
-from authentikate.models import Organization
+import pytest
 from arkitekt_datalayer import base_models
 from arkitekt_datalayer.models import ZarrStore
+from authentikate.models import Organization
+from django.conf import settings
 
 # The moto-backed datalayer with every configured bucket created. Shared rather than copied:
 # the fixture encodes two non-obvious things (moto ignores a client pointed at a real endpoint,
 # and `GLOBAL_DL` memoizes one Datalayer per process) that would rot independently if duplicated.
 from tests.test_store_purging import buckets  # noqa: F401
-
 
 #: A minimal valid zarr v3 array manifest. `fill_info` fetches and parses this, so a store
 #: cannot be finished without one -- the accounting below runs *after* that parse.
@@ -63,14 +61,18 @@ def write_zarr(layer, store: ZarrStore, chunk_bytes: int = 0) -> int:
     layer._s3.put_object(Bucket=bucket, Key=f"{store.key}/zarr.json", Body=manifest)
     written = len(manifest)
     if chunk_bytes:
-        layer._s3.put_object(Bucket=bucket, Key=f"{store.key}/c/0/0", Body=b"x" * chunk_bytes)
+        layer._s3.put_object(
+            Bucket=bucket, Key=f"{store.key}/c/0/0", Body=b"x" * chunk_bytes
+        )
         written += chunk_bytes
     return written
 
 
 def request_store(layer, organization: Organization) -> ZarrStore:
     """Ask for a zarr upload grant and return the store it minted."""
-    grant = layer.generate_zarr_upload_grant(organization.id, base_models.RequestZarrUploadInput())
+    grant = layer.generate_zarr_upload_grant(
+        organization.id, base_models.RequestZarrUploadInput()
+    )
     return ZarrStore.objects.get(id=grant.store)
 
 
@@ -94,14 +96,18 @@ def test_a_finished_upload_records_what_it_actually_delivered(buckets, organizat
     store = request_store(buckets, organization)
     written = write_zarr(buckets, store, chunk_bytes=512)
 
-    buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+    buckets.finish_zarr_upload(
+        organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk))
+    )
 
     store.refresh_from_db()
     assert store.populated is True
     assert store.size_bytes == written
 
 
-def test_an_upload_over_its_advertised_budget_is_recorded_not_rejected(buckets, organization, caplog):  # noqa: F811
+def test_an_upload_over_its_advertised_budget_is_recorded_not_rejected(
+    buckets, organization, caplog
+):  # noqa: F811
     """The cap is advertised, measured, and deliberately not enforced.
 
     Refusing here would reject uploads that were never told a real budget: `maxBytes` is
@@ -120,17 +126,24 @@ def test_an_upload_over_its_advertised_budget_is_recorded_not_rejected(buckets, 
     logging.disable(logging.NOTSET)
     try:
         with caplog.at_level(logging.WARNING, logger="arkitekt_datalayer.datalayer"):
-            buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+            buckets.finish_zarr_upload(
+                organization.id,
+                base_models.FinishZarrUploadInput(store_id=str(store.pk)),
+            )
     finally:
         logging.disable(logging.CRITICAL)
 
     store.refresh_from_db()
     assert store.populated is True, "an overrun is not a failed upload"
     assert store.size_bytes == written > store.max_bytes
-    assert any("against an advertised budget" in record.message for record in caplog.records), "and it is not silent either"
+    assert any(
+        "against an advertised budget" in record.message for record in caplog.records
+    ), "and it is not silent either"
 
 
-def test_a_finish_survives_a_measurement_it_cannot_take(buckets, organization, monkeypatch):  # noqa: F811
+def test_a_finish_survives_a_measurement_it_cannot_take(
+    buckets, organization, monkeypatch
+):  # noqa: F811
     """Accounting must never cost an upload.
 
     The bytes are written and the metadata is parsed by the time this runs, so a listing that
@@ -144,7 +157,9 @@ def test_a_finish_survives_a_measurement_it_cannot_take(buckets, organization, m
         raise RuntimeError("listing is unavailable")
 
     monkeypatch.setattr(datalayer_module.Datalayer, "measure_prefix_bytes", refuse)
-    buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+    buckets.finish_zarr_upload(
+        organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk))
+    )
 
     store.refresh_from_db()
     assert store.populated is True
@@ -158,11 +173,20 @@ def test_a_refresh_reissues_credentials_against_the_same_prefix(buckets, organiz
     a new key would leave the first upload's bytes orphaned and the client writing a fresh array
     it never asked for.
     """
-    first = buckets.generate_zarr_upload_grant(organization.id, base_models.RequestZarrUploadInput())
+    first = buckets.generate_zarr_upload_grant(
+        organization.id, base_models.RequestZarrUploadInput()
+    )
     second = buckets.refresh_upload_grant(ZarrStore, organization.id, first.store)
 
-    assert (second.store, second.key, second.path, second.bucket) == (first.store, first.key, first.path, first.bucket)
-    assert ZarrStore.objects.count() == 1, "a refresh reissues credentials, it does not mint a store"
+    assert (second.store, second.key, second.path, second.bucket) == (
+        first.store,
+        first.key,
+        first.path,
+        first.bucket,
+    )
+    assert ZarrStore.objects.count() == 1, (
+        "a refresh reissues credentials, it does not mint a store"
+    )
     assert second.expires_in == first.expires_in
 
 
@@ -174,13 +198,18 @@ def test_a_refresh_refuses_an_upload_that_is_already_finished(buckets, organizat
     """
     store = request_store(buckets, organization)
     write_zarr(buckets, store)
-    buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk)))
+    buckets.finish_zarr_upload(
+        organization.id, base_models.FinishZarrUploadInput(store_id=str(store.pk))
+    )
 
     with pytest.raises(ValueError, match="already finished"):
         buckets.refresh_upload_grant(ZarrStore, organization.id, str(store.pk))
 
     invalidated = request_store(buckets, organization)
-    buckets.finish_zarr_upload(organization.id, base_models.FinishZarrUploadInput(store_id=str(invalidated.pk), valid=False))
+    buckets.finish_zarr_upload(
+        organization.id,
+        base_models.FinishZarrUploadInput(store_id=str(invalidated.pk), valid=False),
+    )
     with pytest.raises(ValueError, match="abandoned"):
         buckets.refresh_upload_grant(ZarrStore, organization.id, str(invalidated.pk))
 
@@ -220,7 +249,9 @@ _YX = [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_store_finalized_by_a_create_mutation_records_its_size(buckets, authenticated_context):  # noqa: F811
+async def test_a_store_finalized_by_a_create_mutation_records_its_size(
+    buckets, authenticated_context
+):  # noqa: F811
     """The path that actually carries traffic, and the one that used to record nothing.
 
     `createArrayDataset` calls `fill_info` on every level itself; it never invokes
@@ -240,7 +271,14 @@ async def test_a_store_finalized_by_a_create_mutation_records_its_size(buckets, 
         organization = authenticated_context.request.organization
         level_0 = request_store(buckets, organization)
         level_1 = request_store(buckets, organization)
-        return level_0, level_1, {str(level_0.pk): write_zarr(buckets, level_0, chunk_bytes=512), str(level_1.pk): write_zarr(buckets, level_1, chunk_bytes=128)}
+        return (
+            level_0,
+            level_1,
+            {
+                str(level_0.pk): write_zarr(buckets, level_0, chunk_bytes=512),
+                str(level_1.pk): write_zarr(buckets, level_1, chunk_bytes=128),
+            },
+        )
 
     level_0, level_1, written = await seed()
 
@@ -262,7 +300,9 @@ async def test_a_store_finalized_by_a_create_mutation_records_its_size(buckets, 
     assert len(arrays) == 2
     for array in arrays:
         store_id = array["store"]["id"]
-        assert array["store"]["sizeBytes"] == written[store_id], f"level {array['level']} reported the wrong size"
+        assert array["store"]["sizeBytes"] == written[store_id], (
+            f"level {array['level']} reported the wrong size"
+        )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -274,10 +314,19 @@ def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organiz
     """
     from arkitekt_datalayer.models import BigFileStore
 
-    grant = buckets.generate_bigfile_upload_grant(organization.id, base_models.RequestBigFileUploadInput(original_file_name="cells.czi", file_size=2048))
+    grant = buckets.generate_bigfile_upload_grant(
+        organization.id,
+        base_models.RequestBigFileUploadInput(
+            original_file_name="cells.czi", file_size=2048
+        ),
+    )
     store = BigFileStore.objects.get(id=grant.store)
     body = b"y" * 2048
-    buckets._s3.put_object(Bucket=buckets.get_bucket_config("bigfile").bucket, Key=buckets.build_object_key("bigfile", store.key), Body=body)
+    buckets._s3.put_object(
+        Bucket=buckets.get_bucket_config("bigfile").bucket,
+        Key=buckets.build_object_key("bigfile", store.key),
+        Body=body,
+    )
 
     store.fill_info(buckets)
 
@@ -287,7 +336,9 @@ def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organiz
 
 
 @pytest.mark.django_db(transaction=True)
-def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(buckets, organization, monkeypatch):  # noqa: F811
+def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(
+    buckets, organization, monkeypatch
+):  # noqa: F811
     """The non-fatal contract has to hold on the create path too, not just behind the finish mutation.
 
     `fill_info` is now where the measurement happens, so this is the call that must not be able
@@ -308,7 +359,9 @@ def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(bucket
 
 
 @pytest.mark.django_db(transaction=True)
-def test_a_failed_measurement_does_not_erase_a_recorded_size(buckets, organization, monkeypatch):  # noqa: F811
+def test_a_failed_measurement_does_not_erase_a_recorded_size(
+    buckets, organization, monkeypatch
+):  # noqa: F811
     """A re-`fill_info` that cannot measure must leave the last good number alone.
 
     Null means "not measured". Overwriting a real size with it would turn a transient listing

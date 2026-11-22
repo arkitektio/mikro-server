@@ -18,11 +18,11 @@ org's thumbnails).
 """
 
 import pytest
+from arkitekt_datalayer.models import MediaStore
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import models
-from arkitekt_datalayer.models import MediaStore
 from mikro_server.schema import schema
 from tests import seed
 
@@ -87,7 +87,9 @@ async def _snapshot(ctx: HttpContext, scene, key: str, name=None):
     payload = {"file": str(store.pk), "scene": str(scene.pk)}
     if name is not None:
         payload["name"] = name
-    result = await schema.execute(CREATE, context_value=ctx, variable_values={"input": payload})
+    result = await schema.execute(
+        CREATE, context_value=ctx, variable_values={"input": payload}
+    )
     assert not result.errors, result.errors
     return result.data["createSceneSnapshot"]
 
@@ -103,7 +105,9 @@ async def _nominate(ctx: HttpContext, dataset, scene) -> None:
 
 
 async def _names(ctx: HttpContext, filters: dict) -> set[str]:
-    result = await schema.execute(LIST, context_value=ctx, variable_values={"filters": filters})
+    result = await schema.execute(
+        LIST, context_value=ctx, variable_values={"filters": filters}
+    )
     assert not result.errors, result.errors
     return {row["name"] for row in result.data["sceneSnapshots"]}
 
@@ -121,10 +125,17 @@ async def _latest(ctx: HttpContext, dataset, lens, scene):
     result = await schema.execute(
         LATEST,
         context_value=ctx,
-        variable_values={"dataset": str(dataset.pk), "lens": str(lens.pk), "scene": str(scene.pk)},
+        variable_values={
+            "dataset": str(dataset.pk),
+            "lens": str(lens.pk),
+            "scene": str(scene.pk),
+        },
     )
     assert not result.errors, result.errors
-    return tuple((result.data[key]["latestSnapshot"] or {}).get("name") for key in ("arrayDataset", "lens", "scene"))
+    return tuple(
+        (result.data[key]["latestSnapshot"] or {}).get("name")
+        for key in ("arrayDataset", "lens", "scene")
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -152,7 +163,9 @@ async def test_create_records_its_creator(db, authenticated_context: HttpContext
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_scene_deletes_its_pictures(db, authenticated_context: HttpContext):
+async def test_deleting_the_scene_deletes_its_pictures(
+    db, authenticated_context: HttpContext
+):
     """A picture of a composition depicts nothing once the composition is gone."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -186,18 +199,28 @@ async def test_pin_toggles_both_ways(db, authenticated_context: HttpContext):
     scene = await seed.create_scene(ctx, "Composition")
     created = await _snapshot(ctx, scene, "pin.png", name="Pinned")
 
-    result = await schema.execute(PIN, context_value=ctx, variable_values={"input": {"id": created["id"], "pin": True}})
+    result = await schema.execute(
+        PIN,
+        context_value=ctx,
+        variable_values={"input": {"id": created["id"], "pin": True}},
+    )
     assert not result.errors, result.errors
     assert await _names(ctx, {"pinned": True}) == {"Pinned"}
 
-    result = await schema.execute(PIN, context_value=ctx, variable_values={"input": {"id": created["id"], "pin": False}})
+    result = await schema.execute(
+        PIN,
+        context_value=ctx,
+        variable_values={"input": {"id": created["id"], "pin": False}},
+    )
     assert not result.errors, result.errors
     assert await _names(ctx, {"pinned": True}) == set()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_guard(db, authenticated_context: HttpContext, bot_context: HttpContext):
+async def test_delete_guard(
+    db, authenticated_context: HttpContext, bot_context: HttpContext
+):
     """Run as the bot, not the default context.
 
     `assert_can_delete` returns early for org admins, and `authenticated_context` is one --
@@ -207,19 +230,27 @@ async def test_delete_guard(db, authenticated_context: HttpContext, bot_context:
     scene = await seed.create_scene(ctx, "Composition")
 
     mine = await _snapshot(bot_context, scene, "mine.png", name="Mine")
-    result = await schema.execute(DELETE, context_value=bot_context, variable_values={"input": {"id": mine["id"]}})
+    result = await schema.execute(
+        DELETE, context_value=bot_context, variable_values={"input": {"id": mine["id"]}}
+    )
     assert not result.errors, result.errors
     assert not await models.SceneSnapshot.objects.filter(pk=mine["id"]).aexists()
 
     theirs = await _snapshot(ctx, scene, "theirs.png", name="Theirs")
-    result = await schema.execute(DELETE, context_value=bot_context, variable_values={"input": {"id": theirs["id"]}})
+    result = await schema.execute(
+        DELETE,
+        context_value=bot_context,
+        variable_values={"input": {"id": theirs["id"]}},
+    )
     assert result.errors, "a non-admin must not delete another user's snapshot"
     assert await models.SceneSnapshot.objects.filter(pk=theirs["id"]).aexists()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_list_is_scoped_to_the_organization(db, authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_the_list_is_scoped_to_the_organization(
+    db, authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """Without get_queryset a bare list field returns every row in the table.
 
     The legacy `snapshots` field has exactly that hole. It needs two organizations to see,
@@ -227,7 +258,12 @@ async def test_the_list_is_scoped_to_the_organization(db, authenticated_context:
     """
     ctx = authenticated_context
     await _snapshot(ctx, await seed.create_scene(ctx, "Ours"), "ours.png", name="Ours")
-    await _snapshot(other_org_context, await seed.create_scene(other_org_context, "Theirs"), "theirs.png", name="Theirs")
+    await _snapshot(
+        other_org_context,
+        await seed.create_scene(other_org_context, "Theirs"),
+        "theirs.png",
+        name="Theirs",
+    )
 
     assert await _names(ctx, {}) == {"Ours"}
     assert await _names(other_org_context, {}) == {"Theirs"}
@@ -235,7 +271,9 @@ async def test_the_list_is_scoped_to_the_organization(db, authenticated_context:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_previews_the_scene_it_nominates(db, authenticated_context: HttpContext):
+async def test_a_dataset_previews_the_scene_it_nominates(
+    db, authenticated_context: HttpContext
+):
     """The whole feature: nominate a scene, and the dataset reports that scene's newest picture."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -255,7 +293,9 @@ async def test_a_dataset_previews_the_scene_it_nominates(db, authenticated_conte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_second_dataset_in_the_scene_no_longer_blinds_it(db, authenticated_context: HttpContext):
+async def test_a_second_dataset_in_the_scene_no_longer_blinds_it(
+    db, authenticated_context: HttpContext
+):
     """The inversion, and the reason for the change.
 
     This replaces `test_sole_occupancy_a_second_dataset_blinds_both`, which pinned the opposite:
@@ -284,7 +324,9 @@ async def test_a_second_dataset_in_the_scene_no_longer_blinds_it(db, authenticat
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_one_scene_is_the_default_for_many_datasets(db, authenticated_context: HttpContext):
+async def test_one_scene_is_the_default_for_many_datasets(
+    db, authenticated_context: HttpContext
+):
     """The shape the dataset-side FK exists to allow, read from the scene."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Plate")
@@ -298,12 +340,18 @@ async def test_one_scene_is_the_default_for_many_datasets(db, authenticated_cont
         variable_values={"id": str(scene.pk)},
     )
     assert not result.errors, result.errors
-    assert {row["dataset"]["name"] for row in result.data["scene"]["defaultFor"]} == {"Well0", "Well1", "Well2"}, "nominated through their whole lenses"
+    assert {row["dataset"]["name"] for row in result.data["scene"]["defaultFor"]} == {
+        "Well0",
+        "Well1",
+        "Well2",
+    }, "nominated through their whole lenses"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_latest_falls_back_to_the_previous(db, authenticated_context: HttpContext):
+async def test_deleting_the_latest_falls_back_to_the_previous(
+    db, authenticated_context: HttpContext
+):
     """Latest is recomputed per request, never stored -- deleting it needs no invalidation."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -315,14 +363,18 @@ async def test_deleting_the_latest_falls_back_to_the_previous(db, authenticated_
     newest = await _snapshot(ctx, scene, "new.png", name="New")
     assert await _latest(ctx, dataset, lens, scene) == ("New", "New", "New")
 
-    result = await schema.execute(DELETE, context_value=ctx, variable_values={"input": {"id": newest["id"]}})
+    result = await schema.execute(
+        DELETE, context_value=ctx, variable_values={"input": {"id": newest["id"]}}
+    )
     assert not result.errors, result.errors
     assert await _latest(ctx, dataset, lens, scene) == ("Old", "Old", "Old")
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dataset_nominating_nothing_has_no_latest_snapshot(db, authenticated_context: HttpContext):
+async def test_a_dataset_nominating_nothing_has_no_latest_snapshot(
+    db, authenticated_context: HttpContext
+):
     """No nomination, no tile -- even for a scene the dataset is registered into.
 
     Before nominations existed, registration alone was enough; it no longer is.
@@ -342,12 +394,16 @@ async def test_a_dataset_nominating_nothing_has_no_latest_snapshot(db, authentic
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_lens_of_a_dataset_reports_its_default(db, authenticated_context: HttpContext):
+async def test_every_lens_of_a_dataset_reports_its_default(
+    db, authenticated_context: HttpContext
+):
     """The nomination is a fact about the dataset, so its lenses all answer alike."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
     whole = await seed.create_lens(ctx, dataset, slices=[])
-    cropped = await seed.create_lens(ctx, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}])
+    cropped = await seed.create_lens(
+        ctx, dataset, slices=[{"axis": "y", "start": 8, "stop": 40}]
+    )
     scene = await seed.create_scene(ctx, "Composition")
     await _nominate(ctx, dataset, scene)
     await _snapshot(ctx, scene, "both.png", name="Both")
@@ -358,7 +414,9 @@ async def test_every_lens_of_a_dataset_reports_its_default(db, authenticated_con
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_deleting_the_scene_clears_the_nomination(db, authenticated_context: HttpContext):
+async def test_deleting_the_scene_clears_the_nomination(
+    db, authenticated_context: HttpContext
+):
     """SET_NULL: deleting a scene must never delete or hide the data that pointed at it."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -374,12 +432,16 @@ async def test_deleting_the_scene_clears_the_nomination(db, authenticated_contex
 
     whole = await models.ArrayLens.objects.aget(dataset_id=dataset.pk, slices=[])
     assert whole.default_scene_id is None, "the pointer clears"
-    assert await models.ArrayDataset.objects.filter(pk=dataset.pk).aexists(), "and the dataset survives"
+    assert await models.ArrayDataset.objects.filter(pk=dataset.pk).aexists(), (
+        "and the dataset survives"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_set_default_scene_clears_with_null(db, authenticated_context: HttpContext):
+async def test_set_default_scene_clears_with_null(
+    db, authenticated_context: HttpContext
+):
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
     scene = await seed.create_scene(ctx, "Composition")
@@ -411,17 +473,31 @@ async def test_default_for_at_scene_creation(db, authenticated_context: HttpCont
         variable_values={"input": {"name": "Staged", "defaultFor": [str(whole.pk)]}},
     )
     assert not result.errors, result.errors
-    assert [(row["id"], row["dataset"]["name"]) for row in result.data["createScene"]["defaultFor"]] == [(str(whole.pk), "DS")]
+    assert [
+        (row["id"], row["dataset"]["name"])
+        for row in result.data["createScene"]["defaultFor"]
+    ] == [(str(whole.pk), "DS")]
     refreshed = await models.ArrayLens.objects.aget(pk=whole.pk)
-    assert str(refreshed.default_scene_id) == result.data["createScene"]["id"], "the whole lens holds the dataset's nomination"
-    read = await schema.execute("query D($id: ID!) { arrayDataset(id: $id) { defaultScene { id } } }", context_value=ctx, variable_values={"id": str(dataset.pk)})
+    assert str(refreshed.default_scene_id) == result.data["createScene"]["id"], (
+        "the whole lens holds the dataset's nomination"
+    )
+    read = await schema.execute(
+        "query D($id: ID!) { arrayDataset(id: $id) { defaultScene { id } } }",
+        context_value=ctx,
+        variable_values={"id": str(dataset.pk)},
+    )
     assert not read.errors, read.errors
-    assert read.data["arrayDataset"]["defaultScene"]["id"] == result.data["createScene"]["id"], "and the dataset answers through it"
+    assert (
+        read.data["arrayDataset"]["defaultScene"]["id"]
+        == result.data["createScene"]["id"]
+    ), "and the dataset answers through it"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_only_the_datasets_owner_may_nominate(db, authenticated_context: HttpContext, bot_context: HttpContext):
+async def test_only_the_datasets_owner_may_nominate(
+    db, authenticated_context: HttpContext, bot_context: HttpContext
+):
     """Guarded on the dataset, because `Scene` carries no creator to guard on."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Theirs")
@@ -437,7 +513,9 @@ async def test_only_the_datasets_owner_may_nominate(db, authenticated_context: H
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_datasets_can_be_filtered_by_whether_they_have_a_default(db, authenticated_context: HttpContext):
+async def test_datasets_can_be_filtered_by_whether_they_have_a_default(
+    db, authenticated_context: HttpContext
+):
     ctx = authenticated_context
     nominated = await seed.create_array_dataset(ctx, "Nominated")
     await seed.create_array_dataset(ctx, "Bare")
@@ -459,7 +537,17 @@ async def test_datasets_can_be_filtered_by_whether_they_have_a_default(db, authe
     result = await schema.execute(
         "query S($filters: SceneFilter) { scenes(filters: $filters) { name } }",
         context_value=ctx,
-        variable_values={"filters": {"defaultForLens": str((await models.ArrayLens.objects.aget(dataset_id=nominated.pk, slices=[])).pk)}},
+        variable_values={
+            "filters": {
+                "defaultForLens": str(
+                    (
+                        await models.ArrayLens.objects.aget(
+                            dataset_id=nominated.pk, slices=[]
+                        )
+                    ).pk
+                )
+            }
+        },
     )
     assert not result.errors, result.errors
     assert [row["name"] for row in result.data["scenes"]] == ["Composition"]
@@ -475,7 +563,9 @@ query {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_latest_snapshot_page_is_constant_queries(db, authenticated_context: HttpContext, monkeypatch):
+async def test_latest_snapshot_page_is_constant_queries(
+    db, authenticated_context: HttpContext, monkeypatch
+):
     """A page of datasets and scenes must not pay per row for its tiles.
 
     Two regressions, one bound. `latestSnapshot` once walked the placement graph per org scene
@@ -510,14 +600,23 @@ async def test_latest_snapshot_page_is_constant_queries(db, authenticated_contex
 
     result = await schema.execute(LIST_WITH_LATEST, context_value=ctx)
     assert not result.errors, result.errors
-    tiles = {row["latestSnapshot"]["id"] for row in result.data["arrayDatasets"] if row["latestSnapshot"]}
+    tiles = {
+        row["latestSnapshot"]["id"]
+        for row in result.data["arrayDatasets"]
+        if row["latestSnapshot"]
+    }
     assert len(tiles) == 8, "every dataset must report its own tile"
-    assert len(queries) <= 12, f"page ran {len(queries)} queries -- was 16 with the sole-occupancy walk, and a per-row cost would be far worse:\n" + "\n".join(queries)
+    assert len(queries) <= 12, (
+        f"page ran {len(queries)} queries -- was 16 with the sole-occupancy walk, and a per-row cost would be far worse:\n"
+        + "\n".join(queries)
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_latest_snapshot_does_not_cross_organizations(db, authenticated_context: HttpContext, other_org_context: HttpContext):
+async def test_latest_snapshot_does_not_cross_organizations(
+    db, authenticated_context: HttpContext, other_org_context: HttpContext
+):
     """The candidate scenes are org-scoped, so another org's composition is never the answer."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Ours")
@@ -529,5 +628,3 @@ async def test_latest_snapshot_does_not_cross_organizations(db, authenticated_co
     await _snapshot(other_org_context, their_scene, "theirs.png", name="Theirs")
 
     assert await _latest(ctx, dataset, lens, scene) == (None, None, None)
-
-

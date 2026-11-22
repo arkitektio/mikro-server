@@ -1,15 +1,12 @@
 import datetime
 
-from django.db import transaction
-
-from kante.types import Info
-import strawberry
-
-from core import types, models
-
 import kante
+import strawberry
+from django.db import transaction
+from kante.types import Info
 from pydantic import BaseModel, Field, field_validator
-from core import enums
+
+from core import enums, models, types
 from core.creation import CreationContext
 from core.input_unions import prose_errors
 from core.inputs.coords import (
@@ -20,9 +17,9 @@ from core.inputs.coords import (
 )
 from core.inputs.validators import assert_rgba
 from core.logic import scene as scene_logic
+from core.mutations import lens as lens_mutations
 from core.mutations._generic import make_delete
 from core.scoping import get_for_org
-from core.mutations import lens as lens_mutations
 
 
 class CreateSceneInputModel(BaseModel):
@@ -49,14 +46,26 @@ class CreateSceneInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(CreateSceneInputModel, description="Input type for creating a scene over a world coordinate system: an adopted existing system (a shared space, a dataset's intrinsic grid, a physical space), or one created for it")
+@kante.pydantic_input(
+    CreateSceneInputModel,
+    description="Input type for creating a scene over a world coordinate system: an adopted existing system (a shared space, a dataset's intrinsic grid, a physical space), or one created for it",
+)
 class CreateSceneInput:
     """Input for creating a scene."""
 
     name: str = strawberry.field(description="The name of the scene")
-    blending: enums.Blending | None = strawberry.field(default=None, description="Optional blending mode to use for the scene, e.g. 'additive', 'alpha', etc. If not provided, a default blending mode will be used.")
-    preferred_view: enums.PreferredView | None = strawberry.field(default=None, description="How a viewer should open this scene: flat, volumetric, or its own choice. Defaults to AUTO. Changeable afterwards with `updateScene`")
-    background_color: list[float] | None = strawberry.field(default=None, description="The viewer background, as RGBA: exactly four components. Omit to let the viewer use its own")
+    blending: enums.Blending | None = strawberry.field(
+        default=None,
+        description="Optional blending mode to use for the scene, e.g. 'additive', 'alpha', etc. If not provided, a default blending mode will be used.",
+    )
+    preferred_view: enums.PreferredView | None = strawberry.field(
+        default=None,
+        description="How a viewer should open this scene: flat, volumetric, or its own choice. Defaults to AUTO. Changeable afterwards with `updateScene`",
+    )
+    background_color: list[float] | None = strawberry.field(
+        default=None,
+        description="The viewer background, as RGBA: exactly four components. Omit to let the viewer use its own",
+    )
     axes: list[PhysicalAxisInput] | None = strawberry.field(
         default=None,
         description="The axes of the scene's world coordinate system, with their physical units. The scene has no units of its own -- they are per-axis. Defaults to a spatio-temporal world: a second-valued t, then an isotropic micrometre z, y, x. Pass an explicit list for a purely spatial scene. Mutually exclusive with `coordinateSystem`",
@@ -73,10 +82,15 @@ class CreateSceneInput:
         default=None,
         description="An existing coordinate system to adopt as this scene's world instead of creating one: a shared space, a dataset's intrinsic pixel grid, a physical space, or a collection's space -- anything except a derived pixel grid (a pyramid level, a sliced lens) (a slice of a grid). The scene composes over the space as it is -- axes and epoch come from it, so `axes` and `epoch` must not be passed alongside. The space is never owned by the scene: many scenes can share it, it survives their deletion, and while a scene is rooted in it the space (and its container) cannot be deleted. Over an owned space only that container's own data tree composes; foreign data needs a shared space",
     )
-    default_for: list[strawberry.ID] | None = strawberry.field(default=None, description="The lenses that should open this scene by default, and take their thumbnail from it -- a container's whole lens (`fullLens`) to nominate for the container. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must be the maker of each lens named or own its container")
+    default_for: list[strawberry.ID] | None = strawberry.field(
+        default=None,
+        description="The lenses that should open this scene by default, and take their thumbnail from it -- a container's whole lens (`fullLens`) to nominate for the container. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must be the maker of each lens named or own its container",
+    )
 
 
-def _nominate_all(info: Info, scene: "models.Scene", lens_ids: "list[str] | None") -> None:
+def _nominate_all(
+    info: Info, scene: "models.Scene", lens_ids: "list[str] | None"
+) -> None:
     """Point each named lens at this scene as its default, guarding each write.
 
     One transaction: nominating three lenses and failing the third must not leave two
@@ -100,7 +114,11 @@ def create_scene(
     model = input.to_pydantic()
     ctx = CreationContext.from_info(info)
 
-    world = get_for_org(models.CoordinateSystem, info, id=model.coordinate_system) if model.coordinate_system else None
+    world = (
+        get_for_org(models.CoordinateSystem, info, id=model.coordinate_system)
+        if model.coordinate_system
+        else None
+    )
     scene = scene_logic.create_scene(
         name=model.name,
         axes=model.axes,
@@ -130,13 +148,26 @@ class CreateSceneFromCoordinateSystemInputModel(BaseModel):
 class CreateSceneFromCoordinateSystemInput:
     """Input for bootstrapping a scene over an existing coordinate system."""
 
-    coordinate_system: strawberry.ID = strawberry.field(description="The coordinate system to build the scene over: a shared space (its registered sources become the layers) or an owned system such as a dataset's intrinsic grid or physical space (its container's data becomes the layer). It becomes the scene's world as it is. Derived pixel grids are refused")
-    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the coordinate system's name")
-    policy: ScenePolicyInput = strawberry.field(default_factory=ScenePolicyInput, description="How the scene is materialized: at most nchildren sources, filtered by kind (transform_tables, include_meshes)")
-    default_for: list[strawberry.ID] | None = strawberry.field(default=None, description="The lenses that should open this scene by default, and take their thumbnail from it -- a container's whole lens (`fullLens`) to nominate for the container. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must be the maker of each lens named or own its container")
+    coordinate_system: strawberry.ID = strawberry.field(
+        description="The coordinate system to build the scene over: a shared space (its registered sources become the layers) or an owned system such as a dataset's intrinsic grid or physical space (its container's data becomes the layer). It becomes the scene's world as it is. Derived pixel grids are refused"
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="The name of the scene. Defaults to the coordinate system's name",
+    )
+    policy: ScenePolicyInput = strawberry.field(
+        default_factory=ScenePolicyInput,
+        description="How the scene is materialized: at most nchildren sources, filtered by kind (transform_tables, include_meshes)",
+    )
+    default_for: list[strawberry.ID] | None = strawberry.field(
+        default=None,
+        description="The lenses that should open this scene by default, and take their thumbnail from it -- a container's whole lens (`fullLens`) to nominate for the container. Sets each one's `defaultScene` in the same call, so staging a space and pointing its data back at the result is one round trip. A nomination only -- it claims nothing about where the data sits. You must be the maker of each lens named or own its container",
+    )
 
 
-def create_scene_from_coordinate_system(info: Info, input: CreateSceneFromCoordinateSystemInput) -> types.Scene:
+def create_scene_from_coordinate_system(
+    info: Info, input: CreateSceneFromCoordinateSystemInput
+) -> types.Scene:
     """Bootstrap a scene over an existing coordinate system and the sources registered into it.
 
     The scene adopts the system as its world; each source registered one hop into it
@@ -149,7 +180,9 @@ def create_scene_from_coordinate_system(info: Info, input: CreateSceneFromCoordi
     system = get_for_org(models.CoordinateSystem, info, id=model.coordinate_system)
     ctx = CreationContext.from_info(info)
 
-    scene = scene_logic.bootstrap_scene_from_system(system, model.policy, ctx, name=model.name)
+    scene = scene_logic.bootstrap_scene_from_system(
+        system, model.policy, ctx, name=model.name
+    )
     _nominate_all(info, scene, model.default_for)
     return scene
 
@@ -172,8 +205,13 @@ class CreateSceneFromLensInputModel(BaseModel):
 class CreateSceneFromLensInput:
     """Input for bootstrapping a scene over one lens."""
 
-    lens: strawberry.ID = strawberry.field(description="The lens to show, of any kind. Its layer(s) read this lens: a crop or the whole array as image layers per channel, a window over a table as a point or track layer, over a mesh, network or annotation collection as that layer")
-    name: str | None = strawberry.field(default=None, description="The name of the scene. Defaults to the container's label (a collection's name, or its store's key), with the lens' name when it has one")
+    lens: strawberry.ID = strawberry.field(
+        description="The lens to show, of any kind. Its layer(s) read this lens: a crop or the whole array as image layers per channel, a window over a table as a point or track layer, over a mesh, network or annotation collection as that layer"
+    )
+    name: str | None = strawberry.field(
+        default=None,
+        description="The name of the scene. Defaults to the container's label (a collection's name, or its store's key), with the lens' name when it has one",
+    )
     kind: enums.BootstrapLayerKind | None = strawberry.field(
         default=None,
         description="(array lenses) The render recipe for the layers, overriding what would be inferred from the lens' axes and from what ingest recorded -- the same choice as `ScenePolicyInput.kind`",
@@ -205,11 +243,17 @@ def create_scene_from_lens(info: Info, input: CreateSceneFromLensInput) -> types
     model = input.to_pydantic()
 
     lens = get_for_org(models.Lens, info, id=model.lens)
-    world = get_for_org(models.CoordinateSystem, info, id=model.world) if model.world else None
+    world = (
+        get_for_org(models.CoordinateSystem, info, id=model.world)
+        if model.world
+        else None
+    )
     ctx = CreationContext.from_info(info)
 
     with transaction.atomic():
-        scene = scene_logic.bootstrap_scene_from_lens(lens, ctx, name=model.name, kind=model.kind, world=world)
+        scene = scene_logic.bootstrap_scene_from_lens(
+            lens, ctx, name=model.name, kind=model.kind, world=world
+        )
         # Asked of the column that would be written, not of `nominated_scene_id`: a crop that
         # is only *borrowing* its container's picture has nominated nothing yet.
         if model.nominate and lens.default_scene_id is None:
@@ -234,13 +278,22 @@ class UpdateSceneInputModel(BaseModel):
 
 
 @prose_errors
-@kante.pydantic_input(UpdateSceneInputModel, description="Input for setting a scene's viewer preferences. Every field is optional and an omitted one is left alone, so a client may set one preference without restating the others")
+@kante.pydantic_input(
+    UpdateSceneInputModel,
+    description="Input for setting a scene's viewer preferences. Every field is optional and an omitted one is left alone, so a client may set one preference without restating the others",
+)
 class UpdateSceneInput:
     """Input for setting a scene's viewer preferences."""
 
     id: strawberry.ID = strawberry.field(description="The ID of the scene to update")
-    preferred_view: enums.PreferredView | None = strawberry.field(default=None, description="How a viewer should open this scene. Omit to leave it as it is")
-    background_color: list[float] | None = strawberry.field(default=None, description="The viewer background, as RGBA: exactly four components. Omit to leave it as it is")
+    preferred_view: enums.PreferredView | None = strawberry.field(
+        default=None,
+        description="How a viewer should open this scene. Omit to leave it as it is",
+    )
+    background_color: list[float] | None = strawberry.field(
+        default=None,
+        description="The viewer background, as RGBA: exactly four components. Omit to leave it as it is",
+    )
 
 
 def update_scene(info: Info, input: UpdateSceneInput) -> types.Scene:
@@ -278,7 +331,10 @@ class ClearSceneInputModel(BaseModel):
     id: str = Field(description="The ID of the scene to clear")
 
 
-@kante.pydantic_input(ClearSceneInputModel, description="Input for clearing a scene: delete every layer, keep the scene and everything it composes over")
+@kante.pydantic_input(
+    ClearSceneInputModel,
+    description="Input for clearing a scene: delete every layer, keep the scene and everything it composes over",
+)
 class ClearSceneInput:
     """Input for clearing a scene of its layers."""
 
@@ -307,7 +363,9 @@ class DeleteSceneInputModel(BaseModel):
     id: str = Field(description="The ID of the scene to delete")
 
 
-@kante.pydantic_input(DeleteSceneInputModel, description="Input for deleting a scene by ID")
+@kante.pydantic_input(
+    DeleteSceneInputModel, description="Input for deleting a scene by ID"
+)
 class DeleteSceneInput:
     """Input for deleting a scene by ID"""
 

@@ -25,7 +25,8 @@ lookup can still return several rows ((t, i) uniqueness is a convention no index
 client that collected several parents may execute a ONE step as MANY.
 """
 
-from typing import Any, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 Cardinality = Literal["ONE", "MANY"]
 
@@ -87,12 +88,16 @@ def build_lookup_sql(lookup: Any, *, cardinality: Cardinality = "ONE") -> str:
     """
     keys = key_column_names(lookup)
     if not keys:
-        raise ValueError("a lookup binds at least one key column; a statement with no WHERE would read every row")
+        raise ValueError(
+            "a lookup binds at least one key column; a statement with no WHERE would read every row"
+        )
     attributes = attribute_names(lookup)
 
     if cardinality == "MANY":
         selected = keys + [name for name in attributes if name not in keys]
-        where = " AND ".join(f"{quote_identifier(name)} IN (SELECT unnest(?))" for name in keys)
+        where = " AND ".join(
+            f"{quote_identifier(name)} IN (SELECT unnest(?))" for name in keys
+        )
     elif cardinality == "ONE":
         selected = attributes or keys
         where = " AND ".join(f"{quote_identifier(name)} = ?" for name in keys)

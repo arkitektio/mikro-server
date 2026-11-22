@@ -47,11 +47,20 @@ mutation Create($input: CreateMeshLayerInput!) {
 }
 """
 
-ZYX_MESH_AXES = [{"name": "z", "type": "SPACE"}, {"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]
+ZYX_MESH_AXES = [
+    {"name": "z", "type": "SPACE"},
+    {"name": "y", "type": "SPACE"},
+    {"name": "x", "type": "SPACE"},
+]
 
 TRACK_COLUMNS = [
     {"name": "track_id", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
-    {"name": "mean_velocity", "dtype": "DOUBLE", "role": "ATTRIBUTE", "unit": "micrometer"},
+    {
+        "name": "mean_velocity",
+        "dtype": "DOUBLE",
+        "role": "ATTRIBUTE",
+        "unit": "micrometer",
+    },
     {"name": "fate", "dtype": "VARCHAR", "role": "LABEL"},
 ]
 
@@ -59,28 +68,59 @@ TRACK_COLUMNS = [
 def _object_columns(tracks: str | None) -> list[dict]:
     """One row per mesh: a key, a measure, a class, and optionally a hop into the tracks table."""
     columns = [
-        {"name": "object", "dtype": "BIGINT", "role": "COORDINATE", "axisType": "INDEX"},
-        {"name": "volume", "dtype": "DOUBLE", "role": "ATTRIBUTE", "unit": "micrometer**3"},
+        {
+            "name": "object",
+            "dtype": "BIGINT",
+            "role": "COORDINATE",
+            "axisType": "INDEX",
+        },
+        {
+            "name": "volume",
+            "dtype": "DOUBLE",
+            "role": "ATTRIBUTE",
+            "unit": "micrometer**3",
+        },
         {"name": "cell_type", "dtype": "VARCHAR", "role": "LABEL"},
     ]
     if tracks is not None:
-        columns.append({"name": "instance_id", "dtype": "BIGINT", "role": "TRACK_ID", "references": tracks})
+        columns.append(
+            {
+                "name": "instance_id",
+                "dtype": "BIGINT",
+                "role": "TRACK_ID",
+                "references": tracks,
+            }
+        )
     return columns
 
 
 async def _collection(ctx: HttpContext) -> models.MeshCollection:
-    store = await seed.create_fabriks_store(ctx, axes=[axis["name"] for axis in ZYX_MESH_AXES])
+    store = await seed.create_fabriks_store(
+        ctx, axes=[axis["name"] for axis in ZYX_MESH_AXES]
+    )
     result = await schema.execute(
         "mutation Create($input: CreateMeshCollectionInput!) { createMeshCollection(input: $input) { id } }",
         context_value=ctx,
-        variable_values={"input": {"name": "v1", "store": str(store.pk), "axes": ZYX_MESH_AXES}},
+        variable_values={
+            "input": {"name": "v1", "store": str(store.pk), "axes": ZYX_MESH_AXES}
+        },
     )
     assert not result.errors, result.errors
-    return await sync_to_async(models.MeshCollection.objects.get)(id=result.data["createMeshCollection"]["id"])
+    return await sync_to_async(models.MeshCollection.objects.get)(
+        id=result.data["createMeshCollection"]["id"]
+    )
 
 
-async def _table(ctx: HttpContext, name: str, columns: list[dict], **extra: object) -> str:
-    await sync_to_async(models.ParquetStore.objects.create)(path=f"s3://parquet/{name}", bucket="parquet", key=name, organization=ctx.request.organization, populated=True)
+async def _table(
+    ctx: HttpContext, name: str, columns: list[dict], **extra: object
+) -> str:
+    await sync_to_async(models.ParquetStore.objects.create)(
+        path=f"s3://parquet/{name}",
+        bucket="parquet",
+        key=name,
+        organization=ctx.request.organization,
+        populated=True,
+    )
     result = await schema.execute(
         CREATE_TABLE,
         context_value=ctx,
@@ -90,8 +130,14 @@ async def _table(ctx: HttpContext, name: str, columns: list[dict], **extra: obje
     return result.data["createTableDataset"]["id"]
 
 
-async def _options(ctx: HttpContext, collection: models.MeshCollection, **extra: object):
-    result = await schema.execute(OPTIONS, context_value=ctx, variable_values={"collection": str(collection.pk), **extra})
+async def _options(
+    ctx: HttpContext, collection: models.MeshCollection, **extra: object
+):
+    result = await schema.execute(
+        OPTIONS,
+        context_value=ctx,
+        variable_values={"collection": str(collection.pk), **extra},
+    )
     assert not result.errors, result.errors
     return result.data["colorByOptions"]
 
@@ -111,7 +157,9 @@ async def _keyed_stack(ctx: HttpContext, *, with_tracks: bool = True):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_context: HttpContext):
+async def test_the_options_are_exactly_what_the_mutation_accepts(
+    authenticated_context: HttpContext,
+):
     """The invariant this query exists for, asserted the only way that means anything: by writing them.
 
     Every option is fed straight back into `createMeshLayer(colorBys:)`. If the enumerator and
@@ -133,13 +181,18 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_c
     await sync_to_async(register)()
 
     options = await _options(authenticated_context, collection)
-    assert options, "the fixture keys a table off this collection, so there is something to offer"
+    assert options, (
+        "the fixture keys a table off this collection, so there is something to offer"
+    )
 
     for option in options:
         entry = {
             "table": option["table"]["id"],
             "column": option["column"]["name"],
-            "joinPath": [{"table": step["table"]["id"], "column": step["column"]["name"]} for step in option["joinPath"]],
+            "joinPath": [
+                {"table": step["table"]["id"], "column": step["column"]["name"]}
+                for step in option["joinPath"]
+            ],
         }
         # The control says which *sort* of colormap the column admits, and the mutation
         # enforces exactly that -- which is the invariant this test is for.
@@ -148,10 +201,23 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_c
         result = await schema.execute(
             CREATE_LAYER,
             context_value=authenticated_context,
-            variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.pk)), "colorBys": [entry]}},
+            variable_values={
+                "input": {
+                    "scene": str(scene.pk),
+                    "lens": await seed.whole_lens_id(
+                        models.MeshCollection, str(collection.pk)
+                    ),
+                    "colorBys": [entry],
+                }
+            },
         )
-        assert not result.errors, f"offered {entry} and the mutation refused it: {result.errors}"
-        assert result.data["createMeshLayer"]["colorBys"][0]["joinPath"] == entry["joinPath"]
+        assert not result.errors, (
+            f"offered {entry} and the mutation refused it: {result.errors}"
+        )
+        assert (
+            result.data["createMeshLayer"]["colorBys"][0]["joinPath"]
+            == entry["joinPath"]
+        )
 
     # And the other half of the invariant: a table nothing keys is not offered, and is refused.
     unrelated = await _table(authenticated_context, "unrelated", _object_columns(None))
@@ -160,7 +226,17 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_c
     refused = await schema.execute(
         CREATE_LAYER,
         context_value=authenticated_context,
-        variable_values={"input": {"scene": str(scene.pk), "lens": await seed.whole_lens_id(models.MeshCollection, str(collection.pk)), "colorBys": [{"table": unrelated, "column": "volume", "colormap": "VIRIDIS"}]}},
+        variable_values={
+            "input": {
+                "scene": str(scene.pk),
+                "lens": await seed.whole_lens_id(
+                    models.MeshCollection, str(collection.pk)
+                ),
+                "colorBys": [
+                    {"table": unrelated, "column": "volume", "colormap": "VIRIDIS"}
+                ],
+            }
+        },
     )
     assert refused.errors
 
@@ -169,22 +245,34 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(authenticated_c
 @pytest.mark.asyncio
 async def test_the_control_follows_the_column_role(authenticated_context: HttpContext):
     """The split a picker renders its controls from, published rather than re-derived by a client."""
-    collection, objects, tracks = await _keyed_stack(authenticated_context, with_tracks=False)
+    collection, objects, tracks = await _keyed_stack(
+        authenticated_context, with_tracks=False
+    )
 
     options = await _options(authenticated_context, collection)
     controls = {option["column"]["name"]: option["control"] for option in options}
 
-    assert controls["volume"] == "MEASURE", "a measured attribute takes a colormap and a range"
-    assert controls["cell_type"] == "CATEGORICAL", "a class label takes an explicit map and a value set"
-    assert controls["object"] == "MEASURE", "a COORDINATE column is measured too -- the same split Column uses for units"
+    assert controls["volume"] == "MEASURE", (
+        "a measured attribute takes a colormap and a range"
+    )
+    assert controls["cell_type"] == "CATEGORICAL", (
+        "a class label takes an explicit map and a value set"
+    )
+    assert controls["object"] == "MEASURE", (
+        "a COORDINATE column is measured too -- the same split Column uses for units"
+    )
 
     units = {option["column"]["name"]: option["column"]["unit"] for option in options}
-    assert units["volume"] == "micrometer**3", "the unit rides along, so a range control can label its slider"
+    assert units["volume"] == "micrometer**3", (
+        "the unit rides along, so a range control can label its slider"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_reference_is_one_hop_and_is_offered_with_its_path(authenticated_context: HttpContext):
+async def test_a_reference_is_one_hop_and_is_offered_with_its_path(
+    authenticated_context: HttpContext,
+):
     """The case the picker could not express before: colouring by a column of the *tracks* table.
 
     `instance_id` references `tracks`, so `tracks.mean_velocity` is one lookup further. The hop
@@ -195,10 +283,18 @@ async def test_a_reference_is_one_hop_and_is_offered_with_its_path(authenticated
     options = await _options(authenticated_context, collection, maxJoinDepth=1)
     hopped = [option for option in options if option["joinPath"]]
 
-    assert {option["column"]["name"] for option in hopped} == {"track_id", "mean_velocity", "fate"}, "every column of the referenced table, and only those"
-    velocity = next(option for option in hopped if option["column"]["name"] == "mean_velocity")
+    assert {option["column"]["name"] for option in hopped} == {
+        "track_id",
+        "mean_velocity",
+        "fate",
+    }, "every column of the referenced table, and only those"
+    velocity = next(
+        option for option in hopped if option["column"]["name"] == "mean_velocity"
+    )
     assert velocity["table"]["id"] == tracks
-    assert velocity["joinPath"] == [{"table": {"id": objects}, "column": {"name": "instance_id"}}]
+    assert velocity["joinPath"] == [
+        {"table": {"id": objects}, "column": {"name": "instance_id"}}
+    ]
     assert velocity["control"] == "MEASURE"
 
     # The hop column stays offerable in its own right: colouring the meshes *by* their track id
@@ -207,7 +303,9 @@ async def test_a_reference_is_one_hop_and_is_offered_with_its_path(authenticated
     assert "instance_id" in {option["column"]["name"] for option in direct}
 
     shallow = await _options(authenticated_context, collection, maxJoinDepth=0)
-    assert all(not option["joinPath"] for option in shallow), "depth 0 is the set that existed before join paths"
+    assert all(not option["joinPath"] for option in shallow), (
+        "depth 0 is the set that existed before join paths"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -216,48 +314,78 @@ async def test_the_narrowings_narrow(authenticated_context: HttpContext):
     """Search, roles, controls, table and directOnly -- each keeps what it says and drops the rest."""
     collection, objects, tracks = await _keyed_stack(authenticated_context)
 
-    searched = await _options(authenticated_context, collection, filters={"search": "veloc"})
+    searched = await _options(
+        authenticated_context, collection, filters={"search": "veloc"}
+    )
     assert {option["column"]["name"] for option in searched} == {"mean_velocity"}
 
-    by_table_name = await _options(authenticated_context, collection, filters={"search": "tracks"})
-    assert by_table_name and all(option["table"]["id"] == tracks for option in by_table_name), "the table's name is searched too, so a whole table is findable by name"
+    by_table_name = await _options(
+        authenticated_context, collection, filters={"search": "tracks"}
+    )
+    assert by_table_name and all(
+        option["table"]["id"] == tracks for option in by_table_name
+    ), "the table's name is searched too, so a whole table is findable by name"
 
-    measures = await _options(authenticated_context, collection, filters={"controls": ["MEASURE"]})
+    measures = await _options(
+        authenticated_context, collection, filters={"controls": ["MEASURE"]}
+    )
     assert all(option["control"] == "MEASURE" for option in measures)
 
-    labels = await _options(authenticated_context, collection, filters={"roles": ["LABEL"]})
+    labels = await _options(
+        authenticated_context, collection, filters={"roles": ["LABEL"]}
+    )
     assert {option["column"]["name"] for option in labels} == {"cell_type", "fate"}
 
     # `table` means the table the value is *read from*, not one the path passes through: the
     # hopped options read from `tracks` and are dropped by the table they hop out of.
-    one_table = await _options(authenticated_context, collection, filters={"table": objects})
+    one_table = await _options(
+        authenticated_context, collection, filters={"table": objects}
+    )
     assert all(option["table"]["id"] == objects for option in one_table)
-    assert all(not option["joinPath"] for option in one_table), "an option hopping out of this table reads from another one"
+    assert all(not option["joinPath"] for option in one_table), (
+        "an option hopping out of this table reads from another one"
+    )
 
-    hopped_only = await _options(authenticated_context, collection, filters={"table": tracks})
-    assert hopped_only and all(option["joinPath"] for option in hopped_only), "nothing keys tracks directly, so every option reading from it is reached by a hop"
+    hopped_only = await _options(
+        authenticated_context, collection, filters={"table": tracks}
+    )
+    assert hopped_only and all(option["joinPath"] for option in hopped_only), (
+        "nothing keys tracks directly, so every option reading from it is reached by a hop"
+    )
 
-    direct = await _options(authenticated_context, collection, filters={"directOnly": True})
+    direct = await _options(
+        authenticated_context, collection, filters={"directOnly": True}
+    )
     assert all(not option["joinPath"] for option in direct)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_paging_is_stable_and_the_order_does_not_move(authenticated_context: HttpContext):
+async def test_paging_is_stable_and_the_order_does_not_move(
+    authenticated_context: HttpContext,
+):
     """A picker whose second page reshuffles is a menu whose rows move under the cursor."""
     collection, objects, tracks = await _keyed_stack(authenticated_context)
 
     everything = await _options(authenticated_context, collection)
     again = await _options(authenticated_context, collection)
-    assert [option["column"]["name"] for option in everything] == [option["column"]["name"] for option in again]
+    assert [option["column"]["name"] for option in everything] == [
+        option["column"]["name"] for option in again
+    ]
 
-    first = await _options(authenticated_context, collection, pagination={"offset": 0, "limit": 2})
-    second = await _options(authenticated_context, collection, pagination={"offset": 2, "limit": 2})
+    first = await _options(
+        authenticated_context, collection, pagination={"offset": 0, "limit": 2}
+    )
+    second = await _options(
+        authenticated_context, collection, pagination={"offset": 2, "limit": 2}
+    )
     assert first == everything[:2]
     assert second == everything[2:4]
 
     direct = [option for option in everything if not option["joinPath"]]
-    assert everything[: len(direct)] == direct, "direct columns come first, so a client wanting only those reads a prefix"
+    assert everything[: len(direct)] == direct, (
+        "direct columns come first, so a client wanting only those reads a prefix"
+    )
 
 
 FILTER_OPTIONS = """
@@ -274,7 +402,9 @@ query Options($collection: ID!, $filters: ColumnOptionFilter) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_two_pickers_are_offered_the_same_candidates(authenticated_context: HttpContext):
+async def test_the_two_pickers_are_offered_the_same_candidates(
+    authenticated_context: HttpContext,
+):
     """`filterByOptions` is a second name for one answer, not a second answer.
 
     A colouring and a rule reach the same column through the same join and branch on the same
@@ -285,7 +415,11 @@ async def test_the_two_pickers_are_offered_the_same_candidates(authenticated_con
     collection, objects, tracks = await _keyed_stack(authenticated_context)
 
     coloured = await _options(authenticated_context, collection)
-    result = await schema.execute(FILTER_OPTIONS, context_value=authenticated_context, variable_values={"collection": str(collection.pk)})
+    result = await schema.execute(
+        FILTER_OPTIONS,
+        context_value=authenticated_context,
+        variable_values={"collection": str(collection.pk)},
+    )
     assert not result.errors, result.errors
     filtered = result.data["filterByOptions"]
 
@@ -294,11 +428,19 @@ async def test_the_two_pickers_are_offered_the_same_candidates(authenticated_con
     narrowed = await schema.execute(
         FILTER_OPTIONS,
         context_value=authenticated_context,
-        variable_values={"collection": str(collection.pk), "filters": {"controls": ["CATEGORICAL"]}},
+        variable_values={
+            "collection": str(collection.pk),
+            "filters": {"controls": ["CATEGORICAL"]},
+        },
     )
     assert not narrowed.errors, narrowed.errors
-    assert narrowed.data["filterByOptions"], "the shared filter input narrows this query too"
-    assert all(option["control"] == "CATEGORICAL" for option in narrowed.data["filterByOptions"])
+    assert narrowed.data["filterByOptions"], (
+        "the shared filter input narrows this query too"
+    )
+    assert all(
+        option["control"] == "CATEGORICAL"
+        for option in narrowed.data["filterByOptions"]
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -316,12 +458,16 @@ async def test_a_collection_offers_its_own_options(authenticated_context: HttpCo
 
     nested = result.data["meshCollection"]["colorByOptions"]
     flat = await _options(authenticated_context, collection)
-    assert [option["column"]["name"] for option in nested] == [option["column"]["name"] for option in flat]
+    assert [option["column"]["name"] for option in nested] == [
+        option["column"]["name"] for option in flat
+    ]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_walk_costs_the_same_however_many_columns_there_are(authenticated_context: HttpContext):
+async def test_the_walk_costs_the_same_however_many_columns_there_are(
+    authenticated_context: HttpContext,
+):
     """The query count follows the join depth, never the schema's size.
 
     `field_edges_from` prefetches the tables but not their columns, and `columns_by_role` defeats
@@ -334,8 +480,8 @@ async def test_the_walk_costs_the_same_however_many_columns_there_are(authentica
     (`graph_logic.product_space_tables`) is why the count below is a constant three rather than
     a number that follows the graph.
     """
-    from django.test.utils import CaptureQueriesContext
     from django.db import connection
+    from django.test.utils import CaptureQueriesContext
 
     collection, objects, tracks = await _keyed_stack(authenticated_context)
     organization = authenticated_context.request.organization
@@ -348,14 +494,20 @@ async def test_the_walk_costs_the_same_however_many_columns_there_are(authentica
         here is one read per level.
         """
         with CaptureQueriesContext(connection) as captured:
-            options = column_options_logic.build_column_options(collection.coordinate_system, organization, max_join_depth=max_join_depth)
+            options = column_options_logic.build_column_options(
+                collection.coordinate_system,
+                organization,
+                max_join_depth=max_join_depth,
+            )
             assert options
         # Asked of the model rather than spelled out: this counted `core_tablecolumn` from the
         # day `TableColumn` was renamed to `Column` (migration 0007) until 2026-08-20, matched
         # nothing, and returned 0 -- so the N+1 this guards against would have gone straight
         # through it. A count that can silently become "no queries at all" is not a guard.
         table = models.Column._meta.db_table
-        return len([query for query in captured.captured_queries if table in query["sql"]])
+        return len(
+            [query for query in captured.captured_queries if table in query["sql"]]
+        )
 
     lean = await sync_to_async(column_reads)(1)
     # Three: one read per level -- the seed tables and the hop -- plus one for the reachability
@@ -363,10 +515,17 @@ async def test_the_walk_costs_the_same_however_many_columns_there_are(authentica
     # (`graph_logic.product_space_tables`). That third is one read for the whole set however
     # large the set is, which is why the assertion below is the one that matters: it is what
     # separates "a constant" from "a constant per level", and an N+1 would fail it.
-    assert lean == 3, f"one read per level, plus one for the reachability filter -- got {lean}"
+    assert lean == 3, (
+        f"one read per level, plus one for the reachability filter -- got {lean}"
+    )
 
     # A second keyed table with columns of its own, and a hop of its own off the tracks table.
-    await _table(authenticated_context, "more-stats", _object_columns(tracks), keyed_by=[{"kind": "MESH_COLLECTION", "meshCollection": str(collection.pk)}])
+    await _table(
+        authenticated_context,
+        "more-stats",
+        _object_columns(tracks),
+        keyed_by=[{"kind": "MESH_COLLECTION", "meshCollection": str(collection.pk)}],
+    )
     fat = await sync_to_async(column_reads)(1)
 
     assert fat == lean, f"the walk is per level, not per table: {lean} then {fat}"

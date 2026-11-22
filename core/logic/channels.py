@@ -27,7 +27,6 @@ import re
 
 from core import enums
 
-
 #: How a fluorophore's name maps to the hue it is conventionally drawn in. Keys are
 #: normalized (see :func:`normalize`), so "Alexa Fluor 647" and "alexa-fluor-647" are one
 #: entry. Matched as a whole label first and then as a substring, longest key first, so
@@ -99,8 +98,17 @@ _WAVELENGTH_HUES: list[tuple[int, int, "enums.ColorMap"]] = [
 #: be matched: the long ones are unambiguous anywhere in a label ("H2B-GFP brightfield" is a
 #: brightfield channel), while "bf", "tl" and "ph" are two letters and would fire inside any
 #: number of real fluorophore names, so they have to be the whole label.
-_TRANSMITTED_SUBSTRINGS = ("brightfield", "transmitted", "phasecontrast", "differentialinterference", "labelfree", "widefieldtrans")
-_TRANSMITTED_EXACT = frozenset({"bf", "tl", "trans", "dic", "phase", "ph", "brightfield", "transmission"})
+_TRANSMITTED_SUBSTRINGS = (
+    "brightfield",
+    "transmitted",
+    "phasecontrast",
+    "differentialinterference",
+    "labelfree",
+    "widefieldtrans",
+)
+_TRANSMITTED_EXACT = frozenset(
+    {"bf", "tl", "trans", "dic", "phase", "ph", "brightfield", "transmission"}
+)
 
 #: What the three components of a colour photograph are called, whatever the converter's
 #: taste. Only ever consulted as a complete set (see :func:`rgb_components`).
