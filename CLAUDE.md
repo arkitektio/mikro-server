@@ -266,3 +266,18 @@ What a save of the row cannot see is restored by whoever writes it (`core.descri
 A restore inside the transaction that created the row adds no UPDATED: its CREATED reads what is
 stored at the commit. A test that seeds rows by hand gets their descriptors through the same
 saves, so seed through the writers above.
+
+## Lint and types
+
+The arkitekt Python standard (arkitektio/.github, `python/`): `ruff.shared.toml` and
+`pyright.shared.json` are synced copies -- never edit them here; `ruff.toml` and
+`pyrightconfig.json` extend them with what is this repo's own. CI is the shared
+`python-quality` workflow (`.github/workflows/quality.yaml`): `uv run ruff check .`,
+`uv run ruff format --check .` and `uv run basedpyright` (against
+`.basedpyright/baseline.json`), all required. Every argument and return is annotated, tests
+included, with no `Any`, no PEP 695 syntax and no `Self`. Never add
+`from __future__ import annotations` to a module strawberry or pydantic reads. After a sweeping
+annotation change, print the SDL (`schema.as_str()`) before and after and compare: typing caches
+a `Union` by its members, so spelling one union `X | Y` can reorder another with the same
+members (`InViewSource` keeps `Union[...]` for `FileLinkContainer`'s sake). Fix a baselined
+error, run `uv run basedpyright --writebaseline`, and the baseline shrinks; it never grows back.
