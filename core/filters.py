@@ -24,7 +24,7 @@ from typing import Callable, Optional, Sequence
 from strawberry_django.filters import FilterLookup
 from kante.types import Info
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, Exists, F, OuterRef, Q, QuerySet
+from django.db.models import BooleanField, Count, Exists, ExpressionWrapper, F, OuterRef, Q, QuerySet
 from django.db.models.functions import Coalesce
 from embeddings.search import hybrid_search
 import kante
@@ -450,6 +450,15 @@ class FileFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, Create
         return _mime_group_q(prefix, value)
 
 
+#: The column of a `FileLink` each container kind is named in.
+FILE_LINK_CONTAINER_COLUMNS: dict[enums.FileLinkContainerKind, str] = {
+    enums.FileLinkContainerKind.DATASET: "dataset",
+    enums.FileLinkContainerKind.TABLE_DATASET: "table_dataset",
+    enums.FileLinkContainerKind.MESH_COLLECTION: "mesh_collection",
+    enums.FileLinkContainerKind.ANNOTATION_COLLECTION: "annotation_collection",
+}
+
+
 @kante.filter_type(models.FileLink)
 class FileLinkFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
     """Filters for the links between a file and the data it encodes."""
@@ -467,6 +476,11 @@ class FileLinkFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin
     def file(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         """Match links whose file side is this file."""
         return Q(**{f"{prefix}file_id": value})
+
+    @kante.filter_field(description="Filter by the sort of container the link names: only the array datasets, only the tables, and so on")
+    def container_kind(self, info: Info, value: enums.FileLinkContainerKind, prefix: str) -> Q:
+        """Match links whose container side is of this kind."""
+        return Q(**{f"{prefix}{FILE_LINK_CONTAINER_COLUMNS[value]}__isnull": False})
 
 
 # Multi-dimensional data system filters
@@ -1086,6 +1100,18 @@ class CoordinateSystemFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterM
     @kante.filter_field(description="Filter by a scene composing over this system as its world")
     def scene(self, info: Info, value: strawberry.ID, prefix: str) -> Q:
         return Q(**{f"{prefix}scenes__pk": value})
+
+    @kante.filter_field(
+        description=(
+            "Filter to the physical spaces -- every axis carries a unit: a calibration, a stage frame, a world -- or, with false, to the unitless index spaces: pixel grids, "
+            "pyramid levels, lens grids. `a.u.` counts as a unit. A space with no axes is not physical"
+        )
+    )
+    def physical(self, info: Info, queryset: QuerySet, value: bool, prefix: str) -> tuple[QuerySet, Q]:
+        has_axes = Exists(models.Axis.objects.filter(coordinate_system_id=OuterRef(f"{prefix}pk")))
+        unitless_axis = Exists(models.Axis.objects.filter(Q(unit__isnull=True) | Q(unit=""), coordinate_system_id=OuterRef(f"{prefix}pk")))
+        queryset = _annotate_once(queryset, "_physical_space", ExpressionWrapper(has_axes & ~unitless_axis, output_field=BooleanField()))
+        return queryset, Q(_physical_space=value)
 
 
 @kante.filter_type(models.Axis)

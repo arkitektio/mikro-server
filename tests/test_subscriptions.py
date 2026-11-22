@@ -49,6 +49,7 @@ subscription Lenses($kind: LensKind, $container: ID) {
     create { __typename id kind name descriptors ... on ArrayLens { dataset { id } } }
     update { id name }
     delete
+    deleteKind
   }
 }
 """
@@ -321,11 +322,11 @@ async def test_a_datasets_lenses_are_followed(db, authenticated_context: HttpCon
 
         await _run(ctx, rename, {"lens": lens, "label": "nucleus"})
         for follower in (of_dataset, in_org):
-            assert await follower.next() == {"create": None, "update": {"id": lens, "name": "nucleus"}, "delete": None}
+            assert await follower.next() == {"create": None, "update": {"id": lens, "name": "nucleus"}, "delete": None, "deleteKind": None}
 
         await _run(ctx, delete, {"id": lens})
         for follower in (of_dataset, in_org):
-            assert await follower.next() == {"create": None, "update": None, "delete": lens}
+            assert await follower.next() == {"create": None, "update": None, "delete": lens, "deleteKind": "ARRAY"}, "a delete names the kind the lens was cached as"
             assert await follower.silent()
 
 

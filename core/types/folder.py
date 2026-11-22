@@ -17,6 +17,7 @@ from kante.types import Info
 from strawberry import auto
 
 from django.db.models import Prefetch
+from strawberry_django.pagination import OffsetPaginationInput
 
 from core import enums, filters, models, order
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
@@ -89,6 +90,7 @@ class File:
 
     id: auto
     name: auto
+    created_at: datetime.datetime = kante.django_field(description="When this file was registered")
     store: BigFileStore
     folder: Optional["Folder"] = kante.django_field(description="The folder this file is filed in, or null once its folder was deleted (deleting a folder unfiles what is in it and destroys nothing). Organisational only: it says where a user keeps the file, nothing about its contents")
 
@@ -99,12 +101,39 @@ class File:
         ),
         prefetch_related=[_source_links_prefetch],
     )
-    def derived_containers(self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
+    def derived_containers(
+        self,
+        info: Info,
+        filters: filters.FileLinkFilter | None = strawberry.UNSET,
+        pagination: OffsetPaginationInput | None = None,
+    ) -> List[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
         """The links naming this file as a source: from the page's prefetch when the filter allows, one query otherwise."""
         prefetched = getattr(self, _SOURCE_LINKS_ATTR, None)
         if prefetched is not None and _asks_only_sources(filters):
-            return prefetched
-        return apply_link_filters(self.links.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value).order_by("pk"), filters, info)
+            links = list(prefetched)
+        else:
+            links = apply_link_filters(self.links.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value).order_by("pk"), filters, info)
+        if pagination is None:
+            return list(links)
+        offset = pagination.offset or 0
+        if pagination.limit is None or pagination.limit < 0:
+            return list(links[offset:])
+        return list(links[offset : offset + pagination.limit])
+
+    @kante.django_field(
+        description="How many containers `derivedContainers` lists, optionally of one kind: a count for a tile, without loading the links",
+        prefetch_related=[_source_links_prefetch],
+    )
+    def derived_containers_count(self, info: Info, kind: enums.FileLinkContainerKind | None = None) -> int:
+        """The number of SOURCE links of this file, from the page's prefetch when there is one."""
+        column = filters.FILE_LINK_CONTAINER_COLUMNS[kind] if kind is not None else None
+        prefetched = getattr(self, _SOURCE_LINKS_ATTR, None)
+        if prefetched is not None:
+            return sum(1 for link in prefetched if column is None or getattr(link, f"{column}_id") is not None)
+        links = self.links.filter(direction=enums.FileLinkDirectionChoices.SOURCE.value)
+        if column is not None:
+            links = links.filter(**{f"{column}__isnull": False})
+        return links.count()
 
     @kante.django_field(
         description="The containers this file was written from: the dataset exported to OME-TIFF, the mesh collection written to STL. The mirror of `derivedContainers`",

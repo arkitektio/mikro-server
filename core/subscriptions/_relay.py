@@ -37,4 +37,7 @@ async def relay_rows[M: Model, E](
                 yield event(update=row)
 
         elif message.delete is not None:
-            yield event(delete=strawberry.ID(str(message.delete)))
+            if message.kind is not None:
+                yield event(delete=strawberry.ID(str(message.delete)), delete_kind=message.kind)
+            else:
+                yield event(delete=strawberry.ID(str(message.delete)))

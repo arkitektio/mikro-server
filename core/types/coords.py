@@ -186,6 +186,40 @@ class CoordinateSystem(OrgScoped):
 
     provenance_entries: List[ProvenanceEntry] = kante.django_field(description="Provenance entries for this coordinate system: who created it, and every subsequent change")
     created_at: datetime.datetime
+
+    @kante.django_field(
+        prefetch_related=["axes"],
+        description=(
+            "Whether this is a physical space: every axis carries a unit (a calibration, a stage frame, a world). False for a unitless index space -- a pixel grid, a pyramid "
+            "level, a lens grid -- and for a space with no axes. `a.u.` counts as a unit. The same rule `CoordinateSystemFilter.physical` filters by"
+        )
+    )
+    def physical(self, info: Info) -> bool:
+        """Every axis has a unit."""
+        axes = list(self.axes.all())
+        return bool(axes) and all(axis.unit for axis in axes)
+
+    @kante.django_field(
+        description=(
+            "Every physical space this space reaches with the edges, each by its best route and with the size one step along each axis measures there, canonical first -- "
+            "ranked as `ArrayLens.voxelSizes` ranks them (the weakest validity on the route, then fewest hops), so a calibration several steps away is found. Empty for a "
+            "space that is itself physical, or that reaches none"
+        )
+    )
+    def voxel_sizes(self, info: Info) -> List["VoxelSize"]:
+        """One entry per physical space reached."""
+        return [
+            VoxelSize(
+                system=calibration.system,
+                axes=[AxisVoxelSize.of(size) for size in calibration.sizes],
+                canonical=calibration.canonical,
+                validity=enums.PlacementValidity(calibration.validity),
+                hops=calibration.hops,
+                problem=calibration.problem,
+                route=calibration.route,
+            )
+            for calibration in graph_logic.system_calibrations(self)
+        ]
     # Nullable: the creator FK is SET_NULL, so a system outlives the user who made it.
     creator: User | None
 
@@ -1129,6 +1163,11 @@ class MeshObject:
         """Every container with a derivation edge naming this object."""
         # A plain strawberry type, not a django one: its ORM read leaves the event loop itself.
         return await sync_to_async(graph_logic.mesh_object_derived_containers)(self._collection, self.object_id)
+
+    @strawberry.field(description="How many containers `derivedResidents` lists: a count for a card, without loading what they are")
+    async def derived_residents_count(self, info: Info) -> int:
+        """The number of containers derived from this object."""
+        return len(await sync_to_async(graph_logic.mesh_object_derived_containers)(self._collection, self.object_id))
 
 
 @kante.django_type(

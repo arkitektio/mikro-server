@@ -1199,6 +1199,23 @@ _describe(
 )
 
 
+@strawberry.enum(description="Which way a walk over the coordinate graph follows an edge")
+class GraphDirection(str, Enum):
+    """The direction a graph walk follows edges in."""
+
+    OUTGOING = "OUTGOING"
+    INCOMING = "INCOMING"
+    BOTH = "BOTH"
+
+
+_describe(
+    GraphDirection,
+    OUTGOING="From an edge's input to its output only: where this space maps to -- its physical spaces, the worlds it is registered into, and onward.",
+    INCOMING="From an edge's output to its input only: what maps into this space -- the grids, levels and lenses registered into it, and theirs.",
+    BOTH="Either way: the whole connected component, which reaches everything else registered into a shared world.",
+)
+
+
 @strawberry.enum(description="What sort of thing a folder holds: a sub-folder, a file, or one of the containers. The order here is the order a KIND sort lists them in")
 class FolderChildKind(str, Enum):
     """One kind of thing filed in a folder."""

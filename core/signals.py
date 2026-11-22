@@ -190,7 +190,7 @@ def _relay_rows[M: Model](model: type[M], channel: Channel[RowSignal], rooms: Ca
             channels.announce(channel, RowSignal(update=instance.pk), rooms(instance))
 
     def deleted(sender: type[M], instance: M, **kwargs: object) -> None:
-        channels.announce(channel, RowSignal(delete=instance.pk), rooms(instance))
+        channels.announce(channel, RowSignal(delete=instance.pk, kind=getattr(type(instance), "KIND", None)), rooms(instance))
 
     # weak=False: the receivers are closures, and nothing else holds on to them.
     post_save.connect(saved, sender=model, weak=False)

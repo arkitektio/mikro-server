@@ -4,11 +4,12 @@ from typing import Annotated, Union
 
 import strawberry
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
-from django.db.models import BigIntegerField, Expression, F, FloatField, IntegerField, OuterRef, QuerySet, Subquery, Sum, TextField, Value
+from django.db.models import BigIntegerField, Expression, F, FloatField, IntegerField, QuerySet, TextField, Value
 from django.db.models.functions import Cast, Coalesce
 from kante.types import Info
 
 from core import enums, filters as f, models, pagination as p, types
+from core.logic import sizes
 from core.scoping import get_for_org, scope_queryset
 
 
@@ -52,19 +53,6 @@ FolderChild = Annotated[
     ],
     strawberry.union("FolderChild", description="Anything filed in a folder: a sub-folder, a file, or one of the containers"),
 ]
-
-
-def _array_size() -> Expression:
-    """The bytes of a dataset: every level of its pyramid, as their stores measured them."""
-    return Subquery(
-        models.DataArray.objects.filter(dataset=OuterRef("pk")).order_by().values("dataset").annotate(total=Sum("store__size_bytes")).values("total")[:1],
-        output_field=BigIntegerField(),
-    )
-
-
-def _sparse_size() -> Expression:
-    """Both layouts of one matrix share one store, so the matrix's bytes are that store's."""
-    return Subquery(models.SparseArray.objects.filter(dataset=OuterRef("pk")).values("store__size_bytes")[:1], output_field=BigIntegerField())
 
 
 @dataclass(frozen=True)
@@ -115,9 +103,9 @@ def _size_of(source: _ChildSource) -> Expression:
         # A file states its own size when it was registered; its store measures it when it can.
         return Coalesce("size", "store__size_bytes", output_field=BigIntegerField())
     if source.size == "array":
-        return _array_size()
+        return sizes.array_dataset_size_bytes()
     if source.size == "sparse":
-        return _sparse_size()
+        return sizes.sparse_dataset_size_bytes()
     return Cast(source.size, BigIntegerField())
 
 

@@ -15,6 +15,12 @@ class LensEvent:
     create: types.Lens | None = strawberry.field(default=None, description="A lens that was made: a crop, a window, or the whole lens a new container was born with")
     update: types.Lens | None = strawberry.field(default=None, description="A lens that was renamed or nominated a scene, in its new state")
     delete: strawberry.ID | None = strawberry.field(default=None, description="The ID of a lens that was deleted, on its own or with its container")
+    delete_kind: enums.LensKind | None = strawberry.field(default=None, description="The kind of the lens `delete` names, so a client evicts it under the one typename it cached it as. Set exactly when `delete` is")
+
+
+def _lens_event(create: types.Lens | None = None, update: types.Lens | None = None, delete: strawberry.ID | None = None, delete_kind: str | None = None) -> LensEvent:
+    """A `LensEvent`, the relayed kind of a deleted lens read as its enum."""
+    return LensEvent(create=create, update=update, delete=delete, delete_kind=enums.LensKind(delete_kind) if delete_kind is not None else None)
 
 
 async def lenses(
@@ -38,5 +44,5 @@ async def lenses(
         rooms = [channels.container_lenses_room(kind.value, container)]
         scoped = for_org(lens_model, info).filter(**{f"{lens_model.CONTAINER_FIELD}_id": container})
 
-    async for event in relay_rows(channels.lens_channel, info, rooms, scoped.with_sources(), LensEvent):
+    async for event in relay_rows(channels.lens_channel, info, rooms, scoped.with_sources(), _lens_event):
         yield event

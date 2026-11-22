@@ -1,5 +1,7 @@
 """GraphQL types for the parquet-backed table dataset and its declared columns."""
 
+import datetime
+
 from typing import TYPE_CHECKING, Annotated, List, Optional
 
 import strawberry
@@ -182,6 +184,7 @@ class TableDataset(OrgScoped):
     id: auto
     name: auto
     description: str | None
+    created_at: datetime.datetime = kante.django_field(description="When this table dataset was created")
     provenance_entries: List["ProvenanceEntry"] = kante.django_field(
         description="Every change made to this table: who created it, and every subsequent rename or redescription, attributed to the client, user and task it happened under. Only `name` and `description` can change -- the store, the columns and the coordinate system derived from them are fixed at creation"
     )

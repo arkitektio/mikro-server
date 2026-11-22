@@ -59,6 +59,7 @@ from .annotation import (
     AnnotationDerivation,
 )
 from .array_dataset import (
+    anchors_in_windows,
     ArrayDataset,
     DataArray,
     CoordinateAnchor,
@@ -89,6 +90,7 @@ from .array_dataset import (
 )
 
 __all__ = [
+    "anchors_in_windows",
     # datalayer stores (re-exported for backwards compatibility)
     "ZarrStore",
     "BigFileStore",

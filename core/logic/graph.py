@@ -3355,8 +3355,13 @@ def traverse(
     *,
     organization: "Organization",
     max_depth: int | None = None,
+    direction: "enums.GraphDirection" = enums.GraphDirection.BOTH,
 ) -> tuple[list["models.CoordinateSystem"], list["models.Transformation"]]:
     """The connected component around a coordinate system: every system it reaches, and every edge between them.
+
+    ``direction`` narrows the walk: OUTGOING follows edges from input to output only (where
+    this space maps to), INCOMING from output to input only (what maps into it). Either keeps
+    a walk from crossing a shared world into everything else registered there.
 
     Reachability here is **undirected**, and deliberately so. Direction is a fact about how an
     edge composes, not about what it touches: standing on a physical space and asking what
@@ -3382,11 +3387,23 @@ def traverse(
 
     while frontier and (max_depth is None or depth < max_depth):
         # Only the endpoints matter for the walk, so do not drag whole rows through it.
-        endpoints = models.Transformation.objects.filter(organization=organization).filter(Q(input_id__in=frontier) | Q(output_id__in=frontier)).values_list("input_id", "output_id")
+        if direction is enums.GraphDirection.OUTGOING:
+            touching = Q(input_id__in=frontier)
+        elif direction is enums.GraphDirection.INCOMING:
+            touching = Q(output_id__in=frontier)
+        else:
+            touching = Q(input_id__in=frontier) | Q(output_id__in=frontier)
+        endpoints = models.Transformation.objects.filter(organization=organization).filter(touching).values_list("input_id", "output_id")
 
         discovered: set[int] = set()
         for input_id, output_id in endpoints:
-            for endpoint_id in (input_id, output_id):
+            if direction is enums.GraphDirection.OUTGOING:
+                ends: tuple[int | None, ...] = (output_id,)
+            elif direction is enums.GraphDirection.INCOMING:
+                ends = (input_id,)
+            else:
+                ends = (input_id, output_id)
+            for endpoint_id in ends:
                 # A cycle (any loop in the graph) is one the walk must survive, not an
                 # error: `reached` is what makes the search terminate.
                 if endpoint_id is not None and endpoint_id not in reached:
@@ -3926,6 +3943,16 @@ def lens_calibrations(lens: "models.ArrayLens") -> list[Calibration]:
     source = lens.coordinate_system or lens.dataset.intrinsic_coordinate_system
     if source is None:
         return []
+    return system_calibrations(source)
+
+
+def system_calibrations(source: "models.CoordinateSystem") -> list[Calibration]:
+    """Every physical space ``source`` reaches with the edges, best first, ranked as :func:`lens_calibrations` ranks them.
+
+    The voxel size of a space rather than of a lens: what one pixel of a grid measures, for a
+    space read on its own (a coordinate system's page) rather than through a dataset. A space
+    whose axes all carry units is itself physical, reaches nothing and answers empty.
+    """
     source_axes = list(source.axes.all())
     names = [axis.name for axis in source_axes]
     adjacency, physical = _calibration_adjacency(source)

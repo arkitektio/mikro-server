@@ -923,6 +923,23 @@ class Lens(PolymorphicModel, Described):
         return kind.objects.filter(**{f"{kind.CONTAINER_FIELD}_id": real.container_id, column: []}).values_list("default_scene_id", flat=True).first()
 
 
+def anchors_in_windows(anchors, windows: "list[base_models.WindowModel]"):
+    """Narrow anchors to the ones inside every window: global along the window's axis, or in its range.
+
+    An anchor that says nothing about an axis holds for every position on it, so it is inside
+    any window on that axis -- the axis-agnostic rule every lens keeps.
+    """
+    for window in windows:
+        axis_is_global = ~Q(coordinates__has_key=window.axis)
+        in_range = Q()
+        if window.min is not None:
+            in_range &= Q(**{f"coordinates__{window.axis}__gte": window.min})
+        if window.max is not None:
+            in_range &= Q(**{f"coordinates__{window.axis}__lte": window.max})
+        anchors = anchors.filter(axis_is_global | in_range)
+    return anchors
+
+
 class WindowedLens(models.Model):
     """What the five value-windowed kinds share: the windows column, in each kind's own table."""
 
@@ -943,15 +960,7 @@ class WindowedLens(models.Model):
 
     def _anchors_in_windows(self, anchors):
         """Narrow a container's anchors to the ones inside every window: global along an axis, or in its range."""
-        for window in self.windows_list:
-            axis_is_global = ~Q(coordinates__has_key=window.axis)
-            in_range = Q()
-            if window.min is not None:
-                in_range &= Q(**{f"coordinates__{window.axis}__gte": window.min})
-            if window.max is not None:
-                in_range &= Q(**{f"coordinates__{window.axis}__lte": window.max})
-            anchors = anchors.filter(axis_is_global | in_range)
-        return anchors.select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
+        return anchors_in_windows(anchors, self.windows_list).select_related("microscope").prefetch_related("ome_metadata", "value_histogram")
 
 
 class ArrayLens(Lens):

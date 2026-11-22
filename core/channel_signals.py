@@ -35,3 +35,6 @@ class RowSignal(BaseModel):
     create: int | None = None
     update: int | None = None
     delete: int | None = None
+    #: The concrete kind of a deleted row, for a channel whose rows come in kinds (lenses): the
+    #: id alone cannot say which typename a client cached it under, and the row is gone.
+    kind: str | None = None

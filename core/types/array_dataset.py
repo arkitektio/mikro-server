@@ -1,4 +1,5 @@
 import datetime
+import math
 
 from django.db.models import Prefetch
 
@@ -19,7 +20,8 @@ from core.render.layer.models import LayerRenderGraphModel, PhasorRenderModel
 from core.render.camera.types import CameraState
 from core.render.camera.models import CameraStateModel
 from core.inputs.coords import CoordinateInput, at_map
-from core.inputs import SliceInput
+from core.inputs import SliceInput, WindowInput
+from strawberry_django.pagination import OffsetPaginationInput
 from core.types.visualization import Visualization
 from core.types.coords import (
     AffinePlacement,
@@ -37,6 +39,8 @@ from core.types.coords import (
 import kante
 from strawberry.scalars import JSON
 from arkitekt_datalayer.types import MediaStore, ZarrStore
+from arkitekt_datalayer.scalars import ByteCount
+from core.logic.sizes import array_dataset_size_bytes
 from core.scoping import for_org, scope_queryset
 from core.types._shared import DESCRIPTORS_DESCRIPTION, resolve_descriptors, apply_link_filters, build_prescoped_queryset, OrgScoped
 from core.type_gen import create_stats_type
@@ -209,6 +213,11 @@ class ArrayDataset(OrgScoped):
     id: auto
     name: auto
     description: str | None
+    created_at: datetime.datetime = kante.django_field(description="When this dataset was created")
+    size_bytes: Optional[ByteCount] = kante.django_field(
+        annotate=lambda info: array_dataset_size_bytes(),
+        description="The bytes this dataset holds: every level of its pyramid, as their stores measured them when the upload finished. Null when no store could be measured",
+    )
     # `name` and `description` are the only two fields `updateArrayDataset` can reach, which is
     # exactly why the audit trail is worth reading: a rename is the one thing about a dataset
     # that can change, so who changed it is the one history there is to keep.
@@ -257,6 +266,11 @@ class ArrayDataset(OrgScoped):
     def derived_residents(self, info: Info) -> List[Resident]:
         """Every container whose derivation edges land in one of this dataset's spaces."""
         return graph_logic.derived_containers(self)
+
+    @kante.django_field(description="How many containers `derivedResidents` lists: a count for a tile, without loading what they are")
+    def derived_residents_count(self, info: Info) -> int:
+        """The number of containers derived from this dataset."""
+        return len(graph_logic.derived_containers(self))
 
     @kante.django_field(prefetch_related=["data_arrays"], description="Whether this dataset carries a resolution pyramid. Derived: true when it has more than one level")
     def multiscale(self, info: Info) -> bool:
@@ -365,6 +379,12 @@ class ArrayDataset(OrgScoped):
         return _default_scene_snapshot(info, self)
 
 
+@strawberry.type(description="How much one step along an axis spans, measured against another grid's steps")
+class AxisScaleFactor:
+    axis: str = strawberry.field(description="The axis, by name")
+    factor: float = strawberry.field(description="How many steps of the other grid one step along this axis spans")
+
+
 @kante.django_type(
     models.DataArray,
     filters=filters.DataArrayFilter,
@@ -398,6 +418,33 @@ class DataArray(OrgScoped):
     def to_parent(self, info: Info) -> Transformation | None:
         """The stored level-to-intrinsic edge."""
         return self.to_parent
+
+    @kante.django_field(
+        select_related=["coordinate_system", "dataset__coordinate_system"],
+        prefetch_related=["coordinate_system__axes", "dataset__coordinate_system__axes"],
+        description=(
+            "How many level-0 voxels one voxel of this level spans, per axis of this level, read off `toParent`: 4.0 on y and x for a level downsampled by four, 1.0 on an "
+            "axis it keeps. Every 1.0 for level 0. Null when the edge does not condense into an affine map, which a stored level edge always does"
+        ),
+    )
+    def relative_scale(self, info: Info) -> list[AxisScaleFactor] | None:
+        """The level's scale against level 0, condensed from its stored edge."""
+        space = self.space
+        if space is None:
+            return None
+        names = [axis.name for axis in space.axes.all()]
+        if self.to_parent is None:
+            return [AxisScaleFactor(axis=name, factor=1.0) for name in names]
+        parent = self.dataset.coordinate_system
+        try:
+            condensed = graph_logic.condense_path([(self.to_parent, False)], source_axes=names, destination_axes=[axis.name for axis in parent.axes.all()])
+        except coords_logic.NonAffineTransformError:
+            return None
+        factors = []
+        for column, name in enumerate(condensed.input_axes):
+            factor = math.sqrt(sum(row[column] * row[column] for row in condensed.matrix))
+            factors.append(AxisScaleFactor(axis=name, factor=factor))
+        return factors
 
 
 @kante.django_type(
@@ -806,9 +853,29 @@ class Lens:
         return models.Scene.objects.filter(pk=scene_id).first() if scene_id is not None else None
 
     @kante.django_field(description="The coordinate anchors inside this selection: an anchor global along an axis, or pinned inside the lens' range on it. Empty for a container kind that carries no anchors (meshes, networks, annotation collections)")
-    def active_anchors(self, info: Info) -> List[CoordinateAnchor]:
-        """The anchors the selection keeps."""
-        return list(self.active_anchors)
+    def active_anchors(
+        self,
+        info: Info,
+        within: Annotated[
+            Optional[List[WindowInput]],
+            strawberry.argument(
+                description=(
+                    "Narrow further to the anchors inside every one of these windows, in the container's own anchor coordinates (an array's indices, a table's values): "
+                    "a time window, one channel (`min == max`). An anchor that says nothing about an axis is inside any window on it"
+                )
+            ),
+        ] = None,
+        pagination: Optional[OffsetPaginationInput] = None,
+    ) -> List[CoordinateAnchor]:
+        """The anchors the selection keeps, optionally narrowed and paged, oldest first."""
+        anchors = self.active_anchors
+        if within:
+            anchors = models.anchors_in_windows(anchors, [base_models.WindowModel(axis=window.axis, min=window.min, max=window.max) for window in within])
+        anchors = anchors.order_by("pk")
+        if pagination is not None:
+            offset = pagination.offset or 0
+            anchors = anchors[offset:] if pagination.limit is None or pagination.limit < 0 else anchors[offset : offset + pagination.limit]
+        return list(anchors)
 
     @kante.django_field(
         description=(
@@ -1900,6 +1967,11 @@ class Annotation:
     def derived_residents(self, info: Info) -> List[Resident]:
         """Every container with a derivation edge naming this shape."""
         return graph_logic.annotation_derived_containers(self)
+
+    @kante.django_field(description="How many containers `derivedResidents` lists: a count for a tile, without loading what they are")
+    def derived_residents_count(self, info: Info) -> int:
+        """The number of containers derived from this shape."""
+        return len(graph_logic.annotation_derived_containers(self))
 
     @kante.django_field(
         description=(

@@ -1,5 +1,7 @@
 """GraphQL types for the sparse matrix dataset, its stored layouts and its identified axes."""
 
+import datetime
+
 from typing import TYPE_CHECKING, Annotated, List, Optional
 
 import strawberry
@@ -113,6 +115,7 @@ class SparseDataset(OrgScoped):
     id: auto
     name: auto
     description: str | None
+    created_at: datetime.datetime = kante.django_field(description="When this sparse dataset was created")
     folder: Optional[Annotated["Folder", strawberry.lazy("core.types.folder")]] = kante.django_field(description="The folder it is filed in. Organisational only")
     coordinate_system: CoordinateSystem = kante.django_field(description="The coordinate system whose axes are this matrix's two enumerations. Owned by the dataset, and the space a FIELD edge lands in")
     arrays: List[SparseArray] = kante.django_field(description="The stored layouts, one per axis a store's `indptr` indexes. One is legal and offers one capability")

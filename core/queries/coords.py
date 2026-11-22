@@ -14,6 +14,7 @@ def coordinate_graph(
     info: Info,
     coordinate_system: strawberry.ID,
     max_depth: int | None = None,
+    direction: enums.GraphDirection = enums.GraphDirection.BOTH,
 ) -> types.CoordinateGraph:
     """Walk the coordinate graph out from one system and return the subgraph it reaches.
 
@@ -34,6 +35,7 @@ def coordinate_graph(
         root,
         organization=info.context.request.organization,
         max_depth=max_depth,
+        direction=direction,
     )
 
     return types.CoordinateGraph(root=root, systems=systems, transformations=transformations)
