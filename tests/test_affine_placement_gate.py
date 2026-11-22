@@ -26,6 +26,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from mikro_server.schema import schema
@@ -85,7 +86,11 @@ def _fresh_request(ctx: HttpContext) -> HttpContext:
 
 
 async def _register(
-    ctx: HttpContext, input_id, output_id, transform: dict, validity: str | None = None
+    ctx: HttpContext,
+    input_id: str | int,
+    output_id: str | int,
+    transform: dict,
+    validity: str | None = None,
 ) -> str:
     payload: dict = {
         "input": str(input_id),
@@ -103,7 +108,9 @@ async def _register(
     return str(result.data["createTransformation"]["id"])
 
 
-async def _make_layer(ctx: HttpContext, scene_id, lens: models.Lens):
+async def _make_layer(
+    ctx: HttpContext, scene_id: str | int, lens: models.Lens
+) -> ExecutionResult:
     return await schema.execute(
         MAKE_LAYER,
         context_value=_fresh_request(ctx),
@@ -111,7 +118,7 @@ async def _make_layer(ctx: HttpContext, scene_id, lens: models.Lens):
     )
 
 
-async def _layers(ctx: HttpContext, scene_id) -> list[dict]:
+async def _layers(ctx: HttpContext, scene_id: str | int) -> list[dict]:
     result = await schema.execute(
         PLACEMENT,
         context_value=_fresh_request(ctx),
@@ -121,7 +128,9 @@ async def _layers(ctx: HttpContext, scene_id) -> list[dict]:
     return result.data["scene"]["layers"]
 
 
-async def _mask_field_into(ctx: HttpContext, world, validity: str | None = None):
+async def _mask_field_into(
+    ctx: HttpContext, world: models.CoordinateSystem, validity: str | None = None
+) -> tuple[models.ArrayDataset, models.CoordinateSystem, str]:
     """A dataset whose pixels are a map into an index space, and that space registered into world.
 
     The shape a segmentation actually has: (y,x) is consumed by the mask's own values and `i`
@@ -165,7 +174,7 @@ async def _mask_field_into(ctx: HttpContext, world, validity: str | None = None)
 @pytest.mark.asyncio
 async def test_a_layer_reachable_only_through_a_field_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A route exists, it runs through a key (a mask's ids), it composes into nothing, and creation says exactly that.
 
     ABLATION: drop `require_affine=True` from `assert_placeable_in` and this layer is created,
@@ -202,7 +211,7 @@ async def test_a_layer_reachable_only_through_a_field_is_refused(
 @pytest.mark.asyncio
 async def test_the_same_source_is_accepted_once_an_affine_route_exists(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The refusal is about the route, not about the data: author one that condenses and it draws."""
     scene = await seed.create_scene(authenticated_context, "Composition")
     world = await sync_to_async(lambda: scene.world)()
@@ -243,7 +252,7 @@ async def test_the_same_source_is_accepted_once_an_affine_route_exists(
 @pytest.mark.asyncio
 async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The field route is VALIDATED; the affine route is one hop shorter and only INFERRED.
 
     Which is the whole point: `_bfs_tree` maximises bottleneck validity *first* and only then
@@ -303,7 +312,7 @@ async def test_the_walk_prefers_an_affine_route_over_a_better_known_field(
 @pytest.mark.asyncio
 async def test_a_field_only_placement_still_reports_its_route(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A preference, not a filter. Rows the gate never saw keep the answer they had.
 
     Written through the ORM, which is how a layer predating the gate -- or one whose affine
@@ -347,7 +356,7 @@ async def test_a_field_only_placement_still_reports_its_route(
 @pytest.mark.asyncio
 async def test_the_scene_builder_refuses_by_default_and_skips_when_asked(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One source the world does not place: the build fails, unless the caller has said to skip it.
 
     Fail is the default because a scene silently missing a layer is harder to notice than a
@@ -398,7 +407,7 @@ async def test_the_scene_builder_refuses_by_default_and_skips_when_asked(
         {"kind": "UNMAPPABLE", "reason": "the stage position was never recorded"},
     )
 
-    async def _build(skip: bool):
+    async def _build(skip: bool) -> ExecutionResult:
         return await schema.execute(
             SCENE_FROM_SYSTEM,
             context_value=_fresh_request(authenticated_context),

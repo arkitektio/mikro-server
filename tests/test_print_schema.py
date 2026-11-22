@@ -6,7 +6,7 @@ No database required — this only imports and stringifies the schema.
 from mikro_server.schema import schema
 
 
-def test_print_schema():
+def test_print_schema() -> None:
     sdl = str(schema)
     print(sdl)  # visible with `pytest -s`
     assert sdl.strip(), "Schema SDL should not be empty"
@@ -33,7 +33,7 @@ def _fields_named_embedding(sdl: str) -> dict:
     return found
 
 
-def test_only_the_embedded_types_publish_a_vector():
+def test_only_the_embedded_types_publish_a_vector() -> None:
     """A vector is readable, and only where a model actually carries one.
 
     This used to assert the word "embedding" appeared nowhere in the SDL. The vectors are
@@ -44,11 +44,11 @@ def test_only_the_embedded_types_publish_a_vector():
     assert _fields_named_embedding(str(schema))["type"] == EMBEDDING_TYPES
 
 
-def test_no_input_accepts_an_embedding():
+def test_no_input_accepts_an_embedding() -> None:
     """Read-only: a client may not write a vector, or "every vector is this release's model's" is a fiction."""
     assert _fields_named_embedding(str(schema))["input"] == set()
 
 
-def test_the_raw_model_column_is_never_published():
+def test_the_raw_model_column_is_never_published() -> None:
     """`embeddingModel` is carried inside the `Embedding` string, never as its own field."""
     assert "embeddingModel" not in str(schema)

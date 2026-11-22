@@ -57,7 +57,7 @@ async def _table(
 @pytest.mark.asyncio
 async def test_a_channel_is_a_coordinate_and_columns_say_what_varies_along_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table = await _table(ctx, "per channel", LONG_FORM)
     read = (await _ok(ctx, TABLE, {"id": table["id"]}))["tableDataset"]
@@ -86,7 +86,7 @@ CYX_AXES = [
 @pytest.mark.asyncio
 async def test_a_mask_keys_a_long_form_table_by_the_object_alone(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`(y, x)` keys `(cell, c)` by `cell`: no source supplies the channel, and no plan pretends one id finds one row."""
     ctx = authenticated_context
     mask = await _mask(ctx, axes=YX_AXES, shapes=[[64, 64]])
@@ -110,7 +110,7 @@ async def test_a_mask_keys_a_long_form_table_by_the_object_alone(
 @pytest.mark.asyncio
 async def test_a_mask_with_channels_passes_the_channel_through(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A `(c, y, x)` mask shares `c` by name: the key passes it through, and the plan binds it like `t`."""
     ctx = authenticated_context
     mask = await _mask(ctx, axes=CYX_AXES, shapes=[[2, 64, 64]])
@@ -133,7 +133,9 @@ async def test_a_mask_with_channels_passes_the_channel_through(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_long_form_declarations_are_checked(authenticated_context: HttpContext):
+async def test_long_form_declarations_are_checked(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
 
     unit = await _create(

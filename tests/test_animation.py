@@ -11,6 +11,7 @@ does nothing when the tour is played.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -68,7 +69,7 @@ mutation CreateScene($input: CreateSceneInput!) {
 """
 
 
-def _waypoint(z: float, name: str | None = None, **kwargs) -> dict:
+def _waypoint(z: float, name: str | None = None, **kwargs: object) -> dict:
     """A pose on the seeded world, whose axes are z, y, x."""
     payload = {
         "camera": {"position": {"z": z, "y": 32.0, "x": 32.0}, "crossSectionScale": 1.5}
@@ -79,7 +80,9 @@ def _waypoint(z: float, name: str | None = None, **kwargs) -> dict:
     return payload
 
 
-async def _create(ctx: HttpContext, scene, waypoints, name="Tour"):
+async def _create(
+    ctx: HttpContext, scene: models.Scene, waypoints: list[dict], name: str = "Tour"
+) -> ExecutionResult:
     result = await schema.execute(
         CREATE,
         context_value=ctx,
@@ -92,7 +95,9 @@ async def _create(ctx: HttpContext, scene, waypoints, name="Tour"):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_order_is_written_by_enumeration(db, authenticated_context: HttpContext):
+async def test_order_is_written_by_enumeration(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The client never sends an index; the list order is the tour order."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -111,7 +116,7 @@ async def test_order_is_written_by_enumeration(db, authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_camera_round_trips(db, authenticated_context: HttpContext):
+async def test_camera_round_trips(db: None, authenticated_context: HttpContext) -> None:
     """What goes in comes out -- including a null orientation, which is 'viewer decides'."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -139,7 +144,9 @@ async def test_camera_round_trips(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_timing_defaults_and_overrides(db, authenticated_context: HttpContext):
+async def test_timing_defaults_and_overrides(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
 
@@ -156,8 +163,8 @@ async def test_timing_defaults_and_overrides(db, authenticated_context: HttpCont
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_position_on_an_axis_the_world_lacks_is_rejected(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A keyed position makes a typo silent -- so it is caught where it is authored."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -175,8 +182,8 @@ async def test_a_position_on_an_axis_the_world_lacks_is_rejected(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_three_component_orientation_is_rejected(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The plausible mistake: an euler triple where a quaternion belongs."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -200,8 +207,8 @@ async def test_a_three_component_orientation_is_rejected(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_replaces_the_stops_and_re_enumerates(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Replacing, not merging: a tour is a sequence, and reordering is re-authoring it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -237,8 +244,8 @@ async def test_update_replaces_the_stops_and_re_enumerates(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_leaves_omitted_fields_alone(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """An omitted field means 'leave it', never 'clear it'."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -270,8 +277,8 @@ async def test_update_leaves_omitted_fields_alone(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_the_scene_deletes_the_tour_and_its_stops(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Both hops cascade: a tour of a composition means nothing once the composition is gone."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -288,7 +295,9 @@ async def test_deleting_the_scene_deletes_the_tour_and_its_stops(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_scene_viewer_preferences(db, authenticated_context: HttpContext):
+async def test_scene_viewer_preferences(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """AUTO by default, settable at creation, and changeable afterwards -- the last is the
     point: a preference you cannot toggle is not a preference."""
     ctx = authenticated_context
@@ -319,7 +328,9 @@ async def test_scene_viewer_preferences(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_scene_sets_the_preference(db, authenticated_context: HttpContext):
+async def test_create_scene_sets_the_preference(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     result = await schema.execute(
         CREATE_SCENE,
@@ -333,8 +344,8 @@ async def test_create_scene_sets_the_preference(db, authenticated_context: HttpC
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_scene_leaves_omitted_preferences_alone(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Setting the background must not silently reset the view preference to null."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -361,8 +372,8 @@ async def test_update_scene_leaves_omitted_preferences_alone(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_scene_refuses_another_organizations_scene(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """get_for_org is the whole gate here -- Scene has no creator to guard on."""
     theirs = await seed.create_scene(other_org_context, "Theirs")
     result = await schema.execute(
@@ -376,8 +387,8 @@ async def test_update_scene_refuses_another_organizations_scene(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_delete_guard(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     """Run as the bot: `assert_can_delete` short-circuits for org admins, and
     `authenticated_context` is one, so a guard test written with it proves nothing."""
     ctx = authenticated_context
@@ -405,8 +416,8 @@ async def test_delete_guard(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_list_is_scoped_to_the_organization(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """A bare list field returns every row in the table until get_queryset scopes it."""
     ctx = authenticated_context
     await _create(
@@ -419,7 +430,7 @@ async def test_the_list_is_scoped_to_the_organization(
         name="Theirs",
     )
 
-    async def names(context):
+    async def names(context: HttpContext) -> set[str]:
         result = await schema.execute(
             LIST, context_value=context, variable_values={"filters": {}}
         )

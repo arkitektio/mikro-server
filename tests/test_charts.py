@@ -17,6 +17,7 @@ from arkitekt_datalayer.models import ZarrStore
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
+from strawberry.types import ExecutionResult
 
 from chart import models as chart_models
 from core import enums, models
@@ -147,7 +148,7 @@ def _fresh(ctx: HttpContext) -> HttpContext:
 
 async def _run(
     ctx: HttpContext, document: str, input: dict | None = None, **variables: object
-):
+) -> ExecutionResult:
     if input is not None:
         variables["input"] = input
     return await schema.execute(
@@ -242,7 +243,7 @@ async def _layers(ctx: HttpContext, chart_id: str) -> list[dict]:
 @pytest.mark.asyncio
 async def test_a_chart_is_created_over_a_world_with_one_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole of a chart at birth: a name, and the one axis it is laid out along."""
     chart = await _chart(authenticated_context)
 
@@ -269,7 +270,7 @@ async def test_a_chart_is_created_over_a_world_with_one_axis(
 )
 async def test_the_axis_is_any_metric_axis_not_only_space(
     authenticated_context: HttpContext, axis: dict
-):
+) -> None:
     """A chart assumes nothing about what its axis measures -- least of all that it is time."""
     chart = await _chart(authenticated_context, axis=axis)
     assert chart["axis"]["type"] == axis["type"]
@@ -280,7 +281,7 @@ async def test_the_axis_is_any_metric_axis_not_only_space(
 @pytest.mark.asyncio
 async def test_two_charts_adopt_one_world_and_neither_owns_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Adopting is naming a space, not taking it: the second chart is over the same one."""
     ctx = authenticated_context
     first = await _chart(ctx, "First")
@@ -305,7 +306,7 @@ async def test_two_charts_adopt_one_world_and_neither_owns_it(
 @pytest.mark.asyncio
 async def test_a_world_that_is_not_one_metric_unit_carrying_axis_lays_nothing_along_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Three ways a space is not an axis to lay data along. A chart may still adopt it -- its value layers draw rows there -- but it has
     no `axis`, its descriptor says VALUE, and an along-axis layer is refused, naming why."""
     ctx = authenticated_context
@@ -355,7 +356,7 @@ async def test_a_world_that_is_not_one_metric_unit_carrying_axis_lays_nothing_al
 @pytest.mark.asyncio
 async def test_a_one_dimensional_dataset_is_drawn_as_a_trace(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A lens with one metric axis free, laid along the chart by the registration."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -399,7 +400,7 @@ async def test_a_one_dimensional_dataset_is_drawn_as_a_trace(
 @pytest.mark.asyncio
 async def test_a_free_channel_axis_is_the_series_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One enumerating axis may stay free beside the one read along: a line per position."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -433,7 +434,7 @@ async def test_a_free_channel_axis_is_the_series_axis(
 @pytest.mark.asyncio
 async def test_a_second_free_metric_axis_is_a_surface_not_a_trace(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An image is placed along the axis and is still not a trace; a row of it is."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -476,7 +477,7 @@ async def test_a_second_free_metric_axis_is_a_surface_not_a_trace(
 @pytest.mark.asyncio
 async def test_a_lens_fixed_along_the_charts_axis_has_no_trace(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One sample along the axis the chart is laid out along is a point, not a line."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -496,7 +497,7 @@ async def test_a_lens_fixed_along_the_charts_axis_has_no_trace(
 @pytest.mark.asyncio
 async def test_how_a_trace_looks_is_a_setting_not_a_kind(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Line, markers, both, steps: the row's `mark` changes and its kind does not."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -552,7 +553,7 @@ async def _table(ctx: HttpContext, name: str, columns: list[dict]) -> dict:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_is_drawn_as_a_series(authenticated_context: HttpContext):
+async def test_a_table_is_drawn_as_a_series(authenticated_context: HttpContext) -> None:
     """One coordinate column along the axis -- the graph says which -- and one numeric value column."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -604,7 +605,7 @@ async def test_a_table_is_drawn_as_a_series(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_series_value_is_one_numeric_attribute_column(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Inferred only when there is one to infer; otherwise named, and checked."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -683,7 +684,7 @@ async def test_a_series_value_is_one_numeric_attribute_column(
 @pytest.mark.asyncio
 async def test_a_chart_makes_a_drawing_surface_with_a_value_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Marks sit at a position and a height: the chart's axis, and a VALUE axis beside it."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -728,7 +729,9 @@ async def test_a_chart_makes_a_drawing_surface_with_a_value_axis(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_existing_collection_is_drawn_once(authenticated_context: HttpContext):
+async def test_an_existing_collection_is_drawn_once(
+    authenticated_context: HttpContext,
+) -> None:
     """A collection drawn elsewhere is a layer here when the graph places it, and only one."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -791,7 +794,7 @@ async def test_an_existing_collection_is_drawn_once(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_value_axis_exists_only_in_a_drawing_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Data holds its values; it has no axis of them. Nor has a world."""
     ctx = authenticated_context
 
@@ -832,7 +835,7 @@ async def test_a_value_axis_exists_only_in_a_drawing_space(
 @pytest.mark.asyncio
 async def test_data_nothing_places_along_the_axis_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A layer is a claim the graph must already hold. No edge, no layer -- and none is written."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -859,7 +862,7 @@ async def test_data_nothing_places_along_the_axis_is_refused(
 @pytest.mark.asyncio
 async def test_reaching_the_axis_through_a_field_is_not_placement(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Mikro's strict rule, unchanged: a route with no closed form places nothing a chart can draw."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -908,7 +911,7 @@ async def test_reaching_the_axis_through_a_field_is_not_placement(
 @pytest.mark.asyncio
 async def test_a_route_that_says_nothing_about_the_axis_lays_nothing_along_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Placed in the world by the strict rule, and still nowhere along its axis.
 
     The data reaches the world through a frame with two axes: it is registered onto one, and
@@ -974,7 +977,7 @@ async def test_a_route_that_says_nothing_about_the_axis_lays_nothing_along_it(
 @pytest.mark.asyncio
 async def test_a_map_reading_the_axis_from_two_data_axes_lays_neither_along_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An oblique map puts a diagonal of the image on the axis: no single axis runs along the chart."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -1008,7 +1011,7 @@ async def test_a_map_reading_the_axis_from_two_data_axes_lays_neither_along_it(
 @pytest.mark.asyncio
 async def test_where_a_layer_sits_follows_the_edge_with_no_write_to_the_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The axis laid along the chart, its scale and its offset are read from the graph each time.
 
     The layer row is written once. Then the registration is replaced -- another scale, then
@@ -1076,7 +1079,7 @@ async def test_where_a_layer_sits_follows_the_edge_with_no_write_to_the_layer(
 @pytest.mark.asyncio
 async def test_a_space_a_chart_is_laid_out_over_cannot_be_deleted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The refusal a scene's world gets, in the same words, from the same registry."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -1096,7 +1099,7 @@ async def test_a_space_a_chart_is_laid_out_over_cannot_be_deleted(
 @pytest.mark.asyncio
 async def test_the_orphan_sweep_spares_a_charts_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Nothing lives in a chart's world and no edge need touch it: only the chart keeps it."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -1120,7 +1123,7 @@ async def test_the_orphan_sweep_spares_a_charts_world(
 @pytest.mark.asyncio
 async def test_deleting_a_chart_deletes_nothing_it_drew_and_deleting_data_takes_its_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     chart = await _chart(ctx)
     kept = await _dataset(ctx, "Kept", [("d", enums.AxisType.SPACE)], [64])
@@ -1174,7 +1177,7 @@ async def test_deleting_a_chart_deletes_nothing_it_drew_and_deleting_data_takes_
 @pytest.mark.asyncio
 async def test_another_organization_neither_reads_nor_draws_in_a_chart(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     chart = await _chart(authenticated_context)
 
     read = await schema.execute(
@@ -1203,7 +1206,7 @@ async def test_another_organization_neither_reads_nor_draws_in_a_chart(
 @pytest.mark.asyncio
 async def test_a_chart_is_bootstrapped_from_what_is_laid_along_a_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every placed source a kind reads becomes a layer; what no kind reads is left out; no edge is written."""
     ctx = authenticated_context
     staged = await _chart(ctx, "Staging")
@@ -1263,7 +1266,7 @@ async def test_a_chart_is_bootstrapped_from_what_is_laid_along_a_space(
 @pytest.mark.asyncio
 async def test_a_profile_derived_from_an_image_is_charted_in_micrometres_with_a_mark_on_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An image, a line profile taken from it, a calibration, a chart, a trace, a mark.
 
     Every step is a call a client makes, in the order it makes them. The chart is over the
@@ -1389,7 +1392,7 @@ async def test_a_profile_derived_from_an_image_is_charted_in_micrometres_with_a_
 @pytest.mark.asyncio
 async def test_one_annotation_layer_per_lens_not_per_collection(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A window over a collection and the collection's whole lens are two selections: both may be drawn in one chart; one lens twice may not."""
     ctx = authenticated_context
     chart = await _chart(ctx)
@@ -1472,7 +1475,7 @@ async def _edges_into(world_id: str, inputs: set[str]) -> list[int]:
 @pytest.mark.asyncio
 async def test_traces_computed_from_a_movie_are_laid_along_the_chart_by_the_movies_registration(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Only the movie is registered; the traces reach the clock through their derivation.
 
     The traces are ``(cell, t)``, computed per cell from a ``(t, y, x)`` movie: sample ``j`` is
@@ -1563,7 +1566,7 @@ async def test_traces_computed_from_a_movie_are_laid_along_the_chart_by_the_movi
 @pytest.mark.asyncio
 async def test_a_table_in_seconds_computed_from_a_movie_is_placed_through_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table keeps its readable seconds; its derivation divides them back into frames.
 
     The movie's registration multiplies by the frame interval again, so the composed map is

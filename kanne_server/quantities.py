@@ -29,7 +29,8 @@ canonical int in memory.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from collections.abc import Callable
+from typing import Annotated
 
 from pydantic import BeforeValidator, PlainSerializer
 
@@ -46,7 +47,7 @@ def _markers(
     parse = _scalars.SCALAR_MAP[pint_cls].parse_value
     assert parse is not None  # every kanne scalar defines parse_value
 
-    def validate(value: Any) -> Any:
+    def validate(value: object) -> int | None:
         # Tolerant inbound coercion → canonical int (or None for optionals).
         if value is None:
             return None
@@ -59,7 +60,7 @@ def _markers(
         # Pint strings ("100 µs") and pint Quantities: parse + dimension-check.
         return parse(value)
 
-    def serialize(value: Any) -> Any:
+    def serialize(value: int | None) -> dict[str, int | str] | None:
         if value is None:
             return None
         canonical = int(value)
@@ -118,14 +119,14 @@ def _generic_markers() -> tuple[BeforeValidator, PlainSerializer]:
     dict on read-back. A bare number is rejected (a value must carry a unit).
     """
 
-    def validate(value: Any) -> Any:
+    def validate(value: object) -> str | None:
         if value is None:
             return None
         if isinstance(value, dict):  # JSON read-back
             return f"{value['magnitude']} {value['unit']}"
         return _scalars.generic_quantity_string(value)
 
-    def serialize(value: Any) -> Any:
+    def serialize(value: str | None) -> dict | None:
         if value is None:
             return None
         return _scalars.generic_quantity_struct(value)
@@ -139,14 +140,14 @@ _generic = _generic_markers()
 GenericQuantity = Annotated[str, _generic[0], _generic[1]]
 
 
-def _validated_string(parse: Any) -> BeforeValidator:
+def _validated_string(parse: Callable[[object], str]) -> BeforeValidator:
     """A tolerant BeforeValidator that runs ``parse`` (or passes None through).
 
     Used for the metadata string types (``Unit``, ``Dimension``) — the value stays
     a plain string in memory and in JSON; ``parse`` validates/canonicalizes it.
     """
 
-    def validate(value: Any) -> Any:
+    def validate(value: object) -> str | None:
         if value is None:
             return None
         return parse(value)

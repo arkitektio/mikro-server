@@ -62,12 +62,16 @@ class QueryCounter:
         self._execute = db_utils.CursorWrapper.execute
         self._executemany = db_utils.CursorWrapper.executemany
 
-        def execute(inner, sql, params=None):
+        def execute(
+            inner: db_utils.CursorWrapper, sql: str, params: object = None
+        ) -> object:
             with self._lock:
                 self.queries.append(sql)
             return self._execute(inner, sql, params)
 
-        def executemany(inner, sql, param_list):
+        def executemany(
+            inner: db_utils.CursorWrapper, sql: str, param_list: object
+        ) -> object:
             with self._lock:
                 self.queries.append(sql)
             return self._executemany(inner, sql, param_list)
@@ -76,7 +80,7 @@ class QueryCounter:
         db_utils.CursorWrapper.executemany = executemany
         return self
 
-    def __exit__(self, *exc) -> None:
+    def __exit__(self, *exc: object) -> None:
         db_utils.CursorWrapper.execute = self._execute
         db_utils.CursorWrapper.executemany = self._executemany
 
@@ -268,7 +272,7 @@ async def _execute(ctx: HttpContext, query: str) -> tuple[dict, int]:
 @pytest.mark.asyncio
 async def test_scene_placements_are_flat_in_layer_count(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Asking a scene for its layers' placements costs the same at 7 layers as at 3."""
     await _seed_scene(authenticated_context, layer_count=3)
     small_data, small_queries = await _execute(authenticated_context, SCENE_PLACEMENTS)
@@ -286,7 +290,9 @@ async def test_scene_placements_are_flat_in_layer_count(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_root_layers_are_flat_in_layer_count(authenticated_context: HttpContext):
+async def test_root_layers_are_flat_in_layer_count(
+    authenticated_context: HttpContext,
+) -> None:
     """The same, through the root `layers` field rather than through a scene."""
     await _seed_scene(authenticated_context, layer_count=3)
     small_data, small_queries = await _execute(authenticated_context, ROOT_LAYERS)
@@ -315,7 +321,7 @@ query SpaceBoth { coordinateSystems { id placedSystems { id } annotations { id }
 @pytest.mark.asyncio
 async def test_a_spaces_placeable_set_is_walked_once_per_request(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`placedSystems` and `annotations` answer from one walk of the space, not one each.
 
     Both derive from `placeable_system_ids_in`, which is a registrations fetch, a residence
@@ -352,7 +358,7 @@ async def test_a_spaces_placeable_set_is_walked_once_per_request(
 @pytest.mark.asyncio
 async def test_two_scenes_over_one_world_share_the_root_edge_fetch(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The world's edges are fetched once per request, not once per scene composing over it.
 
     A scene's searchable universe is its world's edges plus its layers' datasets' facts, and
@@ -409,7 +415,7 @@ mutation Make($input: CreateIntensityLayerInput!) {
 @pytest.mark.asyncio
 async def test_creating_a_layer_is_flat_in_scene_size(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Placing one more layer costs the same in a 7-layer scene as in a 3-layer one.
 
     The placement check a layer mutation runs (is this source placeable in this scene?)
@@ -476,7 +482,7 @@ query SceneLenses {
 @pytest.mark.asyncio
 async def test_a_scenes_lenses_are_flat_in_layer_count(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Reading each layer's lens -- the selection, its space and its dataset -- costs the same at 7 layers as at 3.
 
     The lens is reached across a polymorphic foreign key the optimizer cannot follow to the

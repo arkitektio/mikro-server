@@ -52,7 +52,7 @@ async def _calibrate(
     *,
     validity: str,
     axes: list[dict] | None = None,
-    outputs=("z", "y", "x"),
+    outputs: tuple[str, ...] = ("z", "y", "x"),
 ) -> dict:
     registration = {
         "dataset": str(dataset.pk),
@@ -98,7 +98,7 @@ def _sizes(entries: list[dict]) -> dict[str, float]:
 @pytest.mark.asyncio
 async def test_the_canonical_voxel_size_follows_the_edges_validity(
     bot_context: HttpContext,
-):
+) -> None:
     dataset = await seed.create_array_dataset(
         bot_context, "Stack", axes=STACK_AXES, shapes=[[2, 8, 64, 64]]
     )
@@ -144,7 +144,7 @@ async def test_the_canonical_voxel_size_follows_the_edges_validity(
 @pytest.mark.asyncio
 async def test_a_calibration_that_turns_space_into_time_is_refused(
     bot_context: HttpContext,
-):
+) -> None:
     dataset = await seed.create_array_dataset(
         bot_context, "Stack", axes=STACK_AXES, shapes=[[2, 8, 64, 64]]
     )

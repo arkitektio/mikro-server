@@ -80,7 +80,9 @@ _ACTIVE_FILTERS_DESCRIPTION = (
 )
 
 
-def assert_max_level(collection, max_level: int | None) -> None:
+def assert_max_level(
+    collection: models.NetworkCollection, max_level: int | None
+) -> None:
     """Refuse an LOD cap the collection has no such level for.
 
     A cap past the last level is not a harmless over-estimate: it is a claim about a store, and

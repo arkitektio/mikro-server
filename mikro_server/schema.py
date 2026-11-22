@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 import arkitekt_datalayer.mutations as datalayer_mutations
 import arkitekt_datalayer.scalars as datalayer_scalars
@@ -15,6 +15,7 @@ from arkitekt_service.graphql import (
 from authentikate import models as ak_models
 from authentikate.strawberry import AuthExtension, AuthSubscribeExtension
 from authentikate.strawberry.extension import AuthentikateExtension
+from django.db.models import Model, QuerySet
 from kante.types import Info
 from koherent import models as koherent_models
 from koherent.strawberry.extension import KoherentExtension
@@ -59,7 +60,7 @@ ID = Annotated[
 ]
 
 
-def field(scope: str = "mikro_read", **kwargs):
+def field(scope: str = "mikro_read", **kwargs: Any) -> Any:  # noqa: ANN401 -- as strawberry_django.field: the value of `x: T = field()`
     "A field an app needs ``scope`` for (``mikro_read``, unless it says otherwise)."
     return strawberry_django.field(extensions=[AuthExtension(scopes=[scope])], **kwargs)
 
@@ -72,7 +73,9 @@ class CreatedByCallerField(StrawberryDjangoField):
     ``get_queryset``, which the parent runs.
     """
 
-    def get_queryset(self, queryset, info, **kwargs):
+    def get_queryset(
+        self, queryset: QuerySet[Model], info: Info, **kwargs: Any
+    ) -> QuerySet[Model]:
         # Narrow before the parent paginates: a sliced queryset can no longer be filtered.
         return super().get_queryset(
             queryset.filter(creator=info.context.request.user), info, **kwargs
@@ -83,7 +86,7 @@ def mutation(
     scope: str = "mikro_write",
     roles: list[str] | None = None,
     guests: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> strawberry.mutation:
     """A write: an app needs ``scope`` for it, a member one of ``roles`` (``mikro_editor`` unless it says
     otherwise; ``mikro_admin`` holds every role).
@@ -102,7 +105,7 @@ def mutation(
     )
 
 
-def access_mutation(**kwargs) -> strawberry.mutation:
+def access_mutation(**kwargs: Any) -> strawberry.mutation:
     """A mutation that hands out read credentials: a read, for whoever may see what it reads."""
     return kante.django_mutation(
         extensions=[AuthExtension(scopes=["mikro_read"])], **kwargs
@@ -115,7 +118,7 @@ collaboration_api = collaboration_types.resolvers(
 )
 
 
-def upload_mutation(**kwargs) -> strawberry.mutation:
+def upload_mutation(**kwargs: Any) -> strawberry.mutation:
     """A mutation that hands out (or finishes) upload credentials: gated by ``datalayer.upload_roles``.
 
     Holding any one of the configured roles is enough. Read once, at schema build -- a change to
@@ -127,7 +130,7 @@ def upload_mutation(**kwargs) -> strawberry.mutation:
     )
 
 
-def subscription(**kwargs) -> strawberry.subscription:
+def subscription(**kwargs: Any) -> strawberry.subscription:
     """A subscription: what it streams is read, so an app needs ``mikro_read`` for it."""
     return strawberry.subscription(
         extensions=[AuthSubscribeExtension(scopes=["mikro_read"])], **kwargs

@@ -126,7 +126,7 @@ async def _create(
 @pytest.mark.asyncio
 async def test_keyed_by_derives_the_axis_split_from_the_two_spaces(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One call, no axes stated, and the plan comes out with the split already right.
 
     The caller names a mask and nothing else. `(t,y,x)` against `(t,i)` can only mean
@@ -192,7 +192,7 @@ async def test_keyed_by_derives_the_axis_split_from_the_two_spaces(
 @pytest.mark.asyncio
 async def test_keyed_by_and_derived_from_are_two_edges_in_opposite_directions(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Stating both in one call writes both, and neither stands in for the other.
 
     This is the whole design question `keyedBy` answers: the table really is derived from
@@ -248,7 +248,7 @@ async def test_keyed_by_and_derived_from_are_two_edges_in_opposite_directions(
 @pytest.mark.asyncio
 async def test_sibling_masks_each_get_their_own_edge(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`keyedBy` is a list: two masks may key one table, one edge each."""
     nuclei = await _mask(authenticated_context, "nuclei labels")
     cells = await _mask(authenticated_context, "cell labels")
@@ -285,7 +285,7 @@ async def test_sibling_masks_each_get_their_own_edge(
 @pytest.mark.asyncio
 async def test_a_table_with_no_axes_cannot_be_keyed_at_all(
     authenticated_context: HttpContext,
-):
+) -> None:
     """It used to be a runtime refusal. It is now inexpressible, which is the better guarantee.
 
     A table with no `axes` has the synthetic `object` axis, which has no column behind it, so
@@ -319,7 +319,7 @@ async def test_a_table_with_no_axes_cannot_be_keyed_at_all(
 @pytest.mark.asyncio
 async def test_keyed_by_refuses_a_mask_that_consumes_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A mask whose every axis is also a table axis collapses nothing, so it is not a map."""
     mask = await _mask(authenticated_context)
 
@@ -342,7 +342,7 @@ async def test_keyed_by_refuses_a_mask_that_consumes_nothing(
 @pytest.mark.asyncio
 async def test_keyed_by_refuses_a_table_that_produces_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table with no coordinate of its own has nothing for the pixels to supply.
 
     The refusal is now the *specific* one, because the caller names the axis: `t` is an axis of
@@ -370,7 +370,9 @@ async def test_keyed_by_refuses_a_table_that_produces_nothing(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_keyed_by_refuses_the_same_mask_twice(authenticated_context: HttpContext):
+async def test_keyed_by_refuses_the_same_mask_twice(
+    authenticated_context: HttpContext,
+) -> None:
     """A second edge between the same pair says nothing the first did not."""
     mask = await _mask(authenticated_context)
 
@@ -391,7 +393,7 @@ async def test_keyed_by_refuses_the_same_mask_twice(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_refused_key_edge_leaves_no_table_behind(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole creation is one transaction, so a bad mask does not strand a table."""
     mask = await _mask(authenticated_context)
 
@@ -414,7 +416,7 @@ async def test_a_refused_key_edge_leaves_no_table_behind(
 @pytest.mark.asyncio
 async def test_keying_a_table_does_not_make_the_mask_derived_from_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The FIELD leaves the mask's system and lands in a table's, which is the shape
     ``derivedFrom`` reports for a dataset -- so check it is not read as lineage.
 
@@ -454,7 +456,7 @@ async def test_keying_a_table_does_not_make_the_mask_derived_from_it(
 @pytest.mark.asyncio
 async def test_keyed_by_refuses_a_table_with_two_id_axes(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One pixel holds one value, so one mask cannot supply two ids.
 
     `assert_field_produces` refuses this anyway, but from the field's side -- it reads as
@@ -502,7 +504,7 @@ async def test_keyed_by_refuses_a_table_with_two_id_axes(
 @pytest.mark.asyncio
 async def test_a_second_object_space_is_a_reference_not_an_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The shape the refusal above recommends: one INDEX axis, the other id a data column.
 
     This is RFC-7's line -- FIELD is the single crossing from geometry into record-land, and
@@ -622,7 +624,9 @@ SHAPE_COLUMNS = [
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_mesh_collection_keys_a_table(authenticated_context: HttpContext):
+async def test_a_mesh_collection_keys_a_table(
+    authenticated_context: HttpContext,
+) -> None:
     """A collection is a keying source in its own right, not only a probe point.
 
     Before this, the only route from a mesh to a table ran through the mask it was
@@ -694,7 +698,7 @@ async def test_a_mesh_collection_keys_a_table(authenticated_context: HttpContext
 @pytest.mark.asyncio
 async def test_a_per_frame_collection_passes_time_through(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The shared axis passes through by name here exactly as it does for a mask.
 
     Worth its own test because it is the case that proves the axis split was not special-cased
@@ -744,7 +748,7 @@ async def test_a_per_frame_collection_passes_time_through(
 @pytest.mark.asyncio
 async def test_a_collection_is_named_by_its_label_in_refusals(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every refusal used to read `dataset.name`, which a MeshCollection may not have.
 
     A collection answers `label` (its name, or its store's key), and reading the wrong
@@ -785,7 +789,7 @@ async def test_a_collection_is_named_by_its_label_in_refusals(
 @pytest.mark.asyncio
 async def test_keyed_by_refuses_a_lens_and_a_table_by_construction(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The union advertises two members, so the other four are a schema error, not a runtime one.
 
     `DerivationSourceKind` carries six; keying reuses neither the enum nor its breadth,
@@ -812,7 +816,7 @@ async def test_keyed_by_refuses_a_lens_and_a_table_by_construction(
 @pytest.mark.asyncio
 async def test_a_collection_keyed_to_its_own_table_still_reaches_its_masks(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The two routes coexist, and the local one sorts first.
 
     A collection extracted from a mask could already reach that mask's table, one
@@ -902,7 +906,7 @@ async def test_a_collection_keyed_to_its_own_table_still_reaches_its_masks(
 @pytest.mark.asyncio
 async def test_a_referenced_index_axis_is_identified_and_the_field_need_not_produce_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The product-space case: a row identified by a *pair*, and a mask can only supply one.
 
     A contact map is indexed by (nucleus, cell). A row is not a nucleus carrying a cell as an
@@ -1001,7 +1005,7 @@ async def test_a_referenced_index_axis_is_identified_and_the_field_need_not_prod
 @pytest.mark.asyncio
 async def test_a_product_space_table_is_offered_to_no_picker(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Reachable by an edge, and still not something a colouring can resolve.
 
     The edge is a real fact -- the mask's pixels are nucleus ids, and those are half of a
@@ -1076,7 +1080,7 @@ async def test_a_product_space_table_is_offered_to_no_picker(
 @pytest.mark.asyncio
 async def test_the_identified_axes_lookup_does_not_repeat_per_keying_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`identified_axes(own_system)` is a property of the table, so it is read once.
 
     It sat inside the per-entry loop, costing two ORM traversals per keying source, and
@@ -1101,7 +1105,7 @@ async def test_the_identified_axes_lookup_does_not_repeat_per_keying_source(
         counter = []
         real = graph_logic.identified_axes
 
-        def counting(system):
+        def counting(system: models.CoordinateSystem) -> set[str]:
             counter.append(system.pk)
             return real(system)
 
@@ -1134,7 +1138,7 @@ async def test_the_identified_axes_lookup_does_not_repeat_per_keying_source(
 @pytest.mark.asyncio
 async def test_a_kind_that_cannot_key_is_refused_rather_than_raising_keyerror(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The lookup into `_DERIVATION_SOURCES` was bare, so an unmapped kind was a 500.
 
     Reachable only through a bug -- every caller filters on `AUTHORS_EDGE` first -- but the
@@ -1181,7 +1185,7 @@ query Keys($id: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_says_what_keys_it(authenticated_context: HttpContext):
+async def test_a_table_says_what_keys_it(authenticated_context: HttpContext) -> None:
     """`TableDataset.keyedBy` reads the keys back from the table's side: each mask, its id axis, what passes through."""
     nuclei = await _mask(authenticated_context, "nuclei labels")
     cells = await _mask(authenticated_context, "cell labels")
@@ -1227,7 +1231,7 @@ async def test_a_table_says_what_keys_it(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_nothing_keys_says_so(authenticated_context: HttpContext):
+async def test_a_table_nothing_keys_says_so(authenticated_context: HttpContext) -> None:
     result = await _create(authenticated_context, "loose", OBJECT_COLUMNS)
     assert not result.errors, result.errors
     keys = await schema.execute(

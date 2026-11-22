@@ -14,7 +14,7 @@ from core import enums
 from mikro_server.schema import schema
 from mikro_server.service import service
 from tests import seed
-from tests.test_rekuest_signals import intake  # noqa: F401  the fixture
+from tests.test_rekuest_signals import _Intake
 from tests.test_signals import _of
 
 DESCRIBED = """
@@ -38,7 +38,7 @@ AXES = [
 @pytest.mark.asyncio
 async def test_an_object_answers_the_descriptors_its_structure_declares(
     authenticated_context: HttpContext,
-):
+) -> None:
     dataset = await seed.create_array_dataset(
         authenticated_context, "timelapse", axes=AXES, shapes=[[5, 3, 64, 64]]
     )
@@ -112,8 +112,8 @@ async def test_an_object_answers_the_descriptors_its_structure_declares(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_field_answers_what_the_signal_carried(
-    intake, authenticated_context: HttpContext
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Described scene")
 
     (received,) = _of(intake, "@mikro/scene")
@@ -133,8 +133,8 @@ async def test_the_field_answers_what_the_signal_carried(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_annotation_says_what_shape_it_is_and_the_signal_carries_the_same(
-    intake, authenticated_context: HttpContext
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Canvas")
     drawn = await schema.execute(
         "mutation Draw($input: CreateAnnotationInput!) { createAnnotation(input: $input) { id descriptors } }",

@@ -76,7 +76,7 @@ query Dataset($id: ID!) {
 CROP = [{"axis": "y", "start": 8, "stop": 40}, {"axis": "x", "start": 8, "stop": 40}]
 
 
-async def _from_lens(ctx: HttpContext, lens: models.Lens, **extra) -> dict:
+async def _from_lens(ctx: HttpContext, lens: models.Lens, **extra: object) -> dict:
     result = await schema.execute(
         FROM_LENS,
         context_value=ctx,
@@ -131,7 +131,9 @@ def _channel_of(layer: models.Layer) -> int:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scene_from_a_lens_draws_that_lens(authenticated_context: HttpContext):
+async def test_a_scene_from_a_lens_draws_that_lens(
+    authenticated_context: HttpContext,
+) -> None:
     """The crop, and nothing else of its dataset -- in the dataset's own grid.
 
     Staging the crop's *space* cannot do this: what lives behind a sliced lens' space is its
@@ -187,7 +189,7 @@ async def test_a_scene_from_a_lens_draws_that_lens(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Over ``c[1:3]``, layer index 0 is the dataset's channel 1 -- and must be drawn as channel 1.
 
     A layer draws through a lens pinning one of the dataset's channels; labels and histograms are recorded
@@ -240,7 +242,9 @@ async def test_a_lens_that_cuts_the_channel_axis_keeps_each_channels_facts(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_crop_too_thin_to_draw_is_refused(authenticated_context: HttpContext):
+async def test_a_crop_too_thin_to_draw_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """Renderability is a fact of the selection: a dataset that draws can have a lens that does not."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -264,7 +268,7 @@ async def test_a_crop_too_thin_to_draw_is_refused(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_sliced_lens_has_its_own_scenes_and_nomination(
     authenticated_context: HttpContext,
-):
+) -> None:
     """What a crop is shown in, and which of those to open, are the crop's own answers."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -293,7 +297,7 @@ async def test_a_sliced_lens_has_its_own_scenes_and_nomination(
 @pytest.mark.asyncio
 async def test_a_crop_borrows_its_datasets_picture_until_it_has_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A crop nobody has staged still gets a tile -- its dataset's -- and its own once it nominates."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -338,7 +342,7 @@ async def test_a_crop_borrows_its_datasets_picture_until_it_has_one(
 @pytest.mark.asyncio
 async def test_an_unsliced_lens_answers_as_its_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Nominating through a whole-array lens is nominating the dataset: one column, whichever door."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -366,7 +370,7 @@ async def test_an_unsliced_lens_answers_as_its_dataset(
 @pytest.mark.asyncio
 async def test_a_dataset_lists_its_lenses_whole_and_sliced_apart(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`fullLens` and the `sliced` switch tell the handle for the whole array from the crops people work on."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -397,7 +401,7 @@ async def test_a_dataset_lists_its_lenses_whole_and_sliced_apart(
 @pytest.mark.asyncio
 async def test_only_the_datasets_owner_nominates_for_its_lens(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """A lens has no creator of its own, and it is the dataset's cards a nomination changes."""
     dataset = await seed.create_array_dataset(authenticated_context, "Tissue")
     crop = await seed.create_lens(authenticated_context, dataset, CROP)
@@ -450,7 +454,7 @@ query Datasets { arrayDatasets { id fullLens { id } } }
 @pytest.mark.asyncio
 async def test_a_dataset_is_created_with_its_whole_array_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     from tests.test_array_axis_declaration import _ZYX, _create
 
     result = await _create(authenticated_context, "born-whole", ["z", "y", "x"], _ZYX)
@@ -477,7 +481,7 @@ async def test_a_dataset_is_created_with_its_whole_array_lens(
 @pytest.mark.asyncio
 async def test_a_page_of_datasets_names_each_ones_whole_array_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`fullLens` is on every tile, so it answers for a whole page -- and for each row its own."""
     ctx = authenticated_context
     first = await seed.create_array_dataset(ctx, "First")
@@ -505,7 +509,7 @@ async def test_a_page_of_datasets_names_each_ones_whole_array_lens(
 @pytest.mark.asyncio
 async def test_a_lens_is_named_by_the_positions_it_pins(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Naming channel 1 names every lens through it -- the crop of it too -- and the name is found, staged and cleared like one."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -575,7 +579,7 @@ async def test_a_lens_is_named_by_the_positions_it_pins(
 @pytest.mark.asyncio
 async def test_a_lens_that_pins_nothing_has_no_positions_to_name(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A crop by ranges is named by the shape it was cut to, the whole dataset by its own name."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
@@ -595,7 +599,7 @@ async def test_a_lens_that_pins_nothing_has_no_positions_to_name(
 @pytest.mark.asyncio
 async def test_only_the_datasets_owner_names_its_positions(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     dataset = await seed.create_array_dataset(authenticated_context, "Tissue")
     channel = await seed.create_lens(
         authenticated_context, dataset, [{"axis": "c", "start": 0, "stop": 1}]

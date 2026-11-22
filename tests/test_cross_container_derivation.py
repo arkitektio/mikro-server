@@ -575,7 +575,7 @@ async def test_the_lineage_graph_is_bounded_and_excludes_registrations(
     assert str(scene.world.pk) not in outputs, "a registration is not a lineage edge"
 
 
-async def _derived(ctx: HttpContext, name: str, *, lens) -> str:  # noqa: ANN001 - a seeded Lens
+async def _derived(ctx: HttpContext, name: str, *, lens: models.Lens) -> str:
     """An array dataset derived from a lens, through the real ingest mutation."""
     from unittest.mock import patch
 
@@ -645,7 +645,7 @@ async def test_the_documented_sequences_run_end_to_end(
             populated=True,
         )
 
-    async def _run(query: str, **variables) -> dict:
+    async def _run(query: str, **variables: object) -> dict:
         with patch("arkitekt_datalayer.models.ZarrStore.fill_info", return_value=None):
             result = await schema.execute(
                 query, context_value=authenticated_context, variable_values=variables

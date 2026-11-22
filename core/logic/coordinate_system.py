@@ -22,12 +22,17 @@ from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, cast
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Model, Q
+from kante.types import Info
 
 from core import base_models, enums, models
 from core import descriptors as descriptors_logic
 from core.creation import CreationContext
-from core.inputs.coords import IDENTITY_TRANSFORM, PhysicalAxisInputModel
+from core.inputs.coords import (
+    IDENTITY_TRANSFORM,
+    LoweredDerivation,
+    PhysicalAxisInputModel,
+)
 from core.logic import compositions as compositions_logic
 from core.logic import coords as coords_logic
 from core.logic import graph as graph_logic
@@ -392,7 +397,7 @@ _DERIVATION_SOURCES: dict[str, tuple[type, str]] = {
 }
 
 
-def source_label(model: type, source) -> str:  # noqa: ANN001 - any container row
+def source_label(model: type, source: Model) -> str:
     """What to call a source in an edge name or an error, whatever kind it is.
 
     ``f"{child} <- {source}"`` used to read the source's *dataset* name -- which a table, a
@@ -439,8 +444,8 @@ WHOLE_SOURCE = SourceNarrowing()
 
 
 def resolve_derivation_source(
-    info, lowered
-) -> "tuple[models.CoordinateSystem, str, SourceNarrowing]":  # noqa: ANN001 - kante's Info, and a LoweredDerivation
+    info: Info, lowered: LoweredDerivation
+) -> "tuple[models.CoordinateSystem, str, SourceNarrowing]":
     """The space a derivation derives *from*, a label for the edge's name, and the shape it names.
 
     **One path for every spelling.** A source is a lens or a bare space: an entry naming a
@@ -500,7 +505,7 @@ def resolve_derivation_source(
 
 
 def write_derivation_edges(
-    info,
+    info: Info,
     *,
     name: str,
     own_system: "models.CoordinateSystem",
@@ -549,7 +554,7 @@ def write_derivation_edges(
     # collection, and the bare entry would add an edge that names nothing.
     systems = [system.pk for system, _, _ in sources]
     shapes = [narrowing.key for _, _, narrowing in sources]
-    resolved = list(zip(systems, shapes))
+    resolved = list(zip(systems, shapes, strict=True))
 
     def collides(index: int) -> bool:
         system, shape = resolved[index]
@@ -578,7 +583,7 @@ def write_derivation_edges(
     edges: list[models.Transformation] = []
     with transaction.atomic():
         for low, (source_system, label, narrowing), parts in zip(
-            lowered, sources, resolved_parts
+            lowered, sources, resolved_parts, strict=True
         ):
             transform = low.transform
             edges.append(
@@ -605,14 +610,14 @@ def write_derivation_edges(
 
 
 def write_key_edges(
-    info,
+    info: Info,
     *,
     name: str,
     own_system: "models.CoordinateSystem",
     keyed_by: Sequence,
     ctx: CreationContext,
     produces: Sequence[str] | None = None,
-) -> list["models.Transformation"]:  # noqa: ANN001 - kante's Info, and a list of KeyedByInput members
+) -> list["models.Transformation"]:
     """Write one FIELD edge per source keying this table, source space -> table space.
 
     The sibling of :func:`write_derivation_edges`, and deliberately not folded into it: a
@@ -718,7 +723,7 @@ def write_key_edges(
 
     edges: list[models.Transformation] = []
     with transaction.atomic():
-        for (entry, label, source_system), wanted in zip(resolved, stated):
+        for (entry, label, source_system), wanted in zip(resolved, stated, strict=True):
             source_axes = [axis.name for axis in source_system.axes.all()]
             supplied = set(source_axes)
             # Axes the table identifies itself are accounted for without the source supplying
@@ -1381,7 +1386,7 @@ def _box_to_dataset_slices(
             raise ValueError(
                 f"Coordinate system '{system.name}' has no placement path into the pixel grid of dataset '{dataset.name}', so a box stated in it cannot be cut from the dataset"
             )
-        by_axis = dict(zip(names, zip(mins, maxs)))
+        by_axis = dict(zip(names, zip(mins, maxs, strict=True), strict=True))
         source_axes = list(condensed.input_axes)
         mins = [
             by_axis[axis][0] if axis in by_axis else -math.inf for axis in source_axes
@@ -1449,7 +1454,7 @@ def annotation_cut_slices(
     spanned = unpinned if len(unpinned) == rank else names[max(len(names) - rank, 0) :]
     bounds = {
         axis: [float(low), float(high)]
-        for axis, low, high in zip(spanned, stored["min"], stored["max"])
+        for axis, low, high in zip(spanned, stored["min"], stored["max"], strict=False)
     }
     bounds.update(
         {

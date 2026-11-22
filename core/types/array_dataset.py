@@ -6,7 +6,7 @@ import kante
 import strawberry
 from arkitekt_datalayer.scalars import ByteCount
 from arkitekt_datalayer.types import MediaStore, ZarrStore
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 from kante.types import Info
 from strawberry import auto
 from strawberry.scalars import JSON
@@ -72,12 +72,17 @@ from optikit.models import OptikitStateModel
 from optikit.types import OptikitStateGraph
 
 if TYPE_CHECKING:
+    # The picker, sparse and table types below are lazy annotations for the same reason.
+    from core.types.column_options import ColorByOption
+
     # Only for the lazy annotation on the file-link fields below; importing it at runtime
     # would be a cycle, since `core.types.file_link` references this module in return.
     from core.types.file_link import FileLink
 
     # Same reason: `core.types.folder` imports this module for the layer/scene types.
     from core.types.folder import Folder
+    from core.types.sparse_dataset import SparseDataset
+    from core.types.table_dataset import ColumnSummary, TableDataset
 
 
 #: Key for the per-request latest-snapshot-per-scene map on the context's loader store.
@@ -99,7 +104,7 @@ _NOMINATING_LENS_PREFETCH = lambda info: Prefetch(  # noqa: E731
 )
 
 
-def _nominating_lens(dataset) -> "models.ArrayLens | None":  # noqa: ANN001 - the ArrayDataset row
+def _nominating_lens(dataset: models.ArrayDataset) -> "models.ArrayLens | None":
     """The dataset's whole lens, which holds its nomination; prefetched on a page, one query otherwise."""
     prefetched = getattr(dataset, _NOMINATING_LENS_ATTR, None)
     if prefetched is not None:
@@ -148,7 +153,9 @@ def _latest_snapshot_map(info: Info) -> "dict[int, models.SceneSnapshot] | None"
     return by_scene
 
 
-def _default_scene_snapshot(info: Info, dataset) -> "SceneSnapshot | None":
+def _default_scene_snapshot(
+    info: Info, dataset: models.ArrayDataset
+) -> "SceneSnapshot | None":
     """The newest picture of the scene this dataset nominates, or None if it nominates none.
 
     This replaced a walk. ``latestSnapshot`` used to derive its answer from *sole occupancy* --
@@ -772,7 +779,9 @@ class CoordinateAnchor:
         return self.coordinates
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.CoordinateAnchor], info: Info, **kwargs: object
+    ) -> QuerySet[models.CoordinateAnchor]:
         """Scope the list to the request's organization, through the anchor's own denormalised column."""
         return build_prescoped_queryset(info, queryset)
 
@@ -938,7 +947,9 @@ class Lens:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.Lens], info: Info, **kwargs: object
+    ) -> QuerySet[models.Lens]:
         """Scope the heterogeneous list to the request's organization, and load each row's container chain in a batch."""
         scoped = build_prescoped_queryset(info, queryset)
         return scoped.with_sources() if hasattr(scoped, "with_sources") else scoped
@@ -1481,7 +1492,9 @@ class Animation:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.Animation], info: Info, **kwargs: object
+    ) -> QuerySet[models.Animation]:
         """Scope the list to the request's organization: a bare list field would return every row in the table, across organizations."""
         return build_prescoped_queryset(info, queryset)
 
@@ -1518,7 +1531,9 @@ class SceneSnapshot:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.SceneSnapshot], info: Info, **kwargs: object
+    ) -> QuerySet[models.SceneSnapshot]:
         """Scope the list to the request's organization: a bare list field would return every row in the table, across organizations, and this is not inherited from anywhere."""
         return build_prescoped_queryset(info, queryset)
 
@@ -1738,7 +1753,9 @@ class Layer:
     order: int
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.Layer], info: Info, **kwargs: object
+    ) -> QuerySet[models.Layer]:
         """Select the relations the placement logic reads in Python.
 
         The optimizer prefetches what the *selection set* names, and a client asking for
@@ -1879,7 +1896,7 @@ class Layer:
         )
 
 
-def _level_placements(layer, info: Info) -> list["LevelPlacement"]:
+def _level_placements(layer: models.Layer, info: Info) -> list["LevelPlacement"]:
     """One placement per pyramid level of a lens-sourced layer, each anchored at that level's ARRAY system.
 
     Module-level and shared rather than a method repeated per type. Every kind that sources
@@ -1933,7 +1950,7 @@ class ImageLayer(Layer):
     )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.IMAGE.value
 
     @kante.django_field(
@@ -1979,7 +1996,7 @@ class IntensityLayer(Layer):
     projection_mode: enums.ProjectionMode | None
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.Layer)
             and obj.kind == enums.LayerKind.INTENSITY.value
@@ -2028,7 +2045,7 @@ class RgbLayer(Layer):
     )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.RGB.value
 
     @kante.django_field(description=_LEVEL_PATHS_DESCRIPTION)
@@ -2059,7 +2076,7 @@ class PhasorLayer(Layer):
     )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.PHASOR.value
         )
@@ -2108,7 +2125,7 @@ class VectorLayer(Layer):
     clim_max: float | None
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.VECTOR.value
         )
@@ -2148,7 +2165,7 @@ class LabelLayer(Layer):
     )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.LABEL.value
 
     @kante.django_field(
@@ -2305,7 +2322,12 @@ class AnnotationCollection:
         return graph_logic.collection_derivation_edges(system) if system else []
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls,
+        queryset: QuerySet[models.AnnotationCollection],
+        info: Info,
+        **kwargs: object,
+    ) -> QuerySet[models.AnnotationCollection]:
         """Scope the list to the request's organization.
 
         A bare list field returns every row in the table, across organizations -- the
@@ -2535,7 +2557,9 @@ class Annotation:
         )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.Annotation], info: Info, **kwargs: object
+    ) -> QuerySet[models.Annotation]:
         """Scope the list to the request's organization, carrying the system along.
 
         Through the required collection FK -- the annotation carries no organization
@@ -2582,7 +2606,7 @@ class AnnotationLayer(Layer):
         return self.lens.annotation_collection
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.Layer)
             and obj.kind == enums.LayerKind.ANNOTATION.value
@@ -2676,7 +2700,7 @@ class PointLayer(Layer):
         return _role_column(self, enums.ColumnRoleChoices.ID.value)
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.POINT.value
 
 
@@ -2728,7 +2752,7 @@ class TrackLayer(Layer):
         return _role_column(self, enums.ColumnRoleChoices.TRACK_ID.value)
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.TRACK.value
 
 
@@ -2807,7 +2831,7 @@ class MeshLayer(Layer):
         return color_by_models.MeshColorByModel(**entries[index])
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.MESH.value
 
 
@@ -2848,7 +2872,7 @@ class FixtureLayer(Layer):
     )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.FIXTURE.value
         )
@@ -2931,7 +2955,7 @@ class NetworkLayer(Layer):
         ]
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.Layer) and obj.kind == enums.LayerKind.NETWORK.value
         )

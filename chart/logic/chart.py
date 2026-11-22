@@ -143,7 +143,7 @@ def along_axis_of(condensed: "graph_logic.CondensedPlacement | None") -> str | N
     coefficients = condensed.matrix[0][:-1]
     read = [
         name
-        for name, coefficient in zip(condensed.input_axes, coefficients)
+        for name, coefficient in zip(condensed.input_axes, coefficients, strict=False)
         if coefficient != 0
     ]
     return read[0] if len(read) == 1 else None
@@ -192,7 +192,9 @@ def resolve_along_axis(
         coefficients = condensed.matrix[0][:-1]
         read = [
             name
-            for name, coefficient in zip(condensed.input_axes, coefficients)
+            for name, coefficient in zip(
+                condensed.input_axes, coefficients, strict=False
+            )
             if coefficient != 0
         ]
         raise ValueError(
@@ -212,7 +214,7 @@ def series_axis_of(lens: "core_models.Lens", along: str) -> str | None:
     refusal.
     """
     types = {spec.name: spec.type for spec in lens.axis_specs}
-    sizes = dict(zip(lens.axis_names, lens.shape_list))
+    sizes = dict(zip(lens.axis_names, lens.shape_list, strict=False))
     free = [name for name in lens.axis_names if name != along and sizes[name] > 1]
     if len(free) == 1 and types[free[0]] in ENUMERATING_AXIS_TYPES:
         return free[0]
@@ -230,7 +232,7 @@ def assert_trace(lens: "core_models.Lens", along: str) -> None:
     is a surface: that is a different reading of the data, and a different kind.
     """
     types = {spec.name: spec.type for spec in lens.axis_specs}
-    sizes = dict(zip(lens.axis_names, lens.shape_list))
+    sizes = dict(zip(lens.axis_names, lens.shape_list, strict=False))
 
     if types[along] not in METRIC_AXIS_TYPES:
         raise ValueError(

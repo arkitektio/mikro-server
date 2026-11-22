@@ -30,6 +30,7 @@ reads the collection's annotations to count the ones in its windows.
 import math
 from collections import Counter
 from collections.abc import Sequence
+from typing import TypeVar
 
 import numpy
 
@@ -78,7 +79,7 @@ def array_descriptors(
     for key, wanted in EXTENT_KEYS.items():
         descriptors[key] = sum(
             extent
-            for axis_type, extent in zip(axis_types, shape)
+            for axis_type, extent in zip(axis_types, shape, strict=True)
             if axis_type == wanted
         )
     descriptors[SIZE] = math.prod(shape)
@@ -439,7 +440,10 @@ def restore(target: object, *, emit: bool = True) -> None:
     service.restore(target, emit=emit)
 
 
-def stamp[M](rows: list[M]) -> list[M]:
+M = TypeVar("M")
+
+
+def stamp(rows: list[M]) -> list[M]:
     """Describe rows about to be bulk-written, which no save sees."""
     from mikro_server.service import (
         service,  # it binds the models this module describes

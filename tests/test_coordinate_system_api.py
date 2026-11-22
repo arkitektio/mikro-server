@@ -16,6 +16,7 @@ tell a working guard from one that raises AttributeError on a column the model d
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from mikro_server.schema import schema
@@ -73,7 +74,10 @@ ATLAS_AXES = [
 
 
 async def _create_space(
-    ctx: HttpContext, name: str = "Atlas", axes=None, registrations=None
+    ctx: HttpContext,
+    name: str = "Atlas",
+    axes: list[dict] | None = None,
+    registrations: list[dict] | None = None,
 ) -> dict:
     result = await schema.execute(
         CREATE_CS,
@@ -102,7 +106,7 @@ async def _system(ctx: HttpContext, system_id: str) -> dict:
 @pytest.mark.asyncio
 async def test_a_scenes_world_is_an_ordinary_shared_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A world created alongside a scene is the same thing as an atlas: a space nothing lives in.
 
     Scenes never own a space, so the space a bare `createScene` makes has no residents,
@@ -128,7 +132,7 @@ async def test_a_scenes_world_is_an_ordinary_shared_space(
 @pytest.mark.asyncio
 async def test_a_lens_lives_in_its_own_space_and_a_scene_may_root_there(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every space is adoptable now, including a lens' crop -- the RFC-9 reversal.
 
     `isAdoptableWorld` refused an ARRAY system on the grounds that a slice *of* a space is
@@ -162,7 +166,7 @@ async def test_a_lens_lives_in_its_own_space_and_a_scene_may_root_there(
 @pytest.mark.asyncio
 async def test_residents_name_the_data_living_in_a_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`residents` resolves to the data itself, and a calibrated space has none.
 
     The sharpest case is the calibration. It used to hang off the dataset by a second FK,
@@ -203,7 +207,9 @@ async def test_residents_name_the_data_living_in_a_space(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_collection_lives_in_its_own_space(authenticated_context: HttpContext):
+async def test_a_collection_lives_in_its_own_space(
+    authenticated_context: HttpContext,
+) -> None:
     """The two arms a dataset-shaped test never reaches.
 
     All three used to read INTRINSIC, so `kind` could not tell them apart and `owner` was
@@ -229,7 +235,7 @@ async def test_a_collection_lives_in_its_own_space(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_uninhabited_lists_every_registrable_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`uninhabited: true` is THE predicate for registrable spaces -- a scene's world included.
 
     There is no second sort of reference frame: the world a bare scene gets and an atlas
@@ -269,7 +275,7 @@ async def test_uninhabited_lists_every_registrable_space(
 @pytest.mark.asyncio
 async def test_a_shared_space_can_be_renamed_and_its_clock_anchored(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The fields that describe the space itself. Where its data sits stays an edge."""
     space = await _create_space(
         authenticated_context, "Atals"
@@ -304,7 +310,7 @@ async def test_a_shared_space_can_be_renamed_and_its_clock_anchored(
 @pytest.mark.asyncio
 async def test_a_space_data_lives_in_cannot_be_renamed_or_deleted_directly(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Both mutations refuse a space with residents: it is described by the data in it.
 
     The guard used to read "is this SHARED", which was the same question asked through the
@@ -339,7 +345,9 @@ async def test_a_space_data_lives_in_cannot_be_renamed_or_deleted_directly(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unused_space_is_deletable_by_its_creator(bot_context: HttpContext):
+async def test_an_unused_space_is_deletable_by_its_creator(
+    bot_context: HttpContext,
+) -> None:
     """The whole point: a space created by mistake can be taken back.
 
     Runs as a non-admin, so `assert_can_delete` actually consults the ownership callable
@@ -364,7 +372,7 @@ async def test_an_unused_space_is_deletable_by_its_creator(bot_context: HttpCont
 @pytest.mark.asyncio
 async def test_a_space_someone_else_created_is_not_yours_to_delete(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """The ownership guard, reached only because the caller is not an org admin."""
     space = await _create_space(authenticated_context, "Theirs")
 
@@ -385,7 +393,7 @@ async def test_a_space_someone_else_created_is_not_yours_to_delete(
 @pytest.mark.asyncio
 async def test_a_space_in_use_is_refused_rather_than_cascaded_away(
     bot_context: HttpContext,
-):
+) -> None:
     """Each refusal guards a CASCADE that would take something the caller never named."""
     dataset = await seed.create_array_dataset(
         bot_context, "A", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -424,7 +432,9 @@ async def test_a_space_in_use_is_refused_rather_than_cascaded_away(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_space_a_scene_composes_over_is_refused(bot_context: HttpContext):
+async def test_a_space_a_scene_composes_over_is_refused(
+    bot_context: HttpContext,
+) -> None:
     """Scene.world is RESTRICT; the mutation names the scenes instead of raising an IntegrityError."""
     space = await _create_space(bot_context, "Adopted")
     created = await schema.execute(
@@ -449,7 +459,7 @@ async def test_a_space_a_scene_composes_over_is_refused(bot_context: HttpContext
 @pytest.mark.asyncio
 async def test_refining_an_edge_leaves_a_readable_audit_trail(
     authenticated_context: HttpContext,
-):
+) -> None:
     """RFC-6 Rule 1 is only true if a client can read it.
 
     "updateTransformation refines an edge in place; koherent provenance holds the history"
@@ -514,7 +524,7 @@ async def test_refining_an_edge_leaves_a_readable_audit_trail(
 @pytest.mark.asyncio
 async def test_a_shared_space_takes_its_axes_as_given_but_must_have_some(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No type ordering is asked of a shared space; a space with no axes is still not a space.
 
     Space-before-time was refused here. It bought nothing: the render-axis derivation finds the
@@ -585,8 +595,12 @@ MM_AXES = [
 
 
 async def _referenced(
-    ctx: HttpContext, reference: str, name: str = "Atlas", axes=None, **extra
-):
+    ctx: HttpContext,
+    reference: str,
+    name: str = "Atlas",
+    axes: list[dict] | None = None,
+    **extra: object,
+) -> ExecutionResult:
     return await schema.execute(
         REFERENCED_CS,
         context_value=ctx,
@@ -602,7 +616,11 @@ async def _referenced(
 
 
 async def _space_for(
-    ctx: HttpContext, reference: str, name: str = "Atlas", axes=None, **extra
+    ctx: HttpContext,
+    reference: str,
+    name: str = "Atlas",
+    axes: list[dict] | None = None,
+    **extra: object,
 ) -> dict:
     result = await _referenced(ctx, reference, name, axes, **extra)
     assert not result.errors, result.errors
@@ -615,7 +633,7 @@ async def test_a_uri_reference_is_one_space_whoever_asks(
     authenticated_context: HttpContext,
     other_app_context: HttpContext,
     no_app_context: HttpContext,
-):
+) -> None:
     """Two converters reading MNI152 from two files land in one space, not two that never compose."""
     first = await _space_for(authenticated_context, "nifti:mni152", "MNI152 (first)")
     again = await _space_for(other_app_context, "nifti:mni152", "MNI152 (second)")
@@ -634,7 +652,7 @@ async def test_a_uri_reference_is_one_space_whoever_asks(
 @pytest.mark.asyncio
 async def test_a_plain_key_is_the_calling_apps_own(
     authenticated_context: HttpContext, other_app_context: HttpContext
-):
+) -> None:
     """`stage` is per app: the same app gets its own back, another app gets another space."""
     mine = await _space_for(authenticated_context, "stage")
     mine_again = await _space_for(authenticated_context, "stage")
@@ -647,7 +665,7 @@ async def test_a_plain_key_is_the_calling_apps_own(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_app_key_needs_an_app(no_app_context: HttpContext):
+async def test_an_app_key_needs_an_app(no_app_context: HttpContext) -> None:
     """Without an app there is no namespace to keep `stage` in; refused rather than made global."""
     result = await _referenced(no_app_context, "stage")
     assert result.errors and "not made through an app" in str(result.errors[0])
@@ -660,7 +678,7 @@ async def test_an_app_key_needs_an_app(no_app_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_referenced_space_is_refused_when_described_differently(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Other axes or another clock under the same reference is a second frame, never a quiet rescale."""
     await _space_for(
         authenticated_context, "nifti:mni152", epoch="2026-01-01T00:00:00+00:00"
@@ -694,7 +712,7 @@ async def test_a_referenced_space_is_refused_when_described_differently(
 @pytest.mark.asyncio
 async def test_a_global_reference_is_materialized_per_organization(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """The URI is global; the row is not -- a space is org-scoped like everything a scene composes."""
     ours = await _space_for(authenticated_context, "nifti:mni152")
     theirs = await _space_for(other_org_context, "nifti:mni152")
@@ -705,7 +723,7 @@ async def test_a_global_reference_is_materialized_per_organization(
 @pytest.mark.asyncio
 async def test_registrations_go_into_the_space_already_holding_the_reference(
     authenticated_context: HttpContext,
-):
+) -> None:
     dataset = await seed.create_array_dataset(
         authenticated_context, "A", axes=seed.YX_AXES, shapes=[[64, 64]]
     )
@@ -733,7 +751,7 @@ async def test_registrations_go_into_the_space_already_holding_the_reference(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_reference_is_set_once(authenticated_context: HttpContext):
+async def test_a_reference_is_set_once(authenticated_context: HttpContext) -> None:
     """An existing space may be given a reference, but not have it changed or take another's."""
     plain = await _create_space(authenticated_context, "Plain")
     held = await _space_for(authenticated_context, "atlas:held")
@@ -776,7 +794,7 @@ async def test_a_reference_is_set_once(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_the_reference_filter_resolves_the_callers_scope(
     authenticated_context: HttpContext, other_app_context: HttpContext
-):
+) -> None:
     mine = await _space_for(authenticated_context, "stage")
     theirs = await _space_for(other_app_context, "stage")
 
@@ -797,7 +815,7 @@ async def test_the_reference_filter_resolves_the_callers_scope(
 @pytest.mark.asyncio
 async def test_scenes_asking_for_one_reference_adopt_one_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     first = await schema.execute(
         REFERENCED_SCENE,
         context_value=authenticated_context,

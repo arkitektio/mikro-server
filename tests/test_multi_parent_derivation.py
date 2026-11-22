@@ -88,11 +88,11 @@ async def _two_sources(
 @pytest.mark.asyncio
 async def test_a_fusion_records_every_parent_in_declared_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`derivedFrom` is the declared list, not a pk lottery: swap the input and the order swaps."""
     _, left_lens, _, right_lens = await _two_sources(authenticated_context)
 
-    async def fuse(name: str, first: models.Lens, second: models.Lens):
+    async def fuse(name: str, first: models.Lens, second: models.Lens) -> str:
         result = await _derive(
             authenticated_context,
             name,
@@ -138,7 +138,9 @@ async def test_a_fusion_records_every_parent_in_declared_order(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_duplicate_source_is_refused(authenticated_context: HttpContext):
+async def test_a_duplicate_source_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """One entry per source: a second entry for the same lens is two claims about one relation."""
     _, left_lens, _, _ = await _two_sources(authenticated_context)
 
@@ -173,7 +175,7 @@ async def test_a_duplicate_source_is_refused(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The primary is the placing parent, so an UNMAPPABLE first entry ahead of a mappable one is refused.
 
     The walks refuse an UNMAPPABLE primary -- that is its contract -- so a mappable parent
@@ -230,7 +232,7 @@ async def test_an_unmappable_entry_may_not_hide_a_mappable_parent(
 @pytest.mark.asyncio
 async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_unmappable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """History from several sources, geometry from none: the data is its own root, and its
     layer is refused with the impossibility message -- not the go-author-a-registration one,
     because there is no missing registration to author."""
@@ -306,7 +308,7 @@ async def test_an_all_unmappable_fusion_is_a_root_and_its_layer_is_refused_as_un
 @pytest.mark.asyncio
 async def test_the_lineage_is_the_primary_chain_and_history_keeps_every_parent(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`lineage_ancestors` is the fact tree's chain; `derivation_edges` is the full history.
 
     A fusion owes both parents historically, but it *sits* where its primary sits: the
@@ -358,7 +360,7 @@ async def test_the_lineage_is_the_primary_chain_and_history_keeps_every_parent(
 @pytest.mark.asyncio
 async def test_an_unregistered_fusion_is_rejected_and_nothing_is_written(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No parent is registered, so the fusion's layer is refused -- and the graph is untouched.
 
     The server used to pin the primary parent here. It no longer writes anything: two
@@ -419,7 +421,7 @@ async def test_an_unregistered_fusion_is_rejected_and_nothing_is_written(
 @pytest.mark.asyncio
 async def test_a_fusion_places_through_either_parent(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A fusion reaches the world through *whichever* parent is registered (RFC-9).
 
     The fact tree used to keep one parent edge per system, so registering only the SECONDARY
@@ -550,7 +552,9 @@ async def test_a_fusion_places_through_either_parent(
     assert str(right_intrinsic.pk) not in hops, "and never through the secondary's"
 
 
-def _best_path(source_pk: int, target_pk: int):
+def _best_path(
+    source_pk: int, target_pk: int
+) -> list[tuple[models.Transformation, bool]] | None:
     """Every top-level edge, fetched the way the real universe fetches them, then searched.
 
     `adjacency_of` reads both endpoints and their axes (through `is_reverse_traversable` ->
@@ -570,7 +574,7 @@ def _best_path(source_pk: int, target_pk: int):
 @pytest.mark.asyncio
 async def test_a_validated_route_beats_a_shorter_unknown_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The rival case the tie-break exists to settle, now actually settled.
 
     The walk used to be an unweighted BFS: fewest hops, ties by edge pk, and `validity` never
@@ -642,7 +646,7 @@ async def test_a_validated_route_beats_a_shorter_unknown_one(
 @pytest.mark.asyncio
 async def test_among_equally_known_routes_the_shortest_still_wins(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Validity is the first key, not the only one: hops still break its ties."""
     ctx = seed._creation(authenticated_context)
 

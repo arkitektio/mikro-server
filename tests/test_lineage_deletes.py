@@ -9,6 +9,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from django.db.models import RestrictedError
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from mikro_server.schema import schema
@@ -37,7 +38,7 @@ PREFLIGHT_ANNOTATION = f"query P($id: ID!) {{ preflightDeleteAnnotation(id: $id)
 PREFLIGHT_COLLECTION = f"query P($id: ID!) {{ preflightDeleteAnnotationCollection(id: $id) {{ {PREFLIGHT_FIELDS} }} }}"
 
 
-async def _run(ctx: HttpContext, query: str, variables: dict):  # noqa: ANN202 - strawberry's ExecutionResult
+async def _run(ctx: HttpContext, query: str, variables: dict) -> ExecutionResult:
     return await schema.execute(
         query, context_value=_fresh_request(ctx), variable_values=variables
     )

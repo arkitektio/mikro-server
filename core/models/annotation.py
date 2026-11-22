@@ -12,6 +12,7 @@ the shape.
 """
 
 import uuid
+from typing import TYPE_CHECKING
 
 from arkitekt_service.service.described import Described
 from authentikate.models import Organization
@@ -23,6 +24,9 @@ from koherent.fields import ProvenanceField
 
 from core import enums
 from core.fields import CubeField
+
+if TYPE_CHECKING:
+    from core.models.coords import CoordinateSystem
 
 
 class AnnotationCollection(Described):
@@ -112,7 +116,7 @@ class AnnotationCollection(Described):
     )
 
     @property
-    def effective_bbox_system(self):
+    def effective_bbox_system(self) -> "CoordinateSystem | None":
         """The frame this collection's boxes are in: the stored one, or its own when null.
 
         The one reader of the null-means-own-system convention above, so the convention lives
@@ -171,7 +175,7 @@ class AnnotationCollection(Described):
         return self.name
 
     @property
-    def coordinate_system_or_none(self):
+    def coordinate_system_or_none(self) -> "CoordinateSystem | None":
         """The coordinate system this collection owns, or None before it is created."""
         # The reverse of CoordinateSystem.annotation_collection, which raises
         # rather than returning None when the system has not been created yet.

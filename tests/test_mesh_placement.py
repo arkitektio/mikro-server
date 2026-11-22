@@ -86,7 +86,7 @@ async def _mesh_collection(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_mesh_layer_reaches_world(authenticated_context: HttpContext):
+async def test_a_mesh_layer_reaches_world(authenticated_context: HttpContext) -> None:
     """The meshes were extracted from a dataset, so they go where that dataset went."""
     dataset = await seed.create_array_dataset(authenticated_context, "Labels")
     collection = await _mesh_collection(authenticated_context, dataset)
@@ -131,7 +131,7 @@ async def test_a_mesh_layer_reaches_world(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_an_unregistered_mesh_layer_has_no_path(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The mirror image: nothing is registered, so there is nothing to inherit.
 
     Without this, a change that made every mesh layer resolve to *some* path would still

@@ -11,6 +11,7 @@ container, so it follows the flat-discriminated-union convention of ``core.input
 exactly as ``DerivedFromInput`` does.
 """
 
+from collections.abc import Callable
 from typing import Annotated, ClassVar, Literal
 
 import kante
@@ -204,7 +205,7 @@ class ExportOfInput:
 
 def _export_of_member(
     model: type, key: "enums.FileLinkContainerKind", description: str
-):  # noqa: ANN202 - a decorator factory
+) -> Callable[..., type]:
     """Publish one member input of the ExportOfInput union."""
     return kante.pydantic_input(
         model,

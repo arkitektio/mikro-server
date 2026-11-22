@@ -26,6 +26,7 @@ import dataclasses
 from collections.abc import Callable, Iterable
 
 from arkitekt_datalayer import storage
+from authentikate.models import Organization
 from django.db import router, transaction
 from django.db.models import Model, Q, QuerySet
 from django.db.models.deletion import Collector, ProtectedError, RestrictedError
@@ -103,7 +104,7 @@ def _shapes_with_children_elsewhere(collection_pks: Iterable[int]) -> list[NodeK
     return [(lineage_logic.ANNOTATION, str(pk)) for pk in sources]
 
 
-def plan(targets: list[NodeKey], *, organization) -> Plan:  # noqa: ANN001 - authentikate's Organization
+def plan(targets: list[NodeKey], *, organization: Organization) -> Plan:
     """Everything downstream of ``targets``, nearest first, each once.
 
     Walked again while it finds annotation collections whose shapes something elsewhere was
@@ -191,7 +192,9 @@ def plan(targets: list[NodeKey], *, organization) -> Plan:  # noqa: ANN001 - aut
     )
 
 
-def instances(keys: Iterable[NodeKey], organization) -> dict[NodeKey, Model]:  # noqa: ANN001 - authentikate's Organization
+def instances(
+    keys: Iterable[NodeKey], organization: Organization
+) -> dict[NodeKey, Model]:
     """The rows behind node keys, scoped to the organization: one query per kind."""
     by_kind: dict[str, list[int | str]] = {}
     for kind, pk in keys:

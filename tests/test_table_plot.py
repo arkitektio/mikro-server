@@ -8,6 +8,7 @@ distribution of one. A table then lists the compositions that draw any lens of i
 
 import pytest
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from mikro_server.schema import schema
 from tests.test_chart_values import MEASUREMENTS
@@ -44,7 +45,7 @@ mutation W($input: CreateTableLensInput!) { createTableLens(input: $input) { id 
 """
 
 
-async def _plot(ctx: HttpContext, **input: object):
+async def _plot(ctx: HttpContext, **input: object) -> ExecutionResult:
     return await schema.execute(
         PLOT, context_value=ctx, variable_values={"input": input}
     )
@@ -52,7 +53,7 @@ async def _plot(ctx: HttpContext, **input: object):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scatter_in_one_call(authenticated_context: HttpContext):
+async def test_a_scatter_in_one_call(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     table_id = await _table(ctx, "nuclei", MEASUREMENTS)
 
@@ -87,7 +88,7 @@ async def test_a_scatter_in_one_call(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_histogram_per_condition_in_one_call(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table_id = await _table(ctx, "nuclei", MEASUREMENTS)
 
@@ -124,7 +125,7 @@ async def test_a_histogram_per_condition_in_one_call(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_plot_of_a_gate(authenticated_context: HttpContext):
+async def test_a_plot_of_a_gate(authenticated_context: HttpContext) -> None:
     """A window on a measurement is a lens of the table like any other, and a plot draws through it."""
     ctx = authenticated_context
     table_id = await _table(ctx, "nuclei", MEASUREMENTS)
@@ -164,7 +165,7 @@ async def test_a_plot_of_a_gate(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_refused_plot_makes_nothing(authenticated_context: HttpContext):
+async def test_a_refused_plot_makes_nothing(authenticated_context: HttpContext) -> None:
     """One transaction: a layer the chart refuses takes the chart with it."""
     ctx = authenticated_context
     table_id = await _table(ctx, "nuclei", MEASUREMENTS)

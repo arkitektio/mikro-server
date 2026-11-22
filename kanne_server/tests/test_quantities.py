@@ -17,7 +17,7 @@ class Sample(BaseModel):
     length: pq.Length | None = None
 
 
-def test_in_memory_value_is_canonical_int():
+def test_in_memory_value_is_canonical_int() -> None:
     # Defaults and parsed values are plain ints in memory (no validate_default needed).
     m = Sample()
     assert m.dur == 100_000_000_000
@@ -26,7 +26,7 @@ def test_in_memory_value_is_canonical_int():
     assert m.model_dump()["dur"] == 100_000_000_000
 
 
-def test_json_dump_expands_to_struct():
+def test_json_dump_expands_to_struct() -> None:
     m = Sample()
     blob = m.model_dump(mode="json")
     assert blob["dur"] == {
@@ -43,7 +43,7 @@ def test_json_dump_expands_to_struct():
     assert blob["length"] is None
 
 
-def test_parses_pint_strings():
+def test_parses_pint_strings() -> None:
     m = Sample.model_validate(
         {"dur": "5 ms", "v": "-65 mV", "temp": "37 degC", "length": "100 µm"}
     )
@@ -58,7 +58,7 @@ def test_parses_pint_strings():
     }
 
 
-def test_reload_from_struct_round_trips():
+def test_reload_from_struct_round_trips() -> None:
     blob = Sample.model_validate({"dur": "5 ms", "length": "100 µm"}).model_dump(
         mode="json"
     )
@@ -68,7 +68,7 @@ def test_reload_from_struct_round_trips():
     assert again.model_dump(mode="json") == blob
 
 
-def test_reads_legacy_bare_int_blobs():
+def test_reads_legacy_bare_int_blobs() -> None:
     # Rows written before the dual struct stored bare canonical ints.
     legacy = Sample(dur=5_000_000_000, length=100_000_000)
     assert legacy.dur == 5_000_000_000
@@ -77,7 +77,7 @@ def test_reads_legacy_bare_int_blobs():
     assert legacy.model_dump(mode="json")["dur"]["given"] == "5 ms"
 
 
-def test_value_equality_is_unit_independent():
+def test_value_equality_is_unit_independent() -> None:
     # "1 ms" and "1000 µs" are the same physical value -> same canonical int
     # (this is what keeps NeuronModel dedup-by-hash correct).
     a = Sample.model_validate({"dur": "1 ms"})
@@ -85,6 +85,6 @@ def test_value_equality_is_unit_independent():
     assert a.dur == b.dur
 
 
-def test_dimensional_mismatch_rejected():
+def test_dimensional_mismatch_rejected() -> None:
     with pytest.raises(ValidationError):
         Sample.model_validate({"dur": "5 mV"})  # volts into a Duration field

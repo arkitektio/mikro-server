@@ -41,7 +41,9 @@ CREATE = f"""
 """
 
 
-async def _placed_channel(ctx: HttpContext):
+async def _placed_channel(
+    ctx: HttpContext,
+) -> tuple[models.Scene, models.Lens, models.Lens]:
     """A scene, and one channel of a lens its world reaches."""
     dataset = await seed.create_array_dataset(
         ctx, "Preview", axes=_CYX, shapes=[[3, 32, 32]]
@@ -56,8 +58,8 @@ async def _placed_channel(ctx: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_preview_resolves_what_the_create_would_and_writes_nothing(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     scene, _, channel = await _placed_channel(authenticated_context)
     intensity = {"scene": str(scene.id), "lens": str(channel.id), "colormap": "MAGMA"}
 
@@ -99,8 +101,8 @@ async def test_preview_resolves_what_the_create_would_and_writes_nothing(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_preview_is_refused_for_the_creates_reasons(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     _, _, channel = await _placed_channel(authenticated_context)
     # A scene whose world the lens does not reach: the create refuses it, so the preview does.
     elsewhere = await seed.create_scene(authenticated_context, "Elsewhere")
@@ -120,8 +122,8 @@ async def test_preview_is_refused_for_the_creates_reasons(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_preview_of_an_image_layer_resolves_its_graph_lenses(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     scene, lens, channel = await _placed_channel(authenticated_context)
     query = f"""
         query Preview($input: PreviewLayerInput!) {{
@@ -161,7 +163,9 @@ async def test_preview_of_an_image_layer_resolves_its_graph_lenses(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_preview_names_exactly_one_layer(db, authenticated_context: HttpContext):
+async def test_preview_names_exactly_one_layer(
+    db: None, authenticated_context: HttpContext
+) -> None:
     result = await schema.execute(
         PREVIEW, context_value=authenticated_context, variable_values={"input": {}}
     )
@@ -171,8 +175,8 @@ async def test_preview_names_exactly_one_layer(db, authenticated_context: HttpCo
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_mesh_preview_places_like_the_mesh_layer_it_would_make(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     from tests.test_layer_kinds import _seed_mesh_collection
 
     ctx = authenticated_context

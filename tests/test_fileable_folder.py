@@ -87,7 +87,10 @@ async def _parquet(
 
 
 async def _create_array_dataset(
-    ctx: HttpContext, name: str, folder=None, derived_from=None
+    ctx: HttpContext,
+    name: str,
+    folder: models.Folder | None = None,
+    derived_from: list[dict] | None = None,
 ) -> dict[str, Any]:
     store = await _zarr(ctx, f"zarr-{name}")
     payload = {"name": name, "data": str(store.pk), "scales": [], "axes": _YX}
@@ -105,7 +108,10 @@ async def _create_array_dataset(
 
 
 async def _create_table(
-    ctx: HttpContext, name: str, folder=None, derived_from=None
+    ctx: HttpContext,
+    name: str,
+    folder: models.Folder | None = None,
+    derived_from: list[dict] | None = None,
 ) -> dict[str, Any]:
     store = await _parquet(ctx, f"table-{name}", [("object", "BIGINT")])
     payload = {
@@ -126,7 +132,10 @@ async def _create_table(
 
 
 async def _create_mesh(
-    ctx: HttpContext, name: str, folder=None, derived_from=None
+    ctx: HttpContext,
+    name: str,
+    folder: models.Folder | None = None,
+    derived_from: list[dict] | None = None,
 ) -> dict[str, Any]:
     # A mesh names all three vertex slots; a plane would leave one unnamed.
     store = await seed.create_fabriks_store(ctx, axes=["z", "y", "x"])
@@ -148,7 +157,10 @@ async def _create_mesh(
 
 
 async def _create_annotation_collection(
-    ctx: HttpContext, name: str, folder=None, derived_from=None
+    ctx: HttpContext,
+    name: str,
+    folder: models.Folder | None = None,
+    derived_from: list[dict] | None = None,
 ) -> dict[str, Any]:
     payload = {"name": name, "axes": _YX}
     if folder is not None:
@@ -169,7 +181,7 @@ async def _create_annotation_collection(
 @pytest.mark.asyncio
 async def test_every_container_files_into_a_named_folder(
     authenticated_context: HttpContext,
-):
+) -> None:
     """All four containers accept a folder on create and read it back."""
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Experiment A")
@@ -192,7 +204,7 @@ async def test_every_container_files_into_a_named_folder(
 @pytest.mark.asyncio
 async def test_a_container_created_without_a_folder_lands_in_the_default(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Omitting the folder files it in the user's default, exactly as an image has always been.
 
     The column is nullable and unfiled rows are legal -- migration 0007 does not backfill --
@@ -210,7 +222,7 @@ async def test_a_container_created_without_a_folder_lands_in_the_default(
 @pytest.mark.asyncio
 async def test_a_folder_lists_every_kind_of_container_it_holds(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The reverse lists on Folder, one per container type."""
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Everything")
@@ -248,7 +260,7 @@ async def test_a_folder_lists_every_kind_of_container_it_holds(
 @pytest.mark.asyncio
 async def test_children_returns_the_containers_alongside_files(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`children` is the folder's contents, so it has to include what folders can now hold.
 
     It returned only sub-folders and files while the containers were unfileable;
@@ -288,7 +300,7 @@ async def test_children_returns_the_containers_alongside_files(
 @pytest.mark.asyncio
 async def test_children_orders_and_searches_across_every_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The `order` and `search` branches, which fan across all seven sources.
 
     Worth its own test because `children` builds its querysets from a table now, and both
@@ -372,7 +384,7 @@ query Children($parent: ID!, $filters: FolderChildrenFilter) {
 @pytest.mark.asyncio
 async def test_children_hides_what_was_converted_from_a_file_until_asked(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A dataset converted from a file is that file again, so the listing shows the file alone.
 
     Only the ingest direction hides: an exported dataset was not made from its file, and
@@ -427,7 +439,9 @@ async def test_children_hides_what_was_converted_from_a_file_until_asked(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_containers_are_filterable_by_folder(authenticated_context: HttpContext):
+async def test_containers_are_filterable_by_folder(
+    authenticated_context: HttpContext,
+) -> None:
     """`folder` and `folders` on each container filter, and they filter independently."""
     ctx = authenticated_context
     here = await seed.create_folder(ctx, "Here")
@@ -461,7 +475,7 @@ async def test_containers_are_filterable_by_folder(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_deleting_a_folder_unfiles_its_contents_and_destroys_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`on_delete=SET_NULL` everywhere: a folder is organisational, so deleting one says
     nothing about whether its contents should exist.
 
@@ -485,7 +499,16 @@ async def test_deleting_a_folder_unfiles_its_contents_and_destroys_nothing(
 
     await sync_to_async(models.Folder.objects.filter(pk=folder.pk).delete)()
 
-    async def survives_unfiled(model, pk) -> bool:
+    async def survives_unfiled(
+        model: type[
+            models.File
+            | models.ArrayDataset
+            | models.TableDataset
+            | models.MeshCollection
+            | models.AnnotationCollection
+        ],
+        pk: int | str,
+    ) -> bool:
         """Still there, and no longer filed. Asked as a query so `<fk>_id` is never read."""
         return await model.objects.filter(pk=pk, folder__isnull=True).aexists()
 
@@ -500,7 +523,7 @@ async def test_deleting_a_folder_unfiles_its_contents_and_destroys_nothing(
 @pytest.mark.asyncio
 async def test_a_container_can_be_refiled_and_unfiled(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`put<Things>InFolder` / `release<Things>FromFolder` for all four containers.
 
     Without these a container could be filed once, at creation, and never moved: `folder`
@@ -575,7 +598,7 @@ async def test_a_container_can_be_refiled_and_unfiled(
 @pytest.mark.asyncio
 async def test_releasing_a_file_from_a_folder_no_longer_violates_not_null(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`File.folder` was NOT NULL while `releaseFilesFromFolder` set it to None.
 
     Every call was an IntegrityError. Making the column nullable -- which SET_NULL needed
@@ -599,7 +622,7 @@ async def test_releasing_a_file_from_a_folder_no_longer_violates_not_null(
 @pytest.mark.asyncio
 async def test_derived_data_is_filed_with_its_parent_and_cannot_be_filed_alone(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Only root data is filed explicitly; a derivation inherits and refuses a folder of its own.
 
     Kind-blind: the table below derives UNMAPPABLY from the dataset -- its rows are
@@ -653,7 +676,7 @@ async def test_derived_data_is_filed_with_its_parent_and_cannot_be_filed_alone(
 @pytest.mark.asyncio
 async def test_moving_a_parent_moves_everything_derived_from_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The stored copy stays honest: re-filing a root rewrites its descendants, transitively."""
     ctx = authenticated_context
     home = await seed.create_folder(ctx, "Home")
@@ -695,7 +718,7 @@ async def test_moving_a_parent_moves_everything_derived_from_it(
 @pytest.mark.asyncio
 async def test_a_secondary_parent_does_not_carry_the_filing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A fusion sits with its *primary* parent, matching the rule placement already uses."""
     ctx = authenticated_context
     first_home = await seed.create_folder(ctx, "First")
@@ -732,7 +755,9 @@ async def test_a_secondary_parent_does_not_carry_the_filing(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filing_says_nothing_about_placement(authenticated_context: HttpContext):
+async def test_filing_says_nothing_about_placement(
+    authenticated_context: HttpContext,
+) -> None:
     """Two datasets in one folder share no space, and one dataset's folder is not its system.
 
     The point of the whole feature: `folder` is organisational and the coordinate graph is

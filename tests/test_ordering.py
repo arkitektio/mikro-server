@@ -7,17 +7,20 @@ from mikro_server.schema import schema
 from tests.seed import create_file, create_folder
 
 
-async def execute(ctx, query, ordering):
+async def execute(ctx: HttpContext, query: str, ordering: list[dict]) -> dict:
     result = await schema.execute(
         query, context_value=ctx, variable_values={"ordering": ordering}
     )
     assert not result.errors, result.errors
+    assert result.data is not None
     return result.data
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_files_order_by_size_then_name(db, authenticated_context: HttpContext):
+async def test_files_order_by_size_then_name(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Multiple ordering keys apply in list order."""
     ctx = authenticated_context
     ds = await create_folder(ctx, "DS")
@@ -36,7 +39,9 @@ async def test_files_order_by_size_then_name(db, authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_folders_order_by_name(db, authenticated_context: HttpContext):
+async def test_folders_order_by_name(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     for name in ["Zeta", "Alpha", "Mid"]:
         await create_folder(ctx, name)

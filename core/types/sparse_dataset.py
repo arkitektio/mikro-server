@@ -23,7 +23,7 @@ from core.types.auth import ProvenanceEntry, Task, User
 from core.types.coords import CoordinateSystem, Transformation
 
 if TYPE_CHECKING:
-    from core.types.array_dataset import CoordinateAnchor
+    from core.types.array_dataset import CoordinateAnchor, SparseLens
     from core.types.file_link import FileLink
     from core.types.folder import Folder
     from core.types.table_dataset import TableDataset

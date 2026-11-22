@@ -5,14 +5,19 @@ with the roles they hold in each; the guest token is minted per test. A full mem
 puts objects in a collaboration; what each needs to be seen comes along, and what is part of it is in it.
 """
 
+from collections.abc import Callable, Iterator, Mapping, Sequence
+
 import pytest
 from arkitekt_service.collaborations import items as collaboration_items
 from arkitekt_service.collaborations.models import Collaboration
 from asgiref.sync import sync_to_async
 from authentikate import settings as authentikate_settings
 from django.db.backends.utils import CursorWrapper
+from django.db.models import Model
 from kante.context import HttpContext, UniversalRequest
+from pytest_django.fixtures import SettingsWrapper
 from strawberry.http.temporal_response import TemporalResponse
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -54,7 +59,9 @@ def _context(token: str) -> HttpContext:
 
 
 @pytest.fixture
-def guest(db, authenticated_context, settings):
+def guest(
+    db: None, authenticated_context: HttpContext, settings: SettingsWrapper
+) -> Iterator[Callable[[dict], HttpContext]]:
     """``guest({collaboration: roles})``: a context presenting a guest's token granted those collaborations on instance "1"."""
 
     def mint(collaborations: dict) -> HttpContext:
@@ -85,17 +92,17 @@ def guest(db, authenticated_context, settings):
     authentikate_settings.cached_settings = None
 
 
-async def _run(ctx: HttpContext, query: str, **variables):
+async def _run(ctx: HttpContext, query: str, **variables: object) -> ExecutionResult:
     return await schema.execute(
         query, context_value=ctx, variable_values=variables or None
     )
 
 
-def _point(**target) -> dict:
+def _point(**target: object) -> dict:
     return {"input": {**target, "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}}
 
 
-async def _collaboration(ctx: HttpContext, *objects) -> Collaboration:
+async def _collaboration(ctx: HttpContext, *objects: Model) -> Collaboration:
     """A collaboration of the organization holding ``objects``, as a full member puts them in."""
 
     def make() -> Collaboration:
@@ -132,7 +139,7 @@ async def _rendered_scene(
     ]
 
 
-def _refused(result, reason: str) -> None:
+def _refused(result: ExecutionResult, reason: str) -> None:
     assert result.errors, "it was let through"
     assert result.errors[0].extensions.get("reason") == reason, result.errors
 
@@ -140,17 +147,21 @@ def _refused(result, reason: str) -> None:
 class _Queries:
     """Counts every SQL statement, in whichever thread the ORM runs it."""
 
-    def __init__(self, monkeypatch) -> None:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.count = 0
         original = CursorWrapper.execute
 
-        def counted(cursor, sql, params=None):
+        def counted(
+            cursor: CursorWrapper,
+            sql: str,
+            params: Sequence[object] | Mapping[str, object] | None = None,
+        ) -> object:
             self.count += 1
             return original(cursor, sql, params)
 
         monkeypatch.setattr(CursorWrapper, "execute", counted)
 
-    async def of(self, ctx: HttpContext, query: str, **variables) -> int:
+    async def of(self, ctx: HttpContext, query: str, **variables: object) -> int:
         before = self.count
         result = await _run(ctx, query, **variables)
         assert not result.errors, result.errors
@@ -160,8 +171,8 @@ class _Queries:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_guest_reads_the_scene_in_their_collaboration_and_nothing_else(
-    authenticated_context, guest
-):
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     shared, _ = await _rendered_scene(authenticated_context, "Shared")
     other, _ = await _rendered_scene(authenticated_context, "Other")
     ctx = guest({await _collaboration(authenticated_context, shared): []})
@@ -176,8 +187,8 @@ async def test_a_guest_reads_the_scene_in_their_collaboration_and_nothing_else(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_scene_in_a_collaboration_renders_for_a_guest(
-    authenticated_context, guest
-):
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     scene, (dataset,) = await _rendered_scene(authenticated_context, "Shared")
     result = await _run(
         guest({await _collaboration(authenticated_context, scene): []}),
@@ -195,7 +206,9 @@ async def test_a_scene_in_a_collaboration_renders_for_a_guest(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_layer_added_later_brings_what_it_draws(authenticated_context, guest):
+async def test_a_layer_added_later_brings_what_it_draws(
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Growing")
     ctx = guest({await _collaboration(authenticated_context, scene): []})
     dataset = await _layer(authenticated_context, scene, "Late pixels")
@@ -207,7 +220,9 @@ async def test_a_layer_added_later_brings_what_it_draws(authenticated_context, g
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_what_is_in_no_collaboration_is_left_out(authenticated_context, guest):
+async def test_what_is_in_no_collaboration_is_left_out(
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     scene, (dataset,) = await _rendered_scene(authenticated_context, "Shared")
     elsewhere = await seed.create_array_dataset(authenticated_context, "Elsewhere")
     ctx = guest({await _collaboration(authenticated_context, scene): []})
@@ -237,8 +252,8 @@ async def test_what_is_in_no_collaboration_is_left_out(authenticated_context, gu
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_lens_two_scenes_draw_brings_neither_scene_the_others_layers(
-    authenticated_context, guest
-):
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Drawn twice")
     lens = await seed.channel_lens(ctx, await seed.create_lens(ctx, dataset))
@@ -264,8 +279,8 @@ async def test_a_lens_two_scenes_draw_brings_neither_scene_the_others_layers(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_editor_in_the_collaboration_draws_there_and_only_there(
-    authenticated_context, guest
-):
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Canvas")
     other = await seed.create_scene(authenticated_context, "Other")
     ctx = guest({await _collaboration(authenticated_context, scene): ["mikro_editor"]})
@@ -288,8 +303,8 @@ async def test_an_editor_in_the_collaboration_draws_there_and_only_there(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_viewer_draws_nothing_and_no_guest_does_anything_else(
-    authenticated_context, guest
-):
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Canvas")
     collaboration = await _collaboration(authenticated_context, scene)
 
@@ -311,8 +326,10 @@ async def test_a_viewer_draws_nothing_and_no_guest_does_anything_else(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_guest_pays_per_kind_of_object_not_per_row(
-    authenticated_context, guest, monkeypatch
-):
+    authenticated_context: HttpContext,
+    guest: Callable[[dict], HttpContext],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     small, _ = await _rendered_scene(authenticated_context, "Small", layers=1)
     large, _ = await _rendered_scene(authenticated_context, "Large", layers=3)
     ctx = guest({await _collaboration(authenticated_context, small, large): []})
@@ -326,7 +343,7 @@ async def test_a_guest_pays_per_kind_of_object_not_per_row(
         await queries.of(ctx, RENDER, id=str(scene.id))
         await queries.of(member, RENDER, id=str(scene.id))
 
-    async def overhead(scene) -> int:
+    async def overhead(scene: models.Scene) -> int:
         guest_cost = await queries.of(ctx, RENDER, id=str(scene.id)) - await queries.of(
             ctx, SHALLOW, id=str(scene.id)
         )
@@ -342,7 +359,7 @@ def _type_line(sdl: str, name: str) -> str:
     return next(line for line in sdl.splitlines() if line.startswith(f"type {name} "))
 
 
-def test_the_schema_says_what_each_type_is_and_who_may_draw():
+def test_the_schema_says_what_each_type_is_and_who_may_draw() -> None:
     sdl = str(schema)
     assert '@identified(by: "@mikro/scene")' in _type_line(sdl, "Scene")
     create = next(

@@ -76,7 +76,7 @@ CLUSTERS = [
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_row_is_its_own_landing(authenticated_context: HttpContext):
+async def test_a_row_is_its_own_landing(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     clusters = await _table(ctx, "clusters", CLUSTERS)
     plan = await _plan(ctx, clusters["id"], depth=0)
@@ -94,7 +94,9 @@ async def test_a_row_is_its_own_landing(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_cluster_row_reaches_its_members(authenticated_context: HttpContext):
+async def test_a_cluster_row_reaches_its_members(
+    authenticated_context: HttpContext,
+) -> None:
     """REVERSE: every member row whose `cluster` column names the picked cluster, with their own ids."""
     ctx = authenticated_context
     clusters = await _table(ctx, "clusters", CLUSTERS)
@@ -139,7 +141,7 @@ async def test_a_cluster_row_reaches_its_members(authenticated_context: HttpCont
 @pytest.mark.asyncio
 async def test_the_scenes_walk_takes_no_reverse_hops(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The picker and the scene's plans walk forward only: a stored `joinPath` cannot name a reverse step."""
     ctx = authenticated_context
     clusters = await _table(ctx, "clusters", CLUSTERS)
@@ -174,7 +176,9 @@ MEASUREMENTS = [
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_derived_table_holds_the_same_rows(authenticated_context: HttpContext):
+async def test_a_derived_table_holds_the_same_rows(
+    authenticated_context: HttpContext,
+) -> None:
     """SAME_ROWS, both ways: a PCA derived row for row reaches its measurement row, and back."""
     ctx = authenticated_context
     measurements = await _table(ctx, "measurements", MEASUREMENTS)
@@ -217,7 +221,9 @@ async def test_a_derived_table_holds_the_same_rows(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_relabel_says_how_the_id_maps(authenticated_context: HttpContext):
+async def test_a_relabel_says_how_the_id_maps(
+    authenticated_context: HttpContext,
+) -> None:
     """`cell_id = cell + 1` between two frames: from a `cell` row the other row is `held + 1`, and back `held - 1`."""
     ctx = authenticated_context
     measurements = await _table(ctx, "measurements", MEASUREMENTS)
@@ -283,7 +289,9 @@ async def test_a_relabel_says_how_the_id_maps(authenticated_context: HttpContext
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_keyed_row_names_its_structure(authenticated_context: HttpContext):
+async def test_a_keyed_row_names_its_structure(
+    authenticated_context: HttpContext,
+) -> None:
     """A mesh collection's rows are mesh objects (`<collection>:<object>`); a mask's labels are nothing openable yet."""
     ctx = authenticated_context
     collection = await _mesh_collection(ctx, ZYX_MESH_AXES)
@@ -305,7 +313,7 @@ async def test_a_keyed_row_names_its_structure(authenticated_context: HttpContex
 @pytest.mark.asyncio
 async def test_a_table_without_an_index_has_no_row_plan(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A synthetic `object` frame has no column a row's id could be looked up by: refused, saying how to fix it."""
     ctx = authenticated_context
     table = await _table(

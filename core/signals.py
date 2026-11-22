@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable
+from typing import TypeVar
 from weakref import WeakSet
 
 from django.apps import apps
@@ -25,7 +26,9 @@ def _file_rooms(instance: models.File) -> list[str]:
 
 
 @receiver(post_save, sender=models.File)
-def my_file_handler(sender, instance=None, created=None, **kwargs):
+def my_file_handler(
+    sender: type[models.File], instance: models.File, created: bool, **kwargs: object
+) -> None:
     if created:
         channels.file_channel.broadcast(
             channels.FileSignal(create=instance.id), _file_rooms(instance)
@@ -37,14 +40,21 @@ def my_file_handler(sender, instance=None, created=None, **kwargs):
 
 
 @receiver(pre_delete, sender=models.File)
-def my_file_delete_handler(sender, instance=None, **kwargs):
+def my_file_delete_handler(
+    sender: type[models.File], instance: models.File, **kwargs: object
+) -> None:
     channels.file_channel.broadcast(
         channels.FileSignal(delete=instance.id), _file_rooms(instance)
     )
 
 
 @receiver(post_save, sender=models.Annotation)
-def annotation_saved_handler(sender, instance=None, created=None, **kwargs):
+def annotation_saved_handler(
+    sender: type[models.Annotation],
+    instance: models.Annotation,
+    created: bool,
+    **kwargs: object,
+) -> None:
     signal = (
         channels.AnnotationSignal(create=str(instance.id))
         if created
@@ -56,7 +66,9 @@ def annotation_saved_handler(sender, instance=None, created=None, **kwargs):
 # pre_delete, because the id is gone after it -- and it fires per row for a cascade too,
 # so deleting a collection tells its subscribers about every shape that went with it.
 @receiver(pre_delete, sender=models.Annotation)
-def annotation_deleted_handler(sender, instance=None, **kwargs):
+def annotation_deleted_handler(
+    sender: type[models.Annotation], instance: models.Annotation, **kwargs: object
+) -> None:
     channels.announce_annotations(
         channels.AnnotationSignal(delete=str(instance.id)), instance.collection_id
     )
@@ -242,7 +254,10 @@ def annotation_renamed_handler(
         lens_names_logic.refresh_lenses(lens_ids)
 
 
-def _relay_rows[M: Model](
+M = TypeVar("M", bound=Model)
+
+
+def _relay_rows(
     model: type[M], channel: Channel[RowSignal], rooms: Callable[[M], list[str]]
 ) -> None:
     """Announce every save and delete of ``model`` to the rooms its row belongs in.

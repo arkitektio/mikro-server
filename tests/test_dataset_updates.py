@@ -38,7 +38,7 @@ mutation Update($input: UpdateArrayDatasetInput!) {
 @pytest.mark.asyncio
 async def test_a_dataset_can_be_renamed_and_redescribed(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The two fields that are editable, edited."""
     dataset = await seed.create_array_dataset(authenticated_context, "raw")
 
@@ -69,7 +69,7 @@ async def test_a_dataset_can_be_renamed_and_redescribed(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_rename_is_audited(authenticated_context: HttpContext):
+async def test_a_rename_is_audited(authenticated_context: HttpContext) -> None:
     """The point of routing a rename through a mutation rather than leaving the column writable.
 
     Attribution comes from `authentikate.vars.user_var`, which `AuthentikateExtension` sets per
@@ -130,7 +130,7 @@ async def test_a_rename_is_audited(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_dataset_update_cannot_reach_its_geometry(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The surface itself is the guarantee: there is no field to smuggle an array or an axis through."""
     sdl = schema.as_str()
     definition = sdl[
@@ -152,7 +152,7 @@ async def test_a_dataset_update_cannot_reach_its_geometry(
 @pytest.mark.asyncio
 async def test_a_datasets_own_coordinate_system_is_not_updatable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`updateCoordinateSystem` serves shared spaces alone: every other system is named by its owner.
 
     The refusal that makes "no updates on its coordinate system" true rather than merely

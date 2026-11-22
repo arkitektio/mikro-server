@@ -82,7 +82,7 @@ async def _create_array_dataset_with_sources(
     return result.data["createArrayDataset"]
 
 
-async def _file_names(ctx, filters: dict) -> set:
+async def _file_names(ctx: HttpContext, filters: dict) -> set:
     """The names the `files` query returns for a filter, as a set."""
     result = await schema.execute(
         "query L($filters: FileFilter) { files(filters: $filters) { name } }",
@@ -142,8 +142,8 @@ def test_every_member_container_field_is_read_by_the_flat_input() -> None:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_dataset_records_the_file_it_was_converted_from(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
     file = await create_file(ctx, "scan.lif", folder)
@@ -170,8 +170,8 @@ async def test_a_dataset_records_the_file_it_was_converted_from(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_two_series_of_one_file_are_two_links(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A dataset fused from two series names one file twice, and that is not a duplicate.
 
     This is why the series is part of the link's *identity* rather than a label on it: keyed
@@ -198,8 +198,8 @@ async def test_two_series_of_one_file_are_two_links(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_naming_one_file_twice_is_refused_with_a_sentence(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The writer refuses before the database does, so the client gets prose not an IntegrityError."""
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
@@ -233,8 +233,8 @@ async def test_naming_one_file_twice_is_refused_with_a_sentence(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_source_files_leave_the_coordinate_graph_alone(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The whole point of the split: recording a file mints no space and writes no edge.
 
     Had FILE become a `DerivedFromInput` kind, this dataset would carry a coordinate system
@@ -268,8 +268,8 @@ async def test_source_files_leave_the_coordinate_graph_alone(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_file_records_the_dataset_it_was_written_from(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     dataset = await create_array_dataset(ctx, "Cells")
     store = await _big_file_store(ctx, "export")
@@ -320,8 +320,8 @@ async def test_a_file_records_the_dataset_it_was_written_from(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_link_file_records_an_export_after_the_fact(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A dataset exported months later gets the same row the create mutation would have written."""
     ctx = authenticated_context
     dataset = await create_array_dataset(ctx, "Cells")
@@ -361,8 +361,8 @@ async def test_link_file_records_an_export_after_the_fact(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_link_file_refuses_an_undecidable_direction(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Naming both ends leaves it unsaid which was made from which, and that is the whole column."""
     ctx = authenticated_context
     dataset = await create_array_dataset(ctx, "Cells")
@@ -387,7 +387,9 @@ async def test_link_file_refuses_an_undecidable_direction(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_link_file_refuses_two_containers(db, authenticated_context: HttpContext):
+async def test_link_file_refuses_two_containers(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     dataset = await create_array_dataset(ctx, "Cells")
     folder = await create_folder(ctx, "DS")
@@ -452,8 +454,8 @@ def test_an_export_link_rejects_a_field_outside_its_kind() -> None:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_file_from_another_organization_is_refused(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """Every id a client sends is org-scoped, and a file link is no exception."""
     ctx = authenticated_context
     foreign_folder = await create_folder(other_org_context, "Theirs")
@@ -491,8 +493,8 @@ async def test_a_file_from_another_organization_is_refused(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_datasets_can_be_filtered_by_the_file_and_series_they_came_from(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """ "Which datasets came from series 3 of this file" is a normal query, not a bespoke walk."""
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
@@ -502,7 +504,7 @@ async def test_datasets_can_be_filtered_by_the_file_and_series_they_came_from(
         ctx, [{"file": str(file.id), "seriesIdentifier": "series-3"}]
     )
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         result = await schema.execute(
             "query L($filters: ArrayDatasetFilter) { arrayDatasets(filters: $filters) { name } }",
             context_value=ctx,
@@ -519,8 +521,8 @@ async def test_datasets_can_be_filtered_by_the_file_and_series_they_came_from(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_documented_read_fields_all_exist(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Every field docs/derivation-api.md section C names must be real.
 
     A doc that names a field the schema does not have is worse than no doc -- it reads as
@@ -559,8 +561,8 @@ async def test_the_documented_read_fields_all_exist(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_collision_with_a_link_already_on_record_writes_nothing(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A second entry colliding with an existing link must not leave the first one written.
 
     The in-request duplicate is caught by `_refuse_duplicates` before anything is fetched;
@@ -605,8 +607,8 @@ async def test_a_collision_with_a_link_already_on_record_writes_nothing(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_three_container_filters_differ_only_by_direction(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`sourceOf` and `exportedFrom` are one-way; `linkedTo` is both.
 
     One dataset with a file on each side of it, so a filter that ignores `direction` returns
@@ -639,8 +641,8 @@ async def test_the_three_container_filters_differ_only_by_direction(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_container_ref_reads_the_kind_not_only_the_id(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The reason the ref is `{kind, id}` and not a bare ID.
 
     A dataset and a table dataset have ids drawn from separate sequences, so an unqualified
@@ -690,8 +692,8 @@ async def test_a_container_ref_reads_the_kind_not_only_the_id(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_two_links_to_one_container_return_the_file_once(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A to-many hop without `.distinct()` returns the row once per matching link."""
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
@@ -721,8 +723,8 @@ async def test_two_links_to_one_container_return_the_file_once(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_not_derived_survives_a_second_link_join(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`notDerived` combined with `sourceOf` -- two `links__` lookups in one query.
 
     This is why `notDerived` is a `pk__in` subquery rather than `~Q(links__direction=...)`:
@@ -758,8 +760,8 @@ async def test_not_derived_survives_a_second_link_join(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_unlinked_finds_the_orphan_uploads(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`unlinked` is stricter than `notDerived`: no links at all, in either direction."""
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
@@ -776,7 +778,9 @@ async def test_unlinked_finds_the_orphan_uploads(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_store_and_metadata_filters(db, authenticated_context: HttpContext):
+async def test_store_and_metadata_filters(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`hasStore` and `populated` are deliberately not complementary."""
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
@@ -803,8 +807,8 @@ async def test_store_and_metadata_filters(db, authenticated_context: HttpContext
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_extension_normalizes_dot_and_case(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     folder = await create_folder(ctx, "DS")
     await create_file(ctx, "scan.CZI", folder)
@@ -819,8 +823,8 @@ async def test_extension_normalizes_dot_and_case(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_mime_group_classifies_a_vendor_file_the_content_type_cannot(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The case the obvious implementation gets wrong.
 
     A CZI uploads as `application/octet-stream`, so a contentType-prefix rule would file it
@@ -842,7 +846,9 @@ async def test_mime_group_classifies_a_vendor_file_the_content_type_cannot(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_link_lists_are_filterable(db, authenticated_context: HttpContext):
+async def test_link_lists_are_filterable(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`FileLinkFilter` reaches the SDL only by being some field's argument.
 
     Declared on the django_type alone it was absent from the schema entirely, so this pins

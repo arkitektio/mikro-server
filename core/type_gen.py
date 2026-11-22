@@ -1,7 +1,7 @@
 import datetime
 from collections.abc import Callable
 from enum import Enum
-from typing import Any, Optional
+from typing import Protocol
 
 import strawberry
 import strawberry_django
@@ -14,12 +14,21 @@ from django.db.models.functions import (
     TruncWeek,
     TruncYear,
 )
+from django.db.models.functions.datetime import TruncBase
 from kante import Info
 
 from core.scoping import for_org
 
 # ---------- Resolver spec ----------
-ResolverSpec = dict[str, tuple[Callable[[QuerySet, str], Any], type, str]]
+ResolverSpec = dict[str, tuple[Callable[[QuerySet, str], object], object, str]]
+
+
+class _StatsRoot(Protocol):
+    """The instance a generated stats type resolves on: its selection and the per-field aggregate."""
+
+    _qs: QuerySet
+
+    def _get_field_summary(self, mf: str) -> dict[str, object]: ...
 
 
 # --------- Bucket return type ---------
@@ -47,7 +56,7 @@ class Granularity(str, Enum):
 def create_stats_type(
     model: type[Model],
     *,
-    filters: type[Any] | None = None,  # strawberry_django filter class for the model
+    filters: type | None = None,  # strawberry_django filter class for the model
     allowed_fields: dict[str, str]
     | None = None,  # GraphQL name -> model field (string)
     allowed_datetime_fields: dict[str, str]
@@ -56,7 +65,7 @@ def create_stats_type(
     type_name: str | None = None,
     enum_name: str | None = None,
     dt_enum_name: str | None = None,
-) -> tuple[type[Any], Callable[..., Any]]:
+) -> tuple[type, Callable[..., object]]:
     """
     Build a Strawberry GraphQL Stats type for `model`.
 
@@ -95,7 +104,7 @@ def create_stats_type(
         TimestampEnum = None  # type: ignore
 
     # --------- Helpers ---------
-    def _truncate(dt_field: str, by: Granularity) -> Any:
+    def _truncate(dt_field: str, by: Granularity) -> TruncBase:
         return {
             "hour": TruncHour(dt_field),
             "day": TruncDay(dt_field),
@@ -106,7 +115,7 @@ def create_stats_type(
         }[by.value]
 
     # Default scalar resolver functions (unused directly now; we aggregate once)
-    def _all_stats_for_field(qs: QuerySet, mf: str) -> dict[str, Any]:
+    def _all_stats_for_field(qs: QuerySet, mf: str) -> dict[str, object]:
         """
         Return all scalar stats for the model field in ONE aggregate.
         """
@@ -129,22 +138,22 @@ def create_stats_type(
         ),
         "max": (
             lambda qs, mf: _all_stats_for_field(qs, mf)["max"],
-            Optional[float],
+            float | None,
             "Maximum",
         ),
         "min": (
             lambda qs, mf: _all_stats_for_field(qs, mf)["min"],
-            Optional[float],
+            float | None,
             "Minimum",
         ),
         "avg": (
             lambda qs, mf: _all_stats_for_field(qs, mf)["avg"],
-            Optional[float],
+            float | None,
             "Average",
         ),
         "sum": (
             lambda qs, mf: _all_stats_for_field(qs, mf)["sum"],
-            Optional[float],
+            float | None,
             "Sum",
         ),
     }
@@ -152,14 +161,15 @@ def create_stats_type(
 
     # --------- Class body with memoized aggregates ---------
     cls_name = type_name or f"{model.__name__}Stats"
-    body: dict[str, Any] = {
-        "__annotations__": {
-            "_qs": strawberry.Private[QuerySet],
-            "_cache": strawberry.Private[
-                dict[str, dict[str, Any]]
-            ],  # per-field aggregate cache
-            "count": int,
-        },
+    annotations: dict[str, object] = {
+        "_qs": strawberry.Private[QuerySet],
+        "_cache": strawberry.Private[
+            dict[str, dict[str, object]]
+        ],  # per-field aggregate cache
+        "count": int,
+    }
+    body: dict[str, object] = {
+        "__annotations__": annotations,
         "__init__": lambda self, **data: setattr(self, "__dict__", data),
         "_qs": None,  # type: ignore
         "_cache": None,  # type: ignore
@@ -176,8 +186,10 @@ def create_stats_type(
     # Attach scalar stat fields that share the same cached aggregate
     for stat_name, (_fn, return_type, desc) in resolvers.items():
 
-        def _make_resolver(stat_key: str):
-            def _resolver(self, field: FieldEnumPy):
+        def _make_resolver(stat_key: str) -> Callable[..., object]:
+            # No return annotation: strawberry takes the field's type from the class
+            # annotation below, which one would override.
+            def _resolver(self: _StatsRoot, field: FieldEnumPy):  # noqa: ANN202
                 mf: str = field.value
                 summary = self._get_field_summary(mf)
                 if stat_key == "distinctCount":
@@ -188,10 +200,10 @@ def create_stats_type(
                     # fallback: compute via function if someone extended `resolvers`
                     return resolvers[stat_key][0](self._qs, mf)
 
-            _resolver.__name__ = stat_name
+            _resolver.__name__ = stat_key
             return _resolver
 
-        body["__annotations__"][stat_name] = return_type
+        annotations[stat_name] = return_type
         body[stat_name] = strawberry_django.field(
             description=desc, resolver=_make_resolver(stat_name)
         )
@@ -200,7 +212,10 @@ def create_stats_type(
     if TimestampEnum is not None:
 
         def _series(
-            self, field: FieldEnumPy, timestampField: TimestampEnumPy, by: Granularity
+            self: _StatsRoot,
+            field: FieldEnumPy,
+            timestampField: TimestampEnumPy,
+            by: Granularity,
         ) -> list[TimeBucket]:
             mf = field.value
             tf = timestampField.value
@@ -236,7 +251,7 @@ def create_stats_type(
                 )
             return out
 
-        body["__annotations__"]["series"] = list[TimeBucket]
+        annotations["series"] = list[TimeBucket]
         body["series"] = strawberry_django.field(
             description="Time-bucketed stats over a datetime field.",
             resolver=_series,
@@ -246,7 +261,7 @@ def create_stats_type(
     new_type = strawberry.type(type(cls_name, (), body))
 
     # --------- Root field resolver (fixed filter handling + cache init) ---------
-    def resolver(info: Info, filters: Any | None = None) -> Any:
+    def resolver(info: Info, filters: object | None = None) -> object:
         # Scope before aggregating: an aggregate over every tenant's rows leaks counts even
         # though it returns no objects. `for_org` is the same seam the single-object getters
         # use, so a model with no path to an organization fails loudly here rather than
@@ -260,6 +275,6 @@ def create_stats_type(
 
     # Expose argument types nicely on the callable (optional)
     if filters_type is not None:
-        resolver.__annotations__["filters"] = Optional[filters_type]  # type: ignore
+        resolver.__annotations__["filters"] = filters_type | None
 
     return new_type, resolver

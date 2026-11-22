@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import strawberry
 from pydantic import BaseModel
 from strawberry.experimental import pydantic
@@ -358,7 +360,9 @@ _BASE_DESCRIPTION = (
 )
 
 
-def _member(model: type, key: ElementKind, description: str):  # noqa: ANN202 - a decorator factory
+def _member(
+    model: type[BaseModel], key: ElementKind, description: str
+) -> Callable[..., type]:
     """Publish one member input of the OpticalElementInput union."""
     return pydantic.input(
         model,

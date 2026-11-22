@@ -30,6 +30,7 @@ Flat-discriminated in the wire shape, following ``core.input_unions`` exactly as
 ``DerivedFromInput`` does, because GraphQL has no input unions.
 """
 
+from collections.abc import Callable
 from typing import Annotated, ClassVar, Literal
 
 import kante
@@ -237,7 +238,7 @@ class IdentificationInput:
 
 def _identification_member(
     model: type, key: "enums.IdentificationKind", description: str
-):  # noqa: ANN202 - a decorator factory
+) -> Callable[..., type]:
     """Publish one member input of the IdentificationInput union."""
     return kante.pydantic_input(
         model,

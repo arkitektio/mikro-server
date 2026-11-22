@@ -17,7 +17,7 @@ from tests.test_layer_mutations import _STOPS_QUERY, _create_layer_with_transfer
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_track_layer_keeps_its_tail(authenticated_context: HttpContext):
+async def test_a_track_layer_keeps_its_tail(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
     dataset, system = await _seed_table_dataset(ctx, "tails", with_track=True)
@@ -61,7 +61,7 @@ async def test_a_track_layer_keeps_its_tail(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_chart_layer_keeps_its_value_range_until_autoscaled(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
@@ -114,7 +114,7 @@ async def test_a_chart_layer_keeps_its_value_range_until_autoscaled(
 @pytest.mark.asyncio
 async def test_a_colour_gradient_survives_the_render_graph(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     gradient = [
         {"position": 0.0, "color": [0, 0, 0, 255]},
@@ -146,7 +146,7 @@ async def test_a_colour_gradient_survives_the_render_graph(
 @pytest.mark.asyncio
 async def test_a_colour_gradient_must_run_forwards_on_zero_to_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     for stops, said in (
         ([{"position": 0.0, "color": [0, 0, 0, 255]}], "at least two"),

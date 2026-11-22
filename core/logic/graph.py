@@ -18,7 +18,7 @@ import math
 from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, Protocol
 
-from django.db.models import F, Q
+from django.db.models import F, Model, Q
 
 from core import enums, models
 from core.creation import CreationContext
@@ -1352,7 +1352,8 @@ def _axis_pairs(
     by_name_in = {axis.name: axis for axis in input_system.axes.all()}
     by_name_out = {axis.name: axis for axis in output_system.axes.all()}
     pairs = []
-    for source, target in zip(input_names, output_names):  # noqa: B905 - ragged is impossible here; the length check runs first
+    # Not strict: a rank-changing AFFINE part pairs fewer axes than it names on one side.
+    for source, target in zip(input_names, output_names, strict=False):
         a, b = by_name_in.get(source), by_name_out.get(target)
         if a is not None and b is not None:
             pairs.append((a, b))
@@ -2152,7 +2153,7 @@ def assert_field_part(
                 f"A field read along {list(consumed)} is indexed by one axis per consumed axis, but '{dataset.name}' is indexed by {index_axes}"
             )
         if len(shape) == len(names):
-            for axis, index_axis in zip(consumed, index_axes):
+            for axis, index_axis in zip(consumed, index_axes, strict=True):
                 extent = _axis_extent(input_system, axis)
                 if extent is not None and extent != int(shape[names.index(index_axis)]):
                     raise ValueError(
@@ -3469,7 +3470,7 @@ def residents_exist(system: "models.CoordinateSystem") -> bool:
     return any(getattr(system, relation).exists() for relation in RESIDENT_RELATIONS)
 
 
-def collection_in(system: "models.CoordinateSystem"):
+def collection_in(system: "models.CoordinateSystem") -> Model | None:
     """The mesh / table / annotation collection living in this space, if one does.
 
     Only the seeding and keying paths ask, and they ask once per space rather than once per
@@ -3920,7 +3921,7 @@ def categorized_dataset_ids(dataset_ids: "Iterable[int]") -> set[int]:
 
 
 def adjacency_of(
-    edges,
+    edges: "Iterable[models.Transformation]",
     *,
     at: dict[str, int] | None = None,
     admit_scoped: bool = False,
@@ -4904,7 +4905,7 @@ def _mixed_kinds(
     """The first (input, output) pair a map relates although one is SPACE and the other is not."""
     space = enums.AxisTypeChoices.SPACE.value
     for target, coefficients in rows:
-        for source, coefficient in zip(inputs, coefficients):
+        for source, coefficient in zip(inputs, coefficients, strict=False):
             if coefficient != 0.0 and (_axis_kind(source) == space) != (
                 _axis_kind(target) == space
             ):
@@ -4927,7 +4928,7 @@ def _route_problem(
     by_name = {axis.name: axis for axis in physical}
     rows = [
         (by_name[name], row[: len(source_axes)])
-        for row, name in zip(condensed.matrix, condensed.output_axes)
+        for row, name in zip(condensed.matrix, condensed.output_axes, strict=False)
         if name in by_name
     ]
     mixed = _mixed_kinds(rows, source_axes)
@@ -4990,7 +4991,7 @@ def _axis_voxel_sizes(
     sizes: list[AxisVoxelSize] = []
     for column, name in enumerate(lens_axes):
         terms = []
-        for row, output in zip(condensed.matrix, condensed.output_axes):
+        for row, output in zip(condensed.matrix, condensed.output_axes, strict=False):
             axis = by_name.get(output)
             if (
                 row[column] == 0.0
@@ -5008,7 +5009,7 @@ def _axis_voxel_sizes(
             continue
         converted = [
             (magnitude * factor, axis)
-            for (magnitude, axis), factor in zip(terms, factors)
+            for (magnitude, axis), factor in zip(terms, factors, strict=True)
         ]
         _, dominant = max(converted, key=lambda term: term[0])
         to_dominant = coords_logic.unit_factor(base, dominant.unit) or 1.0

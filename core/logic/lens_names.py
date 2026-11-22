@@ -92,7 +92,7 @@ def holding_anchors(
     keys = [frozenset(anchor.coordinates) for anchor in holding]
     specific = [
         anchor
-        for anchor, axes in zip(holding, keys)
+        for anchor, axes in zip(holding, keys, strict=True)
         if not any(axes < other for other in keys)
     ]
     order = list(pinned)

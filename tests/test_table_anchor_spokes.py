@@ -11,6 +11,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from django.db import IntegrityError, transaction
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -74,7 +75,7 @@ MICROSCOPE = {
 
 async def _create(
     ctx: HttpContext, name: str, columns: list[dict], anchors: list[dict] | None = None
-):
+) -> ExecutionResult:
     payload = await seed.table_input(ctx, name, columns)
     if anchors is not None:
         payload["anchors"] = anchors
@@ -87,7 +88,7 @@ async def _create(
 @pytest.mark.asyncio
 async def test_a_table_anchor_pins_spokes_to_its_coordinate_columns(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Anchors stated at create land on the table with the dataset side empty."""
     result = await _create(
         authenticated_context,
@@ -135,7 +136,7 @@ async def test_a_table_anchor_pins_spokes_to_its_coordinate_columns(
 @pytest.mark.asyncio
 async def test_a_table_reads_its_anchors_back(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """`TableDataset.anchors` and the `coordinateAnchors` list both serve them, within the tenant."""
     result = await _create(
         authenticated_context,
@@ -188,7 +189,7 @@ async def test_a_table_reads_its_anchors_back(
 @pytest.mark.asyncio
 async def test_an_anchor_must_name_a_coordinate_column(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A key that is not one of the table's axis-typed columns is refused, and nothing is written."""
     result = await _create(
         authenticated_context,
@@ -209,7 +210,7 @@ async def test_an_anchor_must_name_a_coordinate_column(
 @pytest.mark.asyncio
 async def test_a_table_without_coordinate_columns_only_takes_global_anchors(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The synthetic `object` axis is not a column: nothing can be pinned along it."""
     refused = await _create(
         authenticated_context,
@@ -240,7 +241,7 @@ async def test_a_table_without_coordinate_columns_only_takes_global_anchors(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext):
+async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext) -> None:
     """A phasor is the DFT along an array axis; a table has none, so the spoke is refused."""
     result = await _create(
         authenticated_context,
@@ -266,7 +267,7 @@ async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_metadata_is_attached_to_an_existing_table_on_one_anchor(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`createCoordinateAnchor` get-or-creates on (table, coordinates) and replaces a restated spoke."""
     created = await _create(authenticated_context, "Later", LOCALIZATIONS)
     assert created.errors is None, created.errors
@@ -334,7 +335,7 @@ async def test_metadata_is_attached_to_an_existing_table_on_one_anchor(
 @pytest.mark.asyncio
 async def test_metadata_is_attached_to_an_existing_array_dataset_too(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The same mutation serves an array dataset, checked against its axes."""
     dataset = await seed.create_array_dataset(authenticated_context, "Array")
 
@@ -386,7 +387,7 @@ async def test_metadata_is_attached_to_an_existing_array_dataset_too(
 @pytest.mark.asyncio
 async def test_deleting_the_table_takes_its_anchors_with_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An anchor is part of its table: cascade, spokes included."""
     created = await _create(
         authenticated_context,
@@ -416,7 +417,9 @@ async def test_deleting_the_table_takes_its_anchors_with_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_anchor_has_exactly_one_container(authenticated_context: HttpContext):
+async def test_an_anchor_has_exactly_one_container(
+    authenticated_context: HttpContext,
+) -> None:
     """The database refuses an anchor with neither container or both, and fills the organization itself."""
     dataset = await seed.create_array_dataset(authenticated_context, "Constrained")
     created = await _create(authenticated_context, "Constrained", LOCALIZATIONS)
@@ -426,13 +429,13 @@ async def test_an_anchor_has_exactly_one_container(authenticated_context: HttpCo
     )
     organization = authenticated_context.request.organization
 
-    def neither():
+    def neither() -> None:
         with transaction.atomic():
             models.CoordinateAnchor.objects.create(
                 coordinates={}, organization=organization
             )
 
-    def both():
+    def both() -> None:
         with transaction.atomic():
             models.CoordinateAnchor.objects.create(
                 dataset=dataset, table=table, coordinates={}

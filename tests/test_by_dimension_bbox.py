@@ -45,7 +45,9 @@ mutation CreateMany($input: CreateAnnotationsInput!) {
 """
 
 
-async def _collection_over(ctx: HttpContext, dataset, *, name: str) -> str:
+async def _collection_over(
+    ctx: HttpContext, dataset: models.ArrayDataset, *, name: str
+) -> str:
     """A (y, x) drawing space over a (c, y, x) dataset, joined by the edge that states the rank change."""
     result = await schema.execute(
         CREATE_COLLECTION,
@@ -85,8 +87,8 @@ async def _collection_over(ctx: HttpContext, dataset, *, name: str) -> str:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_drawing_behind_a_by_dimension_edge_succeeds(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The draw goes through, and the box comes back in the frame it was drawn in."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Volume")
@@ -114,8 +116,8 @@ async def test_drawing_behind_a_by_dimension_edge_succeeds(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_frame_named_is_the_frame_the_box_is_in(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`bbox_system` and the chain must stop at the same system, or the numbers are mislabelled.
 
     Two halves of one fact: `effective_bbox_system` is what `nearestAnnotations` and
@@ -126,7 +128,7 @@ async def test_the_frame_named_is_the_frame_the_box_is_in(
     dataset = await seed.create_array_dataset(ctx, "Volume")
     collection_id = await _collection_over(ctx, dataset, name="Traced")
 
-    def frames():
+    def frames() -> tuple[int, int, int]:
         collection = models.AnnotationCollection.objects.get(pk=collection_id)
         system = collection.coordinate_system
         return (
@@ -147,8 +149,8 @@ async def test_the_frame_named_is_the_frame_the_box_is_in(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_composable_derivation_is_still_crossed_and_still_labelled(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The truncation is about composability, not about being a collection.
 
     A SCALE derivation has a matrix, so the box *is* pushed into the dataset's pixel grid --
@@ -198,7 +200,7 @@ async def test_a_composable_derivation_is_still_crossed_and_still_labelled(
     box = drawn.data["createAnnotation"]["intrinsicBbox"]
     assert box["max"] == [0.5, 21.0, 41.0], box
 
-    def frame():
+    def frame() -> tuple[int, int, int]:
         collection = models.AnnotationCollection.objects.get(pk=collection_id)
         return (
             collection.effective_bbox_system.pk,
@@ -215,8 +217,8 @@ async def test_a_composable_derivation_is_still_crossed_and_still_labelled(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_bulk_draw_agrees_with_the_single_draw(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`createAnnotations` resolves the chain separately, so it can disagree separately."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Volume")
@@ -254,7 +256,9 @@ async def test_the_bulk_draw_agrees_with_the_single_draw(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_edit_agrees_with_the_draw(db, authenticated_context: HttpContext):
+async def test_an_edit_agrees_with_the_draw(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`updateAnnotation` re-derives the box on new vectors, down the same walk."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Volume")
@@ -313,7 +317,7 @@ _PARAMS_FOR_KIND = {
 }
 
 
-def test_has_matrix_answers_for_every_kind_what_to_matrix_does():
+def test_has_matrix_answers_for_every_kind_what_to_matrix_does() -> None:
     """The walk asks `has_matrix` and the composer asks `to_matrix`; they must agree on every kind.
 
     A new kind gets a branch in one and an entry in the other, and the gap between those two
@@ -339,8 +343,8 @@ def test_has_matrix_answers_for_every_kind_what_to_matrix_does():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_scene_collections_walk_does_not_cross_its_registration(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A drawing space belongs to no dataset, and that must not mean "any edge will do".
 
     The scene-minted collection's only edge is its registration into the world. The walk used
@@ -364,7 +368,7 @@ async def test_a_scene_collections_walk_does_not_cross_its_registration(
     )
     assert not drawn.errors, drawn.errors
 
-    def walk():
+    def walk() -> tuple[list, int, int, str, int]:
         collection = models.AnnotationCollection.objects.get(scene=scene)
         system = collection.coordinate_system
         registration = models.Transformation.objects.get(input=system)

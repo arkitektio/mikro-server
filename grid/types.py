@@ -1,8 +1,10 @@
 """The grid's GraphQL types. Every spatial answer here is derived from the graph on read."""
 
 import datetime
+from typing import Any
 
 import kante
+from django.db.models import QuerySet
 from kante.types import Info
 from strawberry import auto
 from strawberry.scalars import JSON
@@ -109,7 +111,9 @@ class GridLayer:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):  # noqa: ANN001, ANN003, ANN206 - strawberry_django's hook
+    def get_queryset(
+        cls, queryset: QuerySet[models.GridLayer], info: Info, **kwargs: Any
+    ) -> QuerySet[models.GridLayer]:
         """Scope to the request's organization, and select what the placement logic reads in Python."""
         queryset = build_prescoped_queryset(info, queryset)
         return queryset.select_related(
@@ -176,7 +180,7 @@ class HeatmapGridLayer(GridLayer):
     )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.GridLayer)
             and obj.kind == enums.GridLayerKind.HEATMAP.value
@@ -237,7 +241,7 @@ class CellsGridLayer(GridLayer):
         return column.unit if column is not None else None
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.GridLayer)
             and obj.kind == enums.GridLayerKind.CELLS.value

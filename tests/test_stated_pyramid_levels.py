@@ -14,6 +14,7 @@ from arkitekt_datalayer.models import ZarrStore
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 from pytest import approx
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import coords
@@ -127,7 +128,9 @@ async def _store(ctx: HttpContext, key: str, shape: list[int]) -> ZarrStore:
     )
 
 
-async def _create(ctx: HttpContext, name: str, scales: list[tuple[list[int], dict]]):
+async def _create(
+    ctx: HttpContext, name: str, scales: list[tuple[list[int], dict]]
+) -> ExecutionResult:
     """A z/y/x dataset of 36x64x64 with one store per level; each level's extra input fields as given."""
     base = await _store(ctx, f"{name}-0", [36, 64, 64])
     levels = []

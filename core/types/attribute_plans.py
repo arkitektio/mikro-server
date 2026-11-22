@@ -6,7 +6,7 @@ query and the columns to select; a zarr+duckdb worker executes it with credentia
 already has (the stores' own ``accessGrant``). Anything that wants *values* runs the plan.
 """
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import kante
 import strawberry
@@ -21,6 +21,11 @@ from core import enums
 from core.types.column_options import ColumnOptionJoinStep
 from core.types.coords import ByDimensionTransformation, CoordinateSystem, PlacementStep
 from core.types.table_dataset import Column, TableDataset
+
+if TYPE_CHECKING:
+    # Only for the lazy (string) annotations below; a runtime import would be a cycle.
+    from core.types.array_dataset import ArrayDataset
+    from core.types.sparse_dataset import SparseArray, SparseDataset
 
 
 @kante.type(

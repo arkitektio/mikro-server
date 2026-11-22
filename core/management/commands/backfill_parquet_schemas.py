@@ -17,22 +17,24 @@ described. The count of what remains is printed on every run, so the finish line
 rather than a memory.
 """
 
+from typing import Any
+
 from arkitekt_datalayer.datalayer import Datalayer
 from arkitekt_datalayer.models import ParquetStore
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 
 class Command(BaseCommand):
     help = "Read and record the column schema of parquet stores finished before the field existed."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Describe the stores and report, without writing anything.",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: object, **options: Any) -> None:
         dry_run = options["dry_run"]
         datalayer = Datalayer()
 

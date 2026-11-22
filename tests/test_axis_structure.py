@@ -14,6 +14,7 @@ import math
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from mikro_server.schema import schema
@@ -41,7 +42,7 @@ COS, SIN = math.cos(0.3), math.sin(0.3)
 TURN_2D = [[COS, -SIN, 0.0], [SIN, COS, 0.0]]
 
 
-async def _space(ctx: HttpContext, name: str, axes: list[dict]):
+async def _space(ctx: HttpContext, name: str, axes: list[dict]) -> ExecutionResult:
     return await schema.execute(
         CREATE_CS,
         context_value=ctx,
@@ -55,7 +56,9 @@ async def _space_id(ctx: HttpContext, name: str, axes: list[dict]) -> str:
     return result.data["createCoordinateSystem"]["id"]
 
 
-async def _edge(ctx: HttpContext, input_id: str, output_id: str, transform: dict):
+async def _edge(
+    ctx: HttpContext, input_id: str, output_id: str, transform: dict
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_TRANSFORM,
         context_value=ctx,
@@ -81,7 +84,9 @@ MIXED = [_spectrum("w1"), _spectrum("w2")]
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_unitless_measured_axis_is_refused(authenticated_context: HttpContext):
+async def test_a_unitless_measured_axis_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """A unitless SPACE axis in a unit-carrying space is a pixel grid in disguise."""
     result = await _space(
         authenticated_context, "bad", [{"name": "x", "type": "SPACE"}]
@@ -92,7 +97,7 @@ async def test_a_unitless_measured_axis_is_refused(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_category_has_no_unit(authenticated_context: HttpContext):
+async def test_a_category_has_no_unit(authenticated_context: HttpContext) -> None:
     ok = await _space(
         authenticated_context,
         "conditions",
@@ -111,7 +116,9 @@ async def test_a_category_has_no_unit(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_array_grid_has_no_category_axis(authenticated_context: HttpContext):
+async def test_an_array_grid_has_no_category_axis(
+    authenticated_context: HttpContext,
+) -> None:
     """An array is indexed by position; a category is positioned by value."""
     with pytest.raises(ValueError, match="CATEGORY axis"):
         await seed.create_array_dataset(
@@ -132,7 +139,7 @@ async def test_an_array_grid_has_no_category_axis(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_space_axis_is_in_the_space_group_by_default(
     authenticated_context: HttpContext,
-):
+) -> None:
     result = await _space(
         authenticated_context,
         "stage",
@@ -164,7 +171,7 @@ async def test_a_space_axis_is_in_the_space_group_by_default(
 @pytest.mark.asyncio
 async def test_an_enumerating_axis_cannot_declare_a_group(
     authenticated_context: HttpContext,
-):
+) -> None:
     result = await _space(
         authenticated_context,
         "bad",
@@ -179,7 +186,9 @@ async def test_an_enumerating_axis_cannot_declare_a_group(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_one_group_measures_one_dimension(authenticated_context: HttpContext):
+async def test_one_group_measures_one_dimension(
+    authenticated_context: HttpContext,
+) -> None:
     """A wavelength beside a duration is not one distance; two wavelengths of one detector are."""
     mixed = await _space(
         authenticated_context,
@@ -207,7 +216,7 @@ async def test_one_group_measures_one_dimension(authenticated_context: HttpConte
 @pytest.mark.asyncio
 async def test_a_rotation_part_mixing_ungrouped_axes_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Both are lengths, and still share no distance until they say so: no angle between them exists to rotate by."""
     a = await _space_id(authenticated_context, "a", MIXED)
     b = await _space_id(authenticated_context, "b", MIXED)
@@ -237,7 +246,7 @@ async def test_a_rotation_part_mixing_ungrouped_axes_is_refused(
 @pytest.mark.asyncio
 async def test_a_rotation_within_a_declared_group_is_written(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Two wavelengths declared one group share a distance, so turning between them is a rotation."""
     a = await _space_id(
         authenticated_context,
@@ -273,7 +282,7 @@ async def test_a_rotation_within_a_declared_group_is_written(
 @pytest.mark.asyncio
 async def test_an_affine_part_mixing_ungrouped_axes_is_written(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An affine map claims no lengths or angles, so it may mix what a rotation may not."""
     a = await _space_id(authenticated_context, "a", MIXED)
     b = await _space_id(authenticated_context, "b", MIXED)
@@ -301,7 +310,7 @@ async def test_an_affine_part_mixing_ungrouped_axes_is_written(
 @pytest.mark.asyncio
 async def test_a_whole_rotation_mixing_time_and_space_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The gap the rule closes: a ROTATION turning t into x was accepted, and reported an isometry."""
     a = await _space_id(
         authenticated_context,
@@ -331,7 +340,7 @@ async def test_a_whole_rotation_mixing_time_and_space_is_refused(
 @pytest.mark.asyncio
 async def test_a_whole_rotation_passing_time_through_is_written(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Only the axes a rotation mixes need the distance: t passed through needs nothing."""
     axes = [
         {"name": "t", "type": "TIME", "unit": "second"},
@@ -364,7 +373,7 @@ async def test_a_whole_rotation_passing_time_through_is_written(
 @pytest.mark.asyncio
 async def test_a_whole_metric_edge_over_a_space_with_a_category_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     axes = [{"name": "condition", "type": "CATEGORY"}, _spectrum("w")]
     a = await _space_id(authenticated_context, "a", axes)
     b = await _space_id(authenticated_context, "b", axes)
@@ -382,7 +391,7 @@ async def test_a_whole_metric_edge_over_a_space_with_a_category_is_refused(
 @pytest.mark.asyncio
 async def test_parts_pass_a_category_through_and_scale_the_rest(
     authenticated_context: HttpContext,
-):
+) -> None:
     a = await _space_id(
         authenticated_context,
         "a",
@@ -444,7 +453,7 @@ async def test_parts_pass_a_category_through_and_scale_the_rest(
 @pytest.mark.asyncio
 async def test_a_rotation_cannot_be_refined_into_a_shear(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Orthonormality was checked only by the creation inputs, so a refinement could break it."""
     axes = [
         {"name": "y", "type": "SPACE", "unit": "micrometer"},

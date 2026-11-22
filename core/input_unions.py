@@ -20,7 +20,7 @@ convention settles.
 """
 
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import strawberry
 from pydantic import BaseModel, ValidationError
@@ -180,9 +180,9 @@ def prose_errors(cls: type[T]) -> type[T]:
     ``to_pydantic`` for the same reason -- to route its errors through
     :func:`parse_union_member`.
     """
-    original: Callable = cls.to_pydantic  # type: ignore[attr-defined]
+    original: Callable[..., BaseModel] = cls.to_pydantic  # type: ignore[attr-defined]
 
-    def to_pydantic(self, **kwargs):  # noqa: ANN001, ANN003, ANN202 - a passthrough wrapper
+    def to_pydantic(self: T, **kwargs: Any) -> BaseModel:
         try:
             return original(self, **kwargs)
         except ValidationError as err:

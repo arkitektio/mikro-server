@@ -12,15 +12,22 @@ callable that returns the user ids allowed to delete the item; passing
 catalog resources like instruments that have no per-user owner).
 """
 
+from collections.abc import Callable, Iterable
+from typing import TypeAlias
+
 import strawberry
 from arkitekt_datalayer import storage
 from django.db import transaction
+from django.db.models import Model
 from kante.types import Info
 
 from core import scoping
 from core.logic import compositions as compositions_logic
 from core.logic import deletion as deletion_logic
 from mikro_server.contract import ADMIN
+
+#: Who may delete a row: the user ids an owner function returns for it.
+Owner: TypeAlias = Callable[[Model], Iterable[int | None]]
 
 
 def user_is_org_admin(info: Info) -> bool:
@@ -29,7 +36,9 @@ def user_is_org_admin(info: Info) -> bool:
     return ADMIN in (getattr(membership, "roles", None) or [])
 
 
-def assert_can_delete(info: Info, item, owner, *, action: str = "delete") -> None:
+def assert_can_delete(
+    info: Info, item: Model, owner: Owner, *, action: str = "delete"
+) -> None:
     """Raise unless the request user may delete ``item`` -- or do ``action`` to it.
 
     Allowed if the user is an org admin, or their id is among the owner ids
@@ -45,12 +54,12 @@ def assert_can_delete(info: Info, item, owner, *, action: str = "delete") -> Non
         raise PermissionError(f"Only the creator or assignee can {action} this")
 
 
-def self_owner(item):
+def self_owner(item: Model) -> tuple[int | None, int | None]:
     """Owner ids for a model carrying its own creator/assigner fields."""
     return (item.creator_id, item.created_through_by_id)
 
 
-def creator_owner(item):
+def creator_owner(item: Model) -> tuple[int | None]:
     """Owner ids for a model that has a creator but no task assigner.
 
     The coordinate graph is the case: a ``ProvenanceField`` records who changed a
@@ -63,8 +72,12 @@ def creator_owner(item):
 
 
 def make_delete(
-    model, input_type, owner=None, delete=None, lineage_kind: str | None = None
-):
+    model: type[Model],
+    input_type: type,
+    owner: Owner | None = None,
+    delete: Callable[[Model], None] | None = None,
+    lineage_kind: str | None = None,
+) -> Callable[..., strawberry.ID]:
     """Build a delete resolver: fetch org-scoped by id, guard ownership, delete.
 
     ``owner`` is an explicit callable returning the user ids allowed to delete
@@ -117,7 +130,9 @@ def make_delete(
     return resolve
 
 
-def make_pin(model, input_type, return_type):
+def make_pin(
+    model: type[Model], input_type: type, return_type: type
+) -> Callable[..., Model]:
     """Build a pin resolver toggling the request user on the pinned_by M2M."""
 
     def resolve(info: Info, input: input_type) -> return_type:

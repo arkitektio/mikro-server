@@ -62,7 +62,7 @@ _MAX_LEVEL_DESCRIPTION = (
 )
 
 
-def assert_max_level(collection, max_level: int | None) -> None:
+def assert_max_level(collection: models.MeshCollection, max_level: int | None) -> None:
     """Refuse an LOD cap the collection has no such level for.
 
     A cap past the last level is not a harmless over-estimate: it is a claim about a store,

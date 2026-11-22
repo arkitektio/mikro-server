@@ -20,6 +20,7 @@ nothing looks exactly like an empty store.
 
 import json
 import logging
+from typing import Never
 
 import arkitekt_datalayer.datalayer as datalayer_module
 import pytest
@@ -27,11 +28,12 @@ from arkitekt_datalayer import base_models
 from arkitekt_datalayer.models import ZarrStore
 from authentikate.models import Organization
 from django.conf import settings
+from kante.context import HttpContext
 
-# The moto-backed datalayer with every configured bucket created. Shared rather than copied:
+# `buckets` (shared through tests/conftest.py) is the moto-backed datalayer with every
+# configured bucket created. Shared rather than copied:
 # the fixture encodes two non-obvious things (moto ignores a client pointed at a real endpoint,
 # and `GLOBAL_DL` memoizes one Datalayer per process) that would rot independently if duplicated.
-from tests.test_store_purging import buckets  # noqa: F401
 
 #: A minimal valid zarr v3 array manifest. `fill_info` fetches and parses this, so a store
 #: cannot be finished without one -- the accounting below runs *after* that parse.
@@ -48,13 +50,15 @@ ZARR_MANIFEST = {
 
 
 @pytest.fixture()
-def organization(db) -> Organization:
+def organization(db: None) -> Organization:
     """The organization every grant in this module is issued in."""
     org, _ = Organization.objects.get_or_create(identifier="static_issuer#static_org")
     return org
 
 
-def write_zarr(layer, store: ZarrStore, chunk_bytes: int = 0) -> int:
+def write_zarr(
+    layer: datalayer_module.Datalayer, store: ZarrStore, chunk_bytes: int = 0
+) -> int:
     """Write a finishable zarr into the store's prefix, and return the bytes written."""
     bucket = layer.get_bucket_config("zarr").bucket
     manifest = json.dumps(ZARR_MANIFEST).encode()
@@ -68,7 +72,9 @@ def write_zarr(layer, store: ZarrStore, chunk_bytes: int = 0) -> int:
     return written
 
 
-def request_store(layer, organization: Organization) -> ZarrStore:
+def request_store(
+    layer: datalayer_module.Datalayer, organization: Organization
+) -> ZarrStore:
     """Ask for a zarr upload grant and return the store it minted."""
     grant = layer.generate_zarr_upload_grant(
         organization.id, base_models.RequestZarrUploadInput()
@@ -76,7 +82,9 @@ def request_store(layer, organization: Organization) -> ZarrStore:
     return ZarrStore.objects.get(id=grant.store)
 
 
-def test_a_grant_records_the_budget_it_advertised(buckets, organization):  # noqa: F811
+def test_a_grant_records_the_budget_it_advertised(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """The advertised number has to be persisted, or there is nothing to compare against later.
 
     It goes on the row at grant time rather than being recomputed at finish because the config
@@ -87,7 +95,9 @@ def test_a_grant_records_the_budget_it_advertised(buckets, organization):  # noq
     assert store.max_bytes == buckets.get_bucket_config("zarr").default_max_bytes
 
 
-def test_a_finished_upload_records_what_it_actually_delivered(buckets, organization):  # noqa: F811
+def test_a_finished_upload_records_what_it_actually_delivered(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """The measurement is a sum over the prefix, not the one object at it.
 
     A zarr's key names a directory; `head_object` on it answers for nothing, which is the same
@@ -106,8 +116,10 @@ def test_a_finished_upload_records_what_it_actually_delivered(buckets, organizat
 
 
 def test_an_upload_over_its_advertised_budget_is_recorded_not_rejected(
-    buckets, organization, caplog
-):  # noqa: F811
+    buckets: datalayer_module.Datalayer,
+    organization: Organization,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """The cap is advertised, measured, and deliberately not enforced.
 
     Refusing here would reject uploads that were never told a real budget: `maxBytes` is
@@ -142,8 +154,10 @@ def test_an_upload_over_its_advertised_budget_is_recorded_not_rejected(
 
 
 def test_a_finish_survives_a_measurement_it_cannot_take(
-    buckets, organization, monkeypatch
-):  # noqa: F811
+    buckets: datalayer_module.Datalayer,
+    organization: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Accounting must never cost an upload.
 
     The bytes are written and the metadata is parsed by the time this runs, so a listing that
@@ -153,7 +167,7 @@ def test_a_finish_survives_a_measurement_it_cannot_take(
     store = request_store(buckets, organization)
     write_zarr(buckets, store)
 
-    def refuse(*args, **kwargs):
+    def refuse(*args: object, **kwargs: object) -> Never:
         raise RuntimeError("listing is unavailable")
 
     monkeypatch.setattr(datalayer_module.Datalayer, "measure_prefix_bytes", refuse)
@@ -166,7 +180,9 @@ def test_a_finish_survives_a_measurement_it_cannot_take(
     assert store.size_bytes is None
 
 
-def test_a_refresh_reissues_credentials_against_the_same_prefix(buckets, organization):  # noqa: F811
+def test_a_refresh_reissues_credentials_against_the_same_prefix(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """A resumed write must land where the interrupted one was going.
 
     The whole point is that the second session addresses the *same* store: a reissue that minted
@@ -190,7 +206,9 @@ def test_a_refresh_reissues_credentials_against_the_same_prefix(buckets, organiz
     assert second.expires_in == first.expires_in
 
 
-def test_a_refresh_refuses_an_upload_that_is_already_finished(buckets, organization):  # noqa: F811
+def test_a_refresh_refuses_an_upload_that_is_already_finished(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """A populated store's bytes are referenced, so write credentials for them are an overwrite.
 
     A store finished with ``valid=False`` cannot be refreshed either: that ends the upload, and
@@ -214,7 +232,9 @@ def test_a_refresh_refuses_an_upload_that_is_already_finished(buckets, organizat
         buckets.refresh_upload_grant(ZarrStore, organization.id, str(invalidated.pk))
 
 
-def test_a_refresh_cannot_reach_another_organizations_store(buckets, organization):  # noqa: F811
+def test_a_refresh_cannot_reach_another_organizations_store(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """Scoped by organization like every other store lookup, and worth pinning: this one hands
     out *write* credentials, so a missed scope is not a leak but a takeover."""
     store = request_store(buckets, organization)
@@ -224,7 +244,9 @@ def test_a_refresh_cannot_reach_another_organizations_store(buckets, organizatio
         buckets.refresh_upload_grant(ZarrStore, other.id, str(store.pk))
 
 
-def test_a_measured_store_reports_both_numbers_to_clients(buckets, organization):  # noqa: F811
+def test_a_measured_store_reports_both_numbers_to_clients(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """Advertised and delivered are both on the GraphQL type, because the gap is the finding.
 
     `maxBytes` alone reads as a guarantee. Beside `sizeBytes` it reads as what it is.
@@ -250,8 +272,8 @@ _YX = [{"name": "y", "type": "SPACE"}, {"name": "x", "type": "SPACE"}]
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_store_finalized_by_a_create_mutation_records_its_size(
-    buckets, authenticated_context
-):  # noqa: F811
+    buckets: datalayer_module.Datalayer, authenticated_context: HttpContext
+) -> None:
     """The path that actually carries traffic, and the one that used to record nothing.
 
     `createArrayDataset` calls `fill_info` on every level itself; it never invokes
@@ -267,7 +289,7 @@ async def test_a_store_finalized_by_a_create_mutation_records_its_size(
     # a thread rather than rewritten async: `request_store` and `write_zarr` are shared with
     # every sync test in this module and are worth keeping in one shape.
     @sync_to_async
-    def seed():
+    def seed() -> tuple[ZarrStore, ZarrStore, dict[str, int]]:
         organization = authenticated_context.request.organization
         level_0 = request_store(buckets, organization)
         level_1 = request_store(buckets, organization)
@@ -306,7 +328,9 @@ async def test_a_store_finalized_by_a_create_mutation_records_its_size(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organization):  # noqa: F811
+def test_a_single_object_store_measures_the_object_not_a_prefix(
+    buckets: datalayer_module.Datalayer, organization: Organization
+) -> None:
     """The other half of the `is_prefix` split, exercised through `fill_info` rather than a listing.
 
     A bigfile is one key, so its size is a HEAD. Worth pinning beside the zarr case because the
@@ -337,8 +361,10 @@ def test_a_single_object_store_measures_the_object_not_a_prefix(buckets, organiz
 
 @pytest.mark.django_db(transaction=True)
 def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(
-    buckets, organization, monkeypatch
-):  # noqa: F811
+    buckets: datalayer_module.Datalayer,
+    organization: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The non-fatal contract has to hold on the create path too, not just behind the finish mutation.
 
     `fill_info` is now where the measurement happens, so this is the call that must not be able
@@ -347,7 +373,7 @@ def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(
     store = request_store(buckets, organization)
     write_zarr(buckets, store)
 
-    def refuse(*args, **kwargs):
+    def refuse(*args: object, **kwargs: object) -> Never:
         raise RuntimeError("listing is unavailable")
 
     monkeypatch.setattr(datalayer_module.Datalayer, "measure_prefix_bytes", refuse)
@@ -360,8 +386,10 @@ def test_a_create_path_finalization_survives_a_measurement_it_cannot_take(
 
 @pytest.mark.django_db(transaction=True)
 def test_a_failed_measurement_does_not_erase_a_recorded_size(
-    buckets, organization, monkeypatch
-):  # noqa: F811
+    buckets: datalayer_module.Datalayer,
+    organization: Organization,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A re-`fill_info` that cannot measure must leave the last good number alone.
 
     Null means "not measured". Overwriting a real size with it would turn a transient listing
@@ -373,7 +401,7 @@ def test_a_failed_measurement_does_not_erase_a_recorded_size(
     store.refresh_from_db()
     assert store.size_bytes == written
 
-    def refuse(*args, **kwargs):
+    def refuse(*args: object, **kwargs: object) -> Never:
         raise RuntimeError("listing is unavailable")
 
     monkeypatch.setattr(datalayer_module.Datalayer, "measure_prefix_bytes", refuse)

@@ -345,7 +345,7 @@ async def test_cost_follows_the_lineage_not_the_depth_or_the_organization(
                     output=b,
                     organization=org,
                 )
-                for a, b in zip(systems, systems[1:])
+                for a, b in zip(systems, systems[1:], strict=False)
             ]
         )
         with connection.cursor() as cursor:

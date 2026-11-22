@@ -13,7 +13,7 @@ that future nesting is non-breaking, but the canonical graph is one blend level
 deep: a single ``blend`` root whose children are ``channel`` sources.
 """
 
-from typing import Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -191,9 +191,9 @@ class PhasorRenderModel(BaseModel):
     transfer: PhasorTransferModel = Field(default_factory=PhasorTransferModel)
 
 
-LayerNodeUnion = Union[
-    ChannelSourceModel, BlendNodeModel, ProjectionNodeModel, PhasorNodeModel
-]
+LayerNodeUnion = (
+    ChannelSourceModel | BlendNodeModel | ProjectionNodeModel | PhasorNodeModel
+)
 
 
 class LayerRenderGraphModel(BaseModel):

@@ -37,7 +37,7 @@ async def _counts(ctx: HttpContext, since: datetime.datetime) -> dict:
 @pytest.mark.asyncio
 async def test_a_count_is_what_the_organization_holds(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     folder = await seed.create_folder(authenticated_context, "Raw")
     await seed.create_folder(authenticated_context, "Processed")
     await seed.create_file(authenticated_context, "scan.lif", folder)

@@ -26,7 +26,7 @@ from core.mutations.layer import (
 from core.scoping import get_for_org
 
 
-def assert_vector_axis(lens) -> str:
+def assert_vector_axis(lens: models.ArrayLens) -> str:
     """The DISPLACEMENT axis a vector layer draws, checked to actually describe vectors.
 
     The `assert_phasor_axis` of this kind, but resolving rather than validating a choice:

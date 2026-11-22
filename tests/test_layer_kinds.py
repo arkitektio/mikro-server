@@ -7,8 +7,11 @@ path to the scene's world -- a layer mutation checks the placement, it never
 writes one -- so each seed helper hands back the coordinate system to register.
 """
 
+from collections.abc import Awaitable, Callable
+
 import pytest
 from asgiref.sync import sync_to_async
+from django.db.models import Model
 from kante.context import HttpContext
 
 from core import enums, models
@@ -159,7 +162,9 @@ async def _seed_annotation_collection(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_annotation_layer(db, authenticated_context: HttpContext):
+async def test_create_annotation_layer(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
     collection, system = await _seed_annotation_collection(ctx)
@@ -199,8 +204,8 @@ async def test_create_annotation_layer(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_unregistered_annotation_layer_is_rejected(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The collection's system has no path to this world, so the layer is refused with the fix named."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -225,8 +230,8 @@ async def test_an_unregistered_annotation_layer_is_rejected(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_annotation_layer_appears_in_scene_layers(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """An AnnotationLayer is returned polymorphically through Scene.layers."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -271,7 +276,7 @@ async def test_annotation_layer_appears_in_scene_layers(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_point_layer(db, authenticated_context: HttpContext):
+async def test_create_point_layer(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
     dataset, system = await _seed_table_dataset(ctx, "points")
@@ -312,8 +317,8 @@ async def test_create_point_layer(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_track_layer_needs_a_track_id_column(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The track identity is the dataset's TRACK_ID role: a table without one has no tracks to draw."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -336,7 +341,7 @@ async def test_a_track_layer_needs_a_track_id_column(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_track_layer(db, authenticated_context: HttpContext):
+async def test_create_track_layer(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
     dataset, system = await _seed_table_dataset(ctx, "tracks", with_track=True)
@@ -375,7 +380,7 @@ async def test_create_track_layer(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_track_layer(db, authenticated_context: HttpContext):
+async def test_update_track_layer(db: None, authenticated_context: HttpContext) -> None:
     """A track layer's display choices are retunable after creation.
 
     Which columns provide the coordinates and the track identity is NOT among
@@ -454,8 +459,8 @@ async def test_update_track_layer(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_track_layer_refuses_another_kind(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A point layer has no line width to set, and says so rather than patching one on."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -487,7 +492,7 @@ async def test_update_track_layer_refuses_another_kind(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_mesh_layer(db, authenticated_context: HttpContext):
+async def test_create_mesh_layer(db: None, authenticated_context: HttpContext) -> None:
     """A mesh layer renders a mesh COLLECTION: the collection owns the space the check walks from."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -531,8 +536,8 @@ async def test_create_mesh_layer(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_unregistered_mesh_layer_is_rejected(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The collection's own system has no path to this world, so the layer is refused."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -556,7 +561,9 @@ async def test_an_unregistered_mesh_layer_is_rejected(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_heterogeneous_scene_layers(db, authenticated_context: HttpContext):
+async def test_heterogeneous_scene_layers(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A single scene holding several layer kinds returns them all through the polymorphic interface."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -682,13 +689,15 @@ _UNPLACED_SOURCES = [
     ids=[row[0] for row in _UNPLACED_SOURCES],
 )
 async def test_every_source_kind_is_refused_when_nothing_places_it(
-    db,
+    db: None,
     authenticated_context: HttpContext,
-    mutation_name,
-    input_name,
-    seed_source,
-    container_model,
-):
+    mutation_name: str,
+    input_name: str,
+    seed_source: Callable[
+        [HttpContext], Awaitable[tuple[Model, models.CoordinateSystem]]
+    ],
+    container_model: type[Model],
+) -> None:
     """The gate is not the lens path's alone. Skip the registration and each of these refuses.
 
     Every other test in this file registers the source first, which is right -- they are about

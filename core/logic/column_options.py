@@ -56,7 +56,9 @@ MEASURE_ROLES = frozenset(
 MAX_JOIN_DEPTH = join_walk.MAX_JOIN_DEPTH
 
 
-def mesh_collection_system(collection) -> "models.CoordinateSystem":
+def mesh_collection_system(
+    collection: "models.MeshCollection",
+) -> "models.CoordinateSystem":
     """The space a collection's FIELD edges leave from, or the refusal if it has none.
 
     Here rather than in the mutations because both sides of the picker need it: the write path
@@ -71,7 +73,9 @@ def mesh_collection_system(collection) -> "models.CoordinateSystem":
     return system
 
 
-def network_collection_system(collection) -> "models.CoordinateSystem":
+def network_collection_system(
+    collection: "models.NetworkCollection",
+) -> "models.CoordinateSystem":
     """The space a network collection's FIELD edges leave from, or the refusal if it has none.
 
     :func:`mesh_collection_system`'s graph twin, and the same one-definition argument: the

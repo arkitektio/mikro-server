@@ -4,8 +4,6 @@ Input classes live here (not in ``core.mutations``) so the service layer in
 ``core.logic`` can reference them without importing mutation modules.
 """
 
-from typing import List
-
 import kante
 import strawberry
 from pydantic import BaseModel, Field

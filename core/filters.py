@@ -30,6 +30,7 @@ from django.db.models import (
     Q,
     QuerySet,
 )
+from django.db.models.expressions import BaseExpression
 from django.db.models.functions import Coalesce
 from kante.types import Info
 from koherent.models import Task as KoherentTask
@@ -2070,7 +2071,9 @@ def _renderable_lens_ids(
     return renderable
 
 
-def _annotate_once(queryset: QuerySet, alias: str, expression) -> QuerySet:
+def _annotate_once(
+    queryset: QuerySet, alias: str, expression: BaseExpression
+) -> QuerySet:
     """Add an annotation unless the alias is already taken by an identical one.
 
     An alias is global to the queryset while a filter is not: `AND`/`OR` recurse with
@@ -2085,7 +2088,7 @@ def _annotate_once(queryset: QuerySet, alias: str, expression) -> QuerySet:
     return queryset.annotate(**{alias: expression})
 
 
-def _derived_dataset_ids(source_id: strawberry.ID | None = None):
+def _derived_dataset_ids(source_id: strawberry.ID | None = None) -> QuerySet:
     """The ids of every dataset that was derived, or only those derived from one source.
 
     `graph_logic.derivation_edges` expressed as a query, and it has to agree with it.
@@ -2167,7 +2170,7 @@ def _annotate_axis_type_count(
     return _annotate_once(queryset, alias, expression), alias
 
 
-def _systems_derived_from_dataset(dataset_id: strawberry.ID):
+def _systems_derived_from_dataset(dataset_id: strawberry.ID) -> QuerySet:
     """The collection systems whose derivation edge lands in this dataset.
 
     A subquery rather than a join: `Transformation.input`/`output` are declared

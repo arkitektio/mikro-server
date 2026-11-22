@@ -5,9 +5,11 @@ receives is checked the way rekuest checks it: the V1 signature over ``signal:mi
 and the raw provenance token of the task the dataset was created in.
 """
 
+import asyncio
 import json
 import threading
 import time
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 
@@ -16,6 +18,7 @@ from arkitekt_datalayer.models import ZarrStore
 from arkitekt_service import trust
 from joserfc.jwk import OKPKey
 from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
 
 from core.descriptors import array_descriptors
 from mikro_server.schema import schema
@@ -46,7 +49,7 @@ class _Intake:
         intake = self
 
         class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):  # noqa: N802
+            def do_POST(self) -> None:  # noqa: N802
                 body = self.rfile.read(int(self.headers["Content-Length"]))
                 intake.received.append(
                     {"path": self.path, "headers": dict(self.headers), "body": body}
@@ -54,7 +57,7 @@ class _Intake:
                 self.send_response(202)
                 self.end_headers()
 
-            def log_message(self, *args):  # quiet
+            def log_message(self, *args: object) -> None:  # quiet
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -68,7 +71,7 @@ class _Intake:
         return self.received
 
 
-def _dataset_created(intake) -> dict:
+def _dataset_created(intake: _Intake) -> dict:
     """The dataset's CREATED signal. Creating one also signals its folder, and the mutation's
     later saves of the row are UPDATEDs — only the CREATED is the one these tests are about."""
     import time
@@ -89,7 +92,7 @@ def _dataset_created(intake) -> dict:
 
 
 @pytest.fixture
-def intake(settings):
+def intake(settings: SettingsWrapper) -> Iterator[_Intake]:
     server = _Intake()
     settings.REKUEST_SERVICE = {"REKUEST_URL": server.url, "SERVICE": "mikro"}
     settings.INSTANCE = INSTANCE
@@ -100,7 +103,7 @@ def intake(settings):
     server.server.server_close()
 
 
-def test_descriptors_follow_the_client_vocabulary():
+def test_descriptors_follow_the_client_vocabulary() -> None:
     assert array_descriptors(
         ["TIME", "CHANNEL", "SPACE", "SPACE", "SPACE"], [10, 3, 5, 64, 64]
     ) == {
@@ -157,8 +160,8 @@ async def _create(ctx: HttpContext, name: str) -> str:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_created_dataset_is_signalled_with_its_task_token(
-    intake, authenticated_context: HttpContext
-):
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     attach_provenance(authenticated_context, make_provenance(task_id="57"))
     dataset_id = await _create(authenticated_context, "signalled")
     clear_provenance(authenticated_context)
@@ -193,8 +196,8 @@ async def test_a_created_dataset_is_signalled_with_its_task_token(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_without_a_task_the_signal_carries_no_token(
-    intake, authenticated_context: HttpContext
-):
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     await _create(authenticated_context, "untasked")
     received = _dataset_created(intake)
     assert json.loads(received["body"])["provenance"] is None
@@ -203,15 +206,15 @@ async def test_without_a_task_the_signal_carries_no_token(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_nothing_is_sent_when_rekuest_is_not_configured(
-    intake, settings, authenticated_context: HttpContext
-):
+    intake: _Intake, settings: SettingsWrapper, authenticated_context: HttpContext
+) -> None:
     settings.REKUEST_SERVICE = None
     await _create(authenticated_context, "unconfigured")
-    time.sleep(0.5)
+    await asyncio.sleep(0.5)
     assert intake.received == []
 
 
-def test_the_manifest_declares_every_key_mikro_sends(settings):
+def test_the_manifest_declares_every_key_mikro_sends(settings: SettingsWrapper) -> None:
     """A signal is declared with every key of its structure: the client's seven array keys, the value kind, the element type, the spec and whether it is whole -- all computed, none merely stated."""
     from django.test import Client as HttpClient
     from django.urls import reverse

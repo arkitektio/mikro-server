@@ -38,7 +38,7 @@ async def _lens_row(lens_id: str) -> models.Lens:
 @pytest.mark.asyncio
 async def test_a_crop_is_stamped_with_its_maker_and_the_task_it_was_made_under(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Tissue", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]
@@ -67,7 +67,7 @@ async def test_a_crop_is_stamped_with_its_maker_and_the_task_it_was_made_under(
 @pytest.mark.asyncio
 async def test_the_first_to_ask_for_a_selection_is_its_creator(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """Asking again hands back the row: the second asker becomes nobody's creator, and the row keeps its stamp."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Tissue", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]
@@ -103,7 +103,7 @@ async def test_the_first_to_ask_for_a_selection_is_its_creator(
 @pytest.mark.asyncio
 async def test_a_whole_lens_carries_its_containers_provenance(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The handle a container is born with says what the container says: maker, time and task."""
     ctx = authenticated_context
     store = await ZarrStore.objects.acreate(
@@ -160,7 +160,7 @@ async def test_a_whole_lens_carries_its_containers_provenance(
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_a_window_is_stamped_with_whoever_asked_for_it(
     authenticated_context: HttpContext, bot_context: HttpContext, kind: str
-):
+) -> None:
     """A window over someone else's container belongs to the one who cut it; the container's whole lens to the container's maker."""
     make, model, axis = _CONTAINERS[kind]
     container_id, mutation, field = await make(authenticated_context)
@@ -193,7 +193,9 @@ DELETE_LENS = "mutation D($input: DeleteLensInput!) { deleteLens(input: $input) 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_reports_its_provenance(authenticated_context: HttpContext):
+async def test_a_lens_reports_its_provenance(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Tissue", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]
@@ -227,7 +229,7 @@ async def test_a_lens_reports_its_provenance(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_the_maker_of_a_crop_over_someone_elses_dataset_may_nominate_and_delete_it_but_not_name_its_positions(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """A crop is its maker's, whoever owns the pixels under it; the positions it pins are the dataset's, and naming them names every lens through them."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Theirs", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]
@@ -267,7 +269,7 @@ async def test_the_maker_of_a_crop_over_someone_elses_dataset_may_nominate_and_d
 @pytest.mark.asyncio
 async def test_the_containers_owner_may_name_the_positions_of_a_crop_someone_else_made(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """It is the dataset's positions being named, so the dataset's owner -- not an admin here -- may name them through any lens over it."""
     dataset = await seed.create_array_dataset(
         bot_context, "Bots", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]
@@ -288,7 +290,7 @@ async def test_the_containers_owner_may_name_the_positions_of_a_crop_someone_els
 @pytest.mark.asyncio
 async def test_lenses_are_found_by_owner_and_by_task_and_ordered_by_age(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Tissue", axes=seed.SIMPLE_AXES, shapes=[[3, 64, 64]]

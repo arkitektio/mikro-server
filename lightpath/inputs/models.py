@@ -116,7 +116,7 @@ class OpticalElementInputBase(BaseModel):
         raise NotImplementedError
 
 
-def _band(band_min, band_max):  # noqa: ANN001, ANN202 - two optional quantities in, one optional dict out
+def _band(band_min: int | None, band_max: int | None) -> dict[str, int | None] | None:
     """The stored `band` spectrum, from the two flat wire fields that describe it.
 
     The wire says `bandMin`/`bandMax` and the storage model says one `band` -- the one place

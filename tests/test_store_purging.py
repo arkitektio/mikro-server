@@ -16,7 +16,9 @@ mikro's rows flags the stores they held, and that every way mikro points at a st
 """
 
 import datetime
+from collections.abc import Awaitable, Callable, Iterator
 from io import StringIO
+from typing import ParamSpec, TypeVar
 from unittest.mock import patch
 
 import arkitekt_datalayer.datalayer as datalayer_module
@@ -34,9 +36,12 @@ from mikro_server.schema import schema
 from tests import seed
 from tests.seed import create_array_dataset, create_file, create_folder
 
+P = ParamSpec("P")
+R = TypeVar("R")
+
 
 @pytest.fixture()
-def buckets(monkeypatch):
+def buckets(monkeypatch: pytest.MonkeyPatch) -> Iterator[datalayer_module.Datalayer]:
     """A real (moto-backed) S3 with the configured buckets created.
 
     `endpoint_url` is dropped for the duration: moto patches botocore's default AWS endpoints
@@ -69,21 +74,21 @@ def buckets(monkeypatch):
     datalayer_module.GLOBAL_DL = None
 
 
-def keys_in(layer, bucket_key: str) -> set[str]:
+def keys_in(layer: datalayer_module.Datalayer, bucket_key: str) -> set[str]:
     """Every object key currently in one of the datalayer's buckets."""
     bucket = layer.get_bucket_config(bucket_key).bucket
     listing = layer._s3.list_objects_v2(Bucket=bucket)
     return {item["Key"] for item in listing.get("Contents", [])}
 
 
-def put(layer, bucket_key: str, key: str) -> None:
+def put(layer: datalayer_module.Datalayer, bucket_key: str, key: str) -> None:
     """Put one object into a datalayer bucket."""
     layer._s3.put_object(
         Bucket=layer.get_bucket_config(bucket_key).bucket, Key=key, Body=b"bytes"
     )
 
 
-def purge(**options) -> str:
+def purge(**options: object) -> str:
     """Run the sweeper and return its output."""
     out = StringIO()
     call_command("purge_orphaned_stores", stdout=out, stderr=out, **options)
@@ -105,8 +110,10 @@ def age(store: DatalayerStore, days: int) -> None:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_a_file_flags_its_store_and_the_sweeper_purges_it(
-    db, authenticated_context: HttpContext, buckets
-):
+    db: None,
+    authenticated_context: HttpContext,
+    buckets: datalayer_module.Datalayer,
+) -> None:
     ctx = authenticated_context
     store = await models.BigFileStore.objects.acreate(
         path="s3://bigfile/scan",
@@ -142,8 +149,10 @@ async def test_deleting_a_file_flags_its_store_and_the_sweeper_purges_it(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_a_dataset_purges_every_pyramid_level(
-    db, authenticated_context: HttpContext, buckets
-):
+    db: None,
+    authenticated_context: HttpContext,
+    buckets: datalayer_module.Datalayer,
+) -> None:
     """The stores hang off DataArray rows, not off the dataset -- a one-hop walk misses them.
 
     And each is a zarr, so each needs the prefix delete: `delete_object` against `level-0`
@@ -222,8 +231,10 @@ async def test_deleting_a_dataset_purges_every_pyramid_level(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_shared_store_is_never_purged(
-    db, authenticated_context: HttpContext, buckets
-):
+    db: None,
+    authenticated_context: HttpContext,
+    buckets: datalayer_module.Datalayer,
+) -> None:
     """Two Files on one store: deleting one must not destroy the other's bytes.
 
     Nothing stops this today -- no `store` FK has a unique constraint and store ids are
@@ -269,8 +280,10 @@ async def test_a_shared_store_is_never_purged(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_failed_delete_flags_nothing(
-    db, authenticated_context: HttpContext, buckets
-):
+    db: None,
+    authenticated_context: HttpContext,
+    buckets: datalayer_module.Datalayer,
+) -> None:
     """Collection happens before the delete and flagging after it, in one transaction."""
     ctx = authenticated_context
     store = await models.BigFileStore.objects.acreate(
@@ -300,8 +313,10 @@ async def test_a_failed_delete_flags_nothing(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_referrers_of_sees_a_store_a_collection_points_at(
-    db, authenticated_context: HttpContext, buckets
-):
+    db: None,
+    authenticated_context: HttpContext,
+    buckets: datalayer_module.Datalayer,
+) -> None:
     """A store something still points at is never purged, however it is pointed at.
 
     Note **no store many-to-many exists anywhere any more**, so that branch of `_store_fields`
@@ -331,8 +346,10 @@ async def test_referrers_of_sees_a_store_a_collection_points_at(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_a_mesh_collection_flags_its_fabriks_store(
-    db, authenticated_context: HttpContext, buckets
-):
+    db: None,
+    authenticated_context: HttpContext,
+    buckets: datalayer_module.Datalayer,
+) -> None:
     """One collection, one store, one prefix to collect.
 
     The sweep needs no special case for it: `_store_fields` finds the foreign key by walking
@@ -365,7 +382,7 @@ async def test_deleting_a_mesh_collection_flags_its_fabriks_store(
     )
 
 
-def sync(fn):
+def sync(fn: Callable[P, R]) -> Callable[P, Awaitable[R]]:
     """Run a blocking ORM/boto call from an async test."""
     from asgiref.sync import sync_to_async
 

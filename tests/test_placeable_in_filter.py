@@ -113,7 +113,7 @@ def _derivation(
 @pytest.mark.asyncio
 async def test_batched_helper_agrees_with_per_candidate_predicate(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The filter's batched set matches ``is_placeable_in`` object for object.
 
     Unsliced and sliced lenses over a registered and an unregistered dataset -- the one gap
@@ -152,7 +152,7 @@ async def test_batched_helper_agrees_with_per_candidate_predicate(
 @pytest.mark.asyncio
 async def test_a_registered_datasets_lenses_are_placeable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every lens of a registered dataset -- even a fresh, never-layered one -- is offered; none of an unregistered dataset's are."""
     ctx = authenticated_context
     placed = await seed.create_array_dataset(ctx, "Placed")
@@ -187,7 +187,7 @@ async def test_a_registered_datasets_lenses_are_placeable(
 @pytest.mark.asyncio
 async def test_unmappable_is_excluded_but_a_mappable_descendant_is_placeable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A mappable derived dataset rides its parent's registration to world; an UNMAPPABLE one does not.
 
     Registering only the root, a lens of the IDENTITY-derived child is placeable (the
@@ -235,7 +235,7 @@ async def test_unmappable_is_excluded_but_a_mappable_descendant_is_placeable(
 @pytest.mark.asyncio
 async def test_table_dataset_placeable_only_once_registered(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table dataset is offered exactly when its own coordinate system is registered into the scene."""
     ctx = authenticated_context
     placed = await _table_dataset(ctx, "placed-table")
@@ -266,7 +266,7 @@ async def test_table_dataset_placeable_only_once_registered(
 @pytest.mark.asyncio
 async def test_two_scenes_over_one_world_share_the_placeable_set(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One truth per space: the placeable set is the world's, so every scene over it agrees.
 
     The registration is a fact about the space, not a per-scene endorsement -- there is
@@ -303,7 +303,7 @@ query Datasets($space: ID!) {
 @pytest.mark.asyncio
 async def test_array_dataset_placeable_in_agrees_with_its_lenses(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A dataset is offered exactly when one of its lenses is: same set, one hop up.
 
     Both read `placeable_lens_dataset_ids`, so the picker cannot offer a dataset whose
@@ -343,7 +343,7 @@ async def test_array_dataset_placeable_in_agrees_with_its_lenses(
 @pytest.mark.asyncio
 async def test_a_derived_dataset_is_placeable_through_its_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The descendant closure reaches datasets too: a child is offered on its parent's registration.
 
     And an UNMAPPABLE derivation is where that stops -- the walk refuses the edge, so the
@@ -374,7 +374,9 @@ async def test_a_derived_dataset_is_placeable_through_its_source(
     }
 
 
-async def _lens_ids(ctx: HttpContext, space_id, **narrowing) -> set[str]:
+async def _lens_ids(
+    ctx: HttpContext, space_id: str | int, **narrowing: object
+) -> set[str]:
     """The ids the `lenses` picker returns for a space, optionally narrowed."""
     result = await schema.execute(
         LENSES, context_value=ctx, variable_values={"space": str(space_id), **narrowing}
@@ -401,7 +403,7 @@ def _assert_all_placeable(space: models.CoordinateSystem, lens_ids: set[str]) ->
 @pytest.mark.asyncio
 async def test_derived_only_keeps_the_segmentation_and_drops_the_registered_image(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`derivedOnly` is the descendant closure without its seeds: what rode a parent's registration here."""
     ctx = authenticated_context
     source = await seed.create_array_dataset(ctx, "Source")
@@ -431,7 +433,7 @@ async def test_derived_only_keeps_the_segmentation_and_drops_the_registered_imag
 @pytest.mark.asyncio
 async def test_derived_only_drops_a_dataset_that_is_registered_as_well_as_derived(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Registered *and* derived is still registered: it does not need its lineage to be placeable.
 
     The rule is "needed a lineage tree to get here", not "has a lineage". `_derivation_descendants`
@@ -462,7 +464,7 @@ async def test_derived_only_drops_a_dataset_that_is_registered_as_well_as_derive
 @pytest.mark.asyncio
 async def test_as_layer_label_offers_only_the_categorized_derivation(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`asLayer: LABEL` reads the primary derivation's CATEGORIZED -- the signal `_infer_kind` reads.
 
     `IMAGE` deliberately does not exclude the mask: a label map drawn through a render graph
@@ -510,7 +512,7 @@ async def test_as_layer_label_offers_only_the_categorized_derivation(
 @pytest.mark.asyncio
 async def test_a_lens_cropped_to_one_column_is_offered_for_no_layer_kind(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`asLayer` applies the renderability gate layer creation applies, and it is per lens.
 
     The dataset is placeable and its unsliced lens is drawable; the one sliced down to a
@@ -548,7 +550,7 @@ async def test_a_lens_cropped_to_one_column_is_offered_for_no_layer_kind(
 @pytest.mark.asyncio
 async def test_the_renderability_pass_does_not_grow_with_the_number_of_lenses(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`asLayer` costs a constant number of queries, not two per candidate lens.
 
     `Lens.axis_specs` walks the dataset's coordinate system's axes and `ArrayDataset.shape_list`
@@ -586,7 +588,7 @@ async def test_the_renderability_pass_does_not_grow_with_the_number_of_lenses(
 @pytest.mark.asyncio
 async def test_a_lens_of_any_kind_is_placeable_where_its_container_is_and_as_layer_names_what_it_draws(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table lens is placeable where its table is registered; `asLayer: POINT` keeps it, TRACK only with a TRACK_ID column, MESH keeps the mesh lens; nothing is placeable where nothing is registered."""
     ctx = authenticated_context
     points, points_system = await _seed_table_dataset(ctx, "points")
@@ -645,7 +647,7 @@ query Picker {
 @pytest.mark.asyncio
 async def test_a_picker_asking_several_layer_kinds_of_one_space_walks_it_once(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The Add Layer form asks one space for ten lists at once (`asLayer` IMAGE, LABEL, MESH, ...).
 
     Each is a `placeableIn` filter over the same space, and the space cannot have two answers in

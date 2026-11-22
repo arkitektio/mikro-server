@@ -15,7 +15,7 @@ QUERY = """
 """
 
 
-async def _seed_task(ctx: HttpContext, task_id: str, **overrides) -> Task:
+async def _seed_task(ctx: HttpContext, task_id: str, **overrides: object) -> Task:
     fields = dict(
         task_id=task_id,
         root_task_id=task_id,
@@ -44,7 +44,9 @@ async def _query_task_ids(ctx: HttpContext, filters: dict) -> set[str]:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_tasks_filter_by_created_window(db, authenticated_context: HttpContext):
+async def test_tasks_filter_by_created_window(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """createdBefore/createdAfter bound the task list by creation time."""
     early = await _seed_task(authenticated_context, "early")
     await _seed_task(authenticated_context, "late")
@@ -64,7 +66,9 @@ async def test_tasks_filter_by_created_window(db, authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_tasks_filter_by_assigner(db, authenticated_context: HttpContext):
+async def test_tasks_filter_by_assigner(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """assigner (sub) and assignerId (database ID) both narrow to the assigning user."""
     await _seed_task(authenticated_context, "mine")
     await _seed_task(
@@ -82,7 +86,9 @@ async def test_tasks_filter_by_assigner(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_tasks_filter_by_parent_task_id(db, authenticated_context: HttpContext):
+async def test_tasks_filter_by_parent_task_id(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """parentTaskId (FilterLookup) matches the parent task id string."""
     await _seed_task(authenticated_context, "child", parent_task_id="root-task")
     await _seed_task(authenticated_context, "orphan")
@@ -95,8 +101,8 @@ async def test_tasks_filter_by_parent_task_id(db, authenticated_context: HttpCon
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_tasks_search_matches_task_id_or_agent_client_id(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """search matches case-insensitively on either the task id or the executing agent client id."""
     await _seed_task(
         authenticated_context, "Deconvolution-Run", agent_client_id="other"

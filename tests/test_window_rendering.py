@@ -29,7 +29,7 @@ ANNOTATIONS_OF = "query A($id: ID!) { lens(id: $id) { ... on AnnotationLens { an
 @pytest.mark.asyncio
 async def test_a_point_layer_hands_its_lens_windows_to_the_renderer_as_row_filters(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One COLUMN rule per window, inclusive on both ends -- the rule keeps exactly the rows whose anchors the lens itself keeps."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
@@ -77,7 +77,7 @@ async def test_a_point_layer_hands_its_lens_windows_to_the_renderer_as_row_filte
 @pytest.mark.asyncio
 async def test_a_collection_layer_hands_its_lens_windows_on_as_a_clip(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     scene = await _seed_scene(ctx)
     mesh = await _mesh_collection(ctx)
@@ -111,7 +111,7 @@ async def test_a_collection_layer_hands_its_lens_windows_on_as_a_clip(
 @pytest.mark.asyncio
 async def test_a_series_reads_through_its_lens_windows(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     chart = await _chart(ctx)
     table = await _table(ctx, "measurements", _MEASUREMENTS)
@@ -146,7 +146,7 @@ async def test_a_series_reads_through_its_lens_windows(
 @pytest.mark.asyncio
 async def test_an_annotation_lens_names_the_shapes_in_its_windows(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A window is a value range in the drawing space: a point at y=10 is outside y 0..5, and a point at y=2 inside."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -184,7 +184,7 @@ async def test_an_annotation_lens_names_the_shapes_in_its_windows(
 @pytest.mark.asyncio
 async def test_a_range_over_the_layers_own_coordinate_column_is_a_window_and_not_a_picker_rule(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A bounded rule on the point layer's own coordinate column would store a window twice; the lens is where a selection lives."""
     ctx = authenticated_context
     scene = await _seed_scene(ctx)

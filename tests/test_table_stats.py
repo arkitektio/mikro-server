@@ -37,7 +37,7 @@ def _write_parquet(path: Path) -> str:
     return location
 
 
-def test_the_footer_gives_rows_ranges_and_nulls_without_a_scan(tmp_path: Path):
+def test_the_footer_gives_rows_ranges_and_nulls_without_a_scan(tmp_path: Path) -> None:
     footer = table_stats.read_footer(_write_parquet(tmp_path))
 
     assert footer.row_count == 1000
@@ -65,7 +65,7 @@ async def _query(ctx: HttpContext, query: str, **variables: object) -> dict:
 @pytest.mark.asyncio
 async def test_a_tables_footer_facts_are_read_on_the_table(
     authenticated_context: HttpContext, tmp_path: Path
-):
+) -> None:
     ctx = authenticated_context
     created = await _create_table(ctx, "cells")
     query = "query Q($id: ID!) { tableDataset(id: $id) { rowCount columns { name stats { min max nullCount } } } }"
@@ -99,7 +99,7 @@ SUMMARY = "query Q($id: ID!) { tableDataset(id: $id) { columns { name summary { 
 @pytest.mark.asyncio
 async def test_a_client_pins_a_column_summary_to_the_table(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table = await _create_table(ctx, "summarised")
     summary = {
@@ -168,7 +168,7 @@ async def test_a_client_pins_a_column_summary_to_the_table(
 @pytest.mark.asyncio
 async def test_a_column_summary_is_refused_where_it_cannot_belong(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table = await _create_table(ctx, "strict")
     dataset = await _create_array_dataset(ctx, "image")
@@ -209,7 +209,7 @@ async def test_a_column_summary_is_refused_where_it_cannot_belong(
 @pytest.mark.asyncio
 async def test_counts_past_32_bits_are_answered_and_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     created = await _create_table(ctx, "huge")
     huge = 3 * 2**31

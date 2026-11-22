@@ -45,7 +45,9 @@ NEAR = [{"axis": "y", "start": 0, "stop": 32}]
 FAR = [{"axis": "y", "start": 40, "stop": 64}]
 
 
-async def _collection_over(ctx: HttpContext, dataset, *, name: str = "Traced") -> str:
+async def _collection_over(
+    ctx: HttpContext, dataset: models.ArrayDataset, *, name: str = "Traced"
+) -> str:
     """A (y, x) drawing space over a dataset, joined by the edge that states the rank change."""
     result = await schema.execute(
         CREATE_COLLECTION,
@@ -131,7 +133,7 @@ async def _cost(ctx: HttpContext, annotation_id: str) -> tuple[set[str], int]:
 @pytest.mark.asyncio
 async def test_lenses_over_the_annotated_dataset_are_told_apart_by_their_slices(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image")
     whole = await seed.create_lens(ctx, dataset)
@@ -153,7 +155,7 @@ async def test_lenses_over_the_annotated_dataset_are_told_apart_by_their_slices(
 @pytest.mark.asyncio
 async def test_a_lens_over_another_dataset_overlaps_through_a_shared_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The annotation is drawn on one dataset; the lenses look at another registered beside it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -189,7 +191,7 @@ async def test_a_lens_over_another_dataset_overlaps_through_a_shared_world(
 @pytest.mark.asyncio
 async def test_an_annotation_drawn_onto_a_scene_overlaps_the_lenses_placed_in_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A scene's own collection is registered straight into the world, with no dataset under it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
@@ -228,7 +230,7 @@ async def test_an_annotation_drawn_onto_a_scene_overlaps_the_lenses_placed_in_it
 @pytest.mark.asyncio
 async def test_a_pinned_coordinate_keeps_the_annotation_off_the_other_channels(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A (y, x) shape says nothing about c; its `coordinates` do, and the neighbouring channel must not match."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels")
@@ -259,7 +261,7 @@ async def test_a_pinned_coordinate_keeps_the_annotation_off_the_other_channels(
 @pytest.mark.asyncio
 async def test_a_lens_placed_only_per_channel_is_not_returned(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Where it sits depends on a channel nobody named, so it has not been shown to overlap."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Chromatic")
@@ -283,7 +285,7 @@ async def test_a_lens_placed_only_per_channel_is_not_returned(
 @pytest.mark.asyncio
 async def test_the_filter_stays_inside_the_organization(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Shared")
     mine = await seed.create_array_dataset(
@@ -331,7 +333,7 @@ async def _world_with(
 @pytest.mark.asyncio
 async def test_the_cost_does_not_grow_with_the_datasets_or_their_lenses(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Flat in both: the residents arrive with everything a lens' extent is made of.
 
     The lens count is the one that would have grown. `Lens.shape_list` is two queries a lens,
@@ -360,7 +362,7 @@ async def test_the_cost_does_not_grow_with_the_datasets_or_their_lenses(
 @pytest.mark.asyncio
 async def test_the_cost_is_one_graph_per_space_the_annotation_reaches(
     authenticated_context: HttpContext,
-):
+) -> None:
     """What it does grow with, stated: every further space the drawn-on dataset sits in is another walk."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -414,7 +416,7 @@ async def _reachable(
 @pytest.mark.asyncio
 async def test_every_lens_of_the_annotated_dataset_is_reachable_whether_or_not_the_shape_lies_in_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """What a picker offers once a shape is chosen: the data it can be read against, not only the data it happens to cover."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image")
@@ -442,7 +444,7 @@ async def test_every_lens_of_the_annotated_dataset_is_reachable_whether_or_not_t
 @pytest.mark.asyncio
 async def test_a_lens_over_another_dataset_is_reachable_through_a_shared_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
     drawn_on = await seed.create_array_dataset(
@@ -474,7 +476,7 @@ async def test_a_lens_over_another_dataset_is_reachable_through_a_shared_world(
 @pytest.mark.asyncio
 async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collection(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """A freestanding tracing reaches the lens over its own collection and no data; an annotation of another organization names nothing here."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image")
@@ -519,7 +521,7 @@ async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collecti
 @pytest.mark.asyncio
 async def test_reachability_narrows_beside_the_other_filters(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A picker's query: the kind, what the port requires, and what the chosen shape reaches."""
     ctx = authenticated_context
     volume = await seed.create_array_dataset(

@@ -36,7 +36,7 @@ def _resolve_table_lens(info: Info, *, lens: str) -> "models.TableLens":
     return resolved
 
 
-def point_reachable_tables(info: Info, table_dataset) -> dict:
+def point_reachable_tables(info: Info, table_dataset: models.TableDataset) -> dict:
     """The tables a point layer's colouring may read, keyed by id.
 
     A point layer differs from the other two kinds in exactly one way, and it is
@@ -59,7 +59,12 @@ def point_reachable_tables(info: Info, table_dataset) -> dict:
     return {str(table_dataset.pk): table_dataset, **reachable}
 
 
-def build_point_pickers(info: Info, table_dataset, color_bys, filter_bys):
+def build_point_pickers(
+    info: Info,
+    table_dataset: models.TableDataset,
+    color_bys: "list[layer_inputs.LabelColorByInputModel] | None",
+    filter_bys: "list[layer_inputs.LabelFilterByInputModel] | None",
+) -> tuple[list[dict] | None, list[dict] | None]:
     """Both pickers for a point layer, against one walk of its reachability."""
     reachable = point_reachable_tables(info, table_dataset)
     built_color_bys = layer_mutations.build_color_bys(

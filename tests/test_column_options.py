@@ -132,7 +132,7 @@ async def _table(
 
 async def _options(
     ctx: HttpContext, collection: models.MeshCollection, **extra: object
-):
+) -> list[dict]:
     result = await schema.execute(
         OPTIONS,
         context_value=ctx,
@@ -142,7 +142,9 @@ async def _options(
     return result.data["colorByOptions"]
 
 
-async def _keyed_stack(ctx: HttpContext, *, with_tracks: bool = True):
+async def _keyed_stack(
+    ctx: HttpContext, *, with_tracks: bool = True
+) -> tuple[models.MeshCollection, str, str | None]:
     """A collection, a table keyed off it, and (optionally) a tracks table one hop further."""
     collection = await _collection(ctx)
     tracks = await _table(ctx, "tracks", TRACK_COLUMNS) if with_tracks else None
@@ -159,7 +161,7 @@ async def _keyed_stack(ctx: HttpContext, *, with_tracks: bool = True):
 @pytest.mark.asyncio
 async def test_the_options_are_exactly_what_the_mutation_accepts(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The invariant this query exists for, asserted the only way that means anything: by writing them.
 
     Every option is fed straight back into `createMeshLayer(colorBys:)`. If the enumerator and
@@ -243,7 +245,9 @@ async def test_the_options_are_exactly_what_the_mutation_accepts(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_control_follows_the_column_role(authenticated_context: HttpContext):
+async def test_the_control_follows_the_column_role(
+    authenticated_context: HttpContext,
+) -> None:
     """The split a picker renders its controls from, published rather than re-derived by a client."""
     collection, objects, tracks = await _keyed_stack(
         authenticated_context, with_tracks=False
@@ -272,7 +276,7 @@ async def test_the_control_follows_the_column_role(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_reference_is_one_hop_and_is_offered_with_its_path(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The case the picker could not express before: colouring by a column of the *tracks* table.
 
     `instance_id` references `tracks`, so `tracks.mean_velocity` is one lookup further. The hop
@@ -310,7 +314,7 @@ async def test_a_reference_is_one_hop_and_is_offered_with_its_path(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_narrowings_narrow(authenticated_context: HttpContext):
+async def test_the_narrowings_narrow(authenticated_context: HttpContext) -> None:
     """Search, roles, controls, table and directOnly -- each keeps what it says and drops the rest."""
     collection, objects, tracks = await _keyed_stack(authenticated_context)
 
@@ -363,7 +367,7 @@ async def test_the_narrowings_narrow(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_paging_is_stable_and_the_order_does_not_move(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A picker whose second page reshuffles is a menu whose rows move under the cursor."""
     collection, objects, tracks = await _keyed_stack(authenticated_context)
 
@@ -404,7 +408,7 @@ query Options($collection: ID!, $filters: ColumnOptionFilter) {
 @pytest.mark.asyncio
 async def test_the_two_pickers_are_offered_the_same_candidates(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`filterByOptions` is a second name for one answer, not a second answer.
 
     A colouring and a rule reach the same column through the same join and branch on the same
@@ -445,7 +449,9 @@ async def test_the_two_pickers_are_offered_the_same_candidates(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_collection_offers_its_own_options(authenticated_context: HttpContext):
+async def test_a_collection_offers_its_own_options(
+    authenticated_context: HttpContext,
+) -> None:
     """The nested field, over the same walk: what this collection can be coloured by, in one query."""
     collection, objects, tracks = await _keyed_stack(authenticated_context)
 
@@ -467,7 +473,7 @@ async def test_a_collection_offers_its_own_options(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_the_walk_costs_the_same_however_many_columns_there_are(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The query count follows the join depth, never the schema's size.
 
     `field_edges_from` prefetches the tables but not their columns, and `columns_by_role` defeats

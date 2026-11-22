@@ -124,7 +124,7 @@ def test_a_lens_under_a_box_keeps_the_voxels_both_select(kept: list, box: list) 
     """The oracle is the index sets: per axis, what the lens keeps that lies in the box's range, stride and phase intact."""
     narrowed = coords.slices_under(SHAPE, AXES, kept, box)
     by_axis = {entry["axis"]: entry for entry in narrowed}
-    for axis, size in zip(AXES, SHAPE):
+    for axis, size in zip(AXES, SHAPE, strict=True):
         of_kept = next((s for s in kept if s.axis == axis), None)
         of_box = next((s for s in box if s.axis == axis), None)
         expected = set(range(size))

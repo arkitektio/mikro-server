@@ -12,11 +12,14 @@ is placed rather than refused, that a key places nothing, and that what the serv
 (the array's values) is declared rather than invented.
 """
 
+import datetime
+
 import pytest
 from asgiref.sync import sync_to_async
 from django.db.models import ProtectedError
 from kante.context import HttpContext
 from pytest import approx
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import graph as graph_logic
@@ -74,8 +77,11 @@ SAME_YX = {"kind": "IDENTITY", "inputAxes": ["y", "x"], "outputAxes": ["y", "x"]
 
 
 def _world_sync(
-    ctx: HttpContext, name: str, axes: list[tuple[str, str, str]], epoch=None
-) -> models.Scene:  # noqa: ANN001 - a datetime or None
+    ctx: HttpContext,
+    name: str,
+    axes: list[tuple[str, str, str]],
+    epoch: datetime.datetime | None = None,
+) -> models.Scene:
     world = models.CoordinateSystem.objects.create(
         name=f"{name}/world",
         epoch=epoch,
@@ -118,7 +124,9 @@ async def _system(dataset: models.ArrayDataset) -> models.CoordinateSystem:
     return await sync_to_async(lambda: dataset.coordinate_system)()
 
 
-async def _create(ctx: HttpContext, input_id: int, output_id: int, parts: list[dict]):
+async def _create(
+    ctx: HttpContext, input_id: int, output_id: int, parts: list[dict]
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_TRANSFORM,
         context_value=_fresh_request(ctx),
@@ -167,7 +175,12 @@ async def _layer(ctx: HttpContext, scene: models.Scene) -> dict:
 
 async def _movie_and_times(
     ctx: HttpContext, frames: int = 5, times_length: int | None = None
-):
+) -> tuple[
+    models.ArrayDataset,
+    models.ArrayDataset,
+    models.CoordinateSystem,
+    models.CoordinateSystem,
+]:
     movie = await seed.create_array_dataset(
         ctx, "Movie", axes=TYX, shapes=[[frames, 8, 8]]
     )
@@ -181,7 +194,7 @@ async def _movie_and_times(
 @pytest.mark.asyncio
 async def test_a_field_part_beside_a_scale_part_composes_both(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The case the parts exist for: y,x scaled, t read from an array -- and the matrix survives.
 
     ABLATION: drop the FIELD branch of `compose_placement` and `t` simply vanishes (no row, no
@@ -255,7 +268,7 @@ async def test_a_field_part_beside_a_scale_part_composes_both(
 @pytest.mark.asyncio
 async def test_nothing_passes_through_unless_a_part_says_so(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A FIELD part alone places t and says nothing about y and x; an IDENTITY part states them.
 
     ABLATION: give `_by_dimension_forms` back its implicit pass-through and the first layer gets
@@ -288,7 +301,9 @@ async def test_nothing_passes_through_unless_a_part_says_so(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_field_converts_its_values_unit(authenticated_context: HttpContext):
+async def test_a_field_converts_its_values_unit(
+    authenticated_context: HttpContext,
+) -> None:
     """A FIELD part states its values' unit, so milliseconds land in a seconds world."""
     movie, _, movie_system, times_system = await _movie_and_times(authenticated_context)
     scene = await _scene(authenticated_context)
@@ -311,7 +326,7 @@ async def test_a_field_converts_its_values_unit(authenticated_context: HttpConte
 @pytest.mark.asyncio
 async def test_a_lens_slice_and_a_later_clock_offset_compose_into_the_field(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Frames 2..4 of the movie, on a session clock that sits 10 s into the experiment's world.
 
     The slice moves the *inner* index (lens frame 0 is movie frame 2); the clock offset moves
@@ -394,8 +409,12 @@ async def test_a_lens_slice_and_a_later_clock_offset_compose_into_the_field(
     ],
 )
 async def test_a_field_part_the_rows_contradict_is_refused(
-    authenticated_context: HttpContext, times_length, field_extra, beside, message
-):
+    authenticated_context: HttpContext,
+    times_length: int,
+    field_extra: dict,
+    beside: list[dict],
+    message: str,
+) -> None:
     """What the rows can say is checked: length against the axis, unit against the output, one map per axis, a lookup's declared range."""
     _, _, movie_system, times_system = await _movie_and_times(
         authenticated_context, times_length=times_length
@@ -422,7 +441,9 @@ async def test_a_field_part_the_rows_contradict_is_refused(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_declared_values_must_increase(authenticated_context: HttpContext):
+async def test_declared_values_must_increase(
+    authenticated_context: HttpContext,
+) -> None:
     """The server never reads the array, so its writer declares the range -- and a range that does not increase is no lookup."""
     _, _, movie_system, times_system = await _movie_and_times(authenticated_context)
     scene = await _scene(authenticated_context)
@@ -442,7 +463,7 @@ async def test_declared_values_must_increase(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_an_array_indexed_by_the_wrong_axes_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A scalar field read along `t` is indexed by one axis; a (t, c) array is indexed by two."""
     movie = await seed.create_array_dataset(
         authenticated_context, "Movie", axes=TYX, shapes=[[5, 8, 8]]
@@ -473,7 +494,7 @@ async def test_an_array_indexed_by_the_wrong_axes_is_refused(
 @pytest.mark.asyncio
 async def test_each_part_kind_reads_only_its_own_field(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A SCALE part has no array, and a FIELD part has no scale: a stray is refused, never dropped."""
     _, _, movie_system, times_system = await _movie_and_times(authenticated_context)
     scene = await _scene(authenticated_context)
@@ -503,7 +524,7 @@ async def test_each_part_kind_reads_only_its_own_field(
 @pytest.mark.asyncio
 async def test_a_field_part_is_walked_forwards_only_and_protects_its_array(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Its inverse is a search through values the server never reads; and deleting the array would unplace the movie."""
     _, _, movie_system, times_system = await _movie_and_times(authenticated_context)
     scene = await _scene(authenticated_context)
@@ -531,7 +552,7 @@ async def test_a_field_part_is_walked_forwards_only_and_protects_its_array(
 @pytest.mark.asyncio
 async def test_two_field_parts_sit_on_one_edge_and_protect_both_arrays(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Uneven frames AND uneven planes: two FIELD parts beside a pixel size, one edge, no intermediate space."""
     movie = await seed.create_array_dataset(
         authenticated_context,
@@ -588,7 +609,7 @@ async def test_two_field_parts_sit_on_one_edge_and_protect_both_arrays(
 @pytest.mark.asyncio
 async def test_a_field_along_space_is_placed_and_diffeomorphic(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Uneven z planes bend nothing a matrix can state: the edge is DIFFEOMORPHIC -- and still placed, its z in `fields`.
 
     Drawing it is a viewer's question; whether it composes is this server's, and it does.
@@ -647,7 +668,7 @@ async def test_a_field_along_space_is_placed_and_diffeomorphic(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_warp_field_is_placed(authenticated_context: HttpContext):
+async def test_a_warp_field_is_placed(authenticated_context: HttpContext) -> None:
     """A (v, z, y, x) DISPLACEMENT field warping a (z, y, x) stack: every spatial axis given by the array.
 
     Each world axis reads its own component, at the stack's own position, and adds that position
@@ -714,7 +735,7 @@ async def test_a_warp_field_is_placed(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_key_places_nothing(authenticated_context: HttpContext):
+async def test_a_key_places_nothing(authenticated_context: HttpContext) -> None:
     """A mask's pixels are ids: a FIELD part too -- one that dereferences, so no walk places anything through it.
 
     An INDEX axis has no metric, so a value landing on one is an id, never a position, whatever
@@ -773,7 +794,7 @@ async def test_a_key_places_nothing(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_field_places_frames_absolutely_in_a_world_with_an_epoch(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The epoch is the world's reference; the values are absolute coordinates in it -- no offset anywhere.
 
     Frames at 12.0 .. 19.5 s land at exactly those coordinates of a world anchored to 09:00, so
@@ -812,7 +833,7 @@ async def test_a_field_places_frames_absolutely_in_a_world_with_an_epoch(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_fields_array_is_not_a_root(authenticated_context: HttpContext):
+async def test_a_fields_array_is_not_a_root(authenticated_context: HttpContext) -> None:
     """The frame times are part of the movie's placement, so the home page lists the movie, not them.
 
     ABLATION: drop `_not_a_field_sql` from the dataset arm of `_roots_sql` and the times array
@@ -855,7 +876,7 @@ async def test_a_fields_array_is_not_a_root(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_diagonal_affine_part_keeps_what_its_scale_keeps(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A pixel size and a stage position as one AFFINE part read SIMILARITY, as the scale alone would."""
     movie, _, movie_system, _ = await _movie_and_times(authenticated_context)
     scene = await _scene(authenticated_context)

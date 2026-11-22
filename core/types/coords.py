@@ -70,6 +70,7 @@ if TYPE_CHECKING:
         SparseLens,
         TableLens,
     )
+    from core.types.column_options import ColorByOption
     from core.types.file_link import FileLink
     from core.types.folder import Folder
     from core.types.sparse_dataset import SparseDataset
@@ -136,7 +137,7 @@ Resident = Annotated[
 ]
 
 
-def _placeable_ids(info: Info, system) -> set[int]:
+def _placeable_ids(info: Info, system: models.CoordinateSystem) -> set[int]:
     """The systems placeable in this one, computed once per space per request (:func:`graph_logic.placeable_system_ids_memo`).
 
     Not routed through `space_graph.for_request`, which also fetches every resident of every
@@ -589,7 +590,7 @@ class IdentityTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -612,7 +613,7 @@ class ScaleTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -642,7 +643,7 @@ class TranslationTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -672,7 +673,7 @@ class AffineTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -702,7 +703,7 @@ class RotationTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -730,7 +731,7 @@ class MapAxisTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -807,7 +808,7 @@ class SequenceTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -885,7 +886,9 @@ class TransformationPart:
     )
 
     @classmethod
-    def from_edge(cls, edge, info: Info) -> list["TransformationPart"]:  # noqa: ANN001 - models.Transformation
+    def from_edge(
+        cls, edge: models.Transformation, info: Info
+    ) -> list["TransformationPart"]:
         """The stored parts as this type, their arrays read once and scoped as any system read is."""
         ids = [
             part["field"]
@@ -953,7 +956,7 @@ class ByDimensionTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -984,7 +987,7 @@ class UnmappableTransformation(Transformation):
     id: auto
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         """Discriminate on the model's `kind` column.
 
         The model check comes first: `_entities` resolves the `_Entity` union by
@@ -1162,7 +1165,9 @@ class PlacementField:
     )
 
     @classmethod
-    def from_form(cls, axis: str, form, source_axes: list[str]) -> "PlacementField":  # noqa: ANN001 - coords_logic.FieldForm
+    def from_form(
+        cls, axis: str, form: coords_logic.FieldForm, source_axes: list[str]
+    ) -> "PlacementField":
         """One composed field as the wire type. Queries: call it from a sync resolver."""
         field = models.CoordinateSystem.objects.get(pk=form.field)
         single = form.single_term()
@@ -1199,7 +1204,9 @@ class AxisExtent:
 
 
 InViewSource = Annotated[
-    Union[
+    # `Union[...]`, not `X | Y`: typing caches unions by their members regardless of order,
+    # so `|` here hands `FileLinkContainer` (the same four types) this order in the SDL.
+    Union[  # noqa: UP007 -- see above
         Annotated["ArrayDataset", strawberry.lazy("core.types.array_dataset")],
         # Lazy even though it is defined in this module: it is defined *below* this union,
         # and the alternative is moving a type to satisfy an import order.

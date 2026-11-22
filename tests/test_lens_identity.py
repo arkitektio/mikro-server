@@ -78,7 +78,7 @@ async def _lens_ids(dataset: models.ArrayDataset) -> list[int]:
 @pytest.mark.asyncio
 async def test_a_new_dataset_has_exactly_its_whole_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createArrayDataset ends with the lens selecting all of it, in the intrinsic system, and nothing else."""
     store = await ZarrStore.objects.acreate(
         organization=authenticated_context.request.organization,
@@ -122,7 +122,7 @@ async def test_a_new_dataset_has_exactly_its_whole_lens(
 @pytest.mark.asyncio
 async def test_asking_for_the_whole_dataset_is_the_whole_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createLens with no slices, and with a slice that keeps every axis whole, is the one row made at creation."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     (whole_id,) = await _lens_ids(dataset)
@@ -147,7 +147,9 @@ async def test_asking_for_the_whole_dataset_is_the_whole_lens(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_same_selection_is_the_same_lens(authenticated_context: HttpContext):
+async def test_the_same_selection_is_the_same_lens(
+    authenticated_context: HttpContext,
+) -> None:
     """Two calls for one crop are one id, one coordinate system and one edge."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     before_systems = await sync_to_async(models.CoordinateSystem.objects.count)()
@@ -176,7 +178,7 @@ async def test_the_same_selection_is_the_same_lens(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_every_spelling_of_a_selection_is_one_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Negative bounds, open bounds and a stop past the end resolve to the same stored slice and the same row."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "DS", shapes=[[3, 64, 64]]
@@ -202,7 +204,7 @@ async def test_every_spelling_of_a_selection_is_one_lens(
 @pytest.mark.asyncio
 async def test_a_stepped_slice_is_spelled_by_what_it_selects(
     authenticated_context: HttpContext,
-):
+) -> None:
     """``0:10:3`` and ``0:12:3`` pick the same four positions, so they are one lens with one stop."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "DS", shapes=[[3, 64, 64]]
@@ -228,7 +230,7 @@ async def test_a_stepped_slice_is_spelled_by_what_it_selects(
 @pytest.mark.asyncio
 async def test_slices_are_stored_in_the_datasets_axis_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The order a caller lists slices in is not part of the selection."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
 
@@ -251,7 +253,7 @@ async def test_slices_are_stored_in_the_datasets_axis_order(
 @pytest.mark.asyncio
 async def test_a_selection_that_cannot_be_made_is_refused_in_prose(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An axis the dataset lacks, an axis sliced twice, a reversing step and an empty window are refused, and nothing is written."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     before = await _lens_ids(dataset)
@@ -289,7 +291,7 @@ async def test_a_selection_that_cannot_be_made_is_refused_in_prose(
 @pytest.mark.asyncio
 async def test_two_scenes_over_one_dataset_share_its_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Bootstrapping twice over one intrinsic system draws both scenes through the same three single-channel lenses, cut once from the whole lens."""
     dataset = await seed.create_array_dataset(authenticated_context, "Owner")
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -324,7 +326,7 @@ async def test_two_scenes_over_one_dataset_share_its_lens(
 @pytest.mark.asyncio
 async def test_a_chart_trace_from_a_dataset_reads_its_whole_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createTraceChartLayer(dataset:) draws through the dataset's one whole lens rather than minting another."""
     ctx = authenticated_context
     chart = await _chart(ctx, "Profile")
@@ -359,7 +361,7 @@ async def test_a_chart_trace_from_a_dataset_reads_its_whole_lens(
 @pytest.mark.asyncio
 async def test_a_lens_cannot_be_written_without_a_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A selection is stated in a space; the database refuses a row that names none."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -378,7 +380,7 @@ async def test_a_lens_cannot_be_written_without_a_space(
 @pytest.mark.asyncio
 async def test_a_container_is_one_resident_and_its_crops_are_more(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole lens is the dataset's handle, not a second resident of its grid; a crop lives in a space of its own."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(

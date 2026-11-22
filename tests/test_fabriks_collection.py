@@ -10,6 +10,7 @@ which of the two was right.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -37,7 +38,7 @@ AXES = [
 ]
 
 
-async def _create(ctx: HttpContext, payload: dict):
+async def _create(ctx: HttpContext, payload: dict) -> ExecutionResult:
     return await schema.execute(
         CREATE, context_value=ctx, variable_values={"input": payload}
     )
@@ -47,7 +48,7 @@ async def _create(ctx: HttpContext, payload: dict):
 @pytest.mark.asyncio
 async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole point of a self-describing artifact, end to end.
 
     The call names a store and its axes. It does not name a grid, an encoding, a format version, a
@@ -78,7 +79,7 @@ async def test_a_collection_is_its_store_and_declares_nothing_it_can_read(
 @pytest.mark.asyncio
 async def test_the_geometry_cannot_be_described_through_the_api_at_all(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Not merely ignored -- absent from the schema.
 
     A second statement of the same fact is free to disagree with the bytes, and nothing
@@ -112,7 +113,9 @@ async def test_the_geometry_cannot_be_described_through_the_api_at_all(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unfinished_store_is_refused(authenticated_context: HttpContext):
+async def test_an_unfinished_store_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """Nothing is known about a prefix whose manifest was never read.
 
     `finishFabriksUpload` is the step that reads `fabriks.json` and refuses a tree that has none,
@@ -134,7 +137,7 @@ async def test_an_unfinished_store_is_refused(authenticated_context: HttpContext
 @pytest.mark.asyncio
 async def test_declared_axes_are_checked_against_the_manifest(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The transposition trap.
 
     An axis order the server cannot check is a claim nothing tests: the rank matches, the
@@ -176,7 +179,7 @@ async def test_declared_axes_are_checked_against_the_manifest(
 @pytest.mark.asyncio
 async def test_a_store_from_another_organization_is_not_registerable(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """Org scoping, on the one id this mutation now takes.
 
     Worth its own test because the surface shrank to a single store reference: if that one
@@ -197,7 +200,7 @@ async def test_a_store_from_another_organization_is_not_registerable(
 @pytest.mark.asyncio
 async def test_deleting_a_collection_leaves_its_store_collectable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One collection, one prefix -- and the sweep needs no special case for it."""
     store = await seed.create_fabriks_store(
         authenticated_context, axes=[axis["name"] for axis in AXES]
@@ -222,7 +225,7 @@ async def test_deleting_a_collection_leaves_its_store_collectable(
 @pytest.mark.asyncio
 async def test_organization_wide_read_access_covers_the_fabriks_bucket(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`requestGeneralFabriksAccess` is reachable and returns usable credentials.
 
     There is no single `requestGeneralAccess` -- the grants are per logical bucket, each naming

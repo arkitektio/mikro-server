@@ -4,6 +4,8 @@ Real model (potion-base-8M), real Postgres with pgvector -- what the service run
 embedding is not an edit: the provenance history must not know the column.
 """
 
+from pathlib import Path
+
 import pytest
 from asgiref.sync import sync_to_async
 from django.core import checks
@@ -46,7 +48,7 @@ async def create_table_dataset(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_create_embeds_all_three_models(
-    db, authenticated_context: HttpContext
+    db: None, authenticated_context: HttpContext
 ) -> None:
     """Each model gets a unit vector of the release's width."""
     ctx = authenticated_context
@@ -73,7 +75,7 @@ async def test_create_embeds_all_three_models(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_editing_the_description_reembeds(
-    db, authenticated_context: HttpContext
+    db: None, authenticated_context: HttpContext
 ) -> None:
     """A changed description changes the vector; an unrelated ``update_fields`` save does not."""
     folder = await create_folder(
@@ -95,7 +97,9 @@ async def test_editing_the_description_reembeds(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_blank_text_stores_null(db, authenticated_context: HttpContext) -> None:
+async def test_blank_text_stores_null(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """No text, no vector (never a zero vector)."""
     dataset = await create_array_dataset(authenticated_context, "   ", None)
     await dataset.arefresh_from_db()
@@ -106,7 +110,7 @@ async def test_blank_text_stores_null(db, authenticated_context: HttpContext) ->
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_row_saved_without_the_model_has_no_vector_until_it_is_saved_again(
-    db, authenticated_context: HttpContext, monkeypatch
+    db: None, authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The write must not fail because the model did; the row's next save embeds it."""
 
@@ -137,7 +141,7 @@ def test_history_does_not_know_the_column() -> None:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_disabled_writes_no_vector(
-    db, authenticated_context: HttpContext
+    db: None, authenticated_context: HttpContext
 ) -> None:
     """With embeddings off, saving leaves the column untouched."""
     with override_settings(EMBEDDINGS={**engine._settings(), "ENABLED": False}):
@@ -149,7 +153,7 @@ async def test_disabled_writes_no_vector(
 
 
 @pytest.mark.django_db
-def test_no_system_check_loads_the_model(monkeypatch) -> None:
+def test_no_system_check_loads_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """``manage.py migrate`` runs the checks: the model is the server's to load, not a command's."""
 
     def loaded() -> None:
@@ -163,7 +167,9 @@ def test_no_system_check_loads_the_model(monkeypatch) -> None:
     ]
 
 
-def test_weights_baked_for_another_model_are_refused(tmp_path, monkeypatch) -> None:
+def test_weights_baked_for_another_model_are_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The image's ``MODEL_ID`` stamp must name the release's model: anything else is a broken build."""
     (tmp_path / engine.MODEL_ID_FILENAME).write_text("some/other-model")
     monkeypatch.setattr(engine, "MODEL_PATH", str(tmp_path))

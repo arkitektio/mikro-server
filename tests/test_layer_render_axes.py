@@ -129,7 +129,7 @@ _CASES = {
 @pytest.mark.asyncio
 async def test_every_lens_backed_layers_lens_suggests_render_axes_from_its_axes(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One layer per lens-backed kind, each over a lens whose axes fill that kind's slot, each answering the mapping its axes imply."""
     assert set(_CASES) == set(enums.ARRAY_LAYER_KINDS), (
         "an array-lens kind this test does not build a layer for"
@@ -163,7 +163,7 @@ async def test_every_lens_backed_layers_lens_suggests_render_axes_from_its_axes(
 @pytest.mark.asyncio
 async def test_a_bare_lens_suggests_the_render_axes_a_layer_over_it_would_carry(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Before any layer exists a viewer still needs a convention to open with: the lens suggests one from its axis types and names."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -189,7 +189,9 @@ async def test_a_bare_lens_suggests_the_render_axes_a_layer_over_it_would_carry(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_layer_no_longer_states_render_axes(authenticated_context: HttpContext):
+async def test_a_layer_no_longer_states_render_axes(
+    authenticated_context: HttpContext,
+) -> None:
     """Which axis faces the screen is the viewer's, read off the placement under its view: no layer kind carries it."""
     result = await schema.execute(
         "query { scenes { layers { ... on ImageLayer { renderAxes { x } } } } }",

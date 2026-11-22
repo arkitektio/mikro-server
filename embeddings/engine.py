@@ -20,6 +20,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 if TYPE_CHECKING:
+    from django.db.backends.base.base import BaseDatabaseWrapper
     from model2vec import StaticModel
 
 logger = logging.getLogger(__name__)
@@ -193,7 +194,9 @@ def embed_query(text: str) -> list[float] | None:
     return embed_texts([text.strip()])[0]
 
 
-def column_dimensions(connection: Any, table: str, column: str) -> int | None:
+def column_dimensions(
+    connection: BaseDatabaseWrapper, table: str, column: str
+) -> int | None:
     """The declared width of ``table.column``'s ``vector(N)`` type, or ``None`` if absent.
 
     ``None`` also when the type carries no modifier (a bare ``vector`` column).

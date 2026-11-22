@@ -85,7 +85,9 @@ async def _layer_path(ctx: HttpContext, scene_id: str) -> list:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_assumed_placement_reads_unknown(authenticated_context: HttpContext):
+async def test_an_assumed_placement_reads_unknown(
+    authenticated_context: HttpContext,
+) -> None:
     """An edge a client admits it guessed reads UNKNOWN, and the layer surfaces it.
 
     The server writes UNKNOWN nowhere: it fabricates no placements, so the badge exists for
@@ -146,7 +148,7 @@ async def test_an_assumed_placement_reads_unknown(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_an_authored_registration_reads_manual_and_validating_it_needs_no_layer_write(
     authenticated_context: HttpContext,
-):
+) -> None:
     """MANUAL when someone authors the edge; VALIDATED the moment the edge says so.
 
     The second half is the point of the move: validating a registration touches the
@@ -216,7 +218,9 @@ async def test_an_authored_registration_reads_manual_and_validating_it_needs_no_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_weakest_edge_on_the_path_wins(authenticated_context: HttpContext):
+async def test_the_weakest_edge_on_the_path_wins(
+    authenticated_context: HttpContext,
+) -> None:
     """Two hops, two validities: the layer reads the weaker one, and fixing it lifts the layer.
 
     A **sliced** lens in a scene over the dataset's physical space walks two edges: the crop
@@ -294,7 +298,7 @@ async def test_the_weakest_edge_on_the_path_wins(authenticated_context: HttpCont
     )
 
 
-def test_the_layer_carries_no_placement_columns():
+def test_the_layer_carries_no_placement_columns() -> None:
     """`status` had no readers and the layer's validity is derived: neither is a stored Layer column, and the derived field wears its own name."""
     sdl = schema.as_str()
     definition = sdl[

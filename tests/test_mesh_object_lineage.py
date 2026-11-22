@@ -54,7 +54,7 @@ async def _mesh_object(
 @pytest.mark.asyncio
 async def test_a_dataset_names_the_mesh_object_it_was_computed_from(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
     system = await sync_to_async(lambda: collection.coordinate_system)()
@@ -104,7 +104,7 @@ async def test_a_dataset_names_the_mesh_object_it_was_computed_from(
 @pytest.mark.asyncio
 async def test_two_objects_of_one_collection_are_two_sources(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
     source = await seed.create_array_dataset(
@@ -166,7 +166,9 @@ async def test_two_objects_of_one_collection_are_two_sources(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_mesh_object_arm_needs_its_object(authenticated_context: HttpContext):
+async def test_a_mesh_object_arm_needs_its_object(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     collection = await sync_to_async(_seed_mesh_collection_sync)(ctx)
     source = await seed.create_array_dataset(

@@ -52,7 +52,7 @@ query LayerPlacement($id: ID!) {
 """
 
 
-async def _create_scene(ctx: HttpContext, **payload) -> dict:
+async def _create_scene(ctx: HttpContext, **payload: object) -> dict:
     result = await schema.execute(
         CREATE_SCENE,
         context_value=ctx,
@@ -68,7 +68,7 @@ async def _create_scene(ctx: HttpContext, **payload) -> dict:
 @pytest.mark.asyncio
 async def test_a_scene_is_spatio_temporal_by_default(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createScene with no axes gives a world with a clock: t, then z, y, x."""
     result = await _create_scene(authenticated_context)
     assert not result.errors, result.errors
@@ -86,7 +86,7 @@ async def test_a_scene_is_spatio_temporal_by_default(
 @pytest.mark.asyncio
 async def test_a_purely_spatial_scene_is_still_allowed(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The clock is a default, not a mandate: an explicit axis list still wins."""
     result = await _create_scene(
         authenticated_context,
@@ -106,7 +106,7 @@ async def test_a_purely_spatial_scene_is_still_allowed(
 @pytest.mark.asyncio
 async def test_the_epoch_anchors_scene_time_to_the_wall_clock(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`t` is a relative coordinate; the epoch is the one place absolute time enters.
 
     It lives on the *world system*, not the scene: it is the origin of the space's time
@@ -132,7 +132,7 @@ async def test_the_epoch_anchors_scene_time_to_the_wall_clock(
 @pytest.mark.asyncio
 async def test_an_axis_unit_must_have_its_type_s_dimension(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A TIME axis in micrometres is a lie the arithmetic would happily propagate."""
     result = await _create_scene(
         authenticated_context,
@@ -161,7 +161,7 @@ async def test_an_axis_unit_must_have_its_type_s_dimension(
 @pytest.mark.asyncio
 async def test_arbitrary_units_remain_the_escape_hatch(
     authenticated_context: HttpContext,
-):
+) -> None:
     """'a.u.' is for an axis whose unit genuinely is arbitrary, and it survives the check."""
     result = await _create_scene(
         authenticated_context,
@@ -175,7 +175,9 @@ async def test_arbitrary_units_remain_the_escape_hatch(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scene_has_at_most_one_clock(authenticated_context: HttpContext):
+async def test_a_scene_has_at_most_one_clock(
+    authenticated_context: HttpContext,
+) -> None:
     """Two TIME axes are legal today -- they share an ordering rank, so nothing complains."""
     result = await _create_scene(
         authenticated_context,
@@ -199,7 +201,7 @@ async def test_a_scene_has_at_most_one_clock(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_a_rank_mismatched_registration_is_rejected(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A scale with the wrong number of entries used to be written, and composed, without complaint.
 
     The dataset is seeded (z,y,x) rather than the default (c,y,x) so that the *only* thing wrong
@@ -212,7 +214,7 @@ async def test_a_rank_mismatched_registration_is_rejected(
     )  # (z, y, x)
     scene = await seed.create_scene(authenticated_context, "Sc")  # (z, y, x)
 
-    def systems():
+    def systems() -> tuple[models.CoordinateSystem, models.CoordinateSystem]:
         return dataset.intrinsic_coordinate_system, scene.world
 
     intrinsic, world = await sync_to_async(systems)()
@@ -241,7 +243,7 @@ async def test_a_rank_mismatched_registration_is_rejected(
 @pytest.mark.asyncio
 async def test_by_dimension_places_a_dataset_of_a_different_rank(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The point of the whole design: a (c,y,x) dataset in a (t,z,y,x) world.
 
     The edge names y and x, and says nothing about t, z or c -- which is exactly what is
@@ -292,7 +294,7 @@ async def test_by_dimension_places_a_dataset_of_a_different_rank(
 @pytest.mark.asyncio
 async def test_by_dimension_must_name_axes_that_exist(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The naming IS the map, so a name that does not resolve is not a typo, it is a broken edge."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     scene = await seed.create_scene(authenticated_context, "Sc")
@@ -327,7 +329,7 @@ async def test_by_dimension_must_name_axes_that_exist(
 @pytest.mark.asyncio
 async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`scale`/`translation`/`affine` are ordered by the INPUT system's axes, not the reader's axis names.
 
     A client that indexes them against a layer's axis names misplaces them whenever the two
@@ -389,7 +391,7 @@ async def test_every_edge_states_the_axis_order_its_numbers_are_written_in(
 @pytest.mark.asyncio
 async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A layer whose source has no path to world is refused, with the fix in the error.
 
     Nothing fabricates a placement any more: the registration is authored explicitly --
@@ -455,7 +457,7 @@ async def test_an_unplaced_layer_is_rejected_until_someone_registers_its_source(
 @pytest.mark.asyncio
 async def test_creating_a_layer_writes_no_membership_edges(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A layer mutation reads the graph, never writes it: the one registration stays the only one."""
     dataset = await seed.create_array_dataset(authenticated_context, "DS")
     lens = await seed.create_lens(authenticated_context, dataset, slices=[])
@@ -523,7 +525,7 @@ async def test_creating_a_layer_writes_no_membership_edges(
 @pytest.mark.asyncio
 async def test_a_rank_changing_edge_is_not_walked_backwards(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The BFS hands back `inverted: true` steps for the client to undo. That is only
     honest for a map that has an inverse.
 
@@ -543,7 +545,7 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(
     scene_id = scene_result.data["createScene"]["id"]
     world_id = scene_result.data["createScene"]["worldCoordinateSystem"]["id"]
 
-    def place():
+    def place() -> models.Scene:
         scene = models.Scene.objects.get(pk=scene_id)
         models.Layer.objects.create(
             kind=enums.LayerKindChoices.IMAGE.value, scene=scene, lens=lens
@@ -622,7 +624,7 @@ async def test_a_rank_changing_edge_is_not_walked_backwards(
 @pytest.mark.asyncio
 async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An ROI's box is expressed against intrinsic pixels, and a registration must not move it.
 
     The walk up to intrinsic took "the first edge out of this system", unordered -- so once
@@ -680,7 +682,7 @@ async def test_a_registration_does_not_hijack_the_walk_to_intrinsic(
 @pytest.mark.asyncio
 async def test_a_time_axis_stays_navigable_under_a_single_channel_lens(
     authenticated_context: HttpContext,
-):
+) -> None:
     """There is no axis to name as intensity: a layer draws through a lens pinning one channel, and time is left to the slider.
 
     `intensityAxis: "t"` used to composite every timepoint as a separate channel -- a 16-frame

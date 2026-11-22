@@ -7,11 +7,13 @@ cache stays true: a dataset whose anchors contradict each other gets no time at 
 """
 
 import datetime
+from typing import Never, TypeVar
 from unittest.mock import patch
 
 import pytest
 from arkitekt_datalayer.models import ZarrStore
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import derived, models
 from core.derived import Ambiguous, Conflict, Stated, Statement, agreement, envelope
@@ -63,7 +65,7 @@ def anchor(window: tuple[str, str | None] | None, **coordinates: int) -> dict:
     return stated
 
 
-async def _create(ctx: HttpContext, name: str, anchors: list[dict]):
+async def _create(ctx: HttpContext, name: str, anchors: list[dict]) -> ExecutionResult:
     store = await ZarrStore.objects.acreate(
         organization=ctx.request.organization,
         key=name,
@@ -131,7 +133,7 @@ async def _listed(ctx: HttpContext, filters: dict) -> set[str]:
 @pytest.mark.asyncio
 async def test_a_window_on_the_whole_dataset_is_the_datasets(
     authenticated_context: HttpContext,
-):
+) -> None:
     created = await _created(
         authenticated_context, "whole", [anchor((at(10), at(10, 5)))]
     )
@@ -151,7 +153,7 @@ async def test_a_window_on_the_whole_dataset_is_the_datasets(
 @pytest.mark.asyncio
 async def test_frames_give_the_envelope_and_one_instant_is_a_span(
     authenticated_context: HttpContext,
-):
+) -> None:
     created = await _created(
         authenticated_context,
         "frames",
@@ -170,7 +172,7 @@ async def test_frames_give_the_envelope_and_one_instant_is_a_span(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_no_stated_time_is_no_time(authenticated_context: HttpContext):
+async def test_no_stated_time_is_no_time(authenticated_context: HttpContext) -> None:
     created = await _created(authenticated_context, "untimed", [anchor(None)])
     read = await _read(authenticated_context, created["id"])
     assert (read["acquisitionStart"], read["acquisitionEnd"]) == (None, None)
@@ -183,7 +185,7 @@ async def test_no_stated_time_is_no_time(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_the_columns_follow_windows_attached_replaced_and_removed(
     authenticated_context: HttpContext,
-):
+) -> None:
     created = await _created(
         authenticated_context, "followed", [anchor((at(10), None), t=0)]
     )
@@ -221,7 +223,7 @@ async def test_the_columns_follow_windows_attached_replaced_and_removed(
 @pytest.mark.asyncio
 async def test_a_dataset_with_conflicts_deletes_cleanly(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Its anchors cascade with it: their deletes must not derive conflicts onto a dataset going away."""
     created = await _created(
         authenticated_context,
@@ -241,7 +243,7 @@ async def test_a_dataset_with_conflicts_deletes_cleanly(
 @pytest.mark.asyncio
 async def test_a_frame_outside_the_whole_datasets_window_is_a_conflict(
     authenticated_context: HttpContext,
-):
+) -> None:
     created = await _created(
         authenticated_context,
         "contradicted",
@@ -288,7 +290,7 @@ async def test_a_frame_outside_the_whole_datasets_window_is_a_conflict(
 @pytest.mark.asyncio
 async def test_a_window_must_know_its_zone_and_its_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     naive = await _create(
         authenticated_context, "naive", [anchor(("2026-10-22T10:00:00", None))]
     )
@@ -306,7 +308,7 @@ async def test_a_window_must_know_its_zone_and_its_order(
 @pytest.mark.asyncio
 async def test_the_filter_finds_acquisitions_overlapping_the_window(
     authenticated_context: HttpContext,
-):
+) -> None:
     inside = (
         await _created(
             authenticated_context, "inside", [anchor((at(10, 10), at(10, 20)))]
@@ -332,8 +334,9 @@ async def test_the_filter_finds_acquisitions_overlapping_the_window(
     assert not {before, after, untimed} & found
 
     ordered = await schema.execute(
-        'query { arrayDatasets(filters: {acquiredAfter: "%s"}, ordering: [{acquisitionStart: ASC}]) { id } }'
-        % at(0),
+        'query { arrayDatasets(filters: {acquiredAfter: "'
+        + at(0)
+        + '"}, ordering: [{acquisitionStart: ASC}]) { id } }',
         context_value=authenticated_context,
     )
     assert not ordered.errors, ordered.errors
@@ -348,18 +351,23 @@ async def test_the_filter_finds_acquisitions_overlapping_the_window(
 # --- the abstraction --------------------------------------------------------------------
 
 
-def _said(value, anchor_id: int = 1, **coordinates: int) -> Statement:
+T = TypeVar("T")
+
+
+def _said(value: T, anchor_id: int = 1, **coordinates: int) -> Statement[T]:
     return Statement(anchor_id, coordinates, value)
 
 
-def test_covers_is_holding_over():
+def test_covers_is_holding_over() -> None:
     assert derived.covers({}, {"t": 3})
     assert derived.covers({"t": 3}, {"t": 3, "c": 0})
     assert not derived.covers({"t": 3}, {"t": 4, "c": 0})
     assert not derived.covers({"t": 3}, {"t": 3}), "an anchor does not hold over itself"
 
 
-def test_siblings_that_disagree_are_ambiguous_and_a_covering_mismatch_is_a_conflict():
+def test_siblings_that_disagree_are_ambiguous_and_a_covering_mismatch_is_a_conflict() -> (
+    None
+):
     assert isinstance(
         agreement([_said("63x", 1, c=0), _said("40x", 2, c=1)]), Ambiguous
     )
@@ -369,12 +377,12 @@ def test_siblings_that_disagree_are_ambiguous_and_a_covering_mismatch_is_a_confl
     assert agreement([]) is derived.UNSTATED
 
 
-def test_an_envelope_is_never_ambiguous():
+def test_an_envelope_is_never_ambiguous() -> None:
     assert envelope([_said((1, 2), 1, t=0), _said((5, 9), 2, t=1)]) == Stated((1, 9))
     assert isinstance(envelope([_said((1, 5), 1), _said((4, 6), 2, t=0)]), Conflict)
 
 
-def test_a_derived_field_migrates_as_the_plain_field_and_names_its_deriver():
+def test_a_derived_field_migrates_as_the_plain_field_and_names_its_deriver() -> None:
     field = models.ArrayDataset._meta.get_field("acquisition_start")
     _, path, _, kwargs = field.deconstruct()
     assert path == "django.db.models.DateTimeField"
@@ -393,7 +401,7 @@ def test_a_derived_field_migrates_as_the_plain_field_and_names_its_deriver():
 @pytest.mark.asyncio
 async def test_a_window_per_timepoint_is_derived_once(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Ingest states a window per timepoint: the dataset is derived once for all of them, not once per window."""
     from asgiref.sync import sync_to_async
 
@@ -422,7 +430,9 @@ async def test_a_window_per_timepoint_is_derived_once(
     )
 
 
-def test_deferred_derives_once_at_the_outermost_close_and_not_at_all_on_error():
+def test_deferred_derives_once_at_the_outermost_close_and_not_at_all_on_error() -> (
+    Never
+):
     derived_rows: list[object] = []
 
     class Row:

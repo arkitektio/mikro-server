@@ -10,6 +10,9 @@ same for all three, so the ranking cases run once per model through ``MODELS``.
 """
 
 import math
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import TypeAlias
 
 import numpy as np
 import pytest
@@ -55,6 +58,10 @@ async def _table_dataset(
     )
 
 
+#: A row the hybrid search reaches, and the seeder that makes one.
+Searchable: TypeAlias = Folder | ArrayDataset | TableDataset
+SearchSeed: TypeAlias = Callable[[HttpContext, str, str | None], Awaitable[Searchable]]
+
 # (model, seed, GraphQL list field, its filter and order input names)
 MODELS = [
     pytest.param(
@@ -96,7 +103,9 @@ def _vec(e0: np.ndarray, distance: float) -> list[float]:
     )
 
 
-async def _pin(model, row, e0: np.ndarray, distance: float | None) -> None:
+async def _pin(
+    model: type[Searchable], row: Searchable, e0: np.ndarray, distance: float | None
+) -> None:
     """Overwrite a seeded row's vector with one at ``distance`` from ``e0`` (``None``: no vector)."""
     await model.objects.filter(pk=row.pk).aupdate(
         embedding=_vec(e0, distance) if distance is not None else None
@@ -131,7 +140,13 @@ async def _names(
     ("model", "seed", "field", "filter_name", "order_name"), MODELS
 )
 async def test_semantic_match_without_lexical_overlap(
-    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+    db: None,
+    authenticated_context: HttpContext,
+    model: type[Searchable],
+    seed: SearchSeed,
+    field: str,
+    filter_name: str,
+    order_name: str,
 ) -> None:
     """A description that means the query is found although no word of the query is in the name."""
     ctx = authenticated_context
@@ -154,7 +169,13 @@ async def test_semantic_match_without_lexical_overlap(
     ("model", "seed", "field", "filter_name", "order_name"), MODELS
 )
 async def test_lexical_only_when_disabled(
-    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+    db: None,
+    authenticated_context: HttpContext,
+    model: type[Searchable],
+    seed: SearchSeed,
+    field: str,
+    filter_name: str,
+    order_name: str,
 ) -> None:
     """With embeddings off the filter is exactly the old lexical match."""
     ctx = authenticated_context
@@ -173,7 +194,13 @@ async def test_lexical_only_when_disabled(
     ("model", "seed", "field", "filter_name", "order_name"), MODELS
 )
 async def test_ranking_lexical_first_then_by_distance(
-    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+    db: None,
+    authenticated_context: HttpContext,
+    model: type[Searchable],
+    seed: SearchSeed,
+    field: str,
+    filter_name: str,
+    order_name: str,
 ) -> None:
     """Lexical hits first (even without a vector), then semantic hits nearest first, far ones cut."""
     ctx = authenticated_context
@@ -198,7 +225,13 @@ async def test_ranking_lexical_first_then_by_distance(
     ("model", "seed", "field", "filter_name", "order_name"), MODELS
 )
 async def test_name_tiers_rank_before_distance(
-    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+    db: None,
+    authenticated_context: HttpContext,
+    model: type[Searchable],
+    seed: SearchSeed,
+    field: str,
+    filter_name: str,
+    order_name: str,
 ) -> None:
     """Exact name, then prefix, then lexical hits by trigram similarity, then semantic-only; distance never lifts a tier."""
     ctx = authenticated_context
@@ -224,7 +257,13 @@ async def test_name_tiers_rank_before_distance(
     ("model", "seed", "field", "filter_name", "order_name"), MODELS
 )
 async def test_explicit_ordering_replaces_the_ranking(
-    db, authenticated_context: HttpContext, model, seed, field, filter_name, order_name
+    db: None,
+    authenticated_context: HttpContext,
+    model: type[Searchable],
+    seed: SearchSeed,
+    field: str,
+    filter_name: str,
+    order_name: str,
 ) -> None:
     """A client's ``ordering`` wins over the distance ranking."""
     ctx = authenticated_context
@@ -241,7 +280,10 @@ async def test_explicit_ordering_replaces_the_ranking(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_unloadable_model_degrades_to_lexical(
-    db, authenticated_context: HttpContext, tmp_path, monkeypatch
+    db: None,
+    authenticated_context: HttpContext,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When the weights cannot be loaded the query still answers, lexical-only."""
     ctx = authenticated_context

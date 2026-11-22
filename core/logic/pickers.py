@@ -75,7 +75,7 @@ def _names_table_any(table_ids: "set[str]") -> Q:
     return query
 
 
-def layers_naming_table(table) -> "QuerySet[models.Layer]":
+def layers_naming_table(table: "models.TableDataset") -> "QuerySet[models.Layer]":
     """The layers whose colour or filter picker names this table, by any route.
 
     Not organization-scoped, deliberately. A cross-org layer naming this table should not exist,
@@ -90,7 +90,7 @@ def layers_naming_table(table) -> "QuerySet[models.Layer]":
     )
 
 
-def assert_table_not_in_a_picker(table) -> None:
+def assert_table_not_in_a_picker(table: "models.TableDataset") -> None:
     """Refuse to delete a table some layer still colours or filters by.
 
     The PROTECT half of ``deleteTableDataset``. Named layers and scenes in the refusal, because
@@ -130,7 +130,9 @@ def names_sparse_lens(lens_id: str) -> Q:
     return query
 
 
-def layers_naming_sparse_dataset(dataset) -> "QuerySet[models.Layer]":
+def layers_naming_sparse_dataset(
+    dataset: "models.SparseDataset",
+) -> "QuerySet[models.Layer]":
     """Every layer whose pickers name a slice of this sparse dataset: a lens of it."""
     query = Q(pk__in=[])
     for lens_id in models.SparseLens.objects.filter(sparse_dataset=dataset).values_list(
@@ -140,7 +142,7 @@ def layers_naming_sparse_dataset(dataset) -> "QuerySet[models.Layer]":
     return models.Layer.objects.filter(query).select_related("scene").order_by("pk")
 
 
-def assert_sparse_dataset_not_in_a_picker(dataset) -> None:
+def assert_sparse_dataset_not_in_a_picker(dataset: "models.SparseDataset") -> None:
     """Refuse to delete a sparse dataset some layer still colours by.
 
     The PROTECT half of ``deleteSparseDataset``, and the reason this module's key lists are
@@ -164,7 +166,7 @@ def assert_sparse_dataset_not_in_a_picker(dataset) -> None:
     )
 
 
-def _picker_tables(layer) -> "set[str]":
+def _picker_tables(layer: "models.Layer") -> "set[str]":
     """Every table id this layer's two pickers name, terminal tables and hop tables alike."""
     entries: list = []
     for column in _PICKER_COLUMNS:
@@ -187,7 +189,7 @@ def _layer_source_system(layer: "models.Layer") -> "models.CoordinateSystem":
     return layer.lens.coordinate_system
 
 
-def assert_edge_not_stranding_a_picker(edge) -> None:
+def assert_edge_not_stranding_a_picker(edge: "models.Transformation") -> None:
     """Refuse to delete a key (a dereferencing FIELD edge) that some layer's picker is reaching a table through.
 
     The other way to arrive at a picker naming an unreachable table: leave the table in place

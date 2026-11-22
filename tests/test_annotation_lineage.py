@@ -18,6 +18,7 @@ made from it is not.
 
 import pytest
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -93,7 +94,7 @@ async def _drawn_on(
 @pytest.mark.asyncio
 async def test_a_lens_cut_to_a_shape_is_listed_on_it_once(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Cutting records the cut; cutting again is the same cut, and the same lens."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -122,7 +123,7 @@ async def test_a_lens_cut_to_a_shape_is_listed_on_it_once(
 @pytest.mark.asyncio
 async def test_the_cut_is_beside_the_lens_because_the_lens_is_shared(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Typed slices reach the same row and record no cut; a second shape with the same box records its own."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -157,7 +158,7 @@ async def test_the_cut_is_beside_the_lens_because_the_lens_is_shared(
 @pytest.mark.asyncio
 async def test_a_shape_cut_within_a_lens_is_that_lens_under_the_box(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The crop a viewer asks for: the shape it clicked, on the channel its layer draws. One lens is made, and it is the one recorded."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[[3, 6, 8]])
@@ -252,7 +253,7 @@ async def test_a_shape_cut_within_a_lens_is_that_lens_under_the_box(
 @pytest.mark.asyncio
 async def test_a_dataset_names_the_shape_it_was_computed_from(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A crop written out: the lens places it, the shape is why it is what it is, and the shape can list it."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -307,7 +308,7 @@ async def test_a_dataset_names_the_shape_it_was_computed_from(
 @pytest.mark.asyncio
 async def test_two_shapes_of_one_collection_are_two_sources(
     authenticated_context: HttpContext,
-):
+) -> None:
     """They land in one space, and are not a duplicate: the shape is part of what was named."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -373,7 +374,7 @@ async def test_two_shapes_of_one_collection_are_two_sources(
 @pytest.mark.asyncio
 async def test_a_shape_named_first_cannot_hide_the_lens_that_places_the_data(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An untransformed shape is UNMAPPABLE, and the primary parent may not be while a mappable one follows."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -410,7 +411,7 @@ async def test_a_shape_named_first_cannot_hide_the_lens_that_places_the_data(
 @pytest.mark.asyncio
 async def test_a_shape_goes_once_what_was_computed_within_it_has(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Refused while the crop stands (deletes follow lineage); once it is gone, the cut goes with the shape and the lens stays."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -492,7 +493,7 @@ async def _draw_from(
     kind: str,
     vectors: list[list[float]],
     derived_from: list[dict],
-):  # noqa: ANN202 - strawberry's ExecutionResult
+) -> ExecutionResult:
     return await schema.execute(
         DRAW_FROM,
         context_value=_fresh_request(ctx),
@@ -521,7 +522,7 @@ async def _shape_lineage(ctx: HttpContext, annotation_id: str) -> dict:
 @pytest.mark.asyncio
 async def test_a_refined_path_names_the_path_it_refines_and_writes_no_edge(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Shape -> shape is a link row: the collection's own lineage, and the coordinate graph, are untouched."""
     ctx = authenticated_context
     _, collection = await _drawn_on(ctx)
@@ -564,7 +565,7 @@ async def test_a_refined_path_names_the_path_it_refines_and_writes_no_edge(
 @pytest.mark.asyncio
 async def test_converted_changes_the_kind_and_refined_keeps_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The relation is checked against the two kinds, across collections as within one."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -623,7 +624,9 @@ async def test_converted_changes_the_kind_and_refined_keeps_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_merge_names_every_source_in_order(authenticated_context: HttpContext):
+async def test_a_merge_names_every_source_in_order(
+    authenticated_context: HttpContext,
+) -> None:
     """MERGED is several sources or none; a source named twice is refused."""
     ctx = authenticated_context
     _, collection = await _drawn_on(ctx)
@@ -694,7 +697,7 @@ async def test_a_merge_names_every_source_in_order(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_bulk_draw_links_each_shape_after_the_insert(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createAnnotations: the pieces of a split each name the source, and a refused one draws nothing."""
     ctx = authenticated_context
     _, collection = await _drawn_on(ctx)
@@ -763,7 +766,7 @@ async def test_a_bulk_draw_links_each_shape_after_the_insert(
 @pytest.mark.asyncio
 async def test_a_source_of_another_organization_is_not_there(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """Nothing of another organization resolves as a source."""
     _, theirs = await _drawn_on(other_org_context, "Theirs")
     their_path = await _draw(other_org_context, theirs["id"], "PATH", PATH)
@@ -817,7 +820,9 @@ async def _walk_shape(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_lineage_walk_starts_at_a_shape(authenticated_context: HttpContext):
+async def test_the_lineage_walk_starts_at_a_shape(
+    authenticated_context: HttpContext,
+) -> None:
     """Rooted at a shape: up to what it was made from, down to the shapes made from it and the data computed within them."""
     ctx = authenticated_context
     dataset, collection = await _drawn_on(ctx)
@@ -889,7 +894,7 @@ async def test_the_lineage_walk_starts_at_a_shape(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_another_organization_cannot_walk_from_a_shape(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """The root is scoped like any node."""
     _, collection = await _drawn_on(authenticated_context)
     rectangle = await _draw(

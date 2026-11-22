@@ -91,7 +91,7 @@ async def _graph(
 @pytest.mark.asyncio
 async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """From a dataset's pixel grid: its levels, its lens, its calibration, and the world it sits in."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Volume", shapes=[[3, 64, 64], [3, 32, 32]]
@@ -140,7 +140,7 @@ async def test_the_walk_reaches_the_whole_neighbourhood_of_a_dataset(
 @pytest.mark.asyncio
 async def test_an_edge_pointing_into_the_root_still_relates_to_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Reachability is undirected: from a PHYSICAL system, the calibration points *in*.
 
     A forward-only walk leaves this system with no edges at all -- a calibration maps pixels
@@ -183,7 +183,7 @@ async def test_an_edge_pointing_into_the_root_still_relates_to_it(
 @pytest.mark.asyncio
 async def test_two_datasets_in_one_scene_reach_each_other_through_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Relatedness is transitive, which is exactly what no filter on `transformations` can express."""
     first = await seed.create_array_dataset(authenticated_context, "First")
     second = await seed.create_array_dataset(authenticated_context, "Second")
@@ -205,7 +205,7 @@ async def test_two_datasets_in_one_scene_reach_each_other_through_world(
 @pytest.mark.asyncio
 async def test_max_depth_bounds_the_walk_and_leaves_no_edge_dangling(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A depth cutoff must cut whole edges, not leave ones pointing at systems it did not return."""
     first = await seed.create_array_dataset(authenticated_context, "First")
     second = await seed.create_array_dataset(authenticated_context, "Second")
@@ -232,7 +232,7 @@ async def test_max_depth_bounds_the_walk_and_leaves_no_edge_dangling(
 @pytest.mark.asyncio
 async def test_the_walk_stops_at_the_organization_boundary(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """A graph walk crosses foreign keys, and every one of them is a chance to cross a tenant.
 
     The traversal is not a filtered list the scoping layer would narrow on its own: it issues
@@ -262,7 +262,7 @@ async def test_the_walk_stops_at_the_organization_boundary(
 @pytest.mark.asyncio
 async def test_the_walk_is_flat_in_the_size_of_the_graph(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The cost is the depth of the walk, not the width of it.
 
     A custom resolver returns a plain list, and a plain list is invisible to the optimizer --

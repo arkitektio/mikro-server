@@ -17,9 +17,12 @@ fail at runtime), and the list query is organization-scoped (so it cannot serve 
 org's thumbnails).
 """
 
+from collections.abc import Mapping, Sequence
+
 import pytest
 from arkitekt_datalayer.models import MediaStore
 from asgiref.sync import sync_to_async
+from django.db.backends.utils import CursorWrapper
 from kante.context import HttpContext
 
 from core import models
@@ -82,7 +85,9 @@ async def _media_store(ctx: HttpContext, key: str) -> MediaStore:
     )
 
 
-async def _snapshot(ctx: HttpContext, scene, key: str, name=None):
+async def _snapshot(
+    ctx: HttpContext, scene: models.Scene, key: str, name: str | None = None
+) -> dict:
     store = await _media_store(ctx, key)
     payload = {"file": str(store.pk), "scene": str(scene.pk)}
     if name is not None:
@@ -94,7 +99,9 @@ async def _snapshot(ctx: HttpContext, scene, key: str, name=None):
     return result.data["createSceneSnapshot"]
 
 
-async def _nominate(ctx: HttpContext, dataset, scene) -> None:
+async def _nominate(
+    ctx: HttpContext, dataset: models.ArrayDataset, scene: models.Scene
+) -> None:
     """Point a dataset at a scene through the real mutation."""
     result = await schema.execute(
         SET_DEFAULT,
@@ -112,7 +119,12 @@ async def _names(ctx: HttpContext, filters: dict) -> set[str]:
     return {row["name"] for row in result.data["sceneSnapshots"]}
 
 
-async def _latest(ctx: HttpContext, dataset, lens, scene):
+async def _latest(
+    ctx: HttpContext,
+    dataset: models.ArrayDataset,
+    lens: models.Lens,
+    scene: models.Scene,
+) -> tuple[str | None, ...]:
     """(array_dataset.latestSnapshot, lens.latestSnapshot, scene.latestSnapshot) names, or None.
 
     The latest-snapshot map is per-request state, cached on the context's loader store.
@@ -140,7 +152,7 @@ async def _latest(ctx: HttpContext, dataset, lens, scene):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create(db, authenticated_context: HttpContext):
+async def test_create(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
     created = await _snapshot(ctx, scene, "shot.png", name="Shot")
@@ -149,7 +161,9 @@ async def test_create(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_records_its_creator(db, authenticated_context: HttpContext):
+async def test_create_records_its_creator(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The legacy `create_snapshot` never sets `creator`, which leaves its own delete guard
     matching nobody but admins. This one sets it, and that is what makes the guard real."""
     ctx = authenticated_context
@@ -164,8 +178,8 @@ async def test_create_records_its_creator(db, authenticated_context: HttpContext
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_the_scene_deletes_its_pictures(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A picture of a composition depicts nothing once the composition is gone."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
@@ -177,7 +191,7 @@ async def test_deleting_the_scene_deletes_its_pictures(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filters(db, authenticated_context: HttpContext):
+async def test_filters(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     first = await seed.create_scene(ctx, "First")
     second = await seed.create_scene(ctx, "Second")
@@ -194,7 +208,9 @@ async def test_filters(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_pin_toggles_both_ways(db, authenticated_context: HttpContext):
+async def test_pin_toggles_both_ways(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
     created = await _snapshot(ctx, scene, "pin.png", name="Pinned")
@@ -219,8 +235,8 @@ async def test_pin_toggles_both_ways(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_delete_guard(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     """Run as the bot, not the default context.
 
     `assert_can_delete` returns early for org admins, and `authenticated_context` is one --
@@ -249,8 +265,8 @@ async def test_delete_guard(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_list_is_scoped_to_the_organization(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """Without get_queryset a bare list field returns every row in the table.
 
     The legacy `snapshots` field has exactly that hole. It needs two organizations to see,
@@ -272,8 +288,8 @@ async def test_the_list_is_scoped_to_the_organization(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_dataset_previews_the_scene_it_nominates(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The whole feature: nominate a scene, and the dataset reports that scene's newest picture."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -294,8 +310,8 @@ async def test_a_dataset_previews_the_scene_it_nominates(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_second_dataset_in_the_scene_no_longer_blinds_it(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The inversion, and the reason for the change.
 
     This replaces `test_sole_occupancy_a_second_dataset_blinds_both`, which pinned the opposite:
@@ -325,8 +341,8 @@ async def test_a_second_dataset_in_the_scene_no_longer_blinds_it(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_one_scene_is_the_default_for_many_datasets(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The shape the dataset-side FK exists to allow, read from the scene."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Plate")
@@ -350,8 +366,8 @@ async def test_one_scene_is_the_default_for_many_datasets(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_the_latest_falls_back_to_the_previous(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Latest is recomputed per request, never stored -- deleting it needs no invalidation."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -373,8 +389,8 @@ async def test_deleting_the_latest_falls_back_to_the_previous(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_dataset_nominating_nothing_has_no_latest_snapshot(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """No nomination, no tile -- even for a scene the dataset is registered into.
 
     Before nominations existed, registration alone was enough; it no longer is.
@@ -395,8 +411,8 @@ async def test_a_dataset_nominating_nothing_has_no_latest_snapshot(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_every_lens_of_a_dataset_reports_its_default(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The nomination is a fact about the dataset, so its lenses all answer alike."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -415,8 +431,8 @@ async def test_every_lens_of_a_dataset_reports_its_default(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_the_scene_clears_the_nomination(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """SET_NULL: deleting a scene must never delete or hide the data that pointed at it."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -440,8 +456,8 @@ async def test_deleting_the_scene_clears_the_nomination(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_set_default_scene_clears_with_null(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
     scene = await seed.create_scene(ctx, "Composition")
@@ -458,7 +474,9 @@ async def test_set_default_scene_clears_with_null(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_default_for_at_scene_creation(db, authenticated_context: HttpContext):
+async def test_default_for_at_scene_creation(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The reverse setup: stage a space and point its data back at the result in one call -- through the dataset's whole lens, where its nomination lives."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "DS")
@@ -496,8 +514,8 @@ async def test_default_for_at_scene_creation(db, authenticated_context: HttpCont
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_only_the_datasets_owner_may_nominate(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     """Guarded on the dataset, because `Scene` carries no creator to guard on."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Theirs")
@@ -514,15 +532,15 @@ async def test_only_the_datasets_owner_may_nominate(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_datasets_can_be_filtered_by_whether_they_have_a_default(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     nominated = await seed.create_array_dataset(ctx, "Nominated")
     await seed.create_array_dataset(ctx, "Bare")
     scene = await seed.create_scene(ctx, "Composition")
     await _nominate(ctx, nominated, scene)
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         result = await schema.execute(
             "query L($filters: ArrayDatasetFilter) { arrayDatasets(filters: $filters) { name } }",
             context_value=ctx,
@@ -564,8 +582,8 @@ query {
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_latest_snapshot_page_is_constant_queries(
-    db, authenticated_context: HttpContext, monkeypatch
-):
+    db: None, authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A page of datasets and scenes must not pay per row for its tiles.
 
     Two regressions, one bound. `latestSnapshot` once walked the placement graph per org scene
@@ -591,7 +609,11 @@ async def test_latest_snapshot_page_is_constant_queries(
     queries: list[str] = []
     original = db_utils.CursorWrapper.execute
 
-    def counting_execute(cursor_self, sql, params=None):
+    def counting_execute(
+        cursor_self: CursorWrapper,
+        sql: str,
+        params: Sequence[object] | Mapping[str, object] | None = None,
+    ) -> object:
         queries.append(sql)
         return original(cursor_self, sql, params)
 
@@ -615,8 +637,8 @@ async def test_latest_snapshot_page_is_constant_queries(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_latest_snapshot_does_not_cross_organizations(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """The candidate scenes are org-scoped, so another org's composition is never the answer."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Ours")

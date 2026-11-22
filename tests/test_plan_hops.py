@@ -142,7 +142,7 @@ async def _plans(
 @pytest.mark.asyncio
 async def test_a_sparse_landing_hops_into_the_table_its_value_axis_references(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The slice comes back as positions along `gene`; the hop binds them, plural, in the genes table."""
     mask = await _mask(authenticated_context)
     genes = await _table(authenticated_context, "genes", "gene_id", "symbol")
@@ -182,7 +182,7 @@ async def test_a_sparse_landing_hops_into_the_table_its_value_axis_references(
 @pytest.mark.asyncio
 async def test_no_hop_into_a_matrix_without_the_layout_indexing_the_hop_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table hops into a matrix only along an axis a layout compresses; from the other layout it is a scan."""
     mask = await _mask(authenticated_context)
     genes = await _table(authenticated_context, "genes", "gene_id", "symbol")
@@ -214,7 +214,7 @@ async def test_no_hop_into_a_matrix_without_the_layout_indexing_the_hop_axis(
 @pytest.mark.asyncio
 async def test_a_plan_walks_mask_to_matrix_to_table_to_matrix_to_table(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole chain: pixel -> cell -> its genes -> the pathways those genes are in -> their names.
 
     Four hops, each bound from the one before under the name its `via` states. The landing matrix

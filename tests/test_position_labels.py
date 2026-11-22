@@ -94,7 +94,7 @@ async def _name_of(lens: models.Lens) -> str | None:
 )
 def test_the_pins_of_a_selection_are_the_axes_held_to_one_position(
     selection: list, pinned: dict
-):
+) -> None:
     assert coords_logic.pins(selection) == pinned
 
 
@@ -105,7 +105,7 @@ def test_the_pins_of_a_selection_are_the_axes_held_to_one_position(
 @pytest.mark.asyncio
 async def test_a_label_names_every_lens_through_its_position_and_no_other(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Stack", axes=CZYX, shapes=[[3, 8, 32, 32]]
@@ -160,7 +160,7 @@ async def test_a_label_names_every_lens_through_its_position_and_no_other(
 @pytest.mark.asyncio
 async def test_labels_on_different_axes_compose_in_axis_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     axes = [
         seed.axis("t", enums.AxisType.TIME),
@@ -187,7 +187,7 @@ async def test_labels_on_different_axes_compose_in_axis_order(
 @pytest.mark.asyncio
 async def test_a_persons_name_wins_over_the_recorded_one_and_gives_it_back(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Recorded")
     await _recorded(dataset, {"c": 1}, "Alexa 488")
@@ -215,7 +215,7 @@ async def test_a_persons_name_wins_over_the_recorded_one_and_gives_it_back(
 @pytest.mark.asyncio
 async def test_a_bootstrapped_layer_is_called_what_its_channel_is_called(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Tissue")
     await _recorded(dataset, {"c": 0}, "DAPI")
@@ -249,7 +249,7 @@ async def test_a_bootstrapped_layer_is_called_what_its_channel_is_called(
 @pytest.mark.asyncio
 async def test_a_crop_cut_to_a_shape_is_called_by_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[[3, 6, 8]])
     collection = await _collection_on(
@@ -293,7 +293,9 @@ async def test_a_crop_cut_to_a_shape_is_called_by_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_renaming_a_dataset_touches_no_lens(authenticated_context: HttpContext):
+async def test_renaming_a_dataset_touches_no_lens(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Before")
     channel = await seed.create_lens(ctx, dataset, CHANNEL_1)
@@ -311,7 +313,7 @@ async def test_renaming_a_dataset_touches_no_lens(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_table_window_held_to_one_value_is_a_position(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table = await models.TableDataset.objects.aget(
         pk=(await _create_table(ctx, "tracks", TRACKS))["id"]
@@ -339,7 +341,7 @@ async def test_a_table_window_held_to_one_value_is_a_position(
 @pytest.mark.asyncio
 async def test_the_setup_job_repairs_a_name_written_around_the_rule(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Drifted")
     channel = await seed.create_lens(ctx, dataset, CHANNEL_1)
@@ -362,7 +364,7 @@ async def test_the_setup_job_repairs_a_name_written_around_the_rule(
 @pytest.mark.asyncio
 async def test_only_a_name_on_a_lens_of_nothing_but_positions_moves_to_them(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`c[1:2]` called "GFP" names channel 1; `c[1:2], y[0:16]` called "nucleus 3" named a region, and must not name the channel."""
     import importlib
 

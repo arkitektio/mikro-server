@@ -37,7 +37,7 @@ def _stored(model: type, pk: object) -> dict:
 @pytest.mark.asyncio
 async def test_a_file_is_found_by_its_extension_when_its_media_type_says_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A microscope's file arrives as application/octet-stream: its extension is what picks the importer."""
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "acquisitions")
@@ -81,7 +81,7 @@ async def test_a_file_is_found_by_its_extension_when_its_media_type_says_nothing
 @pytest.mark.asyncio
 async def test_a_space_counts_the_axes_written_after_it_and_an_edge_says_what_kind_of_map_it_is(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "plane", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -145,7 +145,7 @@ async def test_a_space_counts_the_axes_written_after_it_and_an_edge_says_what_ki
 @pytest.mark.asyncio
 async def test_an_anchor_and_a_file_link_say_which_kind_of_container_they_belong_to(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "stack")
     file = await seed.create_file(
@@ -187,7 +187,7 @@ async def test_an_anchor_and_a_file_link_say_which_kind_of_container_they_belong
 @pytest.mark.asyncio
 async def test_a_dataset_is_found_by_the_element_type_of_its_store(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An action typed on integer labels asks for them: the dtype is its level-0 store's."""
     ctx = authenticated_context
     source = await seed.create_array_dataset(
@@ -226,7 +226,7 @@ async def test_a_dataset_is_found_by_the_element_type_of_its_store(
 @pytest.mark.asyncio
 async def test_the_setup_job_gives_a_row_what_it_owes(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A row written before its descriptors were stored has none: the setup job states them, and does nothing the second time."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "old")

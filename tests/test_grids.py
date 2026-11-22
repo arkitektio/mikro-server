@@ -90,7 +90,7 @@ async def _long_form(ctx: HttpContext, name: str = "per channel") -> dict:
 @pytest.mark.asyncio
 async def test_a_long_form_table_is_a_grid_of_cells_against_channels(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table = await _long_form(ctx)
     grid = (
@@ -135,7 +135,7 @@ async def test_a_long_form_table_is_a_grid_of_cells_against_channels(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_sparse_matrix_is_a_heatmap(authenticated_context: HttpContext):
+async def test_a_sparse_matrix_is_a_heatmap(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     mask = await _mask(ctx)
     dataset_id = await _expression(ctx, mask)
@@ -176,7 +176,7 @@ async def test_a_sparse_matrix_is_a_heatmap(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_grid_lays_out_members(authenticated_context: HttpContext):
+async def test_a_grid_lays_out_members(authenticated_context: HttpContext) -> None:
     """A measured axis is a scene's or a chart's; three axes are more than rows and columns."""
     ctx = authenticated_context
     stage = (
@@ -221,7 +221,7 @@ async def test_a_grid_lays_out_members(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_each_kind_reads_its_own(authenticated_context: HttpContext):
+async def test_each_kind_reads_its_own(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     table = await _long_form(ctx)
     grid = (
@@ -260,7 +260,9 @@ async def test_each_kind_reads_its_own(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_a_grid_draws_through_is_kept(authenticated_context: HttpContext):
+async def test_a_lens_a_grid_draws_through_is_kept(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     table = await _long_form(ctx)
     gate = await seed.create_windowed_lens(
@@ -298,7 +300,7 @@ mutation Auto($input: AutoVisualizeInput!) {
 @pytest.mark.asyncio
 async def test_a_long_form_table_lens_is_shown_as_a_grid(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table = await _long_form(ctx)
     shown = (await _ok(ctx, AUTO, {"input": {"lens": table["fullLens"]["id"]}}))[

@@ -16,12 +16,23 @@ half-recorded lineage.
 """
 
 from collections.abc import Sequence
+from typing import TypeAlias
 
 from django.db import transaction
+from django.db.models import Model, QuerySet
+from kante.types import Info
 
 from core import enums, models
 from core.creation import CreationContext
 from core.scoping import get_for_org
+
+#: The four containers a file link can point at.
+LinkedContainer: TypeAlias = (
+    models.ArrayDataset
+    | models.TableDataset
+    | models.MeshCollection
+    | models.AnnotationCollection
+)
 
 #: The ``FileLink`` FK each container model is stored under. The one place the container's
 #: type meets the column, so the ingest side (which is handed a model instance) and the export
@@ -42,7 +53,7 @@ _CONTAINER_MODELS: dict[str, type] = {
 }
 
 
-def container_field(container) -> str:  # noqa: ANN001 - one of the four container models
+def container_field(container: Model) -> str:
     """The ``FileLink`` column this container is stored under.
 
     Raises rather than defaulting: a fifth container reaching this function is a wiring
@@ -72,7 +83,7 @@ def column_for_kind(kind: "enums.FileLinkContainerKind | str") -> str:
     return _CONTAINER_FIELDS[model]
 
 
-def container_label(container) -> str:  # noqa: ANN001 - one of the four container models
+def container_label(container: Model) -> str:
     """A container as it should read in a message.
 
     Not ``container.name``: a collection may have none and answers ``label`` (its name or its
@@ -129,8 +140,12 @@ def _existing_link(
 
 
 def write_file_links(
-    info, *, container, source_files: Sequence, ctx: CreationContext
-) -> list["models.FileLink"]:  # noqa: ANN001 - kante's Info, and a container model
+    info: Info,
+    *,
+    container: LinkedContainer,
+    source_files: Sequence,
+    ctx: CreationContext,
+) -> list["models.FileLink"]:
     """Record the files a container was produced from. The ingest direction.
 
     Every id is org-scoped through ``get_for_org`` like any other id a client sends, and every
@@ -149,7 +164,7 @@ def write_file_links(
 
     # Checked here, in the resolve phase, and not in the write loop below: an entry that
     # collides with a link already on record must not leave the entries before it written.
-    for entry, file in zip(source_files, files):
+    for entry, file in zip(source_files, files, strict=True):
         series = entry.series_identifier or ""
         if _existing_link(
             file_id=file.pk,
@@ -164,7 +179,7 @@ def write_file_links(
 
     links: list[models.FileLink] = []
     with transaction.atomic():
-        for entry, file in zip(source_files, files):
+        for entry, file in zip(source_files, files, strict=True):
             series = entry.series_identifier or ""
             links.append(
                 models.FileLink.objects.create(
@@ -184,8 +199,8 @@ def write_file_links(
 
 
 def write_export_links(
-    info, *, file: "models.File", export_of: Sequence, ctx: CreationContext
-) -> list["models.FileLink"]:  # noqa: ANN001 - kante's Info
+    info: Info, *, file: "models.File", export_of: Sequence, ctx: CreationContext
+) -> list["models.FileLink"]:
     """Record the containers a file was written from. The export direction.
 
     The mirror of :func:`write_file_links`, and the reason both live here: one file exported
@@ -217,7 +232,9 @@ def write_export_links(
 
     # Resolve phase, like the ingest direction: a collision on the third entry must not leave
     # the first two written.
-    for (_, _, series, _), container, field_name in zip(lowered, containers, fields):
+    for (_, _, series, _), container, field_name in zip(
+        lowered, containers, fields, strict=True
+    ):
         if _existing_link(
             file_id=file.pk,
             container_field_name=field_name,
@@ -232,7 +249,7 @@ def write_export_links(
     links: list[models.FileLink] = []
     with transaction.atomic():
         for (_, _, series, value_relation), container, field_name in zip(
-            lowered, containers, fields
+            lowered, containers, fields, strict=True
         ):
             links.append(
                 models.FileLink.objects.create(
@@ -249,7 +266,9 @@ def write_export_links(
     return links
 
 
-def links_for(container, direction: "enums.FileLinkDirectionChoices"):  # noqa: ANN001, ANN201 - one of the four container models; returns a QuerySet
+def links_for(
+    container: LinkedContainer, direction: "enums.FileLinkDirectionChoices"
+) -> "QuerySet[models.FileLink]":
     """A container's links in one direction, oldest first.
 
     Shared by the ``sourceFiles`` and ``exports`` fields on all four container types, so the
@@ -284,7 +303,7 @@ _PHOTOGRAPHIC_MEDIA_TYPES = frozenset(
 _PHOTOGRAPHIC_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
 
 
-def is_photographic_source(container) -> bool:  # noqa: ANN001 - one of the four container models
+def is_photographic_source(container: LinkedContainer) -> bool:
     """Whether this container's data was read out of a consumer picture format.
 
     Evidence for the scene bootstrap, which needs to tell a colour photograph from a

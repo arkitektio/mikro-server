@@ -10,6 +10,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
+from strawberry.types import ExecutionResult
 
 from chart import models as chart_models
 from core import enums, models
@@ -69,7 +70,7 @@ def _fresh(ctx: HttpContext) -> HttpContext:
 
 async def _run(
     ctx: HttpContext, document: str, input: dict | None = None, **variables: object
-):
+) -> ExecutionResult:
     if input is not None:
         variables["input"] = input
     return await schema.execute(
@@ -107,7 +108,7 @@ async def _compositions() -> tuple[int, int]:
 @pytest.mark.asyncio
 async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One micrometre axis and a profile registered onto it: a chart, with the profile as its trace."""
     ctx = authenticated_context
     world = await _space(ctx, "distance", [_MICROMETRES])
@@ -162,7 +163,7 @@ async def test_a_space_with_one_metric_axis_is_charted_from_what_is_laid_along_i
 )
 async def test_any_single_metric_axis_is_a_chart_even_one_a_scene_would_accept(
     authenticated_context: HttpContext, axis: dict
-):
+) -> None:
     """A lone time axis could carry a scene too; it is read as an axis before it is read as a place."""
     shown = await _auto(
         authenticated_context, await _space(authenticated_context, "axis", [axis])
@@ -177,7 +178,7 @@ async def test_any_single_metric_axis_is_a_chart_even_one_a_scene_would_accept(
 @pytest.mark.asyncio
 async def test_a_dataset_s_own_pixel_grid_is_staged_as_a_scene_of_its_data(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A unitless grid is no axis to read values off. The image living in it becomes the layers."""
     ctx = authenticated_context
     image = await seed.create_array_dataset(ctx, "Cells")  # (c, y, x)
@@ -194,7 +195,7 @@ async def test_a_dataset_s_own_pixel_grid_is_staged_as_a_scene_of_its_data(
 @pytest.mark.asyncio
 async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered_into_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Two micrometre axes are a place: the image registered into it is drawn there."""
     ctx = authenticated_context
     atlas = await _space(
@@ -251,7 +252,7 @@ async def test_a_shared_space_with_several_axes_is_a_scene_of_what_is_registered
 @pytest.mark.asyncio
 async def test_a_space_no_composition_can_show_is_refused_and_nothing_is_made(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Three enumerating axes: more than a chart's one and a grid's two, and no time or space to navigate."""
     ctx = authenticated_context
     system = await _space(
@@ -277,7 +278,7 @@ async def test_a_space_no_composition_can_show_is_refused_and_nothing_is_made(
 @pytest.mark.asyncio
 async def test_two_enumerating_axes_are_shown_as_a_grid(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Channels against objects: members against members, which a grid lays out. It was refused before grids."""
     ctx = authenticated_context
     system = await _space(
@@ -297,7 +298,7 @@ async def test_two_enumerating_axes_are_shown_as_a_grid(
 @pytest.mark.asyncio
 async def test_a_space_lists_its_scenes_and_charts_together_as_visualizations(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """One space, a scene made by hand and a chart made automatically: both are over it, and it says so."""
     ctx = authenticated_context
     world = await _space(ctx, "distance", [_MICROMETRES])
@@ -341,7 +342,7 @@ async def test_a_space_lists_its_scenes_and_charts_together_as_visualizations(
 @pytest.mark.asyncio
 async def test_a_crop_is_staged_as_a_scene_of_the_cut_and_becomes_what_the_lens_opens_on(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Showing a crop's *space* draws its whole dataset; naming the lens draws the crop."""
     ctx = authenticated_context
     image = await seed.create_array_dataset(ctx, "Cells")  # (c, y, x)
@@ -369,7 +370,7 @@ async def test_a_crop_is_staged_as_a_scene_of_the_cut_and_becomes_what_the_lens_
 @pytest.mark.asyncio
 async def test_a_window_over_a_table_along_one_metric_column_is_charted_as_that_window(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The table's own space is one unit-carrying axis: a chart, whose one layer reads the window."""
     from tests.test_charts import _MEASUREMENTS, _table
 
@@ -395,7 +396,7 @@ async def test_a_window_over_a_table_along_one_metric_column_is_charted_as_that_
 @pytest.mark.parametrize("both", [True, False], ids=["both", "neither"])
 async def test_a_space_and_a_lens_together_or_neither_is_refused_and_nothing_is_made(
     authenticated_context: HttpContext, both: bool
-):
+) -> None:
     """The two inputs are two questions: what resides in a space, or what one lens selects."""
     ctx = authenticated_context
     image = await seed.create_array_dataset(ctx, "Cells")

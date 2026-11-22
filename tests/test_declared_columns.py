@@ -20,6 +20,7 @@ axis-typed columns. There is no second list for the two statements to disagree a
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -47,7 +48,9 @@ FILE = [
 DECLARED = [{"name": name, "dtype": dtype} for name, dtype in FILE]
 
 
-async def _store(ctx: HttpContext, key: str, columns=FILE) -> models.ParquetStore:
+async def _store(
+    ctx: HttpContext, key: str, columns: list[tuple[str, str]] = FILE
+) -> models.ParquetStore:
     return await sync_to_async(models.ParquetStore.objects.create)(
         path=f"s3://parquet/{key}",
         bucket="parquet",
@@ -58,7 +61,13 @@ async def _store(ctx: HttpContext, key: str, columns=FILE) -> models.ParquetStor
     )
 
 
-async def _create(ctx: HttpContext, key: str, *, file=FILE, **payload):
+async def _create(
+    ctx: HttpContext,
+    key: str,
+    *,
+    file: list[tuple[str, str]] = FILE,
+    **payload: object,
+) -> ExecutionResult:
     store = await _store(ctx, key, file)
     payload.setdefault("columns", DECLARED)
     return await schema.execute(
@@ -75,7 +84,7 @@ async def _create(ctx: HttpContext, key: str, *, file=FILE, **payload):
 @pytest.mark.asyncio
 async def test_a_declaration_that_matches_the_file_is_stored_as_given(
     authenticated_context: HttpContext,
-):
+) -> None:
     result = await _create(
         authenticated_context,
         "measurements",
@@ -101,7 +110,7 @@ async def test_a_declaration_that_matches_the_file_is_stored_as_given(
 @pytest.mark.asyncio
 async def test_a_column_the_file_does_not_have_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     result = await _create(
         authenticated_context,
         "measurements",
@@ -118,7 +127,7 @@ async def test_a_column_the_file_does_not_have_is_refused(
 @pytest.mark.asyncio
 async def test_a_column_of_the_file_left_undeclared_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every column is declared. A file column with nothing said about it is a gap in the
     statement, not a shorthand -- the declaration is about *these* bytes."""
     result = await _create(authenticated_context, "measurements", columns=DECLARED[:-1])
@@ -130,7 +139,9 @@ async def test_a_column_of_the_file_left_undeclared_is_refused(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_declared_order_must_be_the_files(authenticated_context: HttpContext):
+async def test_the_declared_order_must_be_the_files(
+    authenticated_context: HttpContext,
+) -> None:
     """Because `Column.order` is the file's order, and a reader takes it as such."""
     result = await _create(
         authenticated_context, "measurements", columns=list(reversed(DECLARED))
@@ -145,7 +156,7 @@ async def test_the_declared_order_must_be_the_files(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_dtype_the_file_does_not_have_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The half `validateSchema` promised and dropped.
 
     `intensity` is a float32, which DuckDB reads back as FLOAT. A caller writing the
@@ -165,7 +176,7 @@ async def test_a_dtype_the_file_does_not_have_is_refused(
 @pytest.mark.asyncio
 async def test_a_pandas_dtype_name_is_refused_as_such(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The trap four `testing/` scripts used to warn about at length, now actually caught."""
     wrong = [dict(column) for column in DECLARED]
     wrong[0]["dtype"] = "float64"
@@ -182,7 +193,9 @@ async def test_a_pandas_dtype_name_is_refused_as_such(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_axis_must_be_a_column_of_the_file(authenticated_context: HttpContext):
+async def test_an_axis_must_be_a_column_of_the_file(
+    authenticated_context: HttpContext,
+) -> None:
     """An axis that is no column of the file is unstateable except as a phantom column --
     and the file check catches that one, so no axis-specific check is needed."""
     result = await _create(
@@ -202,7 +215,7 @@ async def test_an_axis_must_be_a_column_of_the_file(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_column_may_not_claim_the_coordinate_role(
     authenticated_context: HttpContext,
-):
+) -> None:
     """COORDINATE follows from `axisType`; as a bare role it names no axis type to build."""
     columns = [dict(column) for column in DECLARED]
     columns[1]["role"] = "COORDINATE"
@@ -219,7 +232,7 @@ async def test_a_column_may_not_claim_the_coordinate_role(
 @pytest.mark.asyncio
 async def test_a_matrix_wide_file_is_refused_and_told_where_it_belongs(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The refusal is about shape rather than size, so it says so at length.
 
     A caller who hits this has a real object -- an expression matrix, an intensity matrix --
@@ -249,7 +262,7 @@ async def test_a_matrix_wide_file_is_refused_and_told_where_it_belongs(
 @pytest.mark.asyncio
 async def test_a_table_just_inside_the_cap_is_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """So the test above is failing on the width and not on something else about wide files."""
     wide = [(f"gene_{index}", "FLOAT") for index in range(3000)]
     result = await _create(
@@ -269,7 +282,7 @@ async def test_a_table_just_inside_the_cap_is_accepted(
 @pytest.mark.asyncio
 async def test_a_store_that_knows_no_columns_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """There is nothing to check the declaration against, and checking it is the point.
 
     Refused rather than described on demand: `columns_for_store`'s fallback reaches for the

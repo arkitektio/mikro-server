@@ -10,11 +10,19 @@ shared world), whose axes are supplied through :class:`PhysicalAxisInput`.
 """
 
 import dataclasses
+from collections.abc import Callable
 from typing import Annotated, ClassVar, Literal
 
 import kante
 import strawberry
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from core import enums
 from core.input_unions import parse_union_member, prose_errors, union_memberships
@@ -448,7 +456,7 @@ class FieldInputModel(BaseModel):
 
     @field_validator("max")
     @classmethod
-    def _increasing(cls, value: float | None, info) -> float | None:
+    def _increasing(cls, value: float | None, info: ValidationInfo) -> float | None:
         low = info.data.get("min")
         if value is not None and low is not None and not value > low:
             raise ValueError(
@@ -1139,7 +1147,7 @@ class DerivedFromInput:
 
 def _derived_from_member(
     model: type, key: "enums.DerivationSourceKind", description: str
-):  # noqa: ANN202 - a decorator factory
+) -> Callable[..., type]:
     """Publish one member input of the DerivedFromInput union."""
     return kante.pydantic_input(
         model,

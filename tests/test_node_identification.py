@@ -12,6 +12,7 @@ each entry's `target` from the table's shape.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from core.logic import attribute_plans as attribute_plans_logic
@@ -132,7 +133,9 @@ async def _scene_for(
     return scene
 
 
-async def _table(ctx: HttpContext, name: str, columns: list[dict], **extra: object):
+async def _table(
+    ctx: HttpContext, name: str, columns: list[dict], **extra: object
+) -> ExecutionResult:
     await sync_to_async(models.ParquetStore.objects.create)(
         path=f"s3://parquet/{name}",
         bucket="parquet",
@@ -147,7 +150,12 @@ async def _table(ctx: HttpContext, name: str, columns: list[dict], **extra: obje
     )
 
 
-async def _layer(ctx: HttpContext, scene, collection, **extra: object):
+async def _layer(
+    ctx: HttpContext,
+    scene: models.Scene,
+    collection: models.NetworkCollection,
+    **extra: object,
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_LAYER,
         context_value=ctx,
@@ -172,7 +180,7 @@ async def _layer(ctx: HttpContext, scene, collection, **extra: object):
 @pytest.mark.asyncio
 async def test_a_node_table_creates_with_one_object_edge(
     authenticated_context: HttpContext,
-):
+) -> None:
     """(object, node) lands as ONE FIELD edge producing the object axis alone.
 
     The two-ids refusal never fires because the node axis is one 'the table identifies
@@ -217,7 +225,9 @@ async def test_a_node_table_creates_with_one_object_edge(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_edge_table_is_emergent_from_shape(authenticated_context: HttpContext):
+async def test_an_edge_table_is_emergent_from_shape(
+    authenticated_context: HttpContext,
+) -> None:
     """Two node axes over one collection are its edges' (source, target) -- no third kind."""
     collection = await _collection(authenticated_context)
     result = await _table(
@@ -237,7 +247,7 @@ async def test_an_edge_table_is_emergent_from_shape(authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_shape_refusals(authenticated_context: HttpContext):
+async def test_the_shape_refusals(authenticated_context: HttpContext) -> None:
     """Every way the declaration can lie about the geometry, refused with its reason."""
     collection = await _collection(authenticated_context)
     cid = str(collection.pk)
@@ -322,7 +332,7 @@ async def test_the_shape_refusals(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_sparse_axis_refuses_node_identification(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Deferral as refusal: a matrix axis has no sibling-column convention to scope a node id."""
     collection = await _collection(authenticated_context)
     store = await sync_to_async(models.SparseStore.objects.create)(
@@ -393,7 +403,9 @@ async def test_a_sparse_axis_refuses_node_identification(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_node_tables_are_product_spaces(authenticated_context: HttpContext):
+async def test_node_tables_are_product_spaces(
+    authenticated_context: HttpContext,
+) -> None:
     """Dropped from the walk and the plans: an object id alone cannot address a row."""
     ctx = authenticated_context
     collection = await _collection(ctx)
@@ -441,7 +453,7 @@ async def test_node_tables_are_product_spaces(authenticated_context: HttpContext
 @pytest.mark.asyncio
 async def test_options_offer_node_and_edge_columns_with_target(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     collection = await _collection(ctx)
     node = await _table(
@@ -480,7 +492,9 @@ async def test_options_offer_node_and_edge_columns_with_target(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_entries_are_stamped_never_sent(authenticated_context: HttpContext):
+async def test_entries_are_stamped_never_sent(
+    authenticated_context: HttpContext,
+) -> None:
     """The validator writes `target` from the table's shape; a caller-sent one is refused."""
     ctx = authenticated_context
     collection = await _collection(ctx)
@@ -567,7 +581,7 @@ async def test_entries_are_stamped_never_sent(authenticated_context: HttpContext
 @pytest.mark.asyncio
 async def test_a_join_out_of_a_node_table_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A hop would carry the composite key into a table declared for a single id."""
     ctx = authenticated_context
     collection = await _collection(ctx)
@@ -623,7 +637,7 @@ async def test_a_join_out_of_a_node_table_is_refused(
 @pytest.mark.asyncio
 async def test_the_collection_is_protected_under_its_node_tables(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`node_references` is PROTECT: the collection cannot be deleted out from under a column."""
     ctx = authenticated_context
     collection = await _collection(ctx)

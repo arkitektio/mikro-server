@@ -14,8 +14,8 @@ ONE = 'mutation { requestZarrAccess(input: {storeId: "1"}) { __typename } }'
 @pytest.mark.asyncio
 @pytest.mark.parametrize("document", [GENERAL, ONE], ids=["general", "one-store"])
 async def test_a_request_without_a_token_is_handed_no_read_grant(
-    db, backend_stack, document: str
-):
+    db: None, backend_stack: int, document: str
+) -> None:
     anonymous = HttpContext(
         request=UniversalRequest(_extensions={}),
         response=TemporalResponse(),

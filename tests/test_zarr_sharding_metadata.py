@@ -17,11 +17,11 @@ import json
 
 import pytest
 from arkitekt_datalayer import base_models
+from arkitekt_datalayer.datalayer import Datalayer
 from arkitekt_datalayer.models import ZarrStore
 from authentikate.models import Organization
 
 # See test_upload_accounting for why the fixture is shared rather than copied.
-from tests.test_store_purging import buckets  # noqa: F401
 
 #: A sharded zarr v3 manifest as zarr-python writes it: the chunk grid carries the shard
 #: shape, the sole top-level codec is `sharding_indexed`, and the inner chunk shape sits in
@@ -69,14 +69,14 @@ UNSHARDED_MANIFEST = {
 
 
 @pytest.fixture()
-def organization(db) -> Organization:
+def organization(db: None) -> Organization:
     """The organization every grant in this module is issued in."""
     org, _ = Organization.objects.get_or_create(identifier="static_issuer#static_org")
     return org
 
 
 def granted_store_with_manifest(
-    layer, organization: Organization, manifest: dict
+    layer: Datalayer, organization: Organization, manifest: dict
 ) -> ZarrStore:
     """Mint an upload grant and put the given manifest at the store's prefix."""
     grant = layer.generate_zarr_upload_grant(
@@ -104,14 +104,16 @@ def metadata_for(manifest: dict) -> base_models.ZarrMetadata:
     )
 
 
-def sharded_variant(**config_overrides) -> dict:
+def sharded_variant(**config_overrides: object) -> dict:
     """A deep copy of SHARDED_MANIFEST with its sharding configuration patched."""
     manifest = copy.deepcopy(SHARDED_MANIFEST)
     manifest["codecs"][0]["configuration"].update(config_overrides)
     return manifest
 
 
-def test_a_finished_sharded_upload_splits_chunks_from_shards(buckets, organization):  # noqa: F811
+def test_a_finished_sharded_upload_splits_chunks_from_shards(
+    buckets: Datalayer, organization: Organization
+) -> None:
     """`chunks` must be the readable unit and `shards` the storage unit, or every
     consumer of the row plans reads against 128 MiB objects it cannot decode."""
     store = granted_store_with_manifest(buckets, organization, SHARDED_MANIFEST)
@@ -129,7 +131,9 @@ def test_a_finished_sharded_upload_splits_chunks_from_shards(buckets, organizati
     assert store.codecs == SHARDED_MANIFEST["codecs"]
 
 
-def test_an_unsharded_upload_keeps_todays_shape(buckets, organization):  # noqa: F811
+def test_an_unsharded_upload_keeps_todays_shape(
+    buckets: Datalayer, organization: Organization
+) -> None:
     """Regression: the split must not disturb the unsharded path."""
     store = granted_store_with_manifest(buckets, organization, UNSHARDED_MANIFEST)
 
@@ -200,8 +204,8 @@ def test_an_unsharded_upload_keeps_todays_shape(buckets, organization):  # noqa:
     ],
 )
 def test_an_unreadable_sharding_layout_fails_the_finish(
-    buckets, organization, manifest, complaint
-):  # noqa: F811
+    buckets: Datalayer, organization: Organization, manifest: dict, complaint: str
+) -> None:
     """The finish is the last moment the platform can refuse a store the frontend
     cannot read; after it, the store row looks exactly like a working one."""
     store = granted_store_with_manifest(buckets, organization, manifest)
@@ -215,7 +219,7 @@ def test_an_unreadable_sharding_layout_fails_the_finish(
     assert store.populated is False
 
 
-def test_metadata_properties_split_without_s3():
+def test_metadata_properties_split_without_s3() -> None:
     """The chunks/shards split is a pure function of the manifest."""
     sharded = metadata_for(SHARDED_MANIFEST)
     assert sharded.chunks == [1, 1, 4, 512, 512]

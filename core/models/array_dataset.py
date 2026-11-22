@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from arkitekt_datalayer.models import MediaStore, ZarrStore
 from arkitekt_service.service.described import Described
@@ -175,7 +175,7 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
         ]
 
     @property
-    def intrinsic_coordinate_system(self):
+    def intrinsic_coordinate_system(self) -> CoordinateSystem:
         """The space this dataset's pixels live in. An alias for `coordinate_system`.
 
         Kept because a great deal of the graph layer says "intrinsic" to mean "the grid the
@@ -259,13 +259,15 @@ class ArrayDataset(EmbeddedDescriptionMixin, Described):
             return []
         return min(arrays, key=lambda array: array.level).shape
 
-    def phasor_histogram_at(self, axis: str, harmonic: int):
+    def phasor_histogram_at(self, axis: str, harmonic: int) -> "PhasorHistogram | None":
         """The persisted phasor distribution over an axis at a harmonic, across all this dataset's anchors."""
         return PhasorHistogram.objects.filter(
             anchor__dataset=self, axis=axis, harmonic=harmonic
         ).first()
 
-    def phasor_calibrations_at(self, axis: str, harmonic: int):
+    def phasor_calibrations_at(
+        self, axis: str, harmonic: int
+    ) -> "PhasorCalibration | None":
         """The instrument-response correction for an axis at a harmonic, across all this dataset's anchors."""
         return PhasorCalibration.objects.filter(
             anchor__dataset=self, axis=axis, harmonic=harmonic
@@ -351,7 +353,7 @@ class DataArray(models.Model):
         ]
 
     @property
-    def space(self):
+    def space(self) -> CoordinateSystem | None:
         """The coordinate system this level's voxels live in.
 
         Level 0 owns no system: the dataset's INTRINSIC system *is* the level-0 pixel
@@ -363,7 +365,7 @@ class DataArray(models.Model):
         )
 
     @property
-    def to_parent(self):
+    def to_parent(self) -> Transformation | None:
         """The stored edge from this level's voxel space into the dataset's intrinsic space.
 
         None for level 0: its space IS the intrinsic space, and an identity edge between one
@@ -474,7 +476,7 @@ class CoordinateAnchor(Described):
             return self.table
         return self.sparse
 
-    def save(self, *args, **kwargs) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Fill ``organization`` from the container so every write path stays a one-liner."""
         if self.organization_id is None and self.container is not None:
             self.organization_id = self.container.organization_id
@@ -1030,7 +1032,7 @@ class Lens(PolymorphicModel, Described):
         return self
 
     @property
-    def container(self):
+    def container(self) -> models.Model:
         """The container this lens selects over: the one FK its kind carries."""
         real = self._real()
         return getattr(real, type(real).CONTAINER_FIELD)
@@ -1102,7 +1104,7 @@ class Lens(PolymorphicModel, Described):
         return " · ".join(part for part in parts if part)
 
     @property
-    def active_anchors(self):
+    def active_anchors(self) -> "models.QuerySet[CoordinateAnchor]":
         """The coordinate anchors this selection keeps. Empty for a container kind that carries none."""
         return CoordinateAnchor.objects.none()
 
@@ -1129,7 +1131,10 @@ class Lens(PolymorphicModel, Described):
         )
 
 
-def anchors_in_windows(anchors, windows: "list[base_models.WindowModel]"):
+def anchors_in_windows(
+    anchors: "models.QuerySet[CoordinateAnchor]",
+    windows: "list[base_models.WindowModel]",
+) -> "models.QuerySet[CoordinateAnchor]":
     """Narrow anchors to the ones inside every window: global along the window's axis, or in its range.
 
     An anchor that says nothing about an axis holds for every position on it, so it is inside
@@ -1171,7 +1176,9 @@ class WindowedLens(models.Model):
         """The stored selection."""
         return list(self.windows) if isinstance(self.windows, list) else []
 
-    def _anchors_in_windows(self, anchors):
+    def _anchors_in_windows(
+        self, anchors: "models.QuerySet[CoordinateAnchor]"
+    ) -> "models.QuerySet[CoordinateAnchor]":
         """Narrow a container's anchors to the ones inside every window: global along an axis, or in its range."""
         return (
             anchors_in_windows(anchors, self.windows_list)
@@ -1260,7 +1267,7 @@ class ArrayLens(Lens):
             return []
 
     @property
-    def to_parent(self):
+    def to_parent(self) -> Transformation | None:
         """The stored edge from this lens' space back into its dataset's intrinsic space.
 
         None for an unsliced lens: its space IS the intrinsic space, and there is no shift to
@@ -1288,7 +1295,7 @@ class ArrayLens(Lens):
             ) from error
 
     @property
-    def active_anchors(self):
+    def active_anchors(self) -> "models.QuerySet[CoordinateAnchor]":
         """
         THE WORKSPACE QUERY:
         Finds all anchors that fall within the boundaries of this Lens.
@@ -1435,7 +1442,7 @@ class TableLens(WindowedLens, Lens):
         )
 
     @property
-    def active_anchors(self):
+    def active_anchors(self) -> "models.QuerySet[CoordinateAnchor]":
         """The table's anchors inside the windows."""
         return self._anchors_in_windows(
             CoordinateAnchor.objects.filter(table=self.table_dataset)
@@ -1467,7 +1474,7 @@ class SparseLens(WindowedLens, Lens):
         return self.sparse_dataset.spec_for(self.windows_list)
 
     @property
-    def active_anchors(self):
+    def active_anchors(self) -> "models.QuerySet[CoordinateAnchor]":
         """The sparse dataset's anchors inside the windows."""
         return self._anchors_in_windows(
             CoordinateAnchor.objects.filter(sparse=self.sparse_dataset)

@@ -16,12 +16,16 @@ the same frozenset the boundary enforces). A client deriving it from ``role`` wo
 copy of a rule, free to disagree the day a role is added.
 """
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import strawberry
 
 from core import enums
 from core.types.table_dataset import Column, TableDataset
+
+if TYPE_CHECKING:
+    # Only for the lazy (string) annotations below; a runtime import would be a cycle.
+    from core.types.sparse_dataset import SparseDataset
 
 
 @strawberry.type(

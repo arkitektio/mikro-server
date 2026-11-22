@@ -192,7 +192,7 @@ MEASUREMENTS = [
 @pytest.mark.asyncio
 async def test_a_table_answers_with_the_spec_its_columns_declare(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The mutation answers with it, and the row holds the raw values in the same order."""
     tracks = await _create(authenticated_context, "tracks", TRACKS)
     assert tracks["spec"] == ["POINTS_2D", "TIMED", "TRACKED"]
@@ -214,7 +214,9 @@ async def test_a_table_answers_with_the_spec_its_columns_declare(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_keyed_to_another_says_so(authenticated_context: HttpContext):
+async def test_a_table_keyed_to_another_says_so(
+    authenticated_context: HttpContext,
+) -> None:
     objects = await _create(
         authenticated_context,
         "objects",
@@ -252,7 +254,7 @@ async def test_a_table_keyed_to_another_says_so(authenticated_context: HttpConte
 @pytest.mark.asyncio
 async def test_the_spec_filter_keeps_the_tables_that_satisfy_every_member(
     authenticated_context: HttpContext,
-):
+) -> None:
     tracks = await _create(authenticated_context, "tracks", TRACKS)
     points = await _create(authenticated_context, "points", POINTS)
     readout = await _create(authenticated_context, "readout", READOUT)
@@ -280,7 +282,7 @@ async def test_the_spec_filter_keeps_the_tables_that_satisfy_every_member(
 @pytest.mark.asyncio
 async def test_a_stored_spec_this_build_does_not_know_is_left_out(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The enum grows, and a rolled-back release is started on rows a newer one wrote."""
     points = await _create(authenticated_context, "points", POINTS)
     await models.TableDataset.objects.filter(pk=points["id"]).aupdate(

@@ -69,7 +69,10 @@ def _fresh_request(ctx: HttpContext) -> HttpContext:
 
 
 def _register(
-    source_field: str, source_id: str, axes=("y", "x"), validity: str = "VALIDATED"
+    source_field: str,
+    source_id: str,
+    axes: tuple[str, ...] = ("y", "x"),
+    validity: str = "VALIDATED",
 ) -> dict:
     """A registration path: place a source into the space by a BY_DIMENSION edge on shared axes."""
     return {
@@ -96,7 +99,7 @@ async def _create_space(ctx: HttpContext, name: str, registrations: list[dict]) 
     return result.data["createCoordinateSystem"]
 
 
-async def _scene_from(ctx: HttpContext, space_id: str, **policy) -> dict:
+async def _scene_from(ctx: HttpContext, space_id: str, **policy: object) -> dict:
     result = await schema.execute(
         FROM_CS,
         context_value=_fresh_request(ctx),
@@ -110,7 +113,7 @@ async def _scene_from(ctx: HttpContext, space_id: str, **policy) -> dict:
 @pytest.mark.asyncio
 async def test_a_space_places_every_registered_dataset_in_the_scene(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole point: sources registered into the space become placed image layers.
 
     The scene adopts the space as its world -- nothing is authored -- and each
@@ -175,7 +178,7 @@ async def test_a_space_places_every_registered_dataset_in_the_scene(
 @pytest.mark.asyncio
 async def test_nchildren_caps_the_sources_in_registration_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     """``nchildren`` is a flat cap on *sources*, honoured in the order the registrations were authored."""
     datasets = [
         await seed.create_array_dataset(
@@ -211,7 +214,7 @@ async def test_nchildren_caps_the_sources_in_registration_order(
 @pytest.mark.asyncio
 async def test_nchildren_counts_sources_and_never_truncates_an_acquisition(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The cap counts sources, so a multi-channel dataset arrives whole or not at all.
 
     A dataset materializes one layer per channel, and a cap counted in *layers* would stop
@@ -254,7 +257,9 @@ async def test_nchildren_counts_sources_and_never_truncates_an_acquisition(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_transform_tables_gates_table_layers(authenticated_context: HttpContext):
+async def test_transform_tables_gates_table_layers(
+    authenticated_context: HttpContext,
+) -> None:
     """A registered table dataset becomes a point layer only when the policy asks for it."""
     store = await sync_to_async(models.ParquetStore.objects.create)(
         path="s3://parquet/mols",
@@ -313,7 +318,9 @@ async def test_transform_tables_gates_table_layers(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_include_meshes_gates_mesh_layers(authenticated_context: HttpContext):
+async def test_include_meshes_gates_mesh_layers(
+    authenticated_context: HttpContext,
+) -> None:
     """A registered mesh collection becomes a mesh layer unless the policy excludes it."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Meshed", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -369,7 +376,9 @@ async def test_include_meshes_gates_mesh_layers(authenticated_context: HttpConte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_another_scenes_world_seeds_a_scene(authenticated_context: HttpContext):
+async def test_another_scenes_world_seeds_a_scene(
+    authenticated_context: HttpContext,
+) -> None:
     """A scene never owns its world, so another scene's world is adoptable like any shared space.
 
     There is no kind to smuggle in on creation -- the input carries no kind field at
@@ -404,7 +413,7 @@ async def test_another_scenes_world_seeds_a_scene(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_rerun_makes_a_second_scene_and_leaves_the_space_untouched(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Everything created is ordinary: run it twice and there are two scenes; the registrations are one copy."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Once", shapes=[[3, 48, 48]]
@@ -439,7 +448,7 @@ async def test_rerun_makes_a_second_scene_and_leaves_the_space_untouched(
 @pytest.mark.asyncio
 async def test_a_non_renderable_dataset_is_skipped_not_fatal(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A registered dataset too small to render is skipped, exactly like a table with too few
     coordinate columns -- it does not abort the batch and place nothing."""
     good = await seed.create_array_dataset(
@@ -479,7 +488,7 @@ async def test_a_non_renderable_dataset_is_skipped_not_fatal(
 @pytest.mark.asyncio
 async def test_a_calibrated_dataset_registers_through_its_physical_system(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The natural calibrated workflow: register a dataset by its PHYSICAL calibration, not its
     intrinsic pixels. The layer's real source is intrinsic, yet its path to world resolves --
     the walk crosses the dataset's own (non-member) calibration edge to reach the composed
@@ -516,7 +525,7 @@ async def test_a_calibrated_dataset_registers_through_its_physical_system(
     )
 
 
-def test_the_schema_exposes_the_shared_space_mutations():
+def test_the_schema_exposes_the_shared_space_mutations() -> None:
     """The SDL is the contract: both mutations exist, and the shared kind is created directly."""
     sdl = schema.as_str()
     assert "createCoordinateSystem(" in sdl

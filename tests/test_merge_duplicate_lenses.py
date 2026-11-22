@@ -67,7 +67,7 @@ async def _lens_ids(dataset: models.ArrayDataset) -> list[int]:
 @pytest.mark.asyncio
 async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image", shapes=[[3, 64, 64]])
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -172,7 +172,7 @@ async def test_the_job_converges_what_the_old_code_wrote_and_then_does_nothing(
 @pytest.mark.asyncio
 async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An RGB component, a render-graph node and a nomination all move to the keeper."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Image", shapes=[[3, 64, 64]])
@@ -241,7 +241,7 @@ async def test_a_folded_lens_takes_no_layer_with_it_whatever_way_the_layer_named
 @pytest.mark.asyncio
 async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A hand-written window that bounds nothing is the whole lens spelled twice: the job reports it and goes on."""
     from tests.test_charts import _MEASUREMENTS, _table
 
@@ -272,7 +272,7 @@ async def test_a_window_that_normalizes_onto_another_row_is_left_and_named(
 @pytest.mark.asyncio
 async def test_a_single_voxel_stride_is_dropped_and_its_edge_becomes_a_translation(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`x 3:10:7` keeps one voxel; it was stored with its step and written a SEQUENCE edge scaling by 7.
 
     The job folds the stepped spelling onto the plain crop when both exist, and otherwise

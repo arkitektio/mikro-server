@@ -16,8 +16,8 @@ from tests.seed import create_folder
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_delete_folder_is_org_scoped(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     folder = await create_folder(authenticated_context, "Org A Folder")
 
     mutation = """
@@ -46,8 +46,8 @@ async def test_delete_folder_is_org_scoped(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pin_folder_toggles_and_is_org_scoped(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     folder = await create_folder(authenticated_context, "Org A Folder")
 
     mutation = """
@@ -83,8 +83,8 @@ async def test_pin_folder_toggles_and_is_org_scoped(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_another_organizations_lens_does_not_exist_whatever_kind_it_is(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """A layer mutation told a lens of the wrong kind names the kind -- but only of a lens the caller could read."""
     from core.models import ArrayDataset
     from tests import seed

@@ -4,13 +4,12 @@ The single ``addToCollaboration`` is ``arkitekt_service``'s; this batch is mikro
 ``collaboration_items.add``, so every object still brings what it needs to be seen.
 """
 
-from typing import Any
-
 import strawberry
 from arkitekt_service.collaborations import graphql as collaboration_types
 from arkitekt_service.collaborations import items as collaboration_items
 from arkitekt_service.collaborations import models as collaboration_models
 from django.db import transaction
+from django.db.models import Model
 from kante.types import Info
 
 from core.scoping import get_for_org
@@ -34,7 +33,7 @@ class AddManyToCollaborationInput:
     )
 
 
-def _object(info: Info, ref: CollaborationObjectRef) -> Any:
+def _object(info: Info, ref: CollaborationObjectRef) -> Model:
     from arkitekt_service.service.service import Service
 
     structure = Service.hosting(ref.identifier)

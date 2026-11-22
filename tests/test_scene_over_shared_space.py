@@ -128,7 +128,7 @@ def _image_layer(scene_pk: str, lens: "models.Lens") -> "models.Layer":
 @pytest.mark.asyncio
 async def test_a_rival_registration_into_one_shared_world_is_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Rivals are allowed (RFC-9), and every scene over the space sees the same winner.
 
     RFC-6 refused the second claim of one dataset into one space, on the grounds that where
@@ -154,7 +154,7 @@ async def test_a_rival_registration_into_one_shared_world_is_accepted(
         == str(space.pk)
     )
 
-    def setup():
+    def setup() -> tuple[models.CoordinateSystem, models.Transformation]:
         intrinsic = dataset.intrinsic_coordinate_system
         edge = _register_into(authenticated_context, intrinsic, space, IDENTITY_2D)
         _image_layer(scene_a["id"], lens)
@@ -190,7 +190,9 @@ async def test_a_rival_registration_into_one_shared_world_is_accepted(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_two_truths_live_in_two_spaces(authenticated_context: HttpContext):
+async def test_two_truths_live_in_two_spaces(
+    authenticated_context: HttpContext,
+) -> None:
     """The rival that the one space refused is at home in a fork of the space.
 
     registration1 and registration2 are claims into different worlds: two spaces, two
@@ -206,7 +208,7 @@ async def test_two_truths_live_in_two_spaces(authenticated_context: HttpContext)
     scene_a = await _adopt(authenticated_context, space_v1, "A")
     scene_b = await _adopt(authenticated_context, space_v2, "B")
 
-    def setup():
+    def setup() -> tuple[models.Transformation, models.Transformation]:
         intrinsic = dataset.intrinsic_coordinate_system
         edge_a = _register_into(authenticated_context, intrinsic, space_v1, IDENTITY_2D)
         edge_b = _register_into(authenticated_context, intrinsic, space_v2, SHIFTED_2D)
@@ -234,7 +236,7 @@ async def test_two_truths_live_in_two_spaces(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_deleting_the_registration_unplaces_the_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The claim is what places: deleting it un-places the layer in every scene over the space.
 
     There is no membership to withdraw -- un-registering IS deleting the edge, and the
@@ -246,7 +248,7 @@ async def test_deleting_the_registration_unplaces_the_layer(
     space = await sync_to_async(_make_space)(authenticated_context)
     scene = await _adopt(authenticated_context, space, "Removal")
 
-    def setup():
+    def setup() -> models.Transformation:
         edge = _register_into(
             authenticated_context,
             dataset.intrinsic_coordinate_system,
@@ -279,7 +281,9 @@ async def test_deleting_the_registration_unplaces_the_layer(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_scene_adopts_any_space(authenticated_context: HttpContext):
+async def test_create_scene_adopts_any_space(
+    authenticated_context: HttpContext,
+) -> None:
     """Adoption composes over the space as it is: axes and epoch come from the system.
 
     **Every** space is adoptable under RFC-9 -- a scene never owns its world, and a lens'
@@ -354,7 +358,7 @@ async def test_create_scene_adopts_any_space(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_deleting_a_scene_leaves_the_space_and_its_sibling_standing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A space outlives every scene over it -- deleting a scene never deletes a world."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Survivor", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -364,7 +368,7 @@ async def test_deleting_a_scene_leaves_the_space_and_its_sibling_standing(
     scene_a = await _adopt(authenticated_context, space, "Doomed")
     scene_b = await _adopt(authenticated_context, space, "Survivor")
 
-    def setup():
+    def setup() -> models.Transformation:
         edge = _register_into(
             authenticated_context,
             dataset.intrinsic_coordinate_system,
@@ -429,7 +433,7 @@ async def test_deleting_a_scene_leaves_the_space_and_its_sibling_standing(
 @pytest.mark.asyncio
 async def test_a_shared_space_cannot_be_deleted_out_from_under_a_scene(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Scene.world is RESTRICT: a space is never deleted while a scene composes over it --
     but the restriction yields when the whole organization goes (the RESTRICT-vs-PROTECT trap)."""
     space = await sync_to_async(_make_space)(authenticated_context)
@@ -451,7 +455,7 @@ async def test_a_shared_space_cannot_be_deleted_out_from_under_a_scene(
 @pytest.mark.asyncio
 async def test_builder_over_a_space_of_unrenderable_sources_makes_no_layers(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A source too small to render becomes no layer -- and its claim is untouched.
 
     The registration is a fact about the *space*, not about the scene the builder is
@@ -461,7 +465,7 @@ async def test_builder_over_a_space_of_unrenderable_sources_makes_no_layers(
     )
     space = await sync_to_async(_make_space)(authenticated_context)
 
-    def register():
+    def register() -> models.Transformation:
         return graph_logic.build_registration_edge(
             input_system=tiny.intrinsic_coordinate_system,
             output_system=space,

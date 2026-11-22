@@ -31,15 +31,20 @@ from __future__ import annotations
 import dataclasses
 import json
 from functools import cache
+from typing import TYPE_CHECKING
 
 from django.db import connection
 
 from core import enums, models
-from core.logic.graph import _KEYING_ORDER, CONTAINERS, MODEL_BY_KEY
+from core.logic.graph import _KEYING_ORDER, CONTAINERS, MODEL_BY_KEY, Container
 from core.models.array_dataset import selection_label
 from core.scoping import organization_path
 from embeddings import engine
 from embeddings.search import query_vector
+
+if TYPE_CHECKING:
+    from authentikate.models import Organization
+    from django.db.backends.utils import CursorWrapper
 
 #: The file's node key. A file has no coordinate system and keys to no container, so it is
 #: named here rather than in ``CONTAINERS``.
@@ -125,7 +130,7 @@ class _Source:
     priority: int
 
 
-def _source(container, priority: int) -> _Source:
+def _source(container: Container, priority: int) -> _Source:
     model = container.model
     table = _q(model._meta.db_table)
     if issubclass(model, models.Lens):
@@ -269,19 +274,25 @@ def _shape_arms(n: str, *, down: bool) -> list[str]:
     )
     if not down:
         return [
-            f"SELECT '{ANNOTATION}'::text, d.{source}::text, '{VIA_ANNOTATION_DERIVATION}'::text, d.{_q('id')}::bigint FROM {_AD} d "
-            f"WHERE {n}.kind = '{ANNOTATION}' AND d.{child} = {shape} AND d.{source} IS NOT NULL AND d.{org} = %(org)s"
+            (
+                f"SELECT '{ANNOTATION}'::text, d.{source}::text, '{VIA_ANNOTATION_DERIVATION}'::text, d.{_q('id')}::bigint FROM {_AD} d "
+                f"WHERE {n}.kind = '{ANNOTATION}' AND d.{child} = {shape} AND d.{source} IS NOT NULL AND d.{org} = %(org)s"
+            )
         ]
     t = _transformation_columns()
     annotation = _q(_column(models.Transformation, "annotation"))
     computed_in = f"t.{t['input']}"
     return [
-        f"SELECT '{ANNOTATION}'::text, d.{child}::text, '{VIA_ANNOTATION_DERIVATION}'::text, d.{_q('id')}::bigint FROM {_AD} d "
-        f"WHERE {n}.kind = '{ANNOTATION}' AND d.{source} = {shape} AND d.{org} = %(org)s",
-        f"SELECT c.kind, c.pk, '{VIA_SHAPE_EDGE}'::text, t.{_q('id')}::bigint FROM {_T} t "
-        f"CROSS JOIN LATERAL ({_key_of(computed_in)}) c "
-        f"WHERE {n}.kind = '{ANNOTATION}' AND t.{annotation} = {shape} AND t.{t['organization']} = %(org)s "
-        f"AND {_not_drawing_surface('c.kind', 'c.pk')}",
+        (
+            f"SELECT '{ANNOTATION}'::text, d.{child}::text, '{VIA_ANNOTATION_DERIVATION}'::text, d.{_q('id')}::bigint FROM {_AD} d "
+            f"WHERE {n}.kind = '{ANNOTATION}' AND d.{source} = {shape} AND d.{org} = %(org)s"
+        ),
+        (
+            f"SELECT c.kind, c.pk, '{VIA_SHAPE_EDGE}'::text, t.{_q('id')}::bigint FROM {_T} t "
+            f"CROSS JOIN LATERAL ({_key_of(computed_in)}) c "
+            f"WHERE {n}.kind = '{ANNOTATION}' AND t.{annotation} = {shape} AND t.{t['organization']} = %(org)s "
+            f"AND {_not_drawing_surface('c.kind', 'c.pk')}"
+        ),
     ]
 
 
@@ -476,7 +487,7 @@ def _assert_direct_scoping() -> None:
 
 
 def _walk(
-    cursor,
+    cursor: CursorWrapper,
     root: tuple[str, int | str],
     *,
     down: bool,
@@ -503,7 +514,7 @@ def _walk(
 
 
 def _hydrate_nodes(
-    nodes: dict[tuple[str, int | str], LineageNode], organization
+    nodes: dict[tuple[str, int | str], LineageNode], organization: Organization
 ) -> None:
     """One query per node kind present. A node another organization owns is dropped, never named."""
     by_kind: dict[str, list[int | str]] = {}
@@ -546,7 +557,9 @@ def _hydrate_nodes(
 
 
 def _hydrate_shapes(
-    nodes: dict[tuple[str, int | str], LineageNode], pks: list[int | str], organization
+    nodes: dict[tuple[str, int | str], LineageNode],
+    pks: list[int | str],
+    organization: Organization,
 ) -> None:
     """The shape nodes: named, and scoped through their collection, which is where a shape's organization is.
 
@@ -648,7 +661,7 @@ def _hydrate_lenses(
     nodes: dict[tuple[str, int], LineageNode],
     edges: list[LineageEdge],
     landed_in: dict[int, int],
-    organization,
+    organization: Organization,
 ) -> None:
     """Every node's lenses, one query per container kind, and which of them each edge leaves from.
 
@@ -731,7 +744,7 @@ def _hydrate_lenses(
 def lineage(
     root: tuple[str, int],
     *,
-    organization,
+    organization: Organization,
     up: int = 1,
     down: int = 3,
     limit: int = 300,
@@ -980,7 +993,7 @@ class Descendants:
 def descendants(
     roots: list[tuple[str, int]],
     *,
-    organization,
+    organization: Organization,
     down: int = 3,
     limit: int = 500,
     fanout: int = 20,
@@ -1321,7 +1334,7 @@ def _roots_sql(
 
 def roots(
     *,
-    organization,
+    organization: Organization,
     kinds: list[str] | None = None,
     offset: int = 0,
     limit: int = 20,

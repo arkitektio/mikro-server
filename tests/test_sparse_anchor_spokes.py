@@ -11,6 +11,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from django.db import IntegrityError, transaction
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -96,7 +97,9 @@ async def _axes(ctx: HttpContext, name: str) -> list[dict]:
     ]
 
 
-async def _create(ctx: HttpContext, name: str, anchors: list[dict] | None = None):
+async def _create(
+    ctx: HttpContext, name: str, anchors: list[dict] | None = None
+) -> ExecutionResult:
     store = await seed.create_sparse_store(ctx, f"{name}-store", axes=(0,), shape=SHAPE)
     payload: dict = {
         "name": name,
@@ -114,7 +117,7 @@ async def _create(ctx: HttpContext, name: str, anchors: list[dict] | None = None
 @pytest.mark.asyncio
 async def test_a_sparse_anchor_pins_spokes_to_its_axes(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Anchors stated at create land on the matrix with the other containers empty."""
     result = await _create(
         authenticated_context,
@@ -163,7 +166,7 @@ async def test_a_sparse_anchor_pins_spokes_to_its_axes(
 @pytest.mark.asyncio
 async def test_a_sparse_dataset_reads_its_anchors_back(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """`SparseDataset.anchors` and the `coordinateAnchors` list both serve them, within the tenant."""
     result = await _create(
         authenticated_context,
@@ -215,7 +218,7 @@ async def test_a_sparse_dataset_reads_its_anchors_back(
 @pytest.mark.asyncio
 async def test_an_anchor_must_name_an_axis_of_the_matrix(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A key that is not one of the matrix's axes is refused, and nothing is written."""
     result = await _create(
         authenticated_context,
@@ -234,7 +237,7 @@ async def test_an_anchor_must_name_an_axis_of_the_matrix(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext):
+async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext) -> None:
     """A phasor is the DFT along an array axis; a matrix has none, so the spoke is refused."""
     result = await _create(
         authenticated_context,
@@ -259,7 +262,7 @@ async def test_a_phasor_spoke_is_array_only(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_metadata_is_attached_to_an_existing_matrix_on_one_anchor(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`createCoordinateAnchor` get-or-creates on (sparse, coordinates) and replaces a restated spoke."""
     created = await _create(authenticated_context, "Later")
     assert created.errors is None, created.errors
@@ -343,7 +346,7 @@ async def test_metadata_is_attached_to_an_existing_matrix_on_one_anchor(
 @pytest.mark.asyncio
 async def test_deleting_the_matrix_takes_its_anchors_with_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An anchor is part of its matrix: cascade, spokes included."""
     created = await _create(
         authenticated_context,
@@ -374,7 +377,9 @@ async def test_deleting_the_matrix_takes_its_anchors_with_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_anchor_has_exactly_one_container(authenticated_context: HttpContext):
+async def test_an_anchor_has_exactly_one_container(
+    authenticated_context: HttpContext,
+) -> None:
     """The database refuses an anchor on a matrix and a dataset at once, and fills the organization itself."""
     dataset = await seed.create_array_dataset(authenticated_context, "Constrained")
     created = await _create(authenticated_context, "Constrained")
@@ -383,7 +388,7 @@ async def test_an_anchor_has_exactly_one_container(authenticated_context: HttpCo
         pk=created.data["createSparseDataset"]["id"]
     )
 
-    def both():
+    def both() -> None:
         with transaction.atomic():
             models.CoordinateAnchor.objects.create(
                 dataset=dataset, sparse=matrix, coordinates={}

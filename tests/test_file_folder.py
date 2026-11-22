@@ -16,7 +16,9 @@ QUERY = """
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_file_exposes_its_folder(db, authenticated_context: HttpContext) -> None:
+async def test_file_exposes_its_folder(
+    db: None, authenticated_context: HttpContext
+) -> None:
     folder = await create_folder(authenticated_context, "Raw data")
     await create_file(authenticated_context, "plate.czi", folder)
 
@@ -32,7 +34,7 @@ async def test_file_exposes_its_folder(db, authenticated_context: HttpContext) -
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_the_folder_unfiles_the_file(
-    db, authenticated_context: HttpContext
+    db: None, authenticated_context: HttpContext
 ) -> None:
     folder = await create_folder(authenticated_context, "Raw data")
     await create_file(authenticated_context, "plate.czi", folder)

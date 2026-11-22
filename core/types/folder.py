@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Optional, cast
 import kante
 import strawberry
 from arkitekt_datalayer.types import BigFileStore
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 from kante.types import Info
 from strawberry import auto
 from strawberry.scalars import JSON
@@ -77,7 +77,7 @@ def _source_links_prefetch(info: Info) -> Prefetch:
     return Prefetch("links", queryset=links, to_attr=_SOURCE_LINKS_ATTR)
 
 
-def _asks_only_sources(filters_input) -> bool:  # noqa: ANN001 - a strawberry FileLinkFilter input
+def _asks_only_sources(filters_input: filters.FileLinkFilter | None) -> bool:
     """Whether a `derivedContainers` filter is answered by the prefetched links: none, or `direction: SOURCE` alone."""
     if filters_input is strawberry.UNSET or filters_input is None:
         return True
@@ -203,7 +203,9 @@ class File:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[models.File], info: Info, **kwargs: object
+    ) -> QuerySet[models.File]:
         return build_prescoped_queryset(info, queryset)
 
 

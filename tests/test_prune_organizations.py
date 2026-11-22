@@ -22,7 +22,7 @@ from tests.test_annotation_lineage import CORNERS, _draw_from, _drawn_on
 from tests.test_cross_container_derivation import _derived
 from tests.test_lens_geometry import _draw
 from tests.test_metrics import CREATE, quantity, run
-from tests.test_store_purging import buckets, keys_in, put  # noqa: F401  the fixture
+from tests.test_store_purging import keys_in, put
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
@@ -73,7 +73,7 @@ async def _everything(
 async def test_an_organization_is_pruned_through_every_link_and_its_bytes_go(
     authenticated_context: HttpContext,
     other_org_context: HttpContext,
-    buckets: datalayer_module.Datalayer,  # noqa: F811
+    buckets: datalayer_module.Datalayer,
 ) -> None:
     """Derived data, refined shapes, corrected metrics and a registered scene all go; kraph hears of the metrics."""
     ctx = authenticated_context

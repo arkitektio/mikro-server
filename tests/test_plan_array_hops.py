@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import join_walk
@@ -115,7 +116,7 @@ async def _derived_array(
     name: str = "traces",
     axes: list[dict] | None = None,
     shape: list[int] | None = None,
-):
+) -> ExecutionResult:
     """An array dataset derived from the table, through the real ingest mutation."""
     shape = shape or [12, 600]
     key = f"{name}-{uuid.uuid4().hex[:8]}"
@@ -181,7 +182,7 @@ def _array_hops(plan: dict) -> list[dict]:
 @pytest.mark.asyncio
 async def test_a_plan_hops_from_the_cell_table_into_the_traces_derived_from_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Mask pixel, then the cell's row, then the cell's trace: three reads, one plan."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -231,7 +232,9 @@ async def test_a_plan_hops_from_the_cell_table_into_the_traces_derived_from_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_key_map_is_the_edge_inverted(authenticated_context: HttpContext):
+async def test_the_key_map_is_the_edge_inverted(
+    authenticated_context: HttpContext,
+) -> None:
     """`cell_id = 2 * cell + 1`, one AFFINE part; the plan states its inverse."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -261,7 +264,7 @@ async def test_the_key_map_is_the_edge_inverted(authenticated_context: HttpConte
 @pytest.mark.asyncio
 async def test_a_bare_by_dimension_maps_ids_onto_positions_unchanged(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An edge that names the two axes and states no numbers says they count alike."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -282,7 +285,9 @@ async def test_a_bare_by_dimension_maps_ids_onto_positions_unchanged(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_channel_axis_can_carry_the_ids(authenticated_context: HttpContext):
+async def test_a_channel_axis_can_carry_the_ids(
+    authenticated_context: HttpContext,
+) -> None:
     """One channel per object is the same enumeration under another axis type."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -311,7 +316,7 @@ async def test_a_channel_axis_can_carry_the_ids(authenticated_context: HttpConte
 @pytest.mark.asyncio
 async def test_a_derivation_that_states_no_geometry_is_not_a_hop(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An omitted transform is UNMAPPABLE: lineage is recorded, and nothing says which row is whose."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -322,7 +327,9 @@ async def test_a_derivation_that_states_no_geometry_is_not_a_hop(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_measuring_axis_is_never_a_key(authenticated_context: HttpContext):
+async def test_a_measuring_axis_is_never_a_key(
+    authenticated_context: HttpContext,
+) -> None:
     """A row id is a position along an axis that enumerates. Along space it would be a place."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -346,7 +353,7 @@ async def test_a_measuring_axis_is_never_a_key(authenticated_context: HttpContex
 @pytest.mark.asyncio
 async def test_an_array_with_nothing_stored_is_not_a_hop(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A hop is a recipe for a read, and there is nothing here to read."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -362,7 +369,7 @@ async def test_an_array_with_nothing_stored_is_not_a_hop(
 @pytest.mark.asyncio
 async def test_the_mask_that_keys_the_table_is_not_an_array_to_hop_into(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The mask reaches the table too, by a FIELD. That is the plan's root, not a row to read."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -376,7 +383,7 @@ async def test_the_mask_that_keys_the_table_is_not_an_array_to_hop_into(
 @pytest.mark.asyncio
 async def test_the_array_hop_is_bounded_like_any_other_and_nothing_follows_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Depth zero is the landing alone. Deeper, the array is still where its branch ends."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -395,7 +402,7 @@ async def test_the_array_hop_is_bounded_like_any_other_and_nothing_follows_it(
 @pytest.mark.asyncio
 async def test_two_arrays_derived_from_one_table_are_two_hops_in_a_stable_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Traces and spikes of the same cells: both are under the point, and the list does not shuffle."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)
@@ -417,7 +424,7 @@ async def test_two_arrays_derived_from_one_table_are_two_hops_in_a_stable_order(
 @pytest.mark.asyncio
 async def test_every_branch_standing_on_the_table_gets_the_array_hop(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Two plans landing in one table -- sibling masks of the same cells -- each reach the traces."""
     mask = await _mask(authenticated_context)
     cells = await _cells(authenticated_context, mask)

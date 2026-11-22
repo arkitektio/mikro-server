@@ -4,13 +4,26 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, TypeVar
 
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import Case, F, FloatField, IntegerField, Q, QuerySet, Value, When
+from django.db.models import (
+    Case,
+    F,
+    FloatField,
+    IntegerField,
+    Model,
+    Q,
+    QuerySet,
+    Value,
+    When,
+)
 from pgvector.django import CosineDistance
 
 from embeddings import engine
+
+M = TypeVar("M", bound=Model)
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +42,8 @@ def query_vector(value: str) -> list[float] | None:
 
 
 def hybrid_search(
-    queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, name: str
-) -> tuple[QuerySet[Any], Q]:
+    queryset: QuerySet[M], prefix: str, value: str, lexical: Q, name: str
+) -> tuple[QuerySet[M], Q]:
     """``lexical`` OR (embedded AND cosine distance below the threshold), ranked on ``name``.
 
     Four tiers: ``name`` is the text, ``name`` starts with it, any other ``lexical`` hit,
@@ -97,12 +110,12 @@ DEFAULT_NEIGHBOURS = 10
 
 
 def neighbourhood(
-    queryset: QuerySet[Any],
-    vector: Any,
+    queryset: QuerySet[M],
+    vector: Iterable[float] | None,
     *,
-    exclude_pk: Any = None,
+    exclude_pk: int | str | None = None,
     threshold: float | None = None,
-) -> tuple[QuerySet[Any], Q]:
+) -> tuple[QuerySet[M], Q]:
     """``queryset`` ordered by distance to ``vector``, with the predicate that selects it.
 
     The other half of the semantic story: :func:`hybrid_search` answers "what matches this
@@ -138,13 +151,13 @@ def neighbourhood(
 
 
 def neighbours(
-    queryset: QuerySet[Any],
-    vector: Any,
+    queryset: QuerySet[M],
+    vector: Iterable[float] | None,
     *,
-    exclude_pk: Any = None,
+    exclude_pk: int | str | None = None,
     limit: int = DEFAULT_NEIGHBOURS,
     threshold: float | None = None,
-) -> QuerySet[Any]:
+) -> QuerySet[M]:
     """The ``limit`` rows of ``queryset`` nearest to ``vector``, nearest first."""
     queryset, predicate = neighbourhood(
         queryset, vector, exclude_pk=exclude_pk, threshold=threshold

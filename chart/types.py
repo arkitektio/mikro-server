@@ -1,8 +1,10 @@
 """The chart's GraphQL types. Every spatial answer here is derived from the graph on read."""
 
 import datetime
+from typing import Any
 
 import kante
+from django.db.models import QuerySet
 from kante.types import Info
 from strawberry import auto
 from strawberry.scalars import JSON
@@ -118,7 +120,9 @@ class ChartLayer:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):  # noqa: ANN001, ANN003, ANN206 - strawberry_django's hook
+    def get_queryset(
+        cls, queryset: QuerySet[models.ChartLayer], info: Info, **kwargs: Any
+    ) -> QuerySet[models.ChartLayer]:
         """Scope to the request's organization, and select what the placement logic reads in Python."""
         queryset = build_prescoped_queryset(info, queryset)
         return queryset.select_related(
@@ -283,7 +287,7 @@ class TraceChartLayer(ChartLayer):
         )
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.ChartLayer)
             and obj.kind == enums.ChartLayerKind.TRACE.value
@@ -372,7 +376,7 @@ class SeriesChartLayer(ChartLayer):
         return column.unit if column is not None else None
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.ChartLayer)
             and obj.kind == enums.ChartLayerKind.SERIES.value
@@ -411,7 +415,7 @@ class AnnotationChartLayer(ChartLayer):
         return self.lens.annotation_collection
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.ChartLayer)
             and obj.kind == enums.ChartLayerKind.ANNOTATION.value
@@ -510,7 +514,7 @@ class PointsChartLayer(ChartLayer):
         return _column_unit(self.lens, self.z_column)
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.ChartLayer)
             and obj.kind == enums.ChartLayerKind.POINTS.value
@@ -574,7 +578,7 @@ class DistributionChartLayer(ChartLayer):
         return _column_unit(self.lens, self.value_column)
 
     @classmethod
-    def is_type_of(cls, obj, info) -> bool:  # noqa: ANN001, ANN206 - strawberry's hook
+    def is_type_of(cls, obj: object, info: Info) -> bool:
         return (
             isinstance(obj, models.ChartLayer)
             and obj.kind == enums.ChartLayerKind.DISTRIBUTION.value

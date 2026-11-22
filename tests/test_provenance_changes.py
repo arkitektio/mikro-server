@@ -36,7 +36,7 @@ query Provenance($id: ID!) {
 @pytest.mark.asyncio
 async def test_a_json_field_change_does_not_break_the_provenance_query(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A list-valued change reads back as a string, and keeps its native type in the JSON twin."""
     ctx = authenticated_context
     store = await ZarrStore.objects.acreate(

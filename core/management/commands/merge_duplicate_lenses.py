@@ -40,9 +40,9 @@ printed, not failed on: the installer must not be stopped by a lens someone buil
 from __future__ import annotations
 
 import json
-from typing import cast
+from typing import Any, cast
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
 from chart.models import ChartLayer
@@ -75,7 +75,7 @@ class Command(BaseCommand):
     dry_run: bool = False
     counts: dict[str, int]
 
-    def add_arguments(self, parser) -> None:  # noqa: ANN001 - Django's ArgumentParser
+    def add_arguments(self, parser: CommandParser) -> None:
         """Declare the command's options."""
         parser.add_argument(
             "--dry-run",
@@ -83,7 +83,7 @@ class Command(BaseCommand):
             help="Report what would change without writing anything.",
         )
 
-    def handle(self, *args, **options) -> None:
+    def handle(self, *args: object, **options: Any) -> None:
         """Converge every container's lenses, one transaction per container."""
         self.dry_run = options["dry_run"]
         self.counts = {

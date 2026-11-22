@@ -70,7 +70,9 @@ async def _scatter(ctx: HttpContext) -> tuple[dict, dict, str]:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scatter_plots_other_columns(authenticated_context: HttpContext):
+async def test_a_scatter_plots_other_columns(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     _, layer, _ = await _scatter(ctx)
 
@@ -108,7 +110,7 @@ async def test_a_scatter_plots_other_columns(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_an_edit_is_held_to_the_rules_of_creation(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     chart, layer, lens = await _scatter(ctx)
     assert "holds VARCHAR, not numbers" in await _refused(
@@ -149,7 +151,9 @@ async def test_an_edit_is_held_to_the_rules_of_creation(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_layer_is_updated_by_its_own_kind(authenticated_context: HttpContext):
+async def test_a_layer_is_updated_by_its_own_kind(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     _, layer, _ = await _scatter(ctx)
     message = await _refused(
@@ -165,7 +169,7 @@ async def test_a_layer_is_updated_by_its_own_kind(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_distribution_is_regrouped_rebinned_and_boxed(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
@@ -240,7 +244,7 @@ async def test_a_distribution_is_regrouped_rebinned_and_boxed(
 @pytest.mark.asyncio
 async def test_a_lens_is_rebound_only_where_its_rows_are_placed(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     _, layer, lens = await _scatter(ctx)
     _, other_lens, _ = await _nuclei(ctx, "unrelated nuclei")
@@ -279,7 +283,9 @@ async def test_a_lens_is_rebound_only_where_its_rows_are_placed(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_series_reads_another_value_column(authenticated_context: HttpContext):
+async def test_a_series_reads_another_value_column(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     chart = await _chart(ctx)
     table = await _series_table(

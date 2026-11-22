@@ -7,8 +7,11 @@ aliases among them), the filter returns exactly the objects whose descriptors ho
 constraints, by a ``holds`` written the way ``arkitekt_spec.declare.descriptors`` writes it.
 """
 
+from collections.abc import Iterable
+
 import pytest
 from asgiref.sync import sync_to_async
+from django.db.models import Model
 from kante.context import HttpContext
 
 from core import enums, models
@@ -70,13 +73,15 @@ async def _ids(ctx: HttpContext, query: str, field: str, **filters: object) -> s
 
 
 @sync_to_async
-def _described(queryset) -> dict[str, dict]:  # noqa: ANN001 - a queryset of hosted rows
+def _described(queryset: Iterable[Model]) -> dict[str, dict]:
     """What each row states it is: its stored descriptors, which the field and a signal read."""
     return {str(row.pk): service.describe(row) for row in queryset}
 
 
 @sync_to_async
-def _stored_and_computed(queryset) -> tuple[dict[str, dict], dict[str, dict]]:  # noqa: ANN001 - a queryset of hosted rows
+def _stored_and_computed(
+    queryset: Iterable[Model],
+) -> tuple[dict[str, dict], dict[str, dict]]:
     """What each row has stored, and what its describer says of it now, run afresh."""
     rows = list(queryset)
     return {str(row.pk): service.describe(row) for row in rows}, {
@@ -192,7 +197,7 @@ LENS_CONSTRAINTS: list[list[Constraint]] = [
 @pytest.mark.asyncio
 async def test_the_lens_filter_offers_exactly_the_lenses_whose_descriptors_hold(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     await _seed(ctx)
     described = await _described(models.Lens.objects.with_sources())
@@ -218,7 +223,7 @@ async def test_the_lens_filter_offers_exactly_the_lenses_whose_descriptors_hold(
 @pytest.mark.asyncio
 async def test_the_dataset_filter_offers_exactly_the_datasets_whose_descriptors_hold(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     await _seed(ctx)
     described = await _described(models.ArrayDataset.objects.all())
@@ -239,7 +244,7 @@ async def test_the_dataset_filter_offers_exactly_the_datasets_whose_descriptors_
 @pytest.mark.asyncio
 async def test_what_is_stored_is_what_the_describer_says(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every key is stored, the value kind and the counts of shapes included: after the seeding wrote
     derivation edges and drew shapes, what each row holds is what its describer says of it now."""
     ctx = authenticated_context
@@ -261,7 +266,7 @@ async def test_what_is_stored_is_what_the_describer_says(
 @pytest.mark.asyncio
 async def test_a_whole_annotation_lens_is_found_by_how_many_shapes_it_holds(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The count follows the shapes drawn after the lens was made, a windowed lens' the shapes drawn inside its windows."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS["ANNOTATION"]
@@ -303,7 +308,7 @@ async def test_a_whole_annotation_lens_is_found_by_how_many_shapes_it_holds(
 @pytest.mark.asyncio
 async def test_annotations_are_found_by_their_kind_and_the_axes_of_their_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """What a port typed `Path` asks: the kind as the descriptor spells it, and the axis counts of the collection's drawing space."""
     ctx = authenticated_context
     make, _, _ = _CONTAINERS["ANNOTATION"]
@@ -357,7 +362,7 @@ async def test_annotations_are_found_by_their_kind_and_the_axes_of_their_space(
 @pytest.mark.asyncio
 async def test_a_key_the_structure_does_not_declare_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Dropping a constraint would offer objects the port then refuses, so an unknown key is an error and never a no-op."""
     ctx = authenticated_context
     for query, key in (
@@ -386,7 +391,7 @@ async def test_a_key_the_structure_does_not_declare_is_refused(
 @pytest.mark.asyncio
 async def test_requires_composes_with_the_other_filters_and_pages(
     authenticated_context: HttpContext, other_org_context: HttpContext
-):
+) -> None:
     """A picker's query: a kind, a search, the port's constraints, a page -- and nothing of another organization."""
     ctx = authenticated_context
     await _seed(ctx)
@@ -436,7 +441,7 @@ async def test_requires_composes_with_the_other_filters_and_pages(
 @pytest.mark.asyncio
 async def test_an_equality_constraint_is_answerable_from_the_descriptor_index(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The compiled condition is one the GIN index can serve. Sequential scans are switched off: on a handful of rows the planner would never choose an index."""
     await _seed(authenticated_context)
 

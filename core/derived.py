@@ -37,16 +37,22 @@ import threading
 from collections.abc import Callable, Hashable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generic, TypeAlias, TypeVar
 
 from django.apps import apps
 from django.db import models
+
+T = TypeVar("T")
+U = TypeVar("U")
+#: What :func:`envelope` spans: anything ordered that a window states.
+Ordered = TypeVar("Ordered", datetime.datetime, float, int)
+H = TypeVar("H", bound=Hashable)
 
 # --- verdicts -----------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class Stated[T]:
+class Stated(Generic[T]):
     """Every anchor that states the fact is consistent: the column holds ``value``."""
 
     value: T
@@ -72,12 +78,12 @@ class Conflict:
     anchors: tuple[int, ...]
 
 
-type Derivation[T] = Stated[T] | Unstated | Ambiguous | Conflict
+Derivation: TypeAlias = Stated[T] | Unstated | Ambiguous | Conflict
 
 UNSTATED = Unstated()
 
 
-def project[T, U](derivation: Derivation[T], read: Callable[[T], U]) -> Derivation[U]:
+def project(derivation: Derivation[T], read: Callable[[T], U]) -> Derivation[U]:
     """Read one part of a stated value; any other verdict passes through unchanged."""
     return (
         Stated(read(derivation.value)) if isinstance(derivation, Stated) else derivation
@@ -88,7 +94,7 @@ def project[T, U](derivation: Derivation[T], read: Callable[[T], U]) -> Derivati
 
 
 @dataclass(frozen=True)
-class Statement[T]:
+class Statement(Generic[T]):
     """One anchor's word on a fact: where it holds, and what it says."""
 
     anchor: int
@@ -109,7 +115,7 @@ def _where(coordinates: dict[str, Any]) -> str:
     )
 
 
-def _covering_pairs[T](
+def _covering_pairs(
     statements: list[Statement[T]],
 ) -> Iterable[tuple[Statement[T], Statement[T]]]:
     for outer in statements:
@@ -125,9 +131,9 @@ def _conflict(found: list[tuple[str, Statement[Any], Statement[Any]]]) -> Confli
     return Conflict("; ".join(reason for reason, _, _ in found), tuple(anchors))
 
 
-def envelope[T: (datetime.datetime, float, int)](
-    statements: list[Statement[tuple[T, T]]],
-) -> Derivation[tuple[T, T]]:
+def envelope(
+    statements: list[Statement[tuple[Ordered, Ordered]]],
+) -> Derivation[tuple[Ordered, Ordered]]:
     """The span every ``(low, high)`` statement falls in.
 
     True of the container whenever the statements are, so siblings never make it ambiguous. A
@@ -154,7 +160,7 @@ def envelope[T: (datetime.datetime, float, int)](
     )
 
 
-def agreement[T: Hashable](statements: list[Statement[T]]) -> Derivation[T]:
+def agreement(statements: list[Statement[H]]) -> Derivation[H]:
     """The one value every statement gives.
 
     A value an anchor states must equal the value of every anchor that holds over it; siblings
@@ -201,7 +207,7 @@ class AnchorSet:
             )
         return self._spokes[label]
 
-    def statements[T](
+    def statements(
         self, label: str, read: Callable[[Any], T | None]
     ) -> list[Statement[T]]:
         """What each anchor states through a spoke of ``label``; a spoke ``read`` returns None for states nothing."""
@@ -214,7 +220,7 @@ class AnchorSet:
                 )
         return statements
 
-    def memo[T](self, key: Hashable, compute: Callable[[], T]) -> T:
+    def memo(self, key: Hashable, compute: Callable[[], T]) -> T:
         """Compute once per set: the start and the end of a window share one check."""
         if key not in self._memo:
             self._memo[key] = compute()
@@ -233,7 +239,7 @@ def container_field(model: type[models.Model]) -> str:
 # --- derivers -------------------------------------------------------------------------
 
 
-class Deriver[T]:
+class Deriver(Generic[T]):
     """A function computing a column from a container's anchors, and the spoke models it reads."""
 
     def __init__(
@@ -255,7 +261,7 @@ class Deriver[T]:
 SOURCES: set[str] = set()
 
 
-def deriver[T](
+def deriver(
     *, sources: tuple[str, ...]
 ) -> Callable[[Callable[[AnchorSet], Derivation[T]]], Deriver[T]]:
     """Declare a deriver, and the spoke models (``app.Model`` labels) whose writes change what it returns."""

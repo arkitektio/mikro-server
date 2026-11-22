@@ -42,7 +42,7 @@ async def _store(ctx: HttpContext, key: str) -> ZarrStore:
 @pytest.mark.asyncio
 async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Ingest pins the recorded Optikit state to its coordinate, through composable typed input.
 
     Quantities arrive as unit-carrying strings and are stored canonically; the stored
@@ -147,7 +147,9 @@ async def test_a_microscope_state_is_written_as_a_typed_anchor_spoke(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_setting_holds_exactly_one_value(authenticated_context: HttpContext):
+async def test_a_setting_holds_exactly_one_value(
+    authenticated_context: HttpContext,
+) -> None:
     """A setting filling two value slots is refused: it is two settings."""
     store = await _store(authenticated_context, "optikit-two-values")
 

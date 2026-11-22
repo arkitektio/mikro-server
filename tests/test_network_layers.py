@@ -12,6 +12,7 @@ joins an object id cannot execute.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from core.logic import attribute_plans as attribute_plans_logic
@@ -28,27 +29,21 @@ LAYER_FIELDS = """
     filterBys { kind attribute target table column min max values exclude label joinPath { table column } }
 """
 
-CREATE_LAYER = (
-    """
-mutation Create($input: CreateNetworkLayerInput!) {
-  createNetworkLayer(input: $input) {
-    %s
-  }
-}
+CREATE_LAYER = f"""
+mutation Create($input: CreateNetworkLayerInput!) {{
+  createNetworkLayer(input: $input) {{
+    {LAYER_FIELDS}
+  }}
+}}
 """
-    % LAYER_FIELDS
-)
 
-UPDATE_LAYER = (
-    """
-mutation Update($input: UpdateNetworkLayerInput!) {
-  updateNetworkLayer(input: $input) {
-    %s
-  }
-}
+UPDATE_LAYER = f"""
+mutation Update($input: UpdateNetworkLayerInput!) {{
+  updateNetworkLayer(input: $input) {{
+    {LAYER_FIELDS}
+  }}
+}}
 """
-    % LAYER_FIELDS
-)
 
 CREATE_TABLE = """
 mutation Create($input: CreateTableDatasetInput!) {
@@ -167,7 +162,7 @@ async def _create_layer(
     scene: models.Scene,
     collection: models.NetworkCollection,
     **extra: object,
-):
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_LAYER,
         context_value=ctx,
@@ -187,7 +182,7 @@ async def _create_layer(
 @pytest.mark.asyncio
 async def test_a_network_layer_colours_by_a_graph_attribute(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The GRAPH member end to end: validated against the manifest, stored with its target."""
     collection = await _collection(authenticated_context)
     scene = await _scene_for(authenticated_context, collection)
@@ -247,7 +242,7 @@ async def test_a_network_layer_colours_by_a_graph_attribute(
 @pytest.mark.asyncio
 async def test_a_graph_colouring_names_an_attribute_the_collection_carries(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An unknown attribute is refused, and the refusal lists the declared vocabulary."""
     collection = await _collection(authenticated_context)
     scene = await _scene_for(authenticated_context, collection)
@@ -290,7 +285,7 @@ async def test_a_graph_colouring_names_an_attribute_the_collection_carries(
 @pytest.mark.asyncio
 async def test_radius_is_in_the_vocabulary_exactly_when_the_encoding_carries_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`radius` is not a manifest attribute -- it rides on `encoding.radii` -- but it colours."""
     radiusless = dict(seed.KONNEKTION_ENCODING, radii="NONE")
     collection = await _collection(authenticated_context, encoding=radiusless)
@@ -323,7 +318,9 @@ async def test_radius_is_in_the_vocabulary_exactly_when_the_encoding_carries_one
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_graph_colouring_is_measured(authenticated_context: HttpContext):
+async def test_a_graph_colouring_is_measured(
+    authenticated_context: HttpContext,
+) -> None:
     """Qualitative colormaps are refused for every graph attribute, `component` included."""
     collection = await _collection(authenticated_context)
     scene = await _scene_for(authenticated_context, collection)
@@ -342,7 +339,7 @@ async def test_a_graph_colouring_is_measured(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_a_network_layer_colours_by_a_keyed_table(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The NETWORK_COLLECTION identification end to end: the edge authors, the colouring runs."""
     collection = await _collection(authenticated_context)
     scene = await _scene_for(authenticated_context, collection)
@@ -383,7 +380,9 @@ async def test_a_network_layer_colours_by_a_keyed_table(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_wider_fact_walk_is_not_offered(authenticated_context: HttpContext):
+async def test_the_wider_fact_walk_is_not_offered(
+    authenticated_context: HttpContext,
+) -> None:
     """A table keyed by the image the network was traced from is reachable and still refused.
 
     The depth-zero rooting on trial. The fact walk crosses derivations in both directions, so
@@ -456,7 +455,7 @@ async def test_the_wider_fact_walk_is_not_offered(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_options_offer_exactly_what_the_mutation_accepts(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The invariant, walked in both directions over both halves of the list."""
     ctx = authenticated_context
     collection = await _collection(ctx)
@@ -518,7 +517,7 @@ async def test_options_offer_exactly_what_the_mutation_accepts(
 @pytest.mark.asyncio
 async def test_the_nested_options_field_roots_on_the_network(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`NetworkCollection.colorByOptions` resolves through the network rooting.
 
     The regression this guards: it used to delegate to the mesh-rooted root query with a
@@ -540,7 +539,9 @@ async def test_the_nested_options_field_roots_on_the_network(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_graph_rule_filters_by_bounds(authenticated_context: HttpContext):
+async def test_a_graph_rule_filters_by_bounds(
+    authenticated_context: HttpContext,
+) -> None:
     """A GRAPH filter is bounds over a per-node value; a value set is refused."""
     collection = await _collection(authenticated_context)
     scene = await _scene_for(authenticated_context, collection)
@@ -584,7 +585,7 @@ async def test_a_graph_rule_filters_by_bounds(authenticated_context: HttpContext
 @pytest.mark.asyncio
 async def test_two_identical_graph_colourings_are_one_wearing_two_names(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The duplicate key covers `attribute` and `target`: same pair refused, different target kept."""
     collection = await _collection(authenticated_context)
     scene = await _scene_for(authenticated_context, collection)
@@ -627,7 +628,9 @@ async def test_two_identical_graph_colourings_are_one_wearing_two_names(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_update_patches_the_pickers(authenticated_context: HttpContext):
+async def test_the_update_patches_the_pickers(
+    authenticated_context: HttpContext,
+) -> None:
     """`updateNetworkLayer` carries the mesh patch semantics: wholesale replace, dropped danglers."""
     ctx = authenticated_context
     collection = await _collection(ctx)
@@ -724,7 +727,7 @@ def test_the_colour_union_publishes_every_arm() -> None:
 @pytest.mark.asyncio
 async def test_deleting_a_table_a_network_picker_names_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The PROTECT guard covers the network columns -- the gap the point pickers sat in."""
     ctx = authenticated_context
     collection = await _collection(ctx)
@@ -762,7 +765,9 @@ query Plans($system: ID!) {
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_network_collection_roots_a_plan(authenticated_context: HttpContext):
+async def test_a_network_collection_roots_a_plan(
+    authenticated_context: HttpContext,
+) -> None:
     """A table keyed by a network's object ids publishes a plan whose sample is the wireframe.
 
     The regression test for a missing re-export: `NetworkSample` was registered in the schema

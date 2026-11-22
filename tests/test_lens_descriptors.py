@@ -60,7 +60,7 @@ async def _described(
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_a_container_and_its_whole_lens_describe_alike_and_a_window_says_it_is_not_whole(
     authenticated_context: HttpContext, kind: str
-):
+) -> None:
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]
     container_id, mutation, field = await make(ctx)
@@ -101,7 +101,9 @@ async def test_a_container_and_its_whole_lens_describe_alike_and_a_window_says_i
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_says_what_its_schema_says(authenticated_context: HttpContext):
+async def test_a_table_says_what_its_schema_says(
+    authenticated_context: HttpContext,
+) -> None:
     """Where its rows sit and what they carry -- never how many there are."""
     ctx = authenticated_context
     make, model, _ = _CONTAINERS["TABLE"]
@@ -126,7 +128,7 @@ async def test_a_table_says_what_its_schema_says(authenticated_context: HttpCont
 @pytest.mark.asyncio
 async def test_a_sparse_matrix_says_its_rank_and_its_layouts(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     make, model, _ = _CONTAINERS["SPARSE"]
     sparse_id, _, _ = await make(ctx)
@@ -142,7 +144,7 @@ async def test_a_sparse_matrix_says_its_rank_and_its_layouts(
 @pytest.mark.asyncio
 async def test_an_annotation_lens_counts_the_shapes_in_its_windows(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole collection counts every shape; a window counts the ones drawn inside it, as the overlap filter judges them."""
     ctx = authenticated_context
     make, model, _ = _CONTAINERS["ANNOTATION"]
@@ -168,7 +170,7 @@ async def test_an_annotation_lens_counts_the_shapes_in_its_windows(
 @pytest.mark.asyncio
 async def test_an_arrays_value_kind_is_read_off_what_its_author_declared(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A derivation declared CATEGORIZED makes a label map; a DISPLACEMENT value axis a vector field; the rest is intensity -- on the dataset, its whole lens and a crop alike."""
     ctx = authenticated_context
     source = await seed.create_array_dataset(

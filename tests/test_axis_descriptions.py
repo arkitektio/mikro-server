@@ -18,7 +18,9 @@ from tests import seed
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_dataset_axis_descriptions_round_trip(authenticated_context: HttpContext):
+async def test_dataset_axis_descriptions_round_trip(
+    authenticated_context: HttpContext,
+) -> None:
     """A structural axis declared with a description reads it back; one without reads null."""
     store = await ZarrStore.objects.acreate(
         organization=authenticated_context.request.organization,
@@ -71,7 +73,7 @@ async def test_dataset_axis_descriptions_round_trip(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_physical_axis_descriptions_round_trip(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A physical space's axis description is stored and read back off the space itself.
 
     Where this used to also assert the description reached a *bootstrapped world*: there is
@@ -122,7 +124,7 @@ async def test_physical_axis_descriptions_round_trip(
 @pytest.mark.asyncio
 async def test_a_mesh_collection_states_its_own_axis_descriptions(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A collection's axes are its own, descriptions included -- never copied from a source.
 
     They used to default to a copy of the source system's, justified by "an identity

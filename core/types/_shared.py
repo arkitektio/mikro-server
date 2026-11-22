@@ -1,11 +1,20 @@
+from typing import TYPE_CHECKING, TypeVar
+
 import strawberry
 import strawberry_django
+from django.db.models import Model, QuerySet
+from kante.types import Info
 from strawberry.scalars import JSON
 
 from core.scoping import scope_queryset
 
+if TYPE_CHECKING:
+    from core.filters import FileLinkFilter
 
-def build_prescoped_queryset(info, queryset):
+M = TypeVar("M", bound=Model)
+
+
+def build_prescoped_queryset(info: Info, queryset: QuerySet[M]) -> QuerySet[M]:
     """Limit ``queryset`` to the request's organization.
 
     Every type backing a Query field must route its ``get_queryset`` through here:
@@ -26,11 +35,15 @@ class OrgScoped:
     """
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(
+        cls, queryset: QuerySet[M], info: Info, **kwargs: object
+    ) -> QuerySet[M]:
         return build_prescoped_queryset(info, queryset)
 
 
-def apply_link_filters(queryset, filters_input, info) -> list:  # noqa: ANN001 - a QuerySet, a strawberry filter input, kante's Info
+def apply_link_filters(
+    queryset: QuerySet[M], filters_input: "FileLinkFilter | None", info: Info
+) -> list[M]:
     """Apply an optional ``FileLinkFilter`` to a link queryset and evaluate it.
 
     Lives here because five resolvers across four modules need it -- ``sourceFiles`` and
@@ -62,7 +75,7 @@ class DescriptorValue:
     value: JSON = strawberry.field(description="Its value.")
 
 
-def resolve_descriptors(root) -> JSON:  # noqa: ANN001 - the model instance behind any hosted type
+def resolve_descriptors(root: Model) -> JSON:
     """The descriptors of a hosted object, from its structure's declaration (``mikro_server.service``)."""
     from mikro_server.service import service  # the declaration imports core.models
 

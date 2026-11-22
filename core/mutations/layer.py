@@ -1,3 +1,6 @@
+from collections.abc import Sequence
+from typing import Protocol, TypeVar
+
 import kante
 import strawberry
 from django.db import transaction
@@ -27,9 +30,22 @@ from core.render.layer import label as label_models
 from core.render.layer import models as layer_models
 from core.scoping import get_for_org
 
+_T = TypeVar("_T")
+
+
+class CompositingPatch(Protocol):
+    """What every layer update input carries for compositing (`name`/`blending` only some)."""
+
+    @property
+    def opacity(self) -> float | None: ...
+    @property
+    def visible(self) -> bool | None: ...
+    @property
+    def order(self) -> int | None: ...
+
 
 def _build_layer_node(
-    info: Info, node: layer_inputs.LayerNodeInputModel, lens
+    info: Info, node: layer_inputs.LayerNodeInputModel, lens: models.ArrayLens
 ) -> layer_models.LayerNodeUnion:
     """Lower a fat GraphQL render-graph node into its strict tagged-union model, validating the lenses it samples."""
     if node.kind == "channel":
@@ -166,12 +182,12 @@ def assert_harmonic(harmonic: int | None) -> int:
     return value
 
 
-def default_phasor_axis(lens, phasor_axis: str | None) -> str | None:
+def default_phasor_axis(lens: models.ArrayLens, phasor_axis: str | None) -> str | None:
     """The axis a phasor node reduces, defaulting to the lens' first phasor-capable axis."""
     return phasor_axis or coords_logic.resolve_render_axes(lens.axis_specs).phasor
 
 
-def assert_phasor_axis(lens, phasor_axis: str) -> None:
+def assert_phasor_axis(lens: models.ArrayLens, phasor_axis: str) -> None:
     """Check that the axis a phasor node reduces is an axis a DFT means something over.
 
     Only MICROTIME and SPECTRUM qualify: both are *continuous* samplings of a periodic
@@ -192,7 +208,9 @@ def assert_phasor_axis(lens, phasor_axis: str) -> None:
 
 
 def build_render_graph(
-    info: Info, graph_input: layer_inputs.LayerRenderGraphInputModel, lens
+    info: Info,
+    graph_input: layer_inputs.LayerRenderGraphInputModel,
+    lens: models.ArrayLens,
 ) -> dict:
     """Validate a layer render-graph input against the lens and return its JSON representation."""
     root = _build_layer_node(info, graph_input.root, lens)
@@ -487,7 +505,9 @@ def _a(kind: str) -> str:
     return f"an {kind}" if kind[:1] in "aeiou" else f"a {kind}"
 
 
-def assert_kind(layer, expected: enums.LayerKind, *, mutation: str) -> None:
+def assert_kind(
+    layer: models.Layer, expected: enums.LayerKind, *, mutation: str
+) -> None:
     """Refuse a layer of the wrong kind, naming the mutation that does want it.
 
     Every update mutation carries this, and it is load-bearing rather than tidy. Without it
@@ -614,7 +634,7 @@ def _create_flat_layer(
     visible: bool | None,
     order: int | None,
     name: str | None = None,
-    **render,
+    **render: object,
 ) -> "models.Layer":
     """Create a layer of a fixed-shape kind from its render columns.
 
@@ -866,7 +886,10 @@ def create_intensity_layer(
 
 
 def _create_intensity_layer(
-    info: Info, model, *, projection_mode: enums.ProjectionMode | None
+    info: Info,
+    model: "CreateIntensityLayerInputModel | CreateVolumeLayerInputModel",
+    *,
+    projection_mode: enums.ProjectionMode | None,
 ) -> "models.Layer":
     """The body `createIntensityLayer` and `createVolumeLayer` share.
 
@@ -923,7 +946,7 @@ def _create_intensity_layer(
 _MEASURE_ROLES = column_options_logic.MEASURE_ROLES
 
 
-def _column_on(table, column_name: str):
+def _column_on(table: models.TableDataset, column_name: str) -> models.Column:
     """A named column of a table, or the refusal that lists what it does declare."""
     column = next(
         (
@@ -945,7 +968,12 @@ def _column_on(table, column_name: str):
 
 
 def _resolve_joined_column(
-    reachable: dict, join_path, table_id: str, column_name: str, *, source: str
+    reachable: dict,
+    join_path: Sequence[joins.JoinStepModel],
+    table_id: str,
+    column_name: str,
+    *,
+    source: str,
 ) -> tuple:
     """The claims a joined-column reference makes, checked against the facts in hand.
 
@@ -1021,7 +1049,7 @@ def _resolve_joined_column(
     return table, _column_on(table, column_name), steps
 
 
-def reachable_tables(info: Info, system) -> dict:
+def reachable_tables(info: Info, system: models.CoordinateSystem) -> dict:
     """One walk of the FIELD edges, for a mutation that checks both pickers against them.
 
     Every layer kind that publishes pickers publishes *two* of them -- a colour picker and a
@@ -1035,14 +1063,14 @@ def reachable_tables(info: Info, system) -> dict:
     )
 
 
-def mesh_reachable_tables(info: Info, collection) -> dict:
+def mesh_reachable_tables(info: Info, collection: models.MeshCollection) -> dict:
     """That walk, rooted on a mesh collection."""
     return reachable_tables(info, mesh_collection_system(collection))
 
 
 def _resolve_sparse_slice(
     info: Info,
-    system,
+    system: models.CoordinateSystem,
     lens_id: str | None,
     *,
     source: str,
@@ -1127,7 +1155,12 @@ def _resolve_sparse_slice(
 
 
 def _build_sparse_color_by(
-    info: Info, system, color_by, *, source: str, reachable: dict | None = None
+    info: Info,
+    system: models.CoordinateSystem,
+    color_by: layer_inputs.ColorByInputModel,
+    *,
+    source: str,
+    reachable: dict | None = None,
 ) -> color_by_models.ColorByModel:
     """Resolve and check a SPARSE `colorBy`: one slice of a matrix this source's ids index.
 
@@ -1161,7 +1194,9 @@ def _build_sparse_color_by(
     )
 
 
-def _build_graph_color_by(collection, color_by) -> color_by_models.ColorByModel:
+def _build_graph_color_by(
+    collection: models.NetworkCollection, color_by: layer_inputs.ColorByInputModel
+) -> color_by_models.ColorByModel:
     """Resolve and check a GRAPH `colorBy`: a per-node value the collection itself carries.
 
     The one entry kind validated against the *collection* rather than against the coordinate
@@ -1203,14 +1238,14 @@ def _build_graph_color_by(collection, color_by) -> color_by_models.ColorByModel:
 
 def _build_color_by(
     info: Info,
-    system,
+    system: models.CoordinateSystem,
     color_by: layer_inputs.ColorByInputModel,
     *,
     source: str = "this mask",
     reachable: dict | None = None,
     reachable_sparse: dict | None = None,
-    join_path=(),
-    collection=None,
+    join_path: Sequence[joins.JoinStepModel] = (),
+    collection: models.NetworkCollection | None = None,
     node_targets: dict | None = None,
 ) -> color_by_models.ColorByModel:
     """Resolve and check a `colorBy` against the FIELD edge that makes it answerable.
@@ -1312,14 +1347,14 @@ def _build_color_by(
 
 def build_color_bys(
     info: Info,
-    system,
+    system: models.CoordinateSystem,
     color_bys: "list[layer_inputs.ColorByInputModel] | None",
     *,
     source: str,
     entry_model: type = color_by_models.PickerColorByModel,
     reachable: dict | None = None,
     reachable_sparse: dict | None = None,
-    collection=None,
+    collection: models.NetworkCollection | None = None,
     node_targets: dict | None = None,
 ) -> list[dict] | None:
     """Validate a layer's whole colour picker and return what the JSON column stores.
@@ -1423,7 +1458,7 @@ def build_color_bys(
 
 def build_mesh_color_bys(
     info: Info,
-    collection,
+    collection: models.MeshCollection,
     color_bys: "list[layer_inputs.MeshColorByInputModel] | None",
     *,
     reachable: dict | None = None,
@@ -1439,7 +1474,9 @@ def build_mesh_color_bys(
     )
 
 
-def network_reachable_walks(info: Info, collection) -> tuple[dict, dict, dict]:
+def network_reachable_walks(
+    info: Info, collection: models.NetworkCollection
+) -> tuple[dict, dict, dict]:
     """Both reachability walks for a network picker, rooted at depth zero, plus the node tables.
 
     Depth zero is the load-bearing part, and it is a correctness rule rather than a budget:
@@ -1475,7 +1512,11 @@ def network_reachable_walks(info: Info, collection) -> tuple[dict, dict, dict]:
 
 
 def build_network_color_bys(
-    info: Info, collection, color_bys, *, walks: tuple[dict, dict, dict] | None = None
+    info: Info,
+    collection: models.NetworkCollection,
+    color_bys: "list[layer_inputs.NetworkColorByInputModel] | None",
+    *,
+    walks: tuple[dict, dict, dict] | None = None,
 ) -> list[dict] | None:
     """The colour builder, rooted on a network collection and storing network-named entries.
 
@@ -1504,14 +1545,14 @@ def build_network_color_bys(
 
 def build_filter_bys(
     info: Info,
-    system,
+    system: models.CoordinateSystem,
     filter_bys: "list[filter_by_models.PickerFilterByModel] | None",
     *,
     source: str,
     entry_model: type = filter_by_models.PickerFilterByModel,
     reachable: dict | None = None,
     reachable_sparse: dict | None = None,
-    collection=None,
+    collection: models.NetworkCollection | None = None,
     node_targets: dict | None = None,
     own_table_id: str | None = None,
 ) -> list[dict] | None:
@@ -1683,7 +1724,7 @@ def build_filter_bys(
 
 def build_mesh_filter_bys(
     info: Info,
-    collection,
+    collection: models.MeshCollection,
     filter_bys: "list[layer_inputs.MeshFilterByInputModel] | None",
     *,
     reachable: dict | None = None,
@@ -1700,7 +1741,11 @@ def build_mesh_filter_bys(
 
 
 def build_network_filter_bys(
-    info: Info, collection, filter_bys, *, walks: tuple[dict, dict, dict] | None = None
+    info: Info,
+    collection: models.NetworkCollection,
+    filter_bys: "list[layer_inputs.NetworkFilterByInputModel] | None",
+    *,
+    walks: tuple[dict, dict, dict] | None = None,
 ) -> list[dict] | None:
     """The filter builder, rooted on a network collection and storing network-named entries.
 
@@ -1794,10 +1839,15 @@ def assert_active_color_by(
         )
 
 
+def _or_kept(value: _T | None, kept: _T) -> _T:
+    """An omitted (None) field of a patch keeps the stored value."""
+    return kept if value is None else value
+
+
 def build_label_render(
     info: Info,
     render: layer_inputs.LabelRenderInputModel | None,
-    lens,
+    lens: models.ArrayLens,
     *,
     base: label_models.LabelRenderModel | None = None,
 ) -> label_models.LabelRenderModel:
@@ -1893,19 +1943,15 @@ def build_label_render(
         assert_active_filter_bys(filter_bys, render.active_filter_bys)
         active_filter_bys = render.active_filter_bys
 
-    def pick(name: str):
-        value = getattr(render, name)
-        return getattr(current, name) if value is None else value
-
     return label_models.LabelRenderModel(
-        seed=pick("seed"),
-        background=pick("background"),
-        opacity=pick("opacity"),
-        contour=pick("contour"),
-        contour_width=pick("contour_width"),
-        selected=pick("selected"),
-        selection_color=pick("selection_color"),
-        show_unselected=pick("show_unselected"),
+        seed=_or_kept(render.seed, current.seed),
+        background=_or_kept(render.background, current.background),
+        opacity=_or_kept(render.opacity, current.opacity),
+        contour=_or_kept(render.contour, current.contour),
+        contour_width=_or_kept(render.contour_width, current.contour_width),
+        selected=_or_kept(render.selected, current.selected),
+        selection_color=_or_kept(render.selection_color, current.selection_color),
+        show_unselected=_or_kept(render.show_unselected, current.show_unselected),
         color_bys=color_bys,
         active_color_by=active_color_by,
         filter_bys=filter_bys,
@@ -2227,7 +2273,7 @@ def create_phasor_layer(info: Info, input: CreatePhasorLayerInput) -> types.Phas
 # ---------------------------------------------------------------------------
 
 
-def _patch_layer_compositing(layer, model) -> None:
+def _patch_layer_compositing(layer: models.Layer, model: "CompositingPatch") -> None:
     """Apply the compositing fields every update mutation accepts. Omitted means unchanged."""
     if getattr(model, "name", None) is not None:
         layer.name = model.name

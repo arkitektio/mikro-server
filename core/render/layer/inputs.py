@@ -867,7 +867,7 @@ class ColorByInputBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def _window_is_a_range(self):
+    def _window_is_a_range(self) -> "ColorByInputBase":
         if self.min is not None and self.max is not None and self.min > self.max:
             raise ValueError(
                 f"`min` is the value mapped to the bottom of the colormap, so it cannot exceed `max`, but got {self.min} > {self.max}"
@@ -891,7 +891,7 @@ class SparseColorByInputModel(ColorByInputBase):
     lens: str
 
     @model_validator(mode="after")
-    def _a_slice_is_measured(self):
+    def _a_slice_is_measured(self) -> "SparseColorByInputModel":
         """Not variant discipline -- a real rule, so it lives on the member that has it.
 
         The union's own machinery answers "which fields does this kind read"; this answers
@@ -914,7 +914,7 @@ class GraphColorByInputModel(ColorByInputBase):
     target: enums.GraphTarget = enums.GraphTarget.NODE
 
     @model_validator(mode="after")
-    def _a_metric_is_measured(self):
+    def _a_metric_is_measured(self) -> "GraphColorByInputModel":
         """One rule for every graph attribute, `component` included, so no per-semantics branch.
 
         Strahler order, degree, depth, a radius, a writer's own measurement -- ordered values

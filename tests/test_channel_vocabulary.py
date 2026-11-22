@@ -36,7 +36,9 @@ from core.logic import channels
         ("Texas Red", enums.ColorMap.RED),
     ],
 )
-def test_a_recorded_fluorophore_decides_its_hue(label: str, expected: "enums.ColorMap"):
+def test_a_recorded_fluorophore_decides_its_hue(
+    label: str, expected: "enums.ColorMap"
+) -> None:
     """The name ingest recorded says what colour the channel is. It always did; nothing read it."""
     assert channels.colormap_for(label) == expected
 
@@ -52,13 +54,15 @@ def test_a_recorded_fluorophore_decides_its_hue(label: str, expected: "enums.Col
 )
 def test_a_wavelength_in_the_name_decides_the_hue(
     label: str, expected: "enums.ColorMap"
-):
+) -> None:
     """Half the world names a channel after its laser line, and that is as good as a fluorophore."""
     assert channels.colormap_for(label) == expected
 
 
 @pytest.mark.parametrize("label", ["channel 2", "ch1", "", None, "series 4", "Hoechst"])
-def test_an_uninformative_name_decides_nothing_except_when_it_does(label):
+def test_an_uninformative_name_decides_nothing_except_when_it_does(
+    label: str | None,
+) -> None:
     """None is the answer that keeps the index cycle, and it has to be reachable.
 
     A dictionary that returns *something* for every string would quietly replace the
@@ -77,7 +81,7 @@ def test_an_uninformative_name_decides_nothing_except_when_it_does(label):
     "label",
     ["Brightfield", "bright field", "BF", "DIC", "Phase contrast", "TL", "label-free"],
 )
-def test_transmitted_light_is_told_apart(label: str):
+def test_transmitted_light_is_told_apart(label: str) -> None:
     """Not for the colour: for the blend. Brightfield summed into fluorescence washes a scene out."""
     assert channels.is_transmitted(label) is True
 
@@ -85,7 +89,7 @@ def test_transmitted_light_is_told_apart(label: str):
 @pytest.mark.parametrize(
     "label", ["GFP", "DAPI", "channel 0", "", None, "TRITC", "BFP"]
 )
-def test_a_fluorophore_is_not_transmitted_light(label):
+def test_a_fluorophore_is_not_transmitted_light(label: str | None) -> None:
     """The two-letter aliases are the risk here: `bf` and `tl` must not fire inside a real name.
 
     `BFP` is the case that would break a substring match -- it contains `bf`, and it is a blue
@@ -94,7 +98,7 @@ def test_a_fluorophore_is_not_transmitted_light(label):
     assert channels.is_transmitted(label) is False
 
 
-def test_three_channels_named_red_green_blue_are_a_photograph():
+def test_three_channels_named_red_green_blue_are_a_photograph() -> None:
     """The whole set, and the indices come from the labels rather than from position."""
     assert channels.rgb_components({0: "Red", 1: "Green", 2: "Blue"}, 3) == {
         "red": 0,
@@ -103,7 +107,7 @@ def test_three_channels_named_red_green_blue_are_a_photograph():
     }
 
 
-def test_the_components_are_read_in_the_order_the_converter_wrote_them():
+def test_the_components_are_read_in_the_order_the_converter_wrote_them() -> None:
     """Several converters write (blue, green, red). Assuming 0, 1, 2 inverts the picture."""
     assert channels.rgb_components({0: "blue", 1: "green", 2: "red"}, 3) == {
         "red": 2,
@@ -131,6 +135,6 @@ def test_the_components_are_read_in_the_order_the_converter_wrote_them():
 )
 def test_anything_less_than_the_whole_set_is_not_a_photograph(
     labels: dict, channel_count: int
-):
+) -> None:
     """All three, over an axis of exactly three, or none of it."""
     assert channels.rgb_components(labels, channel_count) is None

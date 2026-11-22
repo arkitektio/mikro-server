@@ -134,7 +134,7 @@ async def _scene_with_registered_source(
 @pytest.mark.asyncio
 async def test_an_unmappable_edge_is_not_a_way_to_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The search will not cross it, so the data it relates has no path -- which is the truth.
 
     ABLATION: un-gate the forward step in `SceneGraph.adjacency` and the BFS walks straight
@@ -195,7 +195,7 @@ async def test_an_unmappable_edge_is_not_a_way_to_world(
 @pytest.mark.asyncio
 async def test_an_unmappable_edge_in_a_scene_is_still_not_a_way_to_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Even registered into the scene's composition, the search will not walk it.
 
     This is the case that pins the FORWARD gate specifically. The world's own edges are
@@ -279,7 +279,7 @@ async def test_an_unmappable_edge_in_a_scene_is_still_not_a_way_to_world(
 @pytest.mark.asyncio
 async def test_an_unmappable_derivation_is_refused_with_the_impossibility_message(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The layer mutation refuses this data, and says WHY: nothing can ever place it.
 
     This dataset kept axes called y and x -- and the world has y and x -- exactly the
@@ -349,7 +349,7 @@ async def test_an_unmappable_derivation_is_refused_with_the_impossibility_messag
 @pytest.mark.asyncio
 async def test_the_lineage_stops_but_the_provenance_does_not(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Two halves that must not be confused: placement ends here, history does not.
 
     `lineage_ancestors` answers "who places this", and nothing places data across an
@@ -399,7 +399,7 @@ async def test_the_lineage_stops_but_the_provenance_does_not(
 @pytest.mark.asyncio
 async def test_an_unmappable_edge_is_still_discoverable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Discovery is kind-blind; placement is not. That asymmetry is the design.
 
     A client that gets `pathToWorld: null` needs to find out *why*, and the edge is the
@@ -450,7 +450,7 @@ async def test_an_unmappable_edge_is_still_discoverable(
 @pytest.mark.asyncio
 async def test_a_displacement_field_is_not_walked_backwards(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Rank was never the whole rule; it only looked like it was.
 
     Every kind that was creatable happened to be invertible, so "same number of axes on
@@ -551,7 +551,7 @@ async def test_a_displacement_field_is_not_walked_backwards(
 @pytest.mark.asyncio
 async def test_a_by_dimension_is_invertible_only_if_its_parts_are(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A wrapper's kind says nothing about whether it can be undone. Its parts do.
 
     A set-membership test on the wrapper's own kind -- the obvious implementation -- would
@@ -630,7 +630,7 @@ async def test_a_by_dimension_is_invertible_only_if_its_parts_are(
 @pytest.mark.asyncio
 async def test_an_unmappable_edge_does_not_poison_an_roi_box(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An ROI's box is composed along the walk to intrinsic, and that walk must not take it.
 
     `_edge_towards_intrinsic` picks the first edge out of a system that stays inside the
@@ -678,7 +678,7 @@ async def test_an_unmappable_edge_does_not_poison_an_roi_box(
 @pytest.mark.asyncio
 async def test_placement_distinguishes_a_gap_from_an_impossibility(
     authenticated_context: HttpContext,
-):
+) -> None:
     """PLACED, UNREGISTERED, UNMAPPABLE -- because a null `pathToWorld` meant two things.
 
     One of them is a gap in the data: nobody has registered this yet, and authoring the edge
@@ -747,7 +747,7 @@ async def test_placement_distinguishes_a_gap_from_an_impossibility(
 @pytest.mark.asyncio
 async def test_a_fusion_with_one_unmappable_parent_is_a_gap_not_an_impossibility(
     authenticated_context: HttpContext,
-):
+) -> None:
     """UNMAPPABLE is claimed only when the data reaches nowhere at all.
 
     A fusion whose two parents are related to it differently -- one across an edge that maps
@@ -841,7 +841,7 @@ async def test_a_fusion_with_one_unmappable_parent_is_a_gap_not_an_impossibility
 @pytest.mark.asyncio
 async def test_the_write_path_refuses_a_map_on_an_unmappable_edge(
     authenticated_context: HttpContext,
-):
+) -> None:
     """It carries no parameters, and no rank constrains it. Both halves matter."""
     first = await seed.create_array_dataset(authenticated_context, "Image")
     axes = [seed.axis("object", enums.AxisType.INDEX)]

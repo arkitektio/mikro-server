@@ -111,7 +111,7 @@ async def _values_chart(ctx: HttpContext, world: str) -> dict:
 @pytest.mark.asyncio
 async def test_a_chart_over_rows_has_no_axis_to_lay_along(
     authenticated_context: HttpContext,
-):
+) -> None:
     _, _, space = await _nuclei(authenticated_context)
     chart = await _values_chart(authenticated_context, space)
     assert chart["worldCoordinateSystem"]["id"] == space and chart["axis"] is None, (
@@ -122,7 +122,9 @@ async def test_a_chart_over_rows_has_no_axis_to_lay_along(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scatter_draws_rows_at_their_values(authenticated_context: HttpContext):
+async def test_a_scatter_draws_rows_at_their_values(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
@@ -181,7 +183,7 @@ async def test_a_scatter_draws_rows_at_their_values(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_layers_in_other_units_are_drawn_beside_each_other(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Neither units nor kinds need agree: a chart lays a scatter beside a histogram as panels (its layout) and overlays only the layers that read their axes alike."""
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
@@ -231,7 +233,7 @@ async def test_layers_in_other_units_are_drawn_beside_each_other(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_bound_columns_are_checked(authenticated_context: HttpContext):
+async def test_bound_columns_are_checked(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
@@ -289,7 +291,7 @@ async def test_bound_columns_are_checked(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_distribution_per_condition(authenticated_context: HttpContext):
+async def test_a_distribution_per_condition(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
@@ -367,7 +369,7 @@ async def test_a_distribution_per_condition(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_layer_says_where_its_positions_come_from(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One chart over a table framed by `t`: a SERIES laid along `t` and a scatter of the same time points' columns, side by side.
 
     What positions a layer is its own kind's: along the world axis (needing a world of one measured
@@ -453,7 +455,9 @@ async def test_a_layer_says_where_its_positions_come_from(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_gate_is_a_window_on_a_measurement(authenticated_context: HttpContext):
+async def test_a_gate_is_a_window_on_a_measurement(
+    authenticated_context: HttpContext,
+) -> None:
     """`area >= 50` is a lens of the table like any window: drawn through, kept by its spec, a row filter on read."""
     ctx = authenticated_context
     table_id, _, space = await _nuclei(ctx)
@@ -528,7 +532,7 @@ mutation Auto($input: AutoVisualizeInput!) {
 @pytest.mark.asyncio
 async def test_a_table_with_no_place_is_shown_as_a_chart_of_its_values(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     _, lens, space = await _nuclei(ctx)
     shown = (await _ok(ctx, AUTO, {"input": {"lens": lens}}))["autoVisualize"]
@@ -543,7 +547,9 @@ async def test_a_table_with_no_place_is_shown_as_a_chart_of_its_values(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_values_world_says_whose_rows(authenticated_context: HttpContext):
+async def test_a_values_world_says_whose_rows(
+    authenticated_context: HttpContext,
+) -> None:
     """Another table's rows are not this world's rows: nothing places them here, so they are refused."""
     ctx = authenticated_context
     _, _, space = await _nuclei(ctx)
@@ -568,7 +574,7 @@ async def test_a_values_world_says_whose_rows(authenticated_context: HttpContext
 @pytest.mark.asyncio
 async def test_a_derived_table_draws_in_its_sources_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A PCA written as a table derived from the measurements, row for row: its rows are placed in their world, so both draw in one chart."""
     ctx = authenticated_context
     table_id, lens, space = await _nuclei(ctx)

@@ -1,20 +1,28 @@
 import os
 import time
+from collections.abc import Iterator
 
 import boto3
 import psycopg
 import pytest
 from authentikate.models import Client, Membership, Organization, User
+from botocore.client import BaseClient
+from django.apps import AppConfig
 from django.contrib.contenttypes.management import create_contenttypes
 from django.db.models.signals import post_migrate
 from dokker import PortNotFoundError, testing
 from kante.context import HttpContext, UniversalRequest
 from moto import mock_aws
+from pytest_django import DjangoDbBlocker
 from strawberry.http.temporal_response import TemporalResponse
+
+# Fixtures several modules share, defined beside the tests they were written for.
+from tests.test_rekuest_signals import intake  # noqa: F401 -- a shared fixture
+from tests.test_store_purging import buckets  # noqa: F401 -- a shared fixture
 
 
 @pytest.fixture(scope="session", autouse=True)
-def embedding_model_warm():
+def embedding_model_warm() -> Iterator[None]:
     """Load the embedding model once per session, outside any test's DB transaction.
 
     Every save of a Folder / ArrayDataset / TableDataset embeds its text, so the first one
@@ -28,13 +36,13 @@ def embedding_model_warm():
 
 
 @pytest.fixture(scope="function")
-def s3(aws_credentials):
+def s3(aws_credentials: None) -> Iterator[BaseClient]:
     with mock_aws():
         yield boto3.client("s3", region_name="us-east-1")
 
 
 @pytest.fixture(scope="session")
-def backend_stack():
+def backend_stack() -> Iterator[int]:
     """Bring up the integration stack and yield the host port its postgres landed on.
 
     The port is *not* fixed. The compose file publishes 5432 with no host port, so
@@ -114,7 +122,7 @@ def backend_stack():
 
 
 @pytest.fixture(scope="session")
-def django_db_modify_db_settings(backend_stack):
+def django_db_modify_db_settings(backend_stack: int) -> Iterator[None]:
     """Start the backend services, and point Django at the port they came up on.
 
     pytest-django calls this before creating the test database, which is the only
@@ -130,7 +138,9 @@ def django_db_modify_db_settings(backend_stack):
 
 
 @pytest.fixture(scope="session")
-def django_db_setup(django_db_setup, django_db_blocker):
+def django_db_setup(
+    django_db_setup: None, django_db_blocker: DjangoDbBlocker
+) -> Iterator[None]:
     # Every transaction=True test teardown flushes the DB and re-fires
     # post_migrate, which rebuilds all contenttypes and permissions from the
     # model registry (~1s per test). The rows never change between tests, so
@@ -148,9 +158,11 @@ def django_db_setup(django_db_setup, django_db_blocker):
     )
     post_migrate.disconnect(create_contenttypes)
 
-    def restore_contenttypes_and_permissions(sender, **kwargs):
+    def restore_contenttypes_and_permissions(
+        sender: AppConfig, **kwargs: object
+    ) -> None:
         # post_migrate fires once per app config on flush; restore once.
-        if getattr(sender, "label", None) != "contenttypes":
+        if sender.label != "contenttypes":
             return
         ContentType.objects.bulk_create(contenttypes, ignore_conflicts=True)
         Permission.objects.bulk_create(permissions, ignore_conflicts=True)
@@ -177,7 +189,7 @@ def django_db_setup(django_db_setup, django_db_blocker):
 
 
 @pytest.fixture(scope="function")
-def authenticated_context(db, backend_stack):
+def authenticated_context(db: None, backend_stack: int) -> HttpContext:
     # Match the identity the static "test" token resolves to (see settings_test
     # STATIC_TOKENS + authentikate's token expansion), so the org/user on this
     # context is the same one the schema's AuthentikateExtension authenticates as
@@ -209,7 +221,7 @@ def authenticated_context(db, backend_stack):
 
 
 @pytest.fixture(scope="function")
-def bot_context(db, backend_stack) -> HttpContext:
+def bot_context(db: None, backend_stack: int) -> HttpContext:
     """A non-admin user (static token "bottest") in the SAME org as authenticated_context.
 
     Holds ``mikro_editor``: it passes the write gate but is not mikro's admin, so the creator/assignee delete guard actually applies to it — the
@@ -243,7 +255,7 @@ def bot_context(db, backend_stack) -> HttpContext:
 
 
 @pytest.fixture(scope="function")
-def editor_context(db, backend_stack) -> HttpContext:
+def editor_context(db: None, backend_stack: int) -> HttpContext:
     """A user holding only ``mikro_editor`` (static token "editortest") in the SAME org as authenticated_context."""
     user, _ = User.objects.get_or_create(
         sub="3", iss="static_issuer", defaults={"username": "static_issuer_3"}
@@ -273,7 +285,7 @@ def editor_context(db, backend_stack) -> HttpContext:
 
 
 @pytest.fixture(scope="function")
-def other_org_context(db, backend_stack) -> HttpContext:
+def other_org_context(db: None, backend_stack: int) -> HttpContext:
     """A context for a user in a different organization (static token "othertest")."""
     user, _ = User.objects.get_or_create(
         sub="9", iss="static_issuer", defaults={"username": "static_issuer_9"}
@@ -302,7 +314,7 @@ def other_org_context(db, backend_stack) -> HttpContext:
 
 
 @pytest.fixture(scope="function")
-def same_user_other_org_context(db, backend_stack) -> HttpContext:
+def same_user_other_org_context(db: None, backend_stack: int) -> HttpContext:
     """The user of ``authenticated_context`` (sub 1), acting in "other_org" (token "test-other-org")."""
     user, _ = User.objects.get_or_create(
         sub="1", iss="static_issuer", defaults={"username": "static_issuer_1"}
@@ -341,12 +353,12 @@ def _token_context(token: str) -> HttpContext:
 
 
 @pytest.fixture(scope="function")
-def other_app_context(db, backend_stack) -> HttpContext:
+def other_app_context(db: None, backend_stack: int) -> HttpContext:
     """The user of ``authenticated_context`` in its org, calling through another app ("otherapptest")."""
     return _token_context("otherapptest")
 
 
 @pytest.fixture(scope="function")
-def no_app_context(db, backend_stack) -> HttpContext:
+def no_app_context(db: None, backend_stack: int) -> HttpContext:
     """The user of ``authenticated_context`` through a token naming no app ("noapptest")."""
     return _token_context("noapptest")

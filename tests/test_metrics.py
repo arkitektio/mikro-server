@@ -7,6 +7,7 @@ feed is read over HTTP, signed with a key the trust bundle says is kraph's.
 
 import json
 import time
+from typing import TYPE_CHECKING
 
 import pytest
 from arkitekt_service import trust
@@ -15,11 +16,16 @@ from asgiref.sync import sync_to_async
 from django.test import Client as HttpClient
 from joserfc.jwk import OKPKey
 from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
 
+from core.models import ArrayDataset
 from metric import models
 from mikro_server.schema import schema
 from tests import seed
-from tests.test_rekuest_signals import INSTANCE, intake  # noqa: F401  the fixture
+from tests.test_rekuest_signals import INSTANCE, _Intake
+
+if TYPE_CHECKING:
+    from django.test.client import _MonkeyPatchedWSGIResponse
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
@@ -57,11 +63,11 @@ async def refused(ctx: HttpContext, query: str, variables: dict) -> str:
 
 
 def quantity(
-    dataset,
+    dataset: ArrayDataset,
     key: str = "ais_suite.measure_profile/threshold_distance",
     magnitude: float = 31.2,
     unit: str = "µm",
-    **extra,
+    **extra: object,
 ) -> dict:
     return {
         "target": {"identifier": "@mikro/arraydataset", "object": str(dataset.id)},
@@ -76,7 +82,7 @@ def entries() -> list[FeedEntry]:
     return list(FeedEntry.objects.filter(feed="@mikro/metric").order_by("xid", "id"))
 
 
-def metric_signals(intake, count: int, timeout: float = 3) -> list[dict]:  # noqa: F811
+def metric_signals(intake: _Intake, count: int, timeout: float = 3) -> list[dict]:
     deadline = time.monotonic() + timeout
     while True:
         found = [
@@ -91,8 +97,8 @@ def metric_signals(intake, count: int, timeout: float = 3) -> list[dict]:  # noq
 
 class TestRecording:
     async def test_a_metric_is_recorded_with_its_feed_entry_and_announced(
-        self, authenticated_context, intake
-    ):  # noqa: F811
+        self, authenticated_context: HttpContext, intake: _Intake
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         data = await run(authenticated_context, CREATE, {"input": quantity(dataset)})
         metric = data["createMetric"]
@@ -125,7 +131,9 @@ class TestRecording:
             "@mikro/target_object": str(dataset.id),
         }
 
-    async def test_a_code_is_a_value_too(self, authenticated_context):
+    async def test_a_code_is_a_value_too(
+        self, authenticated_context: HttpContext
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         spec = {
             "target": {"identifier": "@mikro/arraydataset", "object": str(dataset.id)},
@@ -152,8 +160,8 @@ class TestRecording:
         ],
     )
     async def test_a_value_is_a_quantity_or_a_code_under_a_namespaced_key(
-        self, authenticated_context, change, says
-    ):
+        self, authenticated_context: HttpContext, change: dict, says: str
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         assert says in await refused(
             authenticated_context, CREATE, {"input": {**quantity(dataset), **change}}
@@ -161,8 +169,8 @@ class TestRecording:
         assert await sync_to_async(entries)() == []
 
     async def test_many_metrics_are_one_transaction_and_announce_nothing(
-        self, authenticated_context, intake
-    ):  # noqa: F811
+        self, authenticated_context: HttpContext, intake: _Intake
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         scene = await seed.create_scene(authenticated_context, "Canvas")
         drawn = (
@@ -205,8 +213,8 @@ class TestRecording:
         assert metric_signals(intake, 1, timeout=1) == []
 
     async def test_a_batch_that_names_one_missing_object_records_nothing(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         missing = {
             "target": {"identifier": "@mikro/arraydataset", "object": "999999"},
@@ -225,8 +233,8 @@ class TestRecording:
         )
 
     async def test_a_metric_is_about_an_object_of_the_callers_organization(
-        self, authenticated_context, other_org_context
-    ):
+        self, authenticated_context: HttpContext, other_org_context: HttpContext
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         assert "in this organization" in await refused(
             other_org_context, CREATE, {"input": quantity(dataset)}
@@ -256,8 +264,8 @@ class TestRecording:
 
 class TestCorrecting:
     async def test_a_correction_supersedes_and_keeps_what_it_corrects(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         first = (
             await run(authenticated_context, CREATE, {"input": quantity(dataset)})
@@ -273,7 +281,9 @@ class TestCorrecting:
         await refused(authenticated_context, DELETE, {"input": {"id": first["id"]}})
         assert await models.Metric.objects.filter(pk=first["id"]).aexists()
 
-    async def test_a_correction_is_about_the_same_object(self, authenticated_context):
+    async def test_a_correction_is_about_the_same_object(
+        self, authenticated_context: HttpContext
+    ) -> None:
         one = await seed.create_array_dataset(authenticated_context)
         other = await seed.create_array_dataset(authenticated_context, name="Other")
         first = (await run(authenticated_context, CREATE, {"input": quantity(one)}))[
@@ -288,8 +298,8 @@ class TestCorrecting:
 
 class TestDeleting:
     async def test_a_deleted_metric_leaves_a_deleted_entry_and_is_announced(
-        self, authenticated_context, intake
-    ):  # noqa: F811
+        self, authenticated_context: HttpContext, intake: _Intake
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         metric = (
             await run(authenticated_context, CREATE, {"input": quantity(dataset)})
@@ -302,8 +312,8 @@ class TestDeleting:
         assert [s["kind"] for s in metric_signals(intake, 2)] == ["CREATED", "DELETED"]
 
     async def test_an_object_something_was_measured_about_cannot_be_deleted(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         metric = (
             await run(authenticated_context, CREATE, {"input": quantity(dataset)})
@@ -320,7 +330,13 @@ class TestDeleting:
 
 
 class TestFeed:
-    def read(self, settings, body: dict, key=KRAPH_KEY, issuer="kraph"):
+    def read(
+        self,
+        settings: SettingsWrapper,
+        body: dict,
+        key: OKPKey = KRAPH_KEY,
+        issuer: str = "kraph",
+    ) -> "_MonkeyPatchedWSGIResponse":
         settings.INSTANCE = {
             **INSTANCE,
             "TRUST_JWKS": {
@@ -342,8 +358,8 @@ class TestFeed:
         )
 
     async def test_kraph_reads_each_metric_with_its_body(
-        self, authenticated_context, settings
-    ):
+        self, authenticated_context: HttpContext, settings: SettingsWrapper
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         metric = (
             await run(authenticated_context, CREATE, {"input": quantity(dataset)})
@@ -383,8 +399,8 @@ class TestFeed:
         )  # the client the request authenticated through
 
     async def test_one_organization_per_page_and_only_kraph_reads(
-        self, authenticated_context, settings
-    ):
+        self, authenticated_context: HttpContext, settings: SettingsWrapper
+    ) -> None:
         dataset = await seed.create_array_dataset(authenticated_context)
         await run(authenticated_context, CREATE, {"input": quantity(dataset)})
         page = {

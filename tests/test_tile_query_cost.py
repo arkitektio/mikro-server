@@ -6,6 +6,8 @@ page lists datasets as tiles. Each tile field (`shape`, `axisNames`, `multiscale
 through `File.derivedContainers` none of their prefetches applied.
 """
 
+from typing import Any
+
 import pytest
 from asgiref.sync import sync_to_async
 from django.db.backends.utils import CursorWrapper
@@ -16,11 +18,8 @@ from mikro_server.schema import schema
 from tests import seed
 
 TILE = "id name axisNames shape multiscale spec fullLens { id } defaultScene { id } latestSnapshot { id }"
-FILES = (
-    "query { files(pagination: {limit: 20}) { id derivedContainers(filters: {direction: SOURCE}) { id seriesIdentifier container { __typename ... on ArrayDataset { %s } } } } }"
-    % TILE
-)
-DATASETS = "query { arrayDatasets(pagination: {limit: 50}) { %s } }" % TILE
+FILES = f"query {{ files(pagination: {{limit: 20}}) {{ id derivedContainers(filters: {{direction: SOURCE}}) {{ id seriesIdentifier container {{ __typename ... on ArrayDataset {{ {TILE} }} }} }} }} }}"
+DATASETS = f"query {{ arrayDatasets(pagination: {{limit: 50}}) {{ {TILE} }} }}"
 
 
 async def _files_with_series(
@@ -51,7 +50,7 @@ async def _count(ctx: HttpContext, query: str) -> int:
     count = 0
     execute = CursorWrapper.execute
 
-    def counting(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202 - a pass-through
+    def counting(self: CursorWrapper, *args: Any, **kwargs: Any) -> object:
         nonlocal count
         count += 1
         return execute(self, *args, **kwargs)

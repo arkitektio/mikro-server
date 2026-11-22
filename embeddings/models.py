@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
 from typing import Any, ClassVar
 
 from django.db import models
@@ -51,7 +52,7 @@ class EmbeddedDescriptionMixin(models.Model):
 
     @classmethod
     def from_db(
-        cls, db: str | None, field_names: Any, values: Any
+        cls, db: str | None, field_names: Collection[str], values: Collection[object]
     ) -> EmbeddedDescriptionMixin:
         """Remember the source text as loaded, so ``save()`` can tell whether it changed."""
         instance = super().from_db(db, field_names, values)

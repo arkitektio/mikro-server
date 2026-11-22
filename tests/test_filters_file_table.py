@@ -15,7 +15,7 @@ FILE_QUERY = """
 """
 
 
-async def file_names(ctx, filters):
+async def file_names(ctx: HttpContext, filters: dict | None) -> set[str]:
     result = await schema.execute(
         FILE_QUERY, context_value=ctx, variable_values={"filters": filters}
     )
@@ -25,7 +25,9 @@ async def file_names(ctx, filters):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_file_filter_by_folder(db, authenticated_context: HttpContext):
+async def test_file_filter_by_folder(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ds_a = await create_folder(authenticated_context, "A")
     ds_b = await create_folder(authenticated_context, "B")
     await create_file(authenticated_context, "InA", ds_a)
@@ -40,8 +42,8 @@ async def test_file_filter_by_folder(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_file_filter_by_size_and_content_type(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ds = await create_folder(authenticated_context, "DS")
     await create_file(
         authenticated_context, "Small", ds, size=100, content_type="text/csv"
@@ -58,7 +60,9 @@ async def test_file_filter_by_size_and_content_type(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_file_filter_by_not_derived(db, authenticated_context: HttpContext):
+async def test_file_filter_by_not_derived(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`notDerived` separates the files a converter read from the files written out of data here.
 
     It used to read the `File.origins` M2M, which no resolver ever wrote -- so it answered
@@ -89,7 +93,9 @@ async def test_file_filter_by_not_derived(db, authenticated_context: HttpContext
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_file_filter_by_search(db, authenticated_context: HttpContext):
+async def test_file_filter_by_search(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ds = await create_folder(authenticated_context, "DS")
     await create_file(authenticated_context, "measurements.csv", ds)
     await create_file(authenticated_context, "raw.tiff", ds)

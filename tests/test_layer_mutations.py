@@ -12,12 +12,17 @@ from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
 from core import enums, models
+from core.inputs.coords import AxisInputModel
 from mikro_server.schema import schema
 from tests import seed
 
 
 async def _seed_lens(
-    ctx: HttpContext, *, axis_names, shape, descriptors
+    ctx: HttpContext,
+    *,
+    axis_names: list[str],
+    shape: list[int],
+    descriptors: list[AxisInputModel],
 ) -> models.Lens:
     dataset = await seed.create_array_dataset(
         ctx, "LensDS", axes=descriptors, shapes=[shape]
@@ -73,7 +78,9 @@ _YX = (
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_layer_with_render_graph(db, authenticated_context: HttpContext):
+async def test_create_layer_with_render_graph(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A layer may combine multiple channels via a render graph, relaxing the single-channel rule."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -222,7 +229,9 @@ async def _create_layer_with_transfer(ctx: HttpContext, transfer: dict) -> str:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_transfer_stops_round_trip(db, authenticated_context: HttpContext):
+async def test_transfer_stops_round_trip(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A hand-authored transfer curve survives the trip through the JSON column intact.
 
     The mutation response is not enough to prove that: the graph is lowered into the storage
@@ -261,8 +270,8 @@ async def test_transfer_stops_round_trip(db, authenticated_context: HttpContext)
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_transfer_without_stops_still_reads(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """No curve is null, never an empty one -- the shape every render graph written before `stops` existed has.
 
     `stops` is a new key inside a JSON column that gets no migration and no backfill, so every
@@ -288,8 +297,8 @@ async def test_a_transfer_without_stops_still_reads(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_create_layer_without_graph_is_rejected(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """createLayer requires a render graph: the graph is the single source of truth for rendering."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -313,7 +322,7 @@ async def test_create_layer_without_graph_is_rejected(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_rgb_layer(db, authenticated_context: HttpContext):
+async def test_create_rgb_layer(db: None, authenticated_context: HttpContext) -> None:
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
         authenticated_context,
@@ -365,7 +374,9 @@ async def test_create_rgb_layer(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_intensity_layer(db, authenticated_context: HttpContext):
+async def test_create_intensity_layer(
+    db: None, authenticated_context: HttpContext
+) -> None:
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
         authenticated_context,
@@ -421,8 +432,8 @@ async def test_create_intensity_layer(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_create_label_layer_without_channel_axis(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A label / instance map often has no channel axis: the pixel value itself is the id.
 
     And the layer that comes back is a LABEL layer, not an image one carrying a flag. It
@@ -476,8 +487,8 @@ async def test_create_label_layer_without_channel_axis(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_render_graph_with_projection_node(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A render graph may include a projection node (volume rendering mode) over a channel subtree."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -533,7 +544,9 @@ async def test_render_graph_with_projection_node(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_volume_layer(db, authenticated_context: HttpContext):
+async def test_create_volume_layer(
+    db: None, authenticated_context: HttpContext
+) -> None:
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
         authenticated_context,
@@ -585,8 +598,8 @@ async def test_create_volume_layer(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_scene_layers_resolves_imagelayer_polymorphically(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Scene.layers returns the polymorphic Layer interface, resolving to the concrete kind.
 
     This is what the `layer_types` registration buys: a subtype reachable only through the
@@ -667,8 +680,8 @@ async def test_scene_layers_resolves_imagelayer_polymorphically(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_layer_scoping_seam_is_the_scene(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """The org-scoping seam (get_for_org) resolves through the scene, not the lens.
 
     Layer has only nullable source FKs (lens/annotation collection/table/mesh); org isolation for
@@ -703,7 +716,7 @@ async def test_layer_scoping_seam_is_the_scene(
     layer_id = result.data["createRgbLayer"]["id"]
 
     class _Info:
-        def __init__(self, ctx):
+        def __init__(self, ctx: HttpContext) -> None:
             self.context = ctx
 
     mine = await sync_to_async(get_for_org)(
@@ -753,7 +766,9 @@ _LAMBDA_YX = (
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_render_graph_with_phasor_node(db, authenticated_context: HttpContext):
+async def test_render_graph_with_phasor_node(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A render graph may include a phasor node reducing the microtime axis."""
     axis_names, shape, descriptors = _C_TAU_YX
     lens = await _seed_lens(
@@ -848,7 +863,9 @@ async def test_render_graph_with_phasor_node(db, authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_phasor_node_over_a_spectrum_axis(db, authenticated_context: HttpContext):
+async def test_phasor_node_over_a_spectrum_axis(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The generalization is real, not nominal: the same node reduces a wavelength axis."""
     axis_names, shape, descriptors = _LAMBDA_YX
     lens = await _seed_lens(
@@ -895,8 +912,8 @@ async def test_phasor_node_over_a_spectrum_axis(db, authenticated_context: HttpC
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_create_phasor_layer_is_an_overlay(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The layer alpha-composites over what is beneath it. A hue carrying a lifetime is not
     something you *add* to the layers underneath -- that is what an intensity is."""
     axis_names, shape, descriptors = _C_TAU_YX
@@ -935,8 +952,8 @@ async def test_create_phasor_layer_is_an_overlay(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_node_inside_a_projection_node(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A phasor-colored volume, MIP'd into the scene's z. The phasor consumes tau; z stays free."""
     axis_names = ["tau", "z", "y", "x"]
     shape = [16, 8, 32, 32]
@@ -998,8 +1015,8 @@ async def test_phasor_node_inside_a_projection_node(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_axis", ["c", "x"])
 async def test_phasor_axis_must_be_a_phasor_axis(
-    db, authenticated_context: HttpContext, bad_axis: str
-):
+    db: None, authenticated_context: HttpContext, bad_axis: str
+) -> None:
     """A DFT over a channel or a spatial axis produces a (g, s) that means nothing, and nothing
     downstream could tell it from a real phasor. So it is rejected here."""
     axis_names, shape, descriptors = _C_TAU_YX
@@ -1045,8 +1062,8 @@ async def test_phasor_axis_must_be_a_phasor_axis(
     ],
 )
 async def test_degenerate_phasor_cursor_is_rejected(
-    db, authenticated_context: HttpContext, cursor: dict
-):
+    db: None, authenticated_context: HttpContext, cursor: dict
+) -> None:
     """A cursor that selects no region is not a degenerate color rule, it is one that silently
     never fires -- while still appearing in the response the client reads back."""
     axis_names, shape, descriptors = _C_TAU_YX
@@ -1075,7 +1092,9 @@ async def test_degenerate_phasor_cursor_is_rejected(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_phasor_harmonic_must_be_positive(db, authenticated_context: HttpContext):
+async def test_phasor_harmonic_must_be_positive(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """There is no zeroth harmonic: it is the DC term, which is the total photon count."""
     axis_names, shape, descriptors = _C_TAU_YX
     lens = await _seed_lens(
@@ -1100,7 +1119,9 @@ async def test_phasor_harmonic_must_be_positive(db, authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_phasor_layer_needs_a_phasor_axis(db, authenticated_context: HttpContext):
+async def test_phasor_layer_needs_a_phasor_axis(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A plain c/y/x stack has nothing to take a phasor over, and says so."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -1126,8 +1147,8 @@ async def test_phasor_layer_needs_a_phasor_axis(db, authenticated_context: HttpC
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_moving_a_layer_to_another_scene_meets_the_same_placement_gate(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Rebinding a layer into a scene is the same claim creating it there makes.
 
     An update that only touches styling never re-litigates the placement; an update that
@@ -1199,7 +1220,7 @@ async def test_moving_a_layer_to_another_scene_meets_the_same_placement_gate(
 # ---------------------------------------------------------------------------
 
 
-async def _seed_intensity_layer(ctx: HttpContext, **overrides) -> dict:
+async def _seed_intensity_layer(ctx: HttpContext, **overrides: object) -> dict:
     """An intensity layer over one channel of a 3-channel dataset, and the lens and scene behind it."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -1225,8 +1246,8 @@ async def _seed_intensity_layer(ctx: HttpContext, **overrides) -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_intensity_patch_leaves_what_it_does_not_name(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The patch discipline `updateLabelLayer` set: changing a colormap is not a reason to
     lose the contrast limits somebody spent a minute setting."""
     seeded = await _seed_intensity_layer(
@@ -1254,8 +1275,8 @@ async def test_an_intensity_patch_leaves_what_it_does_not_name(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_intensity_layer_carries_a_solid_tint(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A colour that is a measured fact rather than a choice off a list.
 
     A converter reading a channel's emission wavelength, or the colour the acquisition
@@ -1305,8 +1326,8 @@ async def test_an_intensity_layer_carries_a_solid_tint(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_tint_patch_takes_the_colormap_with_it(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Either/or holds on the row, not only within one input: tinting a layer that was drawn
     through MAGMA leaves no MAGMA behind for a client to read back and believe."""
     seeded = await _seed_intensity_layer(authenticated_context, colormap="MAGMA")
@@ -1333,8 +1354,8 @@ _UPDATE_TINT = """
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mutation", ["createIntensityLayer", "createVolumeLayer"])
 async def test_a_tint_beside_another_colormap_is_refused(
-    db, authenticated_context: HttpContext, mutation: str
-):
+    db: None, authenticated_context: HttpContext, mutation: str
+) -> None:
     """Two answers to one question, refused rather than resolved -- on both mutations that
     share the intensity body, since they take separate input models."""
     axis_names, shape, descriptors = _CYX
@@ -1366,8 +1387,8 @@ async def test_a_tint_beside_another_colormap_is_refused(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_tint_beside_the_intensity_colormap_is_the_same_statement(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """INTENSITY is what a tint's colormap is, so saying both is saying it twice. A client
     echoing a tinted layer back -- `colormap` and `color` as it read them -- must not be refused."""
     seeded = await _seed_intensity_layer(
@@ -1396,8 +1417,8 @@ async def test_a_tint_beside_the_intensity_colormap_is_the_same_statement(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_tint_patch_refuses_another_colormap_and_changes_nothing(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     seeded = await _seed_intensity_layer(authenticated_context, colormap="MAGMA")
 
     result = await schema.execute(
@@ -1421,8 +1442,8 @@ async def test_a_tint_patch_refuses_another_colormap_and_changes_nothing(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_colormap_patch_replaces_the_tint(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The way back from a tint. A null `color` means "unchanged", so it cannot be the
     spelling for "no tint" -- naming a colormap is, because the two are either/or."""
     seeded = await _seed_intensity_layer(
@@ -1445,8 +1466,8 @@ async def test_a_colormap_patch_replaces_the_tint(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_patch_that_names_neither_keeps_the_tint(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The patch discipline: a gamma change is not a reason to lose the tint, and neither is
     restating the INTENSITY colormap the tint already carries."""
     seeded = await _seed_intensity_layer(
@@ -1473,8 +1494,8 @@ async def test_a_patch_that_names_neither_keeps_the_tint(
     "color", [[255], [255, 0, 0], [255, 0, 0, 255, 255], [255, 0, 0, 300]]
 )
 async def test_an_intensity_tint_is_rgba_or_nothing(
-    db, authenticated_context: HttpContext, color: list
-):
+    db: None, authenticated_context: HttpContext, color: list
+) -> None:
     """Four components, each 0..255 -- the same refusal `TransferFunctionInput.color` makes.
 
     Worth checking here rather than trusting the shared validator: the tint reaches the row
@@ -1503,8 +1524,8 @@ async def test_an_intensity_tint_is_rgba_or_nothing(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_layer_refuses_a_flat_kind_and_names_the_one_that_wants_it(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A render graph is not an intensity layer's vocabulary, and the refusal says where to go.
 
     The mirror of `test_update_label_layer_refuses_an_image_layer`, and load-bearing for the
@@ -1541,8 +1562,8 @@ async def test_update_layer_refuses_a_flat_kind_and_names_the_one_that_wants_it(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_intensity_layer_refuses_an_image_layer(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """And back the other way: a general image layer's graph is not patched field by field."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -1610,8 +1631,8 @@ _RGB_WB = "fragment WB on RgbLayer { id whiteBalance }"
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_rgb_white_balance_is_optional_set_and_patched(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Null by default; set on create; a patch that omits it keeps it; [1, 1, 1] resets it."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -1688,8 +1709,8 @@ async def test_rgb_white_balance_is_optional_set_and_patched(
     ],
 )
 async def test_rgb_refuses_a_malformed_white_balance(
-    db, authenticated_context: HttpContext, gains: list, expected: str
-):
+    db: None, authenticated_context: HttpContext, gains: list, expected: str
+) -> None:
     """Three positive gains or nothing -- on create and on update alike."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -1735,8 +1756,8 @@ async def test_rgb_refuses_a_malformed_white_balance(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_flat_layer_still_walks_its_pyramid(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`levelPaths` is a fact about the array, so every lens-backed kind answers it.
 
     ABLATION: leave `level_placements` keyed on the two kinds it knew before this split and
@@ -1772,8 +1793,8 @@ async def test_a_flat_layer_still_walks_its_pyramid(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_channel_node_samples_exactly_one_channel(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A node draws one channel, and which one is a lens: a lens keeping three channels is refused, naming the cut that pins one."""
     axis_names, shape, descriptors = _CYX
     lens = await _seed_lens(
@@ -1827,8 +1848,8 @@ async def test_a_channel_node_samples_exactly_one_channel(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pinning_tau_is_not_pinning_a_channel(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The pre-existing guarantee must not regress: a channel is a CHANNEL-axis position. A lens that
     pins one arrival-time bin and keeps both detectors has not picked a channel, and is refused as such."""
     axis_names, shape, descriptors = _C_TAU_YX
@@ -1864,8 +1885,8 @@ async def test_pinning_tau_is_not_pinning_a_channel(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["redLens", "greenLens", "blueLens"])
 async def test_an_rgb_component_is_a_single_channel_crop_of_the_layers_lens(
-    db, authenticated_context: HttpContext, field: str
-):
+    db: None, authenticated_context: HttpContext, field: str
+) -> None:
     """Each of the three is checked, on create and on update, and the refusal names the one that was wrong.
 
     A component that keeps three channels has not picked one; a crop of another dataset is not

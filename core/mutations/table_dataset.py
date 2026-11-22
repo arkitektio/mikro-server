@@ -345,7 +345,7 @@ def _validate_declaration(
     # contradict -- the file's own answer is recorded for it instead. Only a stated type is checked.
     wrong = [
         (declared.name, declared.dtype, recorded.type)
-        for declared, recorded in zip(columns, file_columns)
+        for declared, recorded in zip(columns, file_columns, strict=True)
         if declared.dtype is not None and declared.dtype != recorded.type
     ]
     if wrong:

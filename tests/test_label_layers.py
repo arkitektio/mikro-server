@@ -19,6 +19,7 @@ execute, and accepting it would store a layer that renders differently from what
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import graph as graph_logic
@@ -157,7 +158,9 @@ async def _object_table(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_color_by_dereferences_the_field_edge(authenticated_context: HttpContext):
+async def test_color_by_dereferences_the_field_edge(
+    authenticated_context: HttpContext,
+) -> None:
     """The capability the kind exists for: colour instances by a column of the table they key into.
 
     Nothing about the mask says which object is which type -- the pixels hold ids. The
@@ -207,7 +210,9 @@ async def test_color_by_dereferences_the_field_edge(authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_measure_column_takes_a_colormap(authenticated_context: HttpContext):
+async def test_a_measure_column_takes_a_colormap(
+    authenticated_context: HttpContext,
+) -> None:
     """The other half of the same rule: a measured column is coloured over its range."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
@@ -238,7 +243,7 @@ async def test_a_measure_column_takes_a_colormap(authenticated_context: HttpCont
 @pytest.mark.asyncio
 async def test_color_by_refuses_a_table_no_field_edge_reaches(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table the mask does not key into is a join nothing can execute.
 
     The table is real and the column exists; what is missing is the one thing that makes
@@ -280,7 +285,7 @@ async def test_color_by_refuses_a_table_no_field_edge_reaches(
 @pytest.mark.asyncio
 async def test_color_by_refuses_a_colormap_over_a_categorical_column(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A *continuous* colormap over a class column would impose an order the values do not have.
 
     A qualitative one does not, which is the whole reason the enum has both sorts, so the
@@ -316,7 +321,7 @@ async def test_color_by_refuses_a_colormap_over_a_categorical_column(
 @pytest.mark.asyncio
 async def test_color_by_refuses_a_qualitative_colormap_over_a_measure_column(
     authenticated_context: HttpContext,
-):
+) -> None:
     """And the mirror: a palette over a continuous measurement throws its order away."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
@@ -344,7 +349,7 @@ async def test_color_by_refuses_a_qualitative_colormap_over_a_measure_column(
 @pytest.mark.asyncio
 async def test_color_by_refuses_an_undeclared_column(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The edge is right and the column is not: the table's own schema settles it."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)
@@ -370,7 +375,9 @@ async def test_color_by_refuses_an_undeclared_column(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_is_a_patch_not_a_replacement(authenticated_context: HttpContext):
+async def test_update_is_a_patch_not_a_replacement(
+    authenticated_context: HttpContext,
+) -> None:
     """Toggling `contour` must not drop the selection the client is not sending.
 
     A label layer's settings are edited one at a time from a viewer -- a contour toggle
@@ -441,7 +448,7 @@ async def test_update_is_a_patch_not_a_replacement(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_update_label_layer_refuses_an_image_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The two kinds' render settings are different vocabularies, so their updates are too."""
     _, scene, lens = await _mask_scene_lens(authenticated_context)
 
@@ -468,7 +475,9 @@ async def test_update_label_layer_refuses_an_image_layer(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_layer_refuses_a_label_layer(authenticated_context: HttpContext):
+async def test_update_layer_refuses_a_label_layer(
+    authenticated_context: HttpContext,
+) -> None:
     """The mirror guard, and the one that protects the split.
 
     Without it a single `updateLayer` writes a render graph onto a label layer and leaves
@@ -515,7 +524,7 @@ async def test_update_layer_refuses_a_label_layer(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_label_layer_resolves_through_the_scene_interface(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`Scene.layers` returns it as a `LabelLayer`, and it places like any lens-backed layer.
 
     This is what the `layer_types` registration buys: a subtype reachable only through the
@@ -650,7 +659,9 @@ async def _hopping_object_table(
     return result.data["createTableDataset"]["id"]
 
 
-async def _create(ctx: HttpContext, scene, lens, render: dict):
+async def _create(
+    ctx: HttpContext, scene: models.Scene, lens: models.Lens, render: dict
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_LABEL_LAYER,
         context_value=ctx,
@@ -664,7 +675,7 @@ async def _create(ctx: HttpContext, scene, lens, render: dict):
 @pytest.mark.asyncio
 async def test_a_picker_publishes_several_colourings_and_draws_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole point of a list: two honest readings of one mask, and one of them showing.
 
     Area through a colormap and cell type through class colours are not two attempts at the
@@ -708,7 +719,7 @@ async def test_a_picker_publishes_several_colourings_and_draws_one(
 @pytest.mark.asyncio
 async def test_the_deprecated_color_by_reads_the_active_entry(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One copy of the choice, and it is the index -- the old field is a view onto it.
 
     Kept because clients selecting `colorBy` predate the picker. It is derived on every read,
@@ -754,7 +765,7 @@ async def test_the_deprecated_color_by_reads_the_active_entry(
 @pytest.mark.asyncio
 async def test_an_active_index_that_points_at_nothing_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Past the end, and below the beginning.
 
     A negative index is the dangerous one: `colorBys[-1]` is valid Python and a valid `Int`, so
@@ -791,7 +802,7 @@ async def test_an_active_index_that_points_at_nothing_is_refused(
 @pytest.mark.asyncio
 async def test_two_entries_that_render_identically_are_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A picker whose two rows draw the same thing asks a viewer to choose between a thing and itself.
 
     The caption is deliberately not part of what makes an entry distinct -- a second name is not
@@ -852,7 +863,7 @@ async def test_two_entries_that_render_identically_are_refused(
 @pytest.mark.asyncio
 async def test_filters_keep_and_drop_objects_by_the_same_join(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The colour picker's sibling: which objects are drawn, over the same FIELD edge.
 
     Several rules at once is the normal case, not a contradiction -- they combine with AND --
@@ -900,7 +911,9 @@ async def test_filters_keep_and_drop_objects_by_the_same_join(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_filter_must_match_the_column_role(authenticated_context: HttpContext):
+async def test_a_filter_must_match_the_column_role(
+    authenticated_context: HttpContext,
+) -> None:
     """The same measure-vs-categorical split the colouring turns on, and the same refusals.
 
     A bound over a class column would impose an order the values do not have; a value list over
@@ -969,7 +982,7 @@ async def test_a_filter_must_match_the_column_role(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_picker_entry_may_reach_one_table_further(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`joinPath` is the hop the coordinate graph deliberately stops before.
 
     The mask's ids key the object table; `instance_id` *references* the tracks table, which is a
@@ -1030,7 +1043,7 @@ async def test_a_picker_entry_may_reach_one_table_further(
 @pytest.mark.asyncio
 async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The order *is* the identity, so there is nothing to merge on -- and `[]` finally means 'none'.
 
     This is what a picker buys that a single `colorBy` could not: a patch reads an omitted field
@@ -1110,7 +1123,7 @@ async def test_an_update_replaces_a_picker_wholesale_and_can_clear_it(
 @pytest.mark.asyncio
 async def test_switching_the_active_entry_needs_nothing_but_the_index(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The click-a-picker-row path, which is the one a viewer walks constantly.
 
     Naming an index and nothing else must not require resending the picker -- and must not walk
@@ -1185,7 +1198,7 @@ async def test_switching_the_active_entry_needs_nothing_but_the_index(
 @pytest.mark.asyncio
 async def test_a_shortened_picker_drops_the_indices_it_no_longer_holds(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A patch cannot say 'and switch that one off', so an unpublished entry stops being shown.
 
     The indices that survive keep pointing at what they pointed at, because the list is replaced
@@ -1264,7 +1277,7 @@ async def test_a_shortened_picker_drops_the_indices_it_no_longer_holds(
 @pytest.mark.asyncio
 async def test_the_options_offered_are_the_options_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The invariant a lens-rooted options query exists for, asserted by writing what it returns.
 
     A picker built on a set that merely overlaps the write path's either hides legal choices or
@@ -1354,7 +1367,7 @@ mutation Delete($input: DeleteTableDatasetInput!) {
 @pytest.mark.asyncio
 async def test_a_table_a_picker_names_cannot_be_deleted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """PROTECT, spelled out in a guard because the reference lives in JSON and cascades nowhere.
 
     The boundary refuses a picker naming an unreachable table; deleting the table afterwards
@@ -1427,7 +1440,7 @@ mutation Delete($input: DeleteTransformationInput!) {
 @pytest.mark.asyncio
 async def test_the_field_edge_a_picker_reaches_through_is_protected(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The second route to a stranded picker: keep the table, remove the crossing.
 
     And the reason the guard asks a hypothetical rather than reading the edge: a *rival* FIELD
@@ -1506,7 +1519,7 @@ async def test_the_field_edge_a_picker_reaches_through_is_protected(
 @pytest.mark.asyncio
 async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_the_edge(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`deleteRegistration(dataset: mask, world: <the table's space>)` matches the crossing too.
 
     It used to delete it with no guard at all, stranding the picker `deleteTransformation`
@@ -1553,7 +1566,7 @@ async def test_unregistering_the_mask_from_the_table_is_guarded_like_deleting_th
 @pytest.mark.asyncio
 async def test_the_guard_finds_a_table_a_join_path_only_passes_through(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The half that is easy to forget: a hop table is named nowhere but inside `joinPath`.
 
     Deleting a table the path merely passes through breaks the join exactly as thoroughly as
@@ -1605,7 +1618,7 @@ async def test_the_guard_finds_a_table_a_join_path_only_passes_through(
 @pytest.mark.asyncio
 async def test_an_update_checks_reachability_as_hard_as_a_create(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A patch is a write, so it gets the write path's checks -- both pickers, both directions.
 
     The easy bug here is an update that trusts what it is handed because *something* on the
@@ -1643,7 +1656,7 @@ async def test_an_update_checks_reachability_as_hard_as_a_create(
     layer_id = created.data["createLabelLayer"]["id"]
     before = (await models.Layer.objects.aget(id=layer_id)).label_render
 
-    async def patch(render: dict):
+    async def patch(render: dict) -> ExecutionResult:
         return await schema.execute(
             UPDATE_LABEL_LAYER,
             context_value=authenticated_context,
@@ -1701,7 +1714,9 @@ async def test_an_update_checks_reachability_as_hard_as_a_create(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_offers_its_own_options(authenticated_context: HttpContext):
+async def test_a_lens_offers_its_own_options(
+    authenticated_context: HttpContext,
+) -> None:
     """The nested field, over the same walk: what a mask can be coloured by, without a second round trip.
 
     A client looking at a lens should not have to carry its id back to a root query to learn what
@@ -1747,7 +1762,7 @@ async def test_a_lens_offers_its_own_options(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_the_active_entry_can_be_cleared_without_clearing_the_picker(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The case that had no spelling at all.
 
     "Publish these colourings but draw none of them -- hash the ids" was unreachable while
@@ -1792,7 +1807,7 @@ async def test_the_active_entry_can_be_cleared_without_clearing_the_picker(
 @pytest.mark.asyncio
 async def test_an_omitted_active_entry_still_leaves_the_choice_alone(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The other half of the same distinction, and the regression this could break.
 
     Omitting the field has always meant "keep it", and it still must -- a client toggling
@@ -1834,7 +1849,7 @@ async def test_an_omitted_active_entry_still_leaves_the_choice_alone(
 @pytest.mark.asyncio
 async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The union's message, and why it is better than the branches it replaced.
 
     `ColorByInputModel` used to hand-check which fields each kind reads in four branches, each
@@ -1874,7 +1889,7 @@ async def test_a_colouring_that_contradicts_its_kind_names_what_the_kind_reads(
 @pytest.mark.asyncio
 async def test_a_colouring_can_leave_the_bottom_of_its_window_undrawn(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`hideBelowMin` is stored on the entry, defaults off, and is part of what a colouring is.
 
     A measure read over an image: the objects at the bottom of the window are not painted with
@@ -1919,7 +1934,7 @@ async def test_a_colouring_can_leave_the_bottom_of_its_window_undrawn(
 @pytest.mark.asyncio
 async def test_hiding_the_bottom_needs_a_window_with_a_bottom(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A qualitative colormap has no bottom, so there is nothing for `hideBelowMin` to hide."""
     mask, scene, lens = await _mask_scene_lens(authenticated_context)
     table = await _object_table(authenticated_context, mask)

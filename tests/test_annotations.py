@@ -7,6 +7,8 @@ world, and one annotation layer -- and every later shape appends to all of it.
 The collection path stays inert: appending never touches layers or edges.
 """
 
+from collections.abc import AsyncIterator, Sequence
+
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
@@ -50,8 +52,8 @@ def _counts(scene: "models.Scene") -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_drawing_on_a_scene_mints_its_collection(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The first annotation mints collection + system + registration + layer; the second reuses them all."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
@@ -78,7 +80,7 @@ async def test_drawing_on_a_scene_mints_its_collection(
     counts = await sync_to_async(_counts)(scene)
     assert counts == {"collections": 1, "systems": 1, "layers": 1, "registrations": 1}
 
-    def registration():
+    def registration() -> tuple[models.Transformation, list[str], list[str]]:
         edge = models.Transformation.objects.get(output=scene.world)
         system = models.CoordinateSystem.objects.get(
             annotation_collections__isnull=False
@@ -118,8 +120,8 @@ async def test_drawing_on_a_scene_mints_its_collection(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_drawing_after_the_layer_was_removed_brings_it_back(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Removing the layer leaves the collection; the next draw must not land where nothing draws it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
@@ -159,8 +161,8 @@ async def test_drawing_after_the_layer_was_removed_brings_it_back(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_long_scene_name_does_not_refuse_the_first_draw(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The minted names derive from the scene's, and are therefore longer than it.
 
     The registration's name carries the scene's twice, so a scene name well inside a
@@ -193,8 +195,8 @@ async def test_a_long_scene_name_does_not_refuse_the_first_draw(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_chain_version_is_readable_so_staleness_is_detectable(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`createdWithTransforms` finally has something to be compared with.
 
     The stored number always recorded the chain an annotation was drawn against, and
@@ -291,8 +293,8 @@ async def test_the_chain_version_is_readable_so_staleness_is_detectable(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_scene_drawing_space_has_no_chain_to_be_stale_against(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The scene-minted collection answers 0, because its boxes are in its own coordinates.
 
     Its only edge is the registration into the world, and a registration is not on the path
@@ -342,8 +344,8 @@ async def test_a_scene_drawing_space_has_no_chain_to_be_stale_against(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_chain_version_of_a_space_with_no_pixels_is_zero(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A shared world has no path down to a pixel grid, and answers 0 rather than failing.
 
     The field sits on every coordinate system, so a client will ask a world for it. A
@@ -369,7 +371,9 @@ async def test_the_chain_version_of_a_space_with_no_pixels_is_zero(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_collection_xor_scene(db, authenticated_context: HttpContext):
+async def test_collection_xor_scene(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Exactly one of collection/scene: both or neither is an authoring error."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -412,7 +416,9 @@ async def test_collection_xor_scene(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_annotation_names_who_drew_it(db, authenticated_context: HttpContext):
+async def test_an_annotation_names_who_drew_it(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`creator` is the user that drew the shape, readable straight off the annotation."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -452,8 +458,8 @@ async def test_an_annotation_names_who_drew_it(db, authenticated_context: HttpCo
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_drawing_into_a_collection_appends_only(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The collection path never touches layers or edges."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -492,8 +498,8 @@ async def test_drawing_into_a_collection_appends_only(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_annotation_layer_in_a_second_scene_needs_a_registration(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A foreign scene refuses the layer as UNREGISTERED until the registration is authored."""
     ctx = authenticated_context
     scene_a = await seed.create_scene(ctx, "Home")
@@ -531,7 +537,7 @@ async def test_annotation_layer_in_a_second_scene_needs_a_registration(
     )
     assert "createTransformation" in str(refused.errors[0])
 
-    def collection_system():
+    def collection_system() -> models.CoordinateSystem:
         return models.AnnotationCollection.objects.get(
             pk=collection_id
         ).coordinate_system
@@ -557,8 +563,8 @@ async def test_annotation_layer_in_a_second_scene_needs_a_registration(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_update_annotation_recomputes_derived_fields(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """New vectors re-derive the bounding box; the rest edits in place."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -614,8 +620,8 @@ async def test_update_annotation_recomputes_derived_fields(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_delete_guards(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     """Only the creator (or an admin) deletes; a same-org bot without ownership is denied."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -678,7 +684,9 @@ async def test_delete_guards(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_coordinates_surface(db, authenticated_context: HttpContext):
+async def test_coordinates_surface(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Pins go in and come back as named coordinates; an update replaces the whole set."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -721,7 +729,7 @@ async def test_coordinates_surface(db, authenticated_context: HttpContext):
     assert pins == {"t": 5}, "the whole pin set is replaced, not merged"
 
 
-async def _draw(ctx: HttpContext, target: dict, **fields) -> dict:
+async def _draw(ctx: HttpContext, target: dict, **fields: object) -> dict:
     """One shape via createAnnotation; returns the payload."""
     result = await schema.execute(
         CREATE,
@@ -734,7 +742,7 @@ async def _draw(ctx: HttpContext, target: dict, **fields) -> dict:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_pinned_to_filter(db, authenticated_context: HttpContext):
+async def test_pinned_to_filter(db: None, authenticated_context: HttpContext) -> None:
     """Containment on the pinned dict: spanning a coordinate never matches a pin on it."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -790,7 +798,7 @@ async def test_pinned_to_filter(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_spatial_filters(db, authenticated_context: HttpContext):
+async def test_spatial_filters(db: None, authenticated_context: HttpContext) -> None:
     """Overlap and point containment against the cube column, scoped to one frame."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -850,7 +858,9 @@ async def test_spatial_filters(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_nearest_annotations(db, authenticated_context: HttpContext):
+async def test_nearest_annotations(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Cube-distance ordering, limit, and exclusion of shapes with no box."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -898,7 +908,7 @@ async def test_nearest_annotations(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_bulk_create(db, authenticated_context: HttpContext):
+async def test_bulk_create(db: None, authenticated_context: HttpContext) -> None:
     """Many shapes, one call: one minted bundle, per-shape boxes, uniform version, history intact."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -953,7 +963,7 @@ async def test_bulk_create(db, authenticated_context: HttpContext):
     }, "the batch mints the scene bundle exactly once"
     assert await models.Annotation.objects.acount() == 3
 
-    def history_rows():
+    def history_rows() -> int:
         return models.Annotation.provenance.model.objects.count()
 
     assert await sync_to_async(history_rows)() == 3, (
@@ -964,8 +974,8 @@ async def test_bulk_create(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_traced_on_is_metadata_and_org_scoped(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """`tracedOn` reads back as the lens' concrete kind, pins nothing, and a lens of another organization is refused."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -1026,8 +1036,8 @@ async def test_traced_on_is_metadata_and_org_scoped(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_annotation_lists_are_org_scoped(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """The root lists never leak across organizations -- the hole the old dataRois field had."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx)
@@ -1060,8 +1070,8 @@ async def test_annotation_lists_are_org_scoped(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_every_change_is_announced_to_the_collections_room(
-    db, authenticated_context: HttpContext, monkeypatch
-):
+    db: None, authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Draw, edit, bulk-draw and delete each tell the collection's subscribers -- the bulk as one message."""
     from core import channels
 
@@ -1133,8 +1143,11 @@ async def test_every_change_is_announced_to_the_collections_room(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_collections_subscription_relays_its_changes_and_is_org_scoped(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext, monkeypatch
-):
+    db: None,
+    authenticated_context: HttpContext,
+    other_org_context: HttpContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Each relayed id comes back as the event it stands for; another organization cannot listen in."""
     from types import SimpleNamespace
 
@@ -1171,7 +1184,9 @@ async def test_a_collections_subscription_relays_its_changes_and_is_org_scoped(
     ]
     listened: list[list[str]] = []
 
-    async def listen(info, rooms):
+    async def listen(
+        info: object, rooms: Sequence[str]
+    ) -> AsyncIterator[channels.AnnotationSignal]:
         listened.append(list(rooms))
         for signal in relayed:
             yield signal

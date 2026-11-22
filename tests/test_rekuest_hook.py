@@ -11,6 +11,7 @@ from arkitekt_service import trust
 from django.test import Client as HttpClient
 from django.urls import reverse
 from joserfc.jwk import OKPKey
+from pytest_django.fixtures import SettingsWrapper
 
 from mikro_server.hook_agent import agent
 from mikro_server.service import service
@@ -20,7 +21,7 @@ SERVICE_KEY = OKPKey.generate_key("Ed25519")
 
 
 @pytest.fixture
-def hooked(settings):
+def hooked(settings: SettingsWrapper) -> SettingsWrapper:
     settings.REKUEST_HOOK = {"REKUEST_URL": "http://127.0.0.1:9", "MAX_SKEW": 30}
     settings.INSTANCE = {
         "PRIVATE_KEY": SERVICE_KEY.as_pem(private=True).decode(),
@@ -35,7 +36,12 @@ def hooked(settings):
 
 
 def _as_rekuest(
-    method: str, url: str, body: bytes = b"", *, key=REKUEST_KEY, audience=None
+    method: str,
+    url: str,
+    body: bytes = b"",
+    *,
+    key: OKPKey = REKUEST_KEY,
+    audience: str | None = None,
 ) -> dict:
     authorization = trust.sign(
         method,
@@ -48,7 +54,7 @@ def _as_rekuest(
     return {"Authorization": authorization, "X-Rekuest-Agent": "11"}
 
 
-def test_the_manifest_is_signed_and_offers_no_action(hooked):
+def test_the_manifest_is_signed_and_offers_no_action(hooked: SettingsWrapper) -> None:
     client = HttpClient()
     url = reverse("rekuest_hook_manifest")
     assert client.get(url).status_code == 401
@@ -57,14 +63,16 @@ def test_the_manifest_is_signed_and_offers_no_action(hooked):
     assert response.json()["actions"] == []
 
 
-def test_forged_and_unconfigured_requests_are_refused(hooked, settings):
+def test_forged_and_unconfigured_requests_are_refused(
+    hooked: SettingsWrapper, settings: SettingsWrapper
+) -> None:
     client = HttpClient()
     url = reverse("rekuest_hook")
     body = json.dumps(
         {"type": "ASSIGN", "task": "1", "interface": "anything", "args": {}}
     ).encode()
 
-    def post(headers):
+    def post(headers: dict[str, str]) -> int:
         return client.post(
             url, data=body, content_type="application/json", headers=headers
         ).status_code
@@ -82,7 +90,7 @@ def test_forged_and_unconfigured_requests_are_refused(hooked, settings):
     assert post(_as_rekuest("POST", url, body)) == 503
 
 
-def test_the_service_and_the_agent_are_separate_declarations():
+def test_the_service_and_the_agent_are_separate_declarations() -> None:
     assert "actions" not in service.manifest() and not hasattr(service, "action")
     assert set(agent.manifest()) == {
         "agent",

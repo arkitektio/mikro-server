@@ -23,7 +23,9 @@ Written with ``update`` rather than ``save``: this corrects a derived column, it
 edit of the dataset, and it must not enter its history as one.
 """
 
-from django.core.management.base import BaseCommand
+from typing import Any
+
+from django.core.management.base import BaseCommand, CommandParser
 
 from core import models
 from core.logic import coords as coords_logic
@@ -32,14 +34,14 @@ from core.logic import coords as coords_logic
 class Command(BaseCommand):
     help = "Recompute every array dataset's spec from its axes and its level-0 shape."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Report what would change, without writing anything.",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: object, **options: Any) -> None:
         dry_run = options["dry_run"]
 
         shapes = dict(

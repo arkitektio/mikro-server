@@ -26,7 +26,7 @@ backfill_migration = importlib.import_module(
 @pytest.mark.asyncio
 async def test_a_new_scene_is_filtered_and_ordered_by_when_it_was_made(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     before = timezone.now() - datetime.timedelta(seconds=1)
     await seed.create_scene(ctx, "Old")
@@ -61,7 +61,7 @@ async def test_a_new_scene_is_filtered_and_ordered_by_when_it_was_made(
 @pytest.mark.asyncio
 async def test_the_backfill_takes_the_first_history_row_and_leaves_none_null(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Before the column")
     drawn_at = timezone.now() - datetime.timedelta(days=400)

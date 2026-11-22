@@ -103,7 +103,7 @@ def _image_layer(scene_pk: str, lens: "models.Lens") -> "models.Layer":
 @pytest.mark.asyncio
 async def test_clear_scene_drops_layers_and_touches_no_fact(
     authenticated_context: HttpContext,
-):
+) -> None:
     """clearScene is a view-state reset: layers go, the space, the claim and the sibling scene stay."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Cleared", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -113,7 +113,7 @@ async def test_clear_scene_drops_layers_and_touches_no_fact(
     scene_a = await _adopt(authenticated_context, space, "A")
     scene_b = await _adopt(authenticated_context, space, "B")
 
-    def setup():
+    def setup() -> models.Transformation:
         edge = _register_into(
             authenticated_context, dataset.intrinsic_coordinate_system, space
         )
@@ -150,7 +150,7 @@ async def test_clear_scene_drops_layers_and_touches_no_fact(
 @pytest.mark.asyncio
 async def test_clear_coordinate_system_empties_inward_edges_only(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Everything INTO the space goes; the space, its scenes and its own outward claim stay."""
     a = await seed.create_array_dataset(
         authenticated_context, "A", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -163,7 +163,9 @@ async def test_clear_coordinate_system_empties_inward_edges_only(
     wider = await sync_to_async(_make_space)(authenticated_context, name="wider")
     scene = await _adopt(authenticated_context, space, "Over it")
 
-    def setup():
+    def setup() -> tuple[
+        models.Transformation, models.Transformation, models.Transformation
+    ]:
         edge_a = _register_into(
             authenticated_context, a.intrinsic_coordinate_system, space
         )
@@ -211,7 +213,7 @@ async def test_clear_coordinate_system_empties_inward_edges_only(
 @pytest.mark.asyncio
 async def test_clear_coordinate_system_refusals(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """A space data lives in is not clearable, and clearing is the space-creator's act."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Owned", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -250,7 +252,7 @@ async def test_clear_coordinate_system_refusals(
 @pytest.mark.asyncio
 async def test_delete_registration_by_source_and_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The edge is found from (source, space) via its claim root, and deleting it un-places."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Named", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -259,7 +261,7 @@ async def test_delete_registration_by_source_and_space(
     space = await sync_to_async(_make_space)(authenticated_context)
     scene = await _adopt(authenticated_context, space, "Watcher")
 
-    def setup():
+    def setup() -> models.Transformation:
         edge = _register_into(
             authenticated_context, dataset.intrinsic_coordinate_system, space
         )
@@ -314,7 +316,7 @@ async def test_delete_registration_by_source_and_space(
 @pytest.mark.asyncio
 async def test_delete_registration_guards_the_edges_author(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """A registration someone else authored is not yours to un-register (admins excepted)."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Guarded", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -341,7 +343,7 @@ async def test_delete_registration_guards_the_edges_author(
 @pytest.mark.asyncio
 async def test_delete_registration_takes_all_of_its_edges_or_none(
     authenticated_context: HttpContext, bot_context: HttpContext
-):
+) -> None:
     """Yours goes only if every rival matched goes too: a refusal leaves nothing half done.
 
     The caller's edge is the lower pk, so it was deleted before the rival someone else authored
@@ -378,7 +380,7 @@ async def test_orphan_sweep_takes_only_true_orphans_you_own(
     authenticated_context: HttpContext,
     bot_context: HttpContext,
     other_org_context: HttpContext,
-):
+) -> None:
     """The sweep deletes ownerless spaces nothing points at -- scoped to your own unless admin.
 
     Four spaces in the org: a true orphan of the caller's, a true orphan of someone
@@ -390,7 +392,13 @@ async def test_orphan_sweep_takes_only_true_orphans_you_own(
         authenticated_context, "Toucher", axes=seed.YX_AXES, shapes=[[64, 64]]
     )
 
-    def setup():
+    def setup() -> tuple[
+        models.CoordinateSystem,
+        models.CoordinateSystem,
+        models.CoordinateSystem,
+        models.CoordinateSystem,
+        models.CoordinateSystem,
+    ]:
         mine = _make_space(bot_context, name="mine-orphan")
         theirs = _make_space(authenticated_context, name="their-orphan")
         adopted = _make_space(bot_context, name="adopted")

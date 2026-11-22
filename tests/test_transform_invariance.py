@@ -56,7 +56,7 @@ query PathToWorld($id: ID!) {
 
 
 def _edge(
-    ctx: HttpContext, kind: str, params: dict | None = None, **kwargs
+    ctx: HttpContext, kind: str, params: dict | None = None, **kwargs: object
 ) -> models.Transformation:
     """One bare edge, built through the ORM, over a space of its own when none is given.
 
@@ -80,7 +80,7 @@ def _edge(
 
 
 async def _classify(
-    ctx: HttpContext, kind: str, params: dict | None = None, **kwargs
+    ctx: HttpContext, kind: str, params: dict | None = None, **kwargs: object
 ) -> str:
     def build_and_classify() -> str:
         return graph_logic.invariance_of(_edge(ctx, kind, params, **kwargs))
@@ -88,7 +88,9 @@ async def _classify(
     return await sync_to_async(build_and_classify)()
 
 
-async def _scene_over(ctx: HttpContext, space, lens) -> str:
+async def _scene_over(
+    ctx: HttpContext, space: models.CoordinateSystem, lens: models.Lens
+) -> str:
     """A scene adopting `space` as its world, with one intensity layer over `lens`.
 
     The replacement for the deleted dataset bootstrap: the dataset is already in this space
@@ -115,7 +117,7 @@ async def _scene_over(ctx: HttpContext, space, lens) -> str:
 
 async def _layer_field(
     ctx: HttpContext, scene_id: str, field: str, query: str = LAYER_INVARIANCE
-):
+) -> object:
     result = await schema.execute(
         query, context_value=_fresh_request(ctx), variable_values={"id": scene_id}
     )
@@ -132,14 +134,16 @@ async def _layer_field(
 @pytest.mark.parametrize("kind", ["IDENTITY", "TRANSLATION", "ROTATION", "MAP_AXIS"])
 async def test_the_isometries_are_the_kinds_that_deform_nothing(
     authenticated_context: HttpContext, kind: str
-):
+) -> None:
     """A relabelling, an offset and a rotation all leave every distance and angle where it was."""
     assert await _classify(authenticated_context, kind) == "ISOMETRY"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_isotropic_scale_is_a_similarity(authenticated_context: HttpContext):
+async def test_an_isotropic_scale_is_a_similarity(
+    authenticated_context: HttpContext,
+) -> None:
     """One factor on every axis: a circle is still a circle, so angles and length ratios survive."""
     assert (
         await _classify(authenticated_context, "SCALE", {"scale": [0.5, 0.5, 0.5]})
@@ -149,7 +153,9 @@ async def test_an_isotropic_scale_is_a_similarity(authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_anisotropic_scale_is_only_affine(authenticated_context: HttpContext):
+async def test_an_anisotropic_scale_is_only_affine(
+    authenticated_context: HttpContext,
+) -> None:
     """Different factors per axis: a circular bead arrives an ellipse, so no angle survives.
 
     ABLATION: drop the all-equal check and this reads SIMILARITY -- telling a client that a
@@ -166,7 +172,7 @@ async def test_an_anisotropic_scale_is_only_affine(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_an_affine_reads_affine_even_when_its_matrix_is_rigid(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A 90-degree rotation written as a matrix is an isometry, and still reads AFFINE.
 
     The deliberate limit: proving it rigid needs an SVD, which is numerics inside a metadata
@@ -183,7 +189,7 @@ async def test_an_affine_reads_affine_even_when_its_matrix_is_rigid(
 @pytest.mark.asyncio
 async def test_a_field_part_along_space_is_diffeomorphic_at_best(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A map given by an array's values has a position-dependent Jacobian along the axes it gives: nothing local transfers.
 
     Along time it bends no straight line in space, so the edge stays as rigid as its other parts.
@@ -212,12 +218,12 @@ async def test_a_field_part_along_space_is_diffeomorphic_at_best(
 @pytest.mark.asyncio
 async def test_an_unmappable_edge_corresponds_to_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The one kind that denies a correspondence denies every property with it."""
     assert await _classify(authenticated_context, "UNMAPPABLE") == "NONE"
 
 
-def test_an_unknown_kind_fails_safe():
+def test_an_unknown_kind_fails_safe() -> None:
     """A kind the classifier does not know reads NONE, the bottom -- never a claim of rigidity.
 
     Unsaved, because `kind` is a choices column and the database will not hold a kind that
@@ -243,7 +249,7 @@ def test_an_unknown_kind_fails_safe():
 )
 async def test_a_sequence_is_the_weakest_of_its_steps(
     authenticated_context: HttpContext, scale: list, expected: str
-):
+) -> None:
     """A scale-then-translate sequence takes its class from the scale; the translation is rigid."""
 
     def build() -> str:
@@ -264,7 +270,7 @@ async def test_a_sequence_is_the_weakest_of_its_steps(
 @pytest.mark.asyncio
 async def test_a_by_dimension_reads_the_maps_its_parts_carry(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A BY_DIMENSION's map is its parts, and it is read off them.
 
     ABLATION: return ISOMETRY for a BY_DIMENSION and every sheared registration in the system
@@ -284,7 +290,9 @@ async def test_a_by_dimension_reads_the_maps_its_parts_carry(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_identity_part_is_an_isometry(authenticated_context: HttpContext):
+async def test_an_identity_part_is_an_isometry(
+    authenticated_context: HttpContext,
+) -> None:
     """The same positions said twice, on the axes named."""
     same = {
         "kind": "IDENTITY",
@@ -306,7 +314,7 @@ async def test_an_identity_part_is_an_isometry(authenticated_context: HttpContex
 )
 async def test_a_by_dimension_takes_the_weakest_of_its_parts(
     authenticated_context: HttpContext, scale: list, expected: str
-):
+) -> None:
     """Several parts side by side: the weakest decides.
 
     ABLATION: return the first part's class rather than the minimum and an anisotropic scale
@@ -379,7 +387,7 @@ async def test_a_by_dimension_takes_the_weakest_of_its_parts(
 )
 async def test_parts_that_each_keep_shape_must_keep_it_together(
     authenticated_context: HttpContext, parts: list, expected: str
-):
+) -> None:
     """Each part classed alone reads a split anisotropic scale as a similarity: the parts are compared too."""
 
     def build() -> str:
@@ -413,7 +421,7 @@ async def test_parts_that_each_keep_shape_must_keep_it_together(
 @pytest.mark.asyncio
 async def test_an_identity_registration_places_a_layer_isometrically(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Nothing on the path deforms anything, so a distance in the data IS a distance in world."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Rigid", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -437,7 +445,9 @@ async def test_an_identity_registration_places_a_layer_isometrically(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_weakest_edge_on_the_path_decides(authenticated_context: HttpContext):
+async def test_the_weakest_edge_on_the_path_decides(
+    authenticated_context: HttpContext,
+) -> None:
     """An anisotropic calibration drags an otherwise rigid placement down to AFFINE.
 
     A **sliced** lens in a scene over the dataset's physical space walks two edges: the crop
@@ -468,6 +478,7 @@ async def test_the_weakest_edge_on_the_path_decides(authenticated_context: HttpC
     scene_id = await _scene_over(authenticated_context, calibration, sliced)
 
     hops = await _layer_field(authenticated_context, scene_id, "pathToWorld")
+    assert isinstance(hops, list), hops
     assert len(hops) == 2, (
         f"the minimum below asserts nothing over a one-edge path: {hops}"
     )
@@ -481,7 +492,7 @@ async def test_the_weakest_edge_on_the_path_decides(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_an_isotropic_calibration_keeps_the_layer_similar(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Equal pixel sizes on every axis: shapes and angles survive, and one factor converts lengths."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Isotropic", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -512,7 +523,7 @@ async def test_an_isotropic_calibration_keeps_the_layer_similar(
 @pytest.mark.asyncio
 async def test_an_unplaced_layer_reads_none_and_says_why_elsewhere(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No path means nothing corresponds -- and `placement` is what distinguishes the two reasons.
 
     The conflation is deliberate and mirrors `placementValidity`'s UNKNOWN: a client that
@@ -555,7 +566,7 @@ async def test_an_unplaced_layer_reads_none_and_says_why_elsewhere(
 @pytest.mark.asyncio
 async def test_an_inverted_step_does_not_change_the_class(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every class here is closed under inversion, which is why the BFS's `inverted` flag needs no handling.
 
     The edge is authored world -> intrinsic, against the direction a placement walks, so the
@@ -611,7 +622,7 @@ async def test_an_inverted_step_does_not_change_the_class(
 @pytest.mark.asyncio
 async def test_placement_invariance_costs_no_query_beyond_placement_validity(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The class is read off columns and prefetches the graph already fetched.
 
     `kind` and `params` are local columns of an edge row, and every SceneGraph fetch site
@@ -654,7 +665,7 @@ async def test_placement_invariance_costs_no_query_beyond_placement_validity(
     )
 
 
-def test_the_invariance_is_derived_not_stored():
+def test_the_invariance_is_derived_not_stored() -> None:
     """No column, no TextChoices twin -- and the derived fields wear their two distinct names."""
     assert "invariance" not in {
         field.name for field in models.Transformation._meta.get_fields()

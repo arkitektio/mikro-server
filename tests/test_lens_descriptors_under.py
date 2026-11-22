@@ -29,7 +29,7 @@ mutation Cut($input: CreateLensInput!) {
 CORNERS = [[1.0, 2.0], [1.0, 6.0], [4.0, 6.0], [4.0, 2.0]]
 
 
-async def _under(ctx: HttpContext, lens_id: str, annotation_id: str):
+async def _under(ctx: HttpContext, lens_id: str, annotation_id: str) -> dict:
     result = await schema.execute(
         UNDER,
         context_value=_fresh_request(ctx),
@@ -53,7 +53,7 @@ async def _cut(ctx: HttpContext, lens_id: str, annotation_id: str) -> dict:
 @pytest.mark.asyncio
 async def test_a_lens_says_what_its_crop_to_a_shape_provides_without_making_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The answer is the crop's own descriptors, and asking writes no lens and records no cut."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[[3, 6, 8]])
@@ -96,7 +96,7 @@ async def test_a_lens_says_what_its_crop_to_a_shape_provides_without_making_it(
 @pytest.mark.asyncio
 async def test_a_shape_that_misses_the_lens_has_no_crop(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Where `createLens` would refuse, the answer is null rather than an error."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -128,7 +128,7 @@ mutation Draw($input: CreateAnnotationInput!, $lens: ID!) {
 @pytest.mark.asyncio
 async def test_a_shape_says_what_its_crop_of_a_lens_provides_in_the_request_that_draws_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`Annotation.descriptorsUnder(lens:)` is the same answer, asked from the shape -- so a client drawing it gets both in one go."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[[3, 6, 8]])

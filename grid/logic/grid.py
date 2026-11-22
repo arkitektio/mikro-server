@@ -111,7 +111,9 @@ def free_axes(lens: "core_models.Lens") -> list[str]:
     """The axes a lens leaves free: more than one position kept. What a heatmap spreads over the grid."""
     if isinstance(lens, core_models.ArrayLens):
         return [
-            name for name, extent in zip(lens.axis_names, lens.shape_list) if extent > 1
+            name
+            for name, extent in zip(lens.axis_names, lens.shape_list, strict=False)
+            if extent > 1
         ]
     if isinstance(lens, core_models.SparseLens):
         pinned = set(coords_logic.pinned_axes(lens.windows_list))
@@ -120,7 +122,7 @@ def free_axes(lens: "core_models.Lens") -> list[str]:
         shape = lens.sparse_dataset.shape or [2] * len(names)
         return [
             name
-            for name, extent in zip(names, shape)
+            for name, extent in zip(names, shape, strict=False)
             if name not in pinned and extent > 1
         ]
     raise ValueError(

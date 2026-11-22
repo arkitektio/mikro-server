@@ -18,6 +18,7 @@ a mask supplies one id, and the other axis is accounted for without it.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import graph as graph_logic
@@ -51,7 +52,11 @@ YX_AXES = [seed.axis("y", enums.AxisType.SPACE), seed.axis("x", enums.AxisType.S
 
 #: The declared axes of the matrix, in the order its stores' `shape` is written.
 def _axes(
-    mask=None, features=None, *, keyed: str = "object", table_axis: str = "feature"
+    mask: models.ArrayDataset | None = None,
+    features: str | None = None,
+    *,
+    keyed: str = "object",
+    table_axis: str = "feature",
 ) -> list[dict]:
     """The two axes, each carrying what identifies it.
 
@@ -79,7 +84,7 @@ def _axes(
 SHAPE = [40, 12]
 
 
-async def _mask(ctx: HttpContext, name: str = "cell labels"):
+async def _mask(ctx: HttpContext, name: str = "cell labels") -> models.ArrayDataset:
     """A label mask whose level-0 array has a zarr store, so a plan has something to name.
 
     `resolve_field_store` refuses a storeless array outright -- a plan is instructions for a
@@ -162,7 +167,7 @@ async def _create(ctx: HttpContext, name: str, **extra: object) -> object:
 @pytest.mark.asyncio
 async def test_both_layouts_land_as_two_arrays_of_one_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One matrix, two stores, and the axis each indexes derived from its own encoding."""
     mask = await _mask(authenticated_context)
     features = await _features_table(authenticated_context)
@@ -205,7 +210,7 @@ async def test_both_layouts_land_as_two_arrays_of_one_dataset(
 @pytest.mark.asyncio
 async def test_one_layout_is_legal_and_offers_one_capability(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A dataset with a single store is not half-built: it answers one question, and says so."""
     mask = await _mask(authenticated_context)
     features = await _features_table(authenticated_context)
@@ -227,7 +232,7 @@ async def test_one_layout_is_legal_and_offers_one_capability(
 @pytest.mark.asyncio
 async def test_the_keyed_axis_is_produced_and_the_referenced_one_is_not(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The rule this whole shape rests on: a mask supplies one id, and that is enough.
 
     `assert_edge_rank` accounts for every axis of a FIELD's target -- by the edge, or by the
@@ -271,7 +276,7 @@ async def test_the_keyed_axis_is_produced_and_the_referenced_one_is_not(
 @pytest.mark.asyncio
 async def test_an_axis_identified_by_nothing_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`identifiedBy` is a list now, so the empty case is expressible and comes back as prose.
 
     It was a singular required field, and "identified by nothing" was a document GraphQL would
@@ -302,7 +307,7 @@ async def test_an_axis_identified_by_nothing_is_refused(
 @pytest.mark.asyncio
 async def test_a_matrix_nothing_keys_is_reachable_only_through_a_hop(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every axis identified by a table: no FIELD edge, no colouring -- and legal, because a plan can hop in.
 
     This used to be refused as "quietly useless": nothing stands on such a matrix, so no layer
@@ -358,7 +363,7 @@ async def test_a_matrix_nothing_keys_is_reachable_only_through_a_hop(
 @pytest.mark.asyncio
 async def test_an_axis_identified_two_ways_at_once_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The union reads one id field, chosen by `kind`, and rejects any other."""
     mask = await _mask(authenticated_context)
     features = await _features_table(authenticated_context)
@@ -382,7 +387,7 @@ async def test_an_axis_identified_two_ways_at_once_is_refused(
 @pytest.mark.asyncio
 async def test_a_keyed_axis_the_source_cannot_supply_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The check the caller's statement buys: the derivation now has something to disagree with.
 
     Naming the axis is not naming the split -- `consumed` and the passthrough are still derived --
@@ -423,7 +428,7 @@ async def test_a_keyed_axis_the_source_cannot_supply_is_refused(
 @pytest.mark.asyncio
 async def test_two_stores_indexing_one_axis_are_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One capability twice, and nothing to say which a reader should use."""
     mask = await _mask(authenticated_context)
     features = await _features_table(authenticated_context)
@@ -446,7 +451,7 @@ async def test_two_stores_indexing_one_axis_are_refused(
 @pytest.mark.asyncio
 async def test_a_store_whose_shape_contradicts_the_axes_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The check only possible because the store read its own shape rather than being told it.
 
     Two *stores* disagreeing about the shape is no longer representable -- one matrix is one
@@ -470,7 +475,9 @@ async def test_a_store_whose_shape_contradicts_the_axes_is_refused(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unfinished_store_is_refused(authenticated_context: HttpContext):
+async def test_an_unfinished_store_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """An unfinished store knows nothing about itself, so a dataset over it would know nothing."""
     mask = await _mask(authenticated_context)
     features = await _features_table(authenticated_context)
@@ -511,7 +518,9 @@ mutation Create($input: CreateLabelLayerInput!) {
 """
 
 
-async def _placed_mask(ctx: HttpContext):
+async def _placed_mask(
+    ctx: HttpContext,
+) -> tuple[models.ArrayDataset, models.Lens, models.Scene]:
     """A mask with a lens and a scene it is registered into -- what a label layer needs."""
     mask = await _mask(ctx)
     lens = await seed.create_lens(ctx, mask)
@@ -520,7 +529,9 @@ async def _placed_mask(ctx: HttpContext):
     return mask, lens, scene
 
 
-async def _expression(ctx: HttpContext, mask, *, axes: tuple[int, ...] = (0, 1)) -> str:
+async def _expression(
+    ctx: HttpContext, mask: models.ArrayDataset, *, axes: tuple[int, ...] = (0, 1)
+) -> str:
     """A sparse dataset keyed by ``mask``, its feature axis identified by a table."""
     features = await _features_table(ctx)
     store = await _store(
@@ -550,7 +561,9 @@ async def _slice(ctx: HttpContext, dataset: str, **positions: int) -> str:
     return str(lens.pk)
 
 
-async def _colour(ctx, lens, scene, entry: dict) -> object:
+async def _colour(
+    ctx: HttpContext, lens: models.Lens, scene: models.Scene, entry: dict
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_LABEL_LAYER,
         context_value=ctx,
@@ -568,7 +581,7 @@ async def _colour(ctx, lens, scene, entry: dict) -> object:
 @pytest.mark.asyncio
 async def test_a_label_layer_colours_by_one_slice_of_a_matrix(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The point of the whole exercise: a feature colours the mask, and nothing was rasterised.
 
     The mask's pixels are object ids; the matrix is indexed by those same ids on one axis and
@@ -608,7 +621,7 @@ async def test_a_label_layer_colours_by_one_slice_of_a_matrix(
 @pytest.mark.asyncio
 async def test_a_slice_the_store_would_have_to_scan_for_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The layout rule, made visible. This is why the model holds stores at all.
 
     With only the object-major layout, reading one feature means touching every object's run --
@@ -640,7 +653,7 @@ async def test_a_slice_the_store_would_have_to_scan_for_is_refused(
 @pytest.mark.asyncio
 async def test_a_position_along_the_keyed_axis_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Naming the object axis asks for one object's whole profile, which is a hover, not a colouring."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     dataset = await _expression(authenticated_context, mask)
@@ -661,7 +674,9 @@ async def test_a_position_along_the_keyed_axis_is_refused(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_out_of_range_position_is_refused(authenticated_context: HttpContext):
+async def test_an_out_of_range_position_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """A position is a row of the table that axis references, not an id of its own."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     dataset = await _expression(authenticated_context, mask)
@@ -684,7 +699,7 @@ async def test_an_out_of_range_position_is_refused(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_sparse_colouring_is_measured_and_takes_no_qualitative_colormap(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A slice is a value per object. Nothing stores categories sparsely -- the zeros would be one."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     dataset = await _expression(authenticated_context, mask)
@@ -707,7 +722,7 @@ async def test_a_sparse_colouring_is_measured_and_takes_no_qualitative_colormap(
 @pytest.mark.asyncio
 async def test_a_matrix_no_field_edge_reaches_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The ids that select a value have to be the ids this source supplies."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     other = await _mask(authenticated_context, "other labels")
@@ -731,7 +746,7 @@ async def test_a_matrix_no_field_edge_reaches_is_refused(
 @pytest.mark.asyncio
 async def test_two_slices_of_one_matrix_are_two_colourings(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The duplicate check keys on the whole rendering, and a position is part of it.
 
     Before the variant's fields joined that key, two different features would have keyed
@@ -787,7 +802,7 @@ async def test_two_slices_of_one_matrix_are_two_colourings(
 @pytest.mark.asyncio
 async def test_a_matrix_a_picker_names_cannot_be_deleted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The PROTECT a JSON column cannot express as a foreign key.
 
     A colouring names its source by id inside `label_render`, so nothing cascades. Without this
@@ -852,7 +867,7 @@ query Options($lens: ID!, $filters: ColumnOptionFilter) {
 @pytest.mark.asyncio
 async def test_the_picker_offers_the_sliceable_axis_not_every_position(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One option per axis, and only an axis a stored layout indexes.
 
     Enumerating positions is what this whole design exists to avoid -- a matrix with 19 059
@@ -894,7 +909,7 @@ async def test_the_picker_offers_the_sliceable_axis_not_every_position(
 @pytest.mark.asyncio
 async def test_an_axis_no_layout_indexes_is_not_offered(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The invariant: everything offered is something the mutation accepts.
 
     With only the object-major layout, a colouring along `feature` is refused -- so offering it
@@ -921,7 +936,7 @@ async def test_an_axis_no_layout_indexes_is_not_offered(
 @pytest.mark.asyncio
 async def test_narrowing_by_role_excludes_the_sparse_half(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A role is a property of a column, and a slice of a matrix has none.
 
     So filtering for one returns fewer options, never more -- asking for what an option does not
@@ -973,7 +988,7 @@ query Plans($system: ID!) {
 @pytest.mark.asyncio
 async def test_a_matrix_publishes_a_plan_that_reads_one_slice(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Hover, and the other half of why both layouts are stored.
 
     The id selects a *slice*, not a row: one read of `indptr` at the object, one of the range
@@ -1023,7 +1038,7 @@ async def test_a_matrix_publishes_a_plan_that_reads_one_slice(
 @pytest.mark.asyncio
 async def test_no_plan_when_only_the_wrong_layout_is_stored(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A plan for a scan is not a slow plan; it is one nobody should execute.
 
     With only the feature-major layout, reading one object means touching every feature's run.
@@ -1051,7 +1066,7 @@ async def test_no_plan_when_only_the_wrong_layout_is_stored(
 @pytest.mark.asyncio
 async def test_the_two_layouts_answer_the_two_questions(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole argument for storing both, in one test.
 
     Feature-major answers the colouring ("every object's value for this feature"); object-major
@@ -1102,7 +1117,7 @@ async def test_the_two_layouts_answer_the_two_questions(
 CUBE_SHAPE = [40, 12, 3]
 
 
-def _cube_axes(mask, features, timepoints) -> list[dict]:
+def _cube_axes(mask: models.ArrayDataset, features: str, timepoints: str) -> list[dict]:
     """Three axes, one keyed and two referenced. The rule does not change with rank."""
     return [
         {"name": "feature", "identifiedBy": [{"kind": "TABLE", "table": features}]},
@@ -1114,7 +1129,13 @@ def _cube_axes(mask, features, timepoints) -> list[dict]:
     ]
 
 
-async def _cube_dataset(ctx: HttpContext, mask, features, timepoints, store) -> str:
+async def _cube_dataset(
+    ctx: HttpContext,
+    mask: models.ArrayDataset,
+    features: str,
+    timepoints: str,
+    store: models.SparseStore,
+) -> str:
     """A rank-three dataset over ``store``: one keyed axis and two referenced ones."""
     created = await schema.execute(
         CREATE,
@@ -1135,7 +1156,7 @@ async def _cube_dataset(ctx: HttpContext, mask, features, timepoints, store) -> 
 @pytest.mark.asyncio
 async def test_a_rank_three_matrix_is_a_sparse_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A layout is one axis made contiguous, so an array of rank n has up to n of them.
 
     The store, the datalayer reader and this mutation are all written that way. A
@@ -1195,7 +1216,7 @@ async def test_a_rank_three_matrix_is_a_sparse_dataset(
 @pytest.mark.asyncio
 async def test_a_rank_three_edge_still_produces_exactly_one_id(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The FIELD rule is unchanged by rank: a mask supplies one id, and the rest identify themselves."""
     mask = await _mask(authenticated_context)
     features = await _features_table(authenticated_context, "features")
@@ -1238,7 +1259,7 @@ async def test_a_rank_three_edge_still_produces_exactly_one_id(
 @pytest.mark.asyncio
 async def test_a_rank_three_colouring_names_a_position_along_every_identified_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One value per object out of a rank-three matrix, which is what a colouring is at any rank.
 
     `at` names a position along **both** axes the matrix identifies itself, leaving the keyed axis
@@ -1281,7 +1302,7 @@ async def test_a_rank_three_colouring_names_a_position_along_every_identified_ax
 @pytest.mark.asyncio
 async def test_two_rank_three_slices_differing_only_in_one_position_are_two_colourings(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The duplicate check hashes the whole `at`, so the second is not the first wearing a name."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     features = await _features_table(authenticated_context, "features")
@@ -1332,7 +1353,7 @@ async def test_two_rank_three_slices_differing_only_in_one_position_are_two_colo
 @pytest.mark.asyncio
 async def test_a_rank_three_colouring_needs_a_layout_on_one_named_axis_not_all(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One contiguous slice is all the read needs, so one indexed named axis is all it requires.
 
     The matrix here is stored **only** along the keyed axis, so neither named axis has a layout and
@@ -1382,7 +1403,7 @@ async def test_a_rank_three_colouring_needs_a_layout_on_one_named_axis_not_all(
 @pytest.mark.asyncio
 async def test_a_rank_three_plan_returns_every_other_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A hover is one object's whole profile, and rank only changes how many numbers that is."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     features = await _features_table(authenticated_context, "features")
@@ -1416,7 +1437,9 @@ async def test_a_rank_three_plan_returns_every_other_axis(
     )
 
 
-async def _filter(ctx, lens, scene, entry: dict) -> object:
+async def _filter(
+    ctx: HttpContext, lens: models.Lens, scene: models.Scene, entry: dict
+) -> ExecutionResult:
     return await schema.execute(
         CREATE_LABEL_LAYER,
         context_value=ctx,
@@ -1432,7 +1455,9 @@ async def _filter(ctx, lens, scene, entry: dict) -> object:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_filter_reads_one_slice_of_a_matrix(authenticated_context: HttpContext):
+async def test_a_filter_reads_one_slice_of_a_matrix(
+    authenticated_context: HttpContext,
+) -> None:
     """The colouring's sibling, and the invariant it restores.
 
     `labelFilterByOptions` and `labelColorByOptions` project the SAME walk, so a sparse
@@ -1463,7 +1488,7 @@ async def test_a_filter_reads_one_slice_of_a_matrix(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_sparse_filter_is_measured_and_takes_no_value_set(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A slice is a value per object, so it is bounded — never matched against classes."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     dataset = await _expression(authenticated_context, mask)
@@ -1486,7 +1511,7 @@ async def test_a_sparse_filter_is_measured_and_takes_no_value_set(
 @pytest.mark.asyncio
 async def test_a_sparse_filter_is_refused_along_an_unindexed_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The same layout requirement a colouring has, through the same resolver.
 
     Sharing `_resolve_sparse_slice` is what keeps the two pickers from drifting: a rule the

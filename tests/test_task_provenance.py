@@ -8,7 +8,11 @@ from mikro_server.schema import schema
 
 
 def make_provenance(
-    task_id="task-1", parent=None, args_hash="sha256-args", sub="1", cid="oinsoins"
+    task_id: str = "task-1",
+    parent: str | None = None,
+    args_hash: str = "sha256-args",
+    sub: str = "1",
+    cid: str = "oinsoins",
 ) -> ProvenanceToken:
     """Build a verified provenance token, as AuthentikateExtension would attach one.
 
@@ -72,7 +76,9 @@ CREATE_DATASET = """
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_with_provenance(db, authenticated_context: HttpContext):
+async def test_create_with_provenance(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A provenance token creates one Task row and stamps createdThrough."""
     attach_provenance(authenticated_context, make_provenance())
 
@@ -102,7 +108,9 @@ async def test_create_with_provenance(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_create_without_provenance(db, authenticated_context: HttpContext):
+async def test_create_without_provenance(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Without a provenance token createdThrough stays None and no Task row is made."""
     result = await schema.execute(
         CREATE_DATASET,
@@ -119,8 +127,8 @@ async def test_create_without_provenance(db, authenticated_context: HttpContext)
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_task_row_shared_between_mutations(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Two creations under the same task share a single Task row."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-2"))
 
@@ -137,7 +145,9 @@ async def test_task_row_shared_between_mutations(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_created_through_task(db, authenticated_context: HttpContext):
+async def test_filter_by_created_through_task(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Folders are filterable by the task id they were created through."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-3"))
 
@@ -190,7 +200,9 @@ async def test_filter_by_created_through_task(db, authenticated_context: HttpCon
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_created_through_ids(db, authenticated_context: HttpContext):
+async def test_filter_by_created_through_ids(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Folders are filterable by the task's and the assigner's database IDs."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-5"))
 
@@ -244,7 +256,9 @@ async def test_filter_by_created_through_ids(db, authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_provenance_entry_links_task(db, authenticated_context: HttpContext):
+async def test_provenance_entry_links_task(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The CREATE history entry links back to the task it happened under."""
     attach_provenance(authenticated_context, make_provenance(task_id="task-4"))
 

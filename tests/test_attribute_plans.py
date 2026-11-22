@@ -239,7 +239,7 @@ async def _field_edge(
 @pytest.mark.asyncio
 async def test_sibling_fan_out_returns_one_plan_per_table(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Two FIELD edges off one mask are two plans, each zipped against its OWN produced axis.
 
     The produced axis is per-edge on purpose: objects names it `i`, intensity names it
@@ -319,7 +319,9 @@ async def test_sibling_fan_out_returns_one_plan_per_table(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_warp_field_target_is_not_a_plan(authenticated_context: HttpContext):
+async def test_a_warp_field_target_is_not_a_plan(
+    authenticated_context: HttpContext,
+) -> None:
     """A FIELD whose output is a pixel grid is a registration, not a dereference.
 
     ABLATION: drop the ``table_dataset_id is None`` guard in ``build_attribute_plans`` and
@@ -357,7 +359,9 @@ async def test_a_warp_field_target_is_not_a_plan(authenticated_context: HttpCont
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_degenerate_table_is_not_a_plan(authenticated_context: HttpContext):
+async def test_a_degenerate_table_is_not_a_plan(
+    authenticated_context: HttpContext,
+) -> None:
     """A table with no coordinate columns enumerates rows on a synthetic axis nothing can bind.
 
     The `object` axis has no backing column, so there is no WHERE clause to write --
@@ -399,7 +403,9 @@ async def test_a_degenerate_table_is_not_a_plan(authenticated_context: HttpConte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_lens_owned_field_is_refused(authenticated_context: HttpContext):
+async def test_a_lens_owned_field_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """A lens is a selection over a dataset, nothing else: it owns no array to sample.
 
     Refused rather than guessed -- resolving through to the dataset's store would silently
@@ -450,7 +456,7 @@ async def test_a_lens_owned_field_is_refused(authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_table_cannot_be_a_field(authenticated_context: HttpContext):
+async def test_a_table_cannot_be_a_field(authenticated_context: HttpContext) -> None:
     """The geometry/record-land boundary, refused where the edge is written.
 
     "Nucleus 42 is in track 17" reads like a map and is not one a FIELD can carry: nothing
@@ -519,7 +525,9 @@ async def test_a_table_cannot_be_a_field(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_array_without_a_store_is_refused(authenticated_context: HttpContext):
+async def test_an_array_without_a_store_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """A plan names the array a worker samples; an array with no store cannot be named."""
     mask = await _mask(
         authenticated_context, axes=seed.YX_AXES, shapes=[[64, 64]], with_store=False
@@ -588,7 +596,7 @@ async def _derive(
 @pytest.mark.asyncio
 async def test_probing_the_source_image_finds_the_derived_masks_plans(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The scene-hover case: probe the image layer's system, answer from the derived mask.
 
     The image is (t,c,y,x); the mask is (t,y,x), derived BY_DIMENSION on the axes it kept
@@ -656,7 +664,7 @@ async def test_probing_the_source_image_finds_the_derived_masks_plans(
 @pytest.mark.asyncio
 async def test_probing_the_mask_directly_returns_an_empty_path(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A locally-rooted plan carries no steps: you are already standing where it samples."""
     image = await seed.create_array_dataset(
         authenticated_context, "source", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -693,7 +701,7 @@ async def test_probing_the_mask_directly_returns_an_empty_path(
 @pytest.mark.asyncio
 async def test_sibling_masks_correspond_through_their_parent(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Probing mask A finds mask B's table: the point in A does correspond to a point in B.
 
     The question is "what corresponds to this point", not "what belongs to this dataset" --
@@ -766,7 +774,7 @@ async def test_sibling_masks_correspond_through_their_parent(
 @pytest.mark.asyncio
 async def test_a_rank_changing_derivation_is_not_walked_backwards(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A (y,x) mask embedded into a (z,y,x) image has no inverse to offer the probe.
 
     `is_reverse_traversable` refuses the unequal-rank hop, so the mask is honestly
@@ -821,7 +829,7 @@ async def test_a_rank_changing_derivation_is_not_walked_backwards(
 @pytest.mark.asyncio
 async def test_an_unmappable_derivation_is_not_walked(
     authenticated_context: HttpContext,
-):
+) -> None:
     """UNMAPPABLE declares no point corresponds -- discovery must not compose across it."""
     image = await seed.create_array_dataset(
         authenticated_context, "source", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -865,7 +873,7 @@ async def test_an_unmappable_derivation_is_not_walked(
 @pytest.mark.asyncio
 async def test_a_sliced_lens_hop_appears_in_the_path(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A mask derived from a crop is two backward steps from the image: lens edge, then derivation."""
     image = await seed.create_array_dataset(
         authenticated_context, "source", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -909,7 +917,9 @@ async def test_a_sliced_lens_hop_appears_in_the_path(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_registrations_never_extend_discovery(authenticated_context: HttpContext):
+async def test_registrations_never_extend_discovery(
+    authenticated_context: HttpContext,
+) -> None:
     """Two datasets sharing a scene's world do not correspond by that fact alone.
 
     A registration is a claim a scene composes; this query has no scene, so the walk never
@@ -955,7 +965,7 @@ async def test_registrations_never_extend_discovery(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_field_edge_is_payload_never_connectivity(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A warp-field FIELD edge onto another grid must not carry discovery into that grid."""
     atlas = await seed.create_array_dataset(
         authenticated_context, "atlas", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -1014,7 +1024,7 @@ async def test_a_field_edge_is_payload_never_connectivity(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_max_depth_limits_discovery(authenticated_context: HttpContext):
+async def test_max_depth_limits_discovery(authenticated_context: HttpContext) -> None:
     """`maxDepth` bounds the walk exactly like coordinateGraph's: siblings are two hops away."""
     image = await seed.create_array_dataset(
         authenticated_context, "source", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -1110,7 +1120,7 @@ async def _mesh_collection(
 @pytest.mark.asyncio
 async def test_probing_a_mesh_collections_system_finds_the_source_masks_plans(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A mesh collection asks "what do we know about this segment?" the same way a pixel does.
 
     The collection owns its space, so the plan lives one hop away on the mask it was
@@ -1176,7 +1186,7 @@ async def test_probing_a_mesh_collections_system_finds_the_source_masks_plans(
 @pytest.mark.asyncio
 async def test_a_mesh_collection_with_an_unmappable_derivation_reaches_no_plans(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`derivedFrom` with no `transform` is UNMAPPABLE, and UNMAPPABLE is never walked.
 
     The whole of the condition on the paragraph above: a writer that names its source and
@@ -1222,7 +1232,7 @@ async def test_a_mesh_collection_with_an_unmappable_derivation_reaches_no_plans(
 @pytest.mark.asyncio
 async def test_a_column_references_the_table_its_values_identify(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`instance_id` on the objects table is a declared foreign key into tracks.
 
     The FK states only *which table*: which column carries the target's row identity is
@@ -1277,7 +1287,7 @@ async def test_a_column_references_the_table_its_values_identify(
 @pytest.mark.asyncio
 async def test_a_measured_coordinate_column_cannot_reference(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A SPACE or TIME coordinate's values are positions, so they cannot also be row ids.
 
     Narrowed deliberately, and the narrowing is the whole content of the rule. A position in
@@ -1335,7 +1345,7 @@ async def test_a_measured_coordinate_column_cannot_reference(
 @pytest.mark.asyncio
 async def test_a_composite_keyed_table_cannot_be_referenced(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A single value cannot identify a row of a (t, i)-keyed table: refuse, don't guess."""
     timelapse = await _table(
         authenticated_context,
@@ -1376,7 +1386,7 @@ async def test_a_composite_keyed_table_cannot_be_referenced(
 @pytest.mark.asyncio
 async def test_a_degenerate_table_cannot_be_referenced(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The synthetic `object` axis enumerates rows with no backing column to look a value up in."""
     degenerate = await _table(
         authenticated_context,
@@ -1413,7 +1423,9 @@ async def test_a_degenerate_table_cannot_be_referenced(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_referenced_table_cannot_be_deleted(authenticated_context: HttpContext):
+async def test_a_referenced_table_cannot_be_deleted(
+    authenticated_context: HttpContext,
+) -> None:
     """PROTECT, for the same reason a warp field is PROTECTed: deleting tracks out from
     under a column keying it would orphan the meaning of every value in that column."""
     tracks = await _table(
@@ -1539,7 +1551,7 @@ async def _tracked_stack(ctx: HttpContext) -> models.CoordinateSystem:
 @pytest.mark.asyncio
 async def test_a_reference_is_one_hop_away_in_the_plan(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`instance_id` references tracks, so the plan carries the hop -- with the key column the client used to guess."""
     system = await _tracked_stack(authenticated_context)
 
@@ -1580,7 +1592,9 @@ async def test_a_reference_is_one_hop_away_in_the_plan(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_hops_are_bounded_and_default_to_one(authenticated_context: HttpContext):
+async def test_hops_are_bounded_and_default_to_one(
+    authenticated_context: HttpContext,
+) -> None:
     """`maxJoinDepth` defaults to one hop, zero is the landing alone, and past the cap is the cap."""
     system = await _tracked_stack(authenticated_context)
 
@@ -1619,7 +1633,9 @@ async def test_hops_are_bounded_and_default_to_one(authenticated_context: HttpCo
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_hop_cycle_is_cut_per_branch(authenticated_context: HttpContext):
+async def test_a_hop_cycle_is_cut_per_branch(
+    authenticated_context: HttpContext,
+) -> None:
     """A reference back to the landing table is not a hop: the worker already stands there.
 
     The API cannot author a cycle (a target exists before the table referencing it), so this
@@ -1653,7 +1669,7 @@ async def test_a_hop_cycle_is_cut_per_branch(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_the_hop_walk_costs_one_read_per_level(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Batched per level: a second reference out of the same table adds no query."""
     from django.db import connection
     from django.test.utils import CaptureQueriesContext

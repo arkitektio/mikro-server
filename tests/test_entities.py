@@ -26,8 +26,8 @@ query Entities($representations: [_Any!]!) {
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_entities_resolves_types_beside_the_discriminated_ones(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     folder = await seed.create_folder(authenticated_context, "federated")
     dataset = await seed.create_array_dataset(authenticated_context, "federated")
 
@@ -52,8 +52,8 @@ async def test_entities_resolves_types_beside_the_discriminated_ones(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_entities_does_not_answer_for_another_organizations_row(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     theirs = await seed.create_folder(other_org_context, "theirs")
 
     result = await schema.execute(

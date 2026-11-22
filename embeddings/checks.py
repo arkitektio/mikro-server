@@ -9,7 +9,8 @@ starts (``<service>_server/asgi.py``).
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 from django.apps import apps
 from django.core.checks import Error, Tags, register
@@ -17,6 +18,9 @@ from django.db import connections
 
 from embeddings import engine
 from embeddings.models import EmbeddedDescriptionMixin
+
+if TYPE_CHECKING:
+    from django.apps import AppConfig
 
 
 def embedded_models() -> list[type[EmbeddedDescriptionMixin]]:
@@ -30,7 +34,9 @@ def embedded_models() -> list[type[EmbeddedDescriptionMixin]]:
 
 @register(Tags.database)
 def check_column_dimensions(
-    app_configs: Any, databases: Any = None, **kwargs: Any
+    app_configs: Sequence[AppConfig] | None,
+    databases: Sequence[str] | None = None,
+    **kwargs: Any,
 ) -> list[Error]:
     """``embeddings.E002``: a ``vector(N)`` column whose N is not :data:`embeddings.engine.DIMENSIONS`.
 

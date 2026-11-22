@@ -81,7 +81,7 @@ async def _adopt(
 @pytest.mark.asyncio
 async def test_a_scene_over_a_datasets_intrinsic_grid_places_by_construction(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Adopt the pixel grid itself: the dataset's layer is placed with no edge anywhere.
 
     An unsliced lens' space IS the world, so its path is empty and exact; a sliced
@@ -167,7 +167,7 @@ async def test_a_scene_over_a_datasets_intrinsic_grid_places_by_construction(
 @pytest.mark.asyncio
 async def test_bootstrap_from_an_intrinsic_system_materializes_the_container(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createSceneFromCoordinateSystem over an owned root: the container becomes the layer, nothing is authored.
 
     This is the exact call that used to be refused with 'owned by a container, not an
@@ -233,7 +233,7 @@ async def test_bootstrap_from_an_intrinsic_system_materializes_the_container(
 @pytest.mark.asyncio
 async def test_a_scene_over_a_calibration_renders_at_physical_scale(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Adopt the PHYSICAL space: the path is the calibration edge, forward, and nothing else.
 
     Nothing is minted and nothing is authored: pixel -> physical is the
@@ -291,7 +291,7 @@ async def test_a_scene_over_a_calibration_renders_at_physical_scale(
 @pytest.mark.asyncio
 async def test_only_the_containers_tree_composes_in_an_owned_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A derived child places through its fact chain; an unrelated dataset has no way in.
 
     Registrations land exclusively on SHARED spaces, so an owned root composes exactly
@@ -302,7 +302,7 @@ async def test_only_the_containers_tree_composes_in_an_owned_space(
     child = await seed.create_array_dataset(authenticated_context, "Crop")
     stranger = await seed.create_array_dataset(authenticated_context, "Stranger")
 
-    def derive():
+    def derive() -> models.CoordinateSystem:
         # The child's primary (and only) derivation: a fact edge child -> parent.
         parent_intrinsic = parent.intrinsic_coordinate_system
         models.Transformation.objects.create(
@@ -361,7 +361,7 @@ async def test_only_the_containers_tree_composes_in_an_owned_space(
 @pytest.mark.asyncio
 async def test_the_container_is_undeletable_while_a_scene_is_rooted_in_its_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The space a scene roots in is undeletable; the data that lives there is not.
 
     RFC-9 splits a guarantee that used to be one thing. `Scene.world` is still RESTRICT, so a
@@ -458,7 +458,7 @@ def _layers_of(dataset: models.ArrayDataset) -> list[models.Layer]:
 
 
 async def _stage_in_own_grid(
-    ctx: HttpContext, dataset: models.ArrayDataset, **policy
+    ctx: HttpContext, dataset: models.ArrayDataset, **policy: object
 ) -> dict:
     """A scene over the dataset's own pixel grid -- the replacement for the deleted bootstrap."""
     intrinsic = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -477,7 +477,7 @@ async def _stage_in_own_grid(
 @pytest.mark.asyncio
 async def test_data_in_its_own_space_is_placed_exactly(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The inversion the mirror world used to hide: an empty path is VALIDATED, not UNKNOWN.
 
     Staging an uncalibrated dataset used to mint a world under assumed micrometre units and
@@ -507,7 +507,7 @@ async def test_data_in_its_own_space_is_placed_exactly(
 @pytest.mark.asyncio
 async def test_three_flat_channels_are_three_layers_not_a_photograph(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The guess that had to go: three flat channels are three markers, not red/green/blue.
 
     Nothing about a 2D three-channel array says whether it is a photograph or a three-marker
@@ -542,7 +542,7 @@ async def test_three_flat_channels_are_three_layers_not_a_photograph(
 @pytest.mark.asyncio
 async def test_an_rgb_photograph_is_stated_and_stays_one_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The recipe survives its inference: a caller who actually has a photograph says so.
 
     Red, green and blue are the colour components of one image, so this is the one recipe
@@ -572,7 +572,7 @@ async def test_an_rgb_photograph_is_stated_and_stays_one_layer(
 @pytest.mark.asyncio
 async def test_a_z_stack_infers_a_volume_and_each_channel_is_its_own_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Depth wins over channel count: a 3-channel confocal stack is a volume, not a photograph.
 
     And it is three volumes, one per channel: each channel gets its own layer, its own hue and
@@ -622,7 +622,7 @@ async def test_a_z_stack_infers_a_volume_and_each_channel_is_its_own_layer(
 @pytest.mark.asyncio
 async def test_the_policy_names_the_recipe_inference_cannot_reach(
     authenticated_context: HttpContext,
-):
+) -> None:
     """LABEL is chosen, never inferred from structure -- and `policy.kind` is where it is chosen.
 
     Nothing about an array distinguishes a label map from an image, so inference reaches
@@ -645,7 +645,7 @@ async def test_the_policy_names_the_recipe_inference_cannot_reach(
 @pytest.mark.asyncio
 async def test_a_dataset_finds_its_scenes_by_walking_the_graph(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`ArrayDataset.scenes` is a layers->lens->dataset walk, never a column.
 
     There is deliberately no `Scene.dataset` FK: which scenes show a dataset is already
@@ -667,7 +667,7 @@ async def test_a_dataset_finds_its_scenes_by_walking_the_graph(
 @pytest.mark.asyncio
 async def test_an_unmappable_derivation_still_composes_over_its_own_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An UNMAPPABLE derivation denies correspondence with its *source*, not with its own space.
 
     A phasor-like reduction has no point correspondence with the image it came from, so no
@@ -715,7 +715,7 @@ async def test_an_unmappable_derivation_still_composes_over_its_own_space(
 @pytest.mark.asyncio
 async def test_staging_a_physical_space_reaches_the_data_through_the_calibration(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The other half of the documented staging path: point the builder at a *physical* space.
 
     Over the intrinsic grid the builder takes its `residents_exist` branch -- the data is
@@ -771,7 +771,9 @@ def _label_channels(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_channel_becomes_its_own_layer(authenticated_context: HttpContext):
+async def test_every_channel_becomes_its_own_layer(
+    authenticated_context: HttpContext,
+) -> None:
     """The unit of control is the layer, so the unit of a channel is a layer.
 
     Four fluorescence channels sharing one grid are four independent signals. Packed into one
@@ -835,7 +837,7 @@ async def test_every_channel_becomes_its_own_layer(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_single_channel_dataset_is_still_one_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Splitting per channel is not "one layer per anything": one channel is one layer, in grey.
 
     The degenerate case an `enumerate(range(channels))` loop gets wrong twice -- a dataset with
@@ -881,7 +883,7 @@ def _link_source_file(
     *,
     name: str,
     content_type: str | None,
-    direction=enums.FileLinkDirectionChoices.SOURCE,
+    direction: enums.FileLinkDirectionChoices = enums.FileLinkDirectionChoices.SOURCE,
 ) -> models.File:
     """The file a converter read to write these arrays -- or, for RENDITION, the one it wrote out of them."""
     file = models.File.objects.create(
@@ -904,7 +906,7 @@ def _link_source_file(
 @pytest.mark.asyncio
 async def test_channels_named_red_green_blue_are_inferred_as_one_photograph(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The evidence that shape could never be: a converter that named the components.
 
     Three channels *called* red, green and blue are the three components of one picture --
@@ -932,7 +934,7 @@ async def test_channels_named_red_green_blue_are_inferred_as_one_photograph(
 @pytest.mark.asyncio
 async def test_the_components_follow_the_labels_not_the_positions(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A converter that wrote (blue, green, red) gets its picture back in the right colours.
 
     Hardcoding 0, 1, 2 renders such a file with the channels swapped -- a picture that looks
@@ -957,7 +959,7 @@ async def test_the_components_follow_the_labels_not_the_positions(
 @pytest.mark.asyncio
 async def test_arrays_read_out_of_a_png_are_inferred_as_a_photograph(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A source link to a picture format is the converter saying it read a picture.
 
     Recorded at ingest, by the thing that actually knows -- which is exactly what the shape
@@ -984,7 +986,7 @@ async def test_arrays_read_out_of_a_png_are_inferred_as_a_photograph(
 @pytest.mark.asyncio
 async def test_a_png_exported_from_an_acquisition_proves_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Direction is the whole meaning of the link, and a preview must not rewrite its source.
 
     A PNG *written from* a three-marker acquisition says someone exported a picture of it.
@@ -1011,7 +1013,7 @@ async def test_a_png_exported_from_an_acquisition_proves_nothing(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_czi_is_not_a_photograph(authenticated_context: HttpContext):
+async def test_a_czi_is_not_a_photograph(authenticated_context: HttpContext) -> None:
     """The negative that keeps the media-type list honest: an acquisition format decides nothing."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Confocal", shapes=[[3, 64, 64]]
@@ -1031,7 +1033,7 @@ async def test_a_czi_is_not_a_photograph(authenticated_context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_brightfield_channel_sits_under_the_fluorescence_and_does_not_sum_into_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Transmitted light is not a marker, and additively blending it washes the scene out.
 
     Brightfield is the sample lit from behind -- an opaque picture of the field. Summed with
@@ -1079,7 +1081,7 @@ async def test_a_brightfield_channel_sits_under_the_fluorescence_and_does_not_su
 @pytest.mark.asyncio
 async def test_contrast_limits_come_from_the_histogram_ingest_recorded(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The numbers were already on the server; every viewer was working them out again.
 
     A ValueHistogram is recorded per channel precisely so a client can open the contrast
@@ -1114,7 +1116,7 @@ async def test_contrast_limits_come_from_the_histogram_ingest_recorded(
 @pytest.mark.asyncio
 async def test_a_channel_with_no_histogram_keeps_its_null_limits(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Null is "nobody measured", and it is the answer a viewer's own auto-contrast needs.
 
     Filling it with a number derived from nothing would be a limit that looks recorded.
@@ -1144,7 +1146,7 @@ async def test_a_channel_with_no_histogram_keeps_its_null_limits(
 @pytest.mark.asyncio
 async def test_an_rgb_layer_gets_one_window_wide_enough_for_all_three(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The components of one picture share one pair of limits, so the three windows become one.
 
     The widest of them: clipping a component shows up as a colour cast over the whole image,

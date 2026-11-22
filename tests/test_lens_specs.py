@@ -183,7 +183,7 @@ async def _lens(ctx: HttpContext, pk: object) -> dict:
 @pytest.mark.asyncio
 async def test_an_array_lens_answers_the_spec_of_its_crop(
     authenticated_context: HttpContext,
-):
+) -> None:
     axes = [
         seed.axis("c", enums.AxisType.CHANNEL),
         seed.axis("z", enums.AxisType.SPACE),
@@ -239,7 +239,7 @@ async def test_an_array_lens_answers_the_spec_of_its_crop(
 @pytest.mark.asyncio
 async def test_a_table_lens_answers_the_spec_of_what_its_windows_leave_free(
     authenticated_context: HttpContext,
-):
+) -> None:
     created = await _create_table(authenticated_context, "tracks", TRACKS)
     table = await models.TableDataset.objects.aget(pk=created["id"])
 
@@ -291,7 +291,7 @@ async def test_a_table_lens_answers_the_spec_of_what_its_windows_leave_free(
 @pytest.mark.asyncio
 async def test_a_sparse_lens_is_a_slice_exactly_when_a_picker_takes_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """SLICE and the colour picker's gate are two statements of one rule; this holds them together."""
     mask, lens, scene = await _placed_mask(authenticated_context)
     both = await _expression(authenticated_context, mask)
@@ -329,7 +329,7 @@ async def test_a_sparse_lens_is_a_slice_exactly_when_a_picker_takes_it(
 @pytest.mark.asyncio
 async def test_a_slice_the_store_would_scan_for_is_not_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     mask, lens, scene = await _placed_mask(authenticated_context)
     by_object = await _expression(authenticated_context, mask, axes=(1,))
 
@@ -359,7 +359,7 @@ async def _matching(ctx: HttpContext, **filters: list[str]) -> set[str]:
 @pytest.mark.asyncio
 async def test_lenses_are_found_by_the_spec_of_what_they_select(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One filter per vocabulary, each over its own kind: the member names overlap, the lenses do not."""
     ctx = authenticated_context
     axes = [
@@ -440,7 +440,7 @@ async def test_lenses_are_found_by_the_spec_of_what_they_select(
 @pytest.mark.asyncio
 async def test_the_setup_job_states_the_spec_of_a_lens_written_without_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     """What gives a spec to the lenses older than the column, and to any row a rolled-back release wrote."""
     from io import StringIO
 

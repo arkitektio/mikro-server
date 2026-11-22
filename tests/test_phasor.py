@@ -15,6 +15,7 @@ the only requirement that matters.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import coords as coords_logic
@@ -51,7 +52,7 @@ _FLIM_SCALE = [1.0, _TAU_BIN_WIDTH, 0.325, 0.325]
 # ---------------------------------------------------------------------------
 
 
-def test_phasor_axis_finds_the_continuous_axis():
+def test_phasor_axis_finds_the_continuous_axis() -> None:
     axes = [
         coords_logic.AxisSpec(name=name, type=type_)
         for name, type_ in (
@@ -64,7 +65,7 @@ def test_phasor_axis_finds_the_continuous_axis():
     assert phasor_logic.phasor_axis(axes).name == "tau"
 
 
-def test_phasor_axis_is_none_without_one():
+def test_phasor_axis_is_none_without_one() -> None:
     axes = [
         coords_logic.AxisSpec(name=name, type=type_)
         for name, type_ in (("c", "CHANNEL"), ("y", "SPACE"), ("x", "SPACE"))
@@ -72,7 +73,7 @@ def test_phasor_axis_is_none_without_one():
     assert phasor_logic.phasor_axis(axes) is None
 
 
-def test_axis_scale_reads_the_diagonal_of_a_scale_edge():
+def test_axis_scale_reads_the_diagonal_of_a_scale_edge() -> None:
     edges = [("SCALE", {"scale": _FLIM_SCALE})]
     assert phasor_logic.axis_scale(edges, 1, 4) == _TAU_BIN_WIDTH
 
@@ -96,11 +97,11 @@ def test_axis_scale_of_a_sequence_uses_its_steps() -> None:
     assert phasor_logic.axis_scale(flattened, 1, 4) == _TAU_BIN_WIDTH
 
 
-def test_axis_scale_is_none_for_a_non_affine_edge():
+def test_axis_scale_is_none_for_a_non_affine_edge() -> None:
     assert phasor_logic.axis_scale([("FIELD", {})], 1, 4) is None
 
 
-def test_laser_frequency_reads_the_dual_struct():
+def test_laser_frequency_reads_the_dual_struct() -> None:
     graph = {
         "elements": [
             {"kind": "DETECTOR"},
@@ -117,7 +118,7 @@ def test_laser_frequency_reads_the_dual_struct():
     assert phasor_logic.laser_frequency(graph) == 80_000_000_000_000_000
 
 
-def test_laser_frequency_is_none_without_a_pulsed_source():
+def test_laser_frequency_is_none_without_a_pulsed_source() -> None:
     assert phasor_logic.laser_frequency({"elements": [{"kind": "DETECTOR"}]}) is None
     assert phasor_logic.laser_frequency({}) is None
 
@@ -191,8 +192,8 @@ _PHASOR_CONTEXT = """
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_context_derives_the_instrument(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Bin width from the calibration, laser rate from the lightpath. Neither is copied onto a node."""
     lens = await _seed_flim(authenticated_context)
 
@@ -224,8 +225,8 @@ async def test_phasor_context_derives_the_instrument(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_context_without_a_calibration(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """An uncalibrated dataset still has a phasor context -- it just has no physical bin width."""
     lens = await _seed_flim(authenticated_context, calibrated=False, lightpath=False)
 
@@ -246,8 +247,8 @@ async def test_phasor_context_without_a_calibration(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_context_is_null_without_a_phasor_axis(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A plain c/y/x stack has no axis a phasor is defined over, and says so rather than guessing."""
     dataset = await seed.create_array_dataset(authenticated_context, "Plain")
     lens = await seed.create_lens(authenticated_context, dataset)
@@ -264,8 +265,8 @@ async def test_phasor_context_is_null_without_a_phasor_axis(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_context_of_a_sliced_lens_reports_the_lens_bins(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A lens that crops tau narrows the window the transform runs over, and the context says so
     rather than claiming a period the data does not cover."""
     dataset = await seed.create_array_dataset(
@@ -298,8 +299,8 @@ async def test_phasor_context_of_a_sliced_lens_reports_the_lens_bins(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_context_of_a_stepped_lens_reports_the_lens_grid(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A lens that steps tau samples every other bin: the spacing the transform sees doubles, and
     the period it covers is still the whole axis, because the data still spans it."""
     dataset = await seed.create_array_dataset(
@@ -350,8 +351,8 @@ def _counts(bins: int) -> list[float]:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_create_phasor_histogram_is_keyed_by_harmonic(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Two harmonics coexist; recomputing one replaces it.
 
     The anchor's coordinates can only pin *array* coordinates, and the harmonic is not one --
@@ -362,7 +363,7 @@ async def test_create_phasor_histogram_is_keyed_by_harmonic(
         authenticated_context, "FLIM", axes=_FLIM_AXES, shapes=[_FLIM_SHAPE]
     )
 
-    async def create(harmonic: int, total: int):
+    async def create(harmonic: int, total: int) -> ExecutionResult:
         return await schema.execute(
             _CREATE_HISTOGRAM,
             context_value=authenticated_context,
@@ -405,8 +406,8 @@ async def test_create_phasor_histogram_is_keyed_by_harmonic(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_histogram_rejects_a_non_phasor_axis(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A density stored against the z axis is not a phasor, and nothing downstream could tell."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "FLIM", axes=_FLIM_AXES, shapes=[_FLIM_SHAPE]
@@ -431,8 +432,8 @@ async def test_phasor_histogram_rejects_a_non_phasor_axis(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_phasor_histogram_rejects_a_missized_grid(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """counts is the *flattened* bins x bins grid; a client that sends a 1D histogram gets told."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "FLIM", axes=_FLIM_AXES, shapes=[_FLIM_SHAPE]
@@ -460,8 +461,8 @@ async def test_phasor_histogram_rejects_a_missized_grid(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_single_query_is_sufficient_to_compute_a_phasor(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """One query yields every term of the transform, and of the color it becomes.
 
     Not "the fields resolve" -- that the *set* is sufficient. A client holding this response
@@ -635,8 +636,8 @@ async def test_a_single_query_is_sufficient_to_compute_a_phasor(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_ingest_may_carry_the_phasor_spokes(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A converter that already computed a phasor can attach it at ingest, on the anchor.
 
     The standalone mutations are the usual path -- computing a density means reading the cube --
@@ -718,7 +719,7 @@ async def test_ingest_may_carry_the_phasor_spokes(
 @pytest.mark.asyncio
 async def test_a_bin_width_is_not_read_off_whatever_axis_sits_at_the_same_position(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The physical space is asked for *this* axis by name, not for its axis at some index.
 
     `_resolve_bin_width` used to take one integer -- the phasor axis' position in the lens'
@@ -783,7 +784,7 @@ async def test_a_bin_width_is_not_read_off_whatever_axis_sits_at_the_same_positi
     await sync_to_async(attach_mismatched_physical)()
     lens = await seed.create_lens(ctx, dataset)
 
-    def context():
+    def context() -> array_types.PhasorContext | None:
         return array_types.resolve_phasor_context(
             models.Lens.objects.get(pk=lens.pk), axis_name=None, harmonic=1
         )
@@ -791,7 +792,7 @@ async def test_a_bin_width_is_not_read_off_whatever_axis_sits_at_the_same_positi
     resolved = await sync_to_async(context)()
     assert resolved is not None
 
-    def neighbours():
+    def neighbours() -> list[str]:
         from core.logic import graph as g
 
         return [

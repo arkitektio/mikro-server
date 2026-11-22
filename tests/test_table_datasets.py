@@ -71,7 +71,7 @@ async def _parquet(ctx: HttpContext, key: str) -> models.ParquetStore:
     )
 
 
-async def _create(ctx: HttpContext, key: str, **input_fields) -> dict:
+async def _create(ctx: HttpContext, key: str, **input_fields: object) -> dict:
     store = await _parquet(ctx, key)
     columns = input_fields.pop("columns", [])
     store_columns, declared = seed.split_declaration(columns)
@@ -89,7 +89,7 @@ async def _create(ctx: HttpContext, key: str, **input_fields) -> dict:
 @pytest.mark.asyncio
 async def test_a_coordinate_table_owns_a_placeable_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Its coordinate columns become SPACE axes of a TABLE system, in declared order and units."""
     result = await _create(
         authenticated_context,
@@ -138,7 +138,7 @@ async def test_a_coordinate_table_owns_a_placeable_space(
 @pytest.mark.asyncio
 async def test_a_measurement_table_is_the_feature_collection_case(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No coordinate columns: a single INDEX axis, and an UNMAPPABLE edge to its source."""
     dataset = await seed.create_array_dataset(authenticated_context, "Labels")
     system = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -168,7 +168,7 @@ async def test_a_measurement_table_is_the_feature_collection_case(
 @pytest.mark.asyncio
 async def test_the_default_derivation_is_unmappable_even_with_coordinates(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Naming a source is not authoring a map: without an explicit kind the edge stays UNMAPPABLE."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Labels"
@@ -193,7 +193,7 @@ async def test_the_default_derivation_is_unmappable_even_with_coordinates(
 @pytest.mark.asyncio
 async def test_an_identity_across_mismatched_rank_is_rejected(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A (y,x) table cannot claim IDENTITY into a (c,y,x) source; BY_DIMENSION is how a rank change is stated."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Labels"
@@ -251,7 +251,9 @@ async def test_an_identity_across_mismatched_rank_is_rejected(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_freestanding_table_has_no_edge(authenticated_context: HttpContext):
+async def test_a_freestanding_table_has_no_edge(
+    authenticated_context: HttpContext,
+) -> None:
     """No source coordinate system: the table is a root, with no derivation edge."""
     result = await _create(
         authenticated_context,
@@ -270,7 +272,7 @@ async def test_a_freestanding_table_has_no_edge(authenticated_context: HttpConte
 @pytest.mark.asyncio
 async def test_out_of_order_coordinate_columns_are_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table column's position is arbitrary, so it is not a thing to refuse a table over.
 
     This used to assert `result.errors` -- space-before-time was rejected, on the reasoning
@@ -309,7 +311,7 @@ async def test_out_of_order_coordinate_columns_are_accepted(
 @pytest.mark.asyncio
 async def test_the_spatial_axes_keep_the_order_they_were_declared_in(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The part that is load-bearing, and the part nothing else checks.
 
     x is the *last* spatial axis, y the one before it, by position and never by name. Anything
@@ -335,7 +337,7 @@ async def test_the_spatial_axes_keep_the_order_they_were_declared_in(
 @pytest.mark.asyncio
 async def test_a_coordinate_column_must_be_a_permitted_axis_type(
     authenticated_context: HttpContext,
-):
+) -> None:
     """SPACE, TIME, INDEX and CHANNEL are the permitted set; a SPECTRUM coordinate is held back.
 
     INDEX because an id column's values are the coordinates of the space a label mask's pixels
@@ -364,7 +366,7 @@ async def test_a_coordinate_column_must_be_a_permitted_axis_type(
 @pytest.mark.asyncio
 async def test_a_measurement_column_carries_its_unit_without_becoming_an_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An area is a quantity too: an ATTRIBUTE states what its values are in, and stays data.
 
     The dimension is not checked against anything -- an area is 'micrometer**2', not a length --
@@ -406,7 +408,7 @@ async def test_a_measurement_column_carries_its_unit_without_becoming_an_axis(
 @pytest.mark.asyncio
 async def test_an_unparseable_column_unit_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The unit is a pint unit, checked when the variable is coerced -- before the resolver runs."""
     result = await _create(
         authenticated_context,
@@ -432,7 +434,7 @@ async def test_an_unparseable_column_unit_is_refused(
 @pytest.mark.asyncio
 async def test_a_column_that_is_not_measured_refuses_a_unit(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An id in nanometres names a metric that does not exist -- the INDEX argument, by role."""
     result = await _create(
         authenticated_context,
@@ -450,7 +452,7 @@ async def test_a_column_that_is_not_measured_refuses_a_unit(
 @pytest.mark.asyncio
 async def test_a_table_dataset_is_not_editable_beyond_its_name(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The store, the columns and the coordinate system are fixed at creation.
 
     Stated in three docstrings and a type description, and until now asserted nowhere -- which
@@ -523,7 +525,9 @@ async def test_a_table_dataset_is_not_editable_beyond_its_name(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_table_dataset_exposes_no_rows(authenticated_context: HttpContext):
+async def test_the_table_dataset_exposes_no_rows(
+    authenticated_context: HttpContext,
+) -> None:
     """Like FeatureCollection: the client reads the Parquet, GraphQL never paginates rows."""
     sdl = schema.as_str()
     definition = sdl[
@@ -539,7 +543,7 @@ async def test_the_table_dataset_exposes_no_rows(authenticated_context: HttpCont
 @pytest.mark.asyncio
 async def test_a_point_layer_over_a_table_dataset_reaches_world(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The whole feature: a localization table is placed through its own derivation edge."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Labels"
@@ -626,7 +630,7 @@ async def test_a_point_layer_over_a_table_dataset_reaches_world(
 @pytest.mark.asyncio
 async def test_a_point_layers_placement_names_its_columns(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table declared (x, y, z) is placed over axes named for its columns, so a viewer reading the placement cannot swap x and z by array order."""
     created = await _create(
         authenticated_context,
@@ -674,7 +678,7 @@ async def test_a_point_layers_placement_names_its_columns(
 @pytest.mark.asyncio
 async def test_an_unregistered_derived_table_layer_is_rejected(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A derived table whose source is not registered has no path, so the layer is refused.
 
     Nothing is fabricated any more: the error names the mutation that closes the gap, and
@@ -765,7 +769,7 @@ async def test_an_unregistered_derived_table_layer_is_rejected(
 @pytest.mark.asyncio
 async def test_a_freestanding_table_layer_is_rejected_until_its_space_is_registered(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table derived from nothing has no source to chain through: register its own space, or no layer."""
     created = await _create(
         authenticated_context,
@@ -822,7 +826,7 @@ async def test_a_freestanding_table_layer_is_rejected_until_its_space_is_registe
 @pytest.mark.asyncio
 async def test_registration_is_not_an_ingest_concern(
     authenticated_context: HttpContext,
-):
+) -> None:
     """createTableDataset takes no `scene`: a registration is a separate, explicit step."""
     sdl = schema.as_str()
     definition = sdl[
@@ -840,7 +844,7 @@ async def test_registration_is_not_an_ingest_concern(
 @pytest.mark.asyncio
 async def test_column_descriptions_are_stored_and_carried_onto_axes(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A column's description round-trips, and a coordinate column's is carried onto its axis."""
     result = await _create(
         authenticated_context,
@@ -881,7 +885,7 @@ async def test_column_descriptions_are_stored_and_carried_onto_axes(
 @pytest.mark.asyncio
 async def test_a_point_layer_colours_by_its_own_table_without_an_edge(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The one way a point layer differs: its objects ARE rows of a table.
 
     A mask's pixels and a collection's surfaces are geometry that has to be
@@ -987,7 +991,7 @@ async def test_a_point_layer_colours_by_its_own_table_without_an_edge(
 @pytest.mark.asyncio
 async def test_a_point_layer_refuses_a_table_it_cannot_reach(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Seeding its own table does not make every table reachable."""
     dataset = await seed.create_array_dataset(authenticated_context, "Labels")
     system = await sync_to_async(lambda: dataset.intrinsic_coordinate_system)()
@@ -1055,7 +1059,7 @@ async def test_a_point_layer_refuses_a_table_it_cannot_reach(
 @pytest.mark.asyncio
 async def test_a_column_that_declares_no_dtype_records_the_file_s_own(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`dtype` is a fact about the file, so omitting it is a declaration, not a gap.
 
     The server read every column's type off the Parquet when the upload finished. A caller who
@@ -1107,7 +1111,7 @@ async def test_a_column_that_declares_no_dtype_records_the_file_s_own(
 @pytest.mark.asyncio
 async def test_a_stated_dtype_is_still_checked_against_the_file(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Optional is not unchecked: a caller who asserts a type is held to it."""
     store = await _parquet(authenticated_context, "wrong-dtype")
     store.columns = [{"name": "area", "type": "DOUBLE", "nullable": True}]

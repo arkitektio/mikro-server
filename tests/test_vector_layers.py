@@ -11,6 +11,7 @@ flattened onto a plane).
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from mikro_server.schema import schema
@@ -33,22 +34,24 @@ CREATE_LAYER = (
     """
 mutation Create($input: CreateVectorLayerInput!) {
   createVectorLayer(input: $input) {
-    %s
+    """
+    + LAYER_FIELDS
+    + """
   }
 }
 """
-    % LAYER_FIELDS
 )
 
 UPDATE_LAYER = (
     """
 mutation Update($input: UpdateVectorLayerInput!) {
   updateVectorLayer(input: $input) {
-    %s
+    """
+    + LAYER_FIELDS
+    + """
   }
 }
 """
-    % LAYER_FIELDS
 )
 
 CREATE_INTENSITY = """
@@ -104,7 +107,9 @@ async def _scene_with(ctx: HttpContext, lens: models.Lens) -> models.Scene:
     return scene
 
 
-async def _create(ctx: HttpContext, lens: models.Lens, scene: models.Scene, **extra):
+async def _create(
+    ctx: HttpContext, lens: models.Lens, scene: models.Scene, **extra: object
+) -> ExecutionResult:
     variables = {"input": {"scene": str(scene.pk), "lens": str(lens.pk), **extra}}
     return await schema.execute(
         CREATE_LAYER, context_value=ctx, variable_values=variables
@@ -115,7 +120,7 @@ async def _create(ctx: HttpContext, lens: models.Lens, scene: models.Scene, **ex
 @pytest.mark.asyncio
 async def test_create_vector_layer_defaults_and_derived_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The defaults are the mutation's own, and the component axis is derived, not chosen.
 
     NORMAL, not ADDITIVE: glyphs are geometry over what is beneath them, and summing an
@@ -147,7 +152,7 @@ async def test_create_vector_layer_defaults_and_derived_axis(
 @pytest.mark.asyncio
 async def test_a_lens_without_a_displacement_axis_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No DISPLACEMENT axis means no components to read: every drawn arrow would be invented."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Plain"
@@ -179,7 +184,7 @@ async def test_a_lens_without_a_displacement_axis_is_refused(
 )
 async def test_undrawable_component_counts_are_refused(
     authenticated_context: HttpContext, components: int, volumetric: bool, fragment: str
-):
+) -> None:
     """2 or 3 components, and no more components than spatial axes -- each refusal is a wrong picture avoided."""
     lens = await _flow_lens(
         authenticated_context, components=components, volumetric=volumetric
@@ -195,7 +200,7 @@ async def test_undrawable_component_counts_are_refused(
 @pytest.mark.asyncio
 async def test_an_intensity_layer_over_a_vector_lens_is_refused_by_default(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The grey-layer gap, closed. A lens whose only value axis is a DISPLACEMENT axis used to
     resolve as 'single-valued data' and draw as one grey layer over its components -- wrong
     picture, no error, nothing pointing back."""
@@ -215,7 +220,9 @@ async def test_an_intensity_layer_over_a_vector_lens_is_refused_by_default(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_update_patches_and_checks_the_pair(authenticated_context: HttpContext):
+async def test_update_patches_and_checks_the_pair(
+    authenticated_context: HttpContext,
+) -> None:
     """Every field is a patch, and the clim pair is checked as the pair the row will hold."""
     lens = await _flow_lens(authenticated_context, components=2)
     scene = await _scene_with(authenticated_context, lens)
@@ -258,7 +265,7 @@ async def test_update_patches_and_checks_the_pair(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_degenerate_stride_and_scale_are_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A stride of 0 samples nothing and a non-positive scale draws nothing or draws reversed."""
     lens = await _flow_lens(authenticated_context, components=2)
     scene = await _scene_with(authenticated_context, lens)
@@ -272,7 +279,7 @@ async def test_degenerate_stride_and_scale_are_refused(
 @pytest.mark.asyncio
 async def test_the_kind_is_fixed_for_the_life_of_the_row(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`updateIntensityLayer` on a vector layer is refused, naming `updateVectorLayer` -- and the
     other way round, so neither vocabulary can land on the other's columns."""
     lens = await _flow_lens(authenticated_context, components=2)
@@ -294,7 +301,7 @@ async def test_the_kind_is_fixed_for_the_life_of_the_row(
 @pytest.mark.asyncio
 async def test_bootstrap_infers_a_vector_layer_from_the_displacement_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The DISPLACEMENT axis is authored evidence in LABEL's CATEGORIZED sense, so unlike RGB
     the bootstrap *does* infer from it -- one layer, no channels to peel, indistinguishable
     from one `createVectorLayer` authored."""
@@ -331,7 +338,7 @@ async def test_bootstrap_infers_a_vector_layer_from_the_displacement_axis(
 @pytest.mark.asyncio
 async def test_bootstrap_falls_through_when_the_field_is_not_drawable(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A DISPLACEMENT axis `createVectorLayer` would refuse must not decide the recipe: the
     bootstrap falls through to the ordinary inference rather than materializing a layer no
     mutation can update into validity."""

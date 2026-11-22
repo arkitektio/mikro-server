@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator, Callable
+from typing import TypeVar
 
 import strawberry
 from django.db.models import Model, QuerySet
@@ -7,8 +8,11 @@ from kante.types import Info
 
 from core.channel_signals import RowSignal
 
+M = TypeVar("M", bound=Model)
+E = TypeVar("E")
 
-async def relay_rows[M: Model, E](
+
+async def relay_rows(
     channel: Channel[RowSignal],
     info: Info,
     rooms: list[str],

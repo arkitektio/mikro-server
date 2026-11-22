@@ -66,7 +66,7 @@ async def _calibrate(
 @pytest.mark.asyncio
 async def test_datasets_and_files_say_when_they_were_made(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Timed", axes=YX, shapes=[[8, 8]])
     folder = await seed.create_folder(ctx, "Files")
@@ -85,7 +85,7 @@ async def test_datasets_and_files_say_when_they_were_made(
 @pytest.mark.asyncio
 async def test_a_dataset_weighs_every_level_of_its_pyramid(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Pyramid", axes=YX, shapes=[[64, 64], [32, 32]]
@@ -95,7 +95,9 @@ async def test_a_dataset_weighs_every_level_of_its_pyramid(
     )
 
     def attach_stores() -> None:
-        for array, size in zip(dataset.data_arrays.order_by("level"), (4000, 1000)):
+        for array, size in zip(
+            dataset.data_arrays.order_by("level"), (4000, 1000), strict=True
+        ):
             array.store = ZarrStore.objects.create(
                 path=f"s3://zarr/{array.pk}",
                 bucket="zarr",
@@ -128,7 +130,7 @@ async def test_a_dataset_weighs_every_level_of_its_pyramid(
 @pytest.mark.asyncio
 async def test_physical_spaces_are_told_from_index_spaces(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Grid", axes=YX, shapes=[[16, 16]])
     physical = await _calibrate(ctx, dataset, [0.5, 0.25])
@@ -148,7 +150,7 @@ async def test_physical_spaces_are_told_from_index_spaces(
 @pytest.mark.asyncio
 async def test_a_space_reads_its_voxel_size_through_more_than_one_hop(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Pyramid", axes=YX, shapes=[[64, 64], [32, 32]]
@@ -188,7 +190,9 @@ async def test_a_space_reads_its_voxel_size_through_more_than_one_hop(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_coordinate_graph_can_walk_one_way(authenticated_context: HttpContext):
+async def test_a_coordinate_graph_can_walk_one_way(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     first = await seed.create_array_dataset(ctx, "First", axes=YX, shapes=[[16, 16]])
     world = await _calibrate(ctx, first, [1.0, 1.0])
@@ -235,7 +239,7 @@ async def test_a_coordinate_graph_can_walk_one_way(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_files_converted_containers_are_counted_and_paged(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Ingest")
     file = await seed.create_file(ctx, "series.lif", folder)
@@ -281,7 +285,7 @@ async def test_a_files_converted_containers_are_counted_and_paged(
 @pytest.mark.asyncio
 async def test_a_pyramid_level_states_its_scale_against_level_zero(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
         ctx, "Pyramid", axes=YX, shapes=[[64, 64], [16, 32]]
@@ -305,7 +309,7 @@ async def test_a_pyramid_level_states_its_scale_against_level_zero(
 @pytest.mark.asyncio
 async def test_a_lens_pages_its_anchors_within_a_window(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     axes = [
         seed.axis("t", enums.AxisType.TIME),

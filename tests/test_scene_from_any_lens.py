@@ -23,7 +23,7 @@ mutation F($input: CreateSceneFromLensInput!) {
 @pytest.mark.asyncio
 async def test_a_scene_from_a_table_lens_draws_that_window_as_a_point_layer_in_the_tables_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table, system = await _seed_table_dataset(ctx, "points")
     window = await seed.create_windowed_lens(
@@ -51,7 +51,7 @@ async def test_a_scene_from_a_table_lens_draws_that_window_as_a_point_layer_in_t
 @pytest.mark.asyncio
 async def test_a_scene_from_a_lens_over_a_tracked_table_draws_a_track_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     table, _ = await _seed_table_dataset(ctx, "tracks", with_track=True)
     whole = await seed.create_windowed_lens(ctx, table)
@@ -70,7 +70,7 @@ async def test_a_scene_from_a_lens_over_a_tracked_table_draws_a_track_layer(
 @pytest.mark.asyncio
 async def test_a_scene_from_a_sparse_lens_is_refused_in_prose(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No layer draws a matrix, and the build says so rather than handing back an empty scene."""
     ctx = authenticated_context
     sparse_id, _, _ = await _a_sparse(ctx)

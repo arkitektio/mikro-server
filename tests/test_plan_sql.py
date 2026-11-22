@@ -6,6 +6,7 @@ feed it dicts and namespaces rather than model rows for the same reason: a build
 a ``Column`` row to produce a string would be one the client could not carry.
 """
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import duckdb
@@ -90,7 +91,7 @@ def test_a_lookup_without_keys_is_refused() -> None:
         plan_sql.build_lookup_sql({"keyColumns": [], "attributes": [{"name": "area"}]})
 
 
-def test_the_statement_runs_against_a_real_parquet(tmp_path) -> None:
+def test_the_statement_runs_against_a_real_parquet(tmp_path: Path) -> None:
     """Both shapes execute on DuckDB with the documented bind order: the path first, then the keys."""
     path = str(tmp_path / "objects.parquet")
     con = duckdb.connect()

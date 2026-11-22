@@ -17,6 +17,7 @@ reorder the space with, and no way for the space and the file to disagree.
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -70,7 +71,7 @@ async def _parquet(
 
 async def _create(
     ctx: HttpContext, name: str, columns: list[dict], declared: list[dict] | None = None
-):
+) -> ExecutionResult:
     """Create over a store matching ``columns``; ``declared`` overrides the wire columns."""
     store = await _parquet(ctx, name.replace(" ", "-"), columns)
     payload = {
@@ -88,7 +89,9 @@ async def _create(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_axis_order_is_the_column_order(authenticated_context: HttpContext):
+async def test_the_axis_order_is_the_column_order(
+    authenticated_context: HttpContext,
+) -> None:
     """One declaration, one order: the axis-typed columns, as the file runs.
 
     The separate `axes` list existed to state an order different from the file's; for a
@@ -111,7 +114,7 @@ async def test_the_axis_order_is_the_column_order(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_column_without_axis_type_is_an_ordinary_column(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`axisType` is the ONLY thing that makes a column an axis.
 
     A column without one is simply a column, inferred from the file as an ATTRIBUTE; there is
@@ -133,7 +136,9 @@ async def test_a_column_without_axis_type_is_an_ordinary_column(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_axis_type_beside_a_role_is_refused(authenticated_context: HttpContext):
+async def test_axis_type_beside_a_role_is_refused(
+    authenticated_context: HttpContext,
+) -> None:
     """An axis column IS a COORDINATE; a role beside `axisType` answers twice.
 
     The guard the two-list shape never had for `references` and the descriptive triplet --
@@ -157,7 +162,7 @@ async def test_axis_type_beside_a_role_is_refused(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Item 7's product space, on the flat declaration.
 
     An INDEX axis' values are already ids, so naming the table it enumerates is not a second
@@ -218,7 +223,9 @@ async def test_an_index_axis_may_be_identified_by_the_table_it_enumerates(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_data_column_may_reference_a_table(authenticated_context: HttpContext):
+async def test_a_data_column_may_reference_a_table(
+    authenticated_context: HttpContext,
+) -> None:
     """The retired `ColumnInput.references`, spelled the one remaining way.
 
     An `instance_id` data column referencing a table of tracks is a foreign key, not a map:
@@ -273,7 +280,7 @@ async def test_a_data_column_may_reference_a_table(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_a_keying_source_on_a_data_column_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A FIELD edge produces an axis, so it cannot land on a column that is not one.
 
     Under the two-list shape this was unstateable (identifications lived on axes); flat, it
@@ -309,7 +316,7 @@ async def test_a_keying_source_on_a_data_column_is_refused(
 @pytest.mark.asyncio
 async def test_a_table_identification_on_a_space_axis_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A position in nanometres and a row id are different things.
 
     Under the two-list shape this rule guarded only the identification door while
@@ -357,7 +364,7 @@ async def test_a_table_identification_on_a_space_axis_is_refused(
 @pytest.mark.asyncio
 async def test_an_axis_identified_by_two_tables_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Fan-in is only meaningful for the kinds that author an edge.
 
     Two masks keying one axis are two edges, each standing on its own. Two *tables* would be
@@ -425,7 +432,7 @@ async def test_an_axis_identified_by_two_tables_is_refused(
 @pytest.mark.asyncio
 async def test_an_axis_with_no_identification_is_ordinary(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`identifiedBy` defaults to empty, and that is the common case.
 
     A localization table's `x` axis is identified by nothing: its values are positions, and a

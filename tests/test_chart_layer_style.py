@@ -30,7 +30,7 @@ mutation R($input: UpdateChartLayerInput!) { updateChartLayer(input: $input) { i
 @pytest.mark.asyncio
 async def test_sizes_are_multiples_and_the_marker_has_a_shape(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     _, layer, _ = await _scatter(ctx)
     styled = (
@@ -65,7 +65,9 @@ async def test_sizes_are_multiples_and_the_marker_has_a_shape(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_size_is_a_positive_multiple(authenticated_context: HttpContext):
+async def test_a_size_is_a_positive_multiple(
+    authenticated_context: HttpContext,
+) -> None:
     ctx = authenticated_context
     _, layer, _ = await _scatter(ctx)
     assert "greater than 0" in await _refused(
@@ -77,7 +79,7 @@ async def test_a_size_is_a_positive_multiple(authenticated_context: HttpContext)
 @pytest.mark.asyncio
 async def test_stored_pixels_become_multiples_of_the_old_defaults(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Before 0005 a size was pixels against defaults of 1.25 px (line) and 5 px (marker): 2.5 px and 10 px are twice the default."""
     ctx = authenticated_context
     _, layer, _ = await _scatter(ctx)

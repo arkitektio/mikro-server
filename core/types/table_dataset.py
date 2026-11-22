@@ -30,11 +30,13 @@ if TYPE_CHECKING:
     # Only for the lazy annotation on the file-link fields below; importing it at runtime
     # would be a cycle, since `core.types.file_link` references this module in return.
     # And again: `core.types.array_dataset` is imported after this module.
-    from core.types.array_dataset import CoordinateAnchor
+    from core.types.array_dataset import CoordinateAnchor, TableLens
+    from core.types.coords import NetworkCollection, Resident
     from core.types.file_link import FileLink
 
     # Same reason: `core.types.folder` imports this module for the layer types.
     from core.types.folder import Folder
+    from core.types.visualization import Visualization
 
 
 @kante.django_type(

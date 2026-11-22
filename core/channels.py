@@ -1,3 +1,5 @@
+from typing import TypeVar
+
 from django.db import transaction
 from kante.channel import Channel, build_channel
 from pydantic import BaseModel
@@ -65,7 +67,10 @@ def container_lenses_room(kind: str, container_id: int | str) -> str:
     return f"{kind.lower()}_lenses_{container_id}"
 
 
-def announce[S: BaseModel](channel: Channel[S], signal: S, rooms: list[str]) -> None:
+S = TypeVar("S", bound=BaseModel)
+
+
+def announce(channel: Channel[S], signal: S, rooms: list[str]) -> None:
     """Tell the subscribers of ``rooms`` about a change, once it is committed.
 
     On commit, not at once: the subscriber re-fetches the row by id, and a write inside a

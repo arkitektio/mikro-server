@@ -49,7 +49,7 @@ def is_previewing() -> bool:
 
 
 def persist_layer(
-    *, channel_lens_ids: Iterable[int] | None = None, **fields
+    *, channel_lens_ids: Iterable[int] | None = None, **fields: object
 ) -> models.Layer:
     """Write a new layer row -- or, while :func:`previewing`, build the row it would be.
 

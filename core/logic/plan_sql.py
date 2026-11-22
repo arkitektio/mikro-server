@@ -26,7 +26,7 @@ client that collected several parents may execute a ONE step as MANY.
 """
 
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Literal, cast
 
 Cardinality = Literal["ONE", "MANY"]
 
@@ -40,7 +40,7 @@ def quote_identifier(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def _get(thing: Any, *names: str) -> Any:
+def _get(thing: object, *names: str) -> object:
     """The first of ``names`` present on ``thing``, as an attribute or a mapping key."""
     for name in names:
         if isinstance(thing, dict):
@@ -51,10 +51,11 @@ def _get(thing: Any, *names: str) -> Any:
     raise KeyError(f"none of {names} on {type(thing).__name__}")
 
 
-def _names(columns: Iterable[Any]) -> list[str]:
+def _names(columns: object) -> list[str]:
     """Column names, whether each entry is a column or a key binding wrapping one."""
     names = []
-    for entry in columns:
+    # A list of columns or key bindings, in whichever of the three shapes the step arrived in.
+    for entry in cast("Iterable[object]", columns):
         try:
             column = _get(entry, "column")
         except KeyError:
@@ -63,17 +64,17 @@ def _names(columns: Iterable[Any]) -> list[str]:
     return names
 
 
-def key_column_names(lookup: Any) -> list[str]:
+def key_column_names(lookup: object) -> list[str]:
     """The parquet columns the key values bind, in bind order."""
     return _names(_get(lookup, "key_columns", "keyColumns"))
 
 
-def attribute_names(lookup: Any) -> list[str]:
+def attribute_names(lookup: object) -> list[str]:
     """The columns the statement returns beyond the keys."""
     return _names(_get(lookup, "attributes"))
 
 
-def build_lookup_sql(lookup: Any, *, cardinality: Cardinality = "ONE") -> str:
+def build_lookup_sql(lookup: object, *, cardinality: Cardinality = "ONE") -> str:
     """The parameterized DuckDB statement for one TABLE lookup step.
 
     ``ONE``: ``SELECT <attributes> FROM read_parquet(?) WHERE "k" = ? [AND ...]``. A table whose

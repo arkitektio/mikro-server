@@ -4,12 +4,12 @@ filter inputs and ordering arguments. No database required."""
 from mikro_server.schema import schema
 
 
-def test_schema_builds():
+def test_schema_builds() -> None:
     sdl = schema.as_str()
     assert sdl
 
 
-def test_filter_inputs_exist():
+def test_filter_inputs_exist() -> None:
     sdl = schema.as_str()
     for input_name in [
         "input ArrayDatasetFilter",
@@ -20,7 +20,7 @@ def test_filter_inputs_exist():
         assert input_name in sdl, f"{input_name} missing from schema"
 
 
-def test_array_datasets_query_has_filters():
+def test_array_datasets_query_has_filters() -> None:
     fields = schema.query.__strawberry_definition__.fields
     field = next(f for f in fields if f.name == "array_datasets")
     arg_names = {arg.python_name for arg in field.arguments}
@@ -28,7 +28,7 @@ def test_array_datasets_query_has_filters():
     assert "ordering" in arg_names
 
 
-def test_order_inputs_exist():
+def test_order_inputs_exist() -> None:
     sdl = schema.as_str()
     for input_name in [
         "input ArrayDatasetOrder",
@@ -39,7 +39,7 @@ def test_order_inputs_exist():
         assert input_name in sdl, f"{input_name} missing from schema"
 
 
-def test_layer_render_graph_surface_exists():
+def test_layer_render_graph_surface_exists() -> None:
     """The composable in-layer render graph is exposed for input, output and helpers."""
     sdl = schema.as_str()
     for token in [
@@ -62,7 +62,7 @@ def test_layer_render_graph_surface_exists():
         assert token in sdl, f"{token} missing from schema"
 
 
-def test_phasor_surface_exists():
+def test_phasor_surface_exists() -> None:
     """The phasor node, its read surface and its metadata spokes are exposed.
 
     An implementation reachable only *through* an interface is dropped from the SDL unless it
@@ -94,7 +94,7 @@ def test_phasor_surface_exists():
     )
 
 
-def test_polymorphic_layer_subtypes_exist():
+def test_polymorphic_layer_subtypes_exist() -> None:
     """All the polymorphic Layer subtypes implement the Layer interface."""
     sdl = schema.as_str()
     for token in [
@@ -107,7 +107,7 @@ def test_polymorphic_layer_subtypes_exist():
         assert token in sdl, f"{token} missing from schema"
 
 
-def test_layer_alpha_compositing_fields_exist():
+def test_layer_alpha_compositing_fields_exist() -> None:
     """The polymorphic Layer interface carries the neuroglancer-style alpha compositing knobs."""
     sdl = schema.as_str()
     layer_def = sdl[
@@ -135,14 +135,14 @@ def test_layer_alpha_compositing_fields_exist():
     assert "NORMAL" in blending_def
 
 
-def test_layer_is_polymorphic_interface():
+def test_layer_is_polymorphic_interface() -> None:
     """Layer is a GraphQL interface implemented by ImageLayer (and future subtypes)."""
     sdl = schema.as_str()
     assert "interface Layer " in sdl
     assert "type ImageLayer implements Layer" in sdl
 
 
-def test_blending_enums_stay_in_sync():
+def test_blending_enums_stay_in_sync() -> None:
     """The GraphQL Blending enum values must be a subset of the DB BlendingChoices."""
     from core import enums
 
@@ -151,7 +151,7 @@ def test_blending_enums_stay_in_sync():
     assert graphql_values <= db_values, graphql_values - db_values
 
 
-def test_legacy_order_argument_removed():
+def test_legacy_order_argument_removed() -> None:
     sdl = schema.as_str()
     listing = sdl[
         sdl.find("arrayDatasets(") : sdl.find(")", sdl.find("arrayDatasets("))
@@ -160,7 +160,7 @@ def test_legacy_order_argument_removed():
     assert "order:" not in listing
 
 
-def test_coordinate_enums_stay_in_sync():
+def test_coordinate_enums_stay_in_sync() -> None:
     """Each new GraphQL enum's values must be a subset of the DB TextChoices it is written to.
 
     The two are separate classes -- strawberry.enum_value corrupts a (str, Enum) --
@@ -182,7 +182,7 @@ def test_coordinate_enums_stay_in_sync():
         )
 
 
-def test_polymorphic_transformation_subtypes_exist():
+def test_polymorphic_transformation_subtypes_exist() -> None:
     """Every Transformation subtype must implement the interface and be in the SDL.
 
     A subtype reachable only through the interface is not auto-discovered by
@@ -206,7 +206,7 @@ def test_polymorphic_transformation_subtypes_exist():
         assert token in sdl, f"{token} missing from schema"
 
 
-def test_attribute_plan_types_exist():
+def test_attribute_plan_types_exist() -> None:
     """The plan types are computed (not django) types reachable only through one query.
 
     Nothing else in the schema references them, so a registration slip would drop them
@@ -270,7 +270,7 @@ def test_attribute_plan_types_exist():
     assert "sql:" not in lookup, "LookupStep must not carry the statement"
 
 
-def test_a_column_reference_is_schema_not_geometry():
+def test_a_column_reference_is_schema_not_geometry() -> None:
     """Table-to-table relations are declared foreign keys, never coordinate-graph edges.
 
     FIELD is the single crossing from geometry into record-land; between tables, the
@@ -286,7 +286,7 @@ def test_a_column_reference_is_schema_not_geometry():
     assert "referencedBy" in table_def, "TableDataset must answer 'who keys into me'"
 
 
-def test_no_to_world_resolver():
+def test_no_to_world_resolver() -> None:
     """The API ships edges, not resolved paths.
 
     The same dataset can appear in two scenes under two different registrations, so
@@ -299,7 +299,7 @@ def test_no_to_world_resolver():
     )
 
 
-def test_nothing_mints_a_world_for_a_dataset():
+def test_nothing_mints_a_world_for_a_dataset() -> None:
     """A dataset is staged over a space it is already in, never over a copy of one.
 
     `createSceneFromDataset` minted a coordinate system whose axes copied the dataset's
@@ -334,7 +334,7 @@ def test_nothing_mints_a_world_for_a_dataset():
     )
 
 
-def test_a_scene_answers_for_its_layers_and_nothing_spatial():
+def test_a_scene_answers_for_its_layers_and_nothing_spatial() -> None:
     """A scene is its world plus its layers; every space-level fact hangs off the space.
 
     Each of these fields used to live on `Scene` and returned an answer identical for
@@ -365,7 +365,7 @@ def test_a_scene_answers_for_its_layers_and_nothing_spatial():
         assert token in system_def, f"the space is where `{token}` is read"
 
 
-def test_layer_carries_no_spatial_fields():
+def test_layer_carries_no_spatial_fields() -> None:
     """Registration is a scene-level edge, not a property of a view of the data."""
     sdl = schema.as_str()
     layer_def = sdl[

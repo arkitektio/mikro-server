@@ -18,6 +18,7 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.logic import graph as graph_logic
@@ -95,7 +96,9 @@ async def _objects_table(ctx: HttpContext, name: str = "nuclei morphology") -> d
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_id_column_is_the_tables_own_axis(authenticated_context: HttpContext):
+async def test_an_id_column_is_the_tables_own_axis(
+    authenticated_context: HttpContext,
+) -> None:
     """A COORDINATE column's values ARE its coordinates -- for `i` in object ids as for `x` in nanometres.
 
     That consistency is the whole argument for admitting INDEX here. Declared as a plain ID
@@ -122,7 +125,7 @@ async def test_an_id_column_is_the_tables_own_axis(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_an_index_coordinate_column_refuses_a_unit(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The distance between object 3 and object 4 is not a small number, it is not a number.
 
     ABLATION: `assert_unit_matches_type` cannot catch this -- INDEX is absent from its
@@ -156,7 +159,7 @@ async def test_an_index_coordinate_column_refuses_a_unit(
 @pytest.mark.asyncio
 async def test_a_mask_dereferences_into_a_table_of_objects(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The label mask IS the map: a FIELD part whose array is the input's own system.
 
     (y,x) is consumed, `i` is produced by the value at each pixel, and nothing passes through.
@@ -204,7 +207,9 @@ async def test_a_mask_dereferences_into_a_table_of_objects(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_field_is_never_walked_backwards(authenticated_context: HttpContext):
+async def test_a_field_is_never_walked_backwards(
+    authenticated_context: HttpContext,
+) -> None:
     """An object is a set of pixels, so the reverse asks for a point where there is a set.
 
     The existing `_INVERTIBLE_KINDS` gate gives this for free, knowing nothing about
@@ -256,7 +261,7 @@ async def test_a_field_is_never_walked_backwards(authenticated_context: HttpCont
 @pytest.mark.asyncio
 async def test_a_key_must_account_for_every_axis_it_keys(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A per-frame table (t, i) keyed by a timelapse mask (t, y, x): the key states `t`, or it is refused.
 
     Nothing passes through implicitly, so a key giving only `i` says nothing about which frame's
@@ -300,7 +305,7 @@ async def test_a_key_must_account_for_every_axis_it_keys(
         "field": {"system": str(mask_system.pk)},
     }
 
-    async def create(parts: list[dict]):
+    async def create(parts: list[dict]) -> ExecutionResult:
         return await schema.execute(
             CREATE_TRANSFORM,
             context_value=authenticated_context,
@@ -329,7 +334,7 @@ async def test_a_key_must_account_for_every_axis_it_keys(
 @pytest.mark.asyncio
 async def test_a_scalar_field_produces_exactly_one_axis(
     authenticated_context: HttpContext,
-):
+) -> None:
     """No value axis means scalar, and a scalar value is one coordinate.
 
     The elision is deliberate -- a mask is a plain (y,x) array and giving it a length-1
@@ -386,7 +391,7 @@ async def test_a_scalar_field_produces_exactly_one_axis(
 @pytest.mark.asyncio
 async def test_a_metric_kind_is_refused_over_an_index_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Object 3 x 2 = object 6 is not a wrong number, it is a meaningless one.
 
     ABLATION: this is exactly what the rank check waves through -- `scale: [2.0]` has one
@@ -415,7 +420,7 @@ async def test_a_metric_kind_is_refused_over_an_index_space(
 @pytest.mark.asyncio
 async def test_a_field_requires_its_array_and_other_kinds_refuse_one(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The map is the array. Without it the edge claims a correspondence it cannot produce."""
     mask = await seed.create_array_dataset(
         authenticated_context, "labels", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -472,7 +477,7 @@ async def test_a_field_requires_its_array_and_other_kinds_refuse_one(
 @pytest.mark.asyncio
 async def test_a_composite_key_orders_time_before_index(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`i` is per-frame, so the key is (t, i) -- and the table gets that order either way.
 
     `(t, i)` is the order the key is written in, and it is now simply stored -- a table's axes
@@ -524,7 +529,7 @@ async def test_a_composite_key_orders_time_before_index(
 @pytest.mark.asyncio
 async def test_dereferencing_a_mask_does_not_pin_it_forever(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Keying a table off a mask must not make the mask undeletable.
 
     A FIELD part's array is linked PROTECT, which is right for a *separate* array: deleting a
@@ -596,7 +601,7 @@ async def test_dereferencing_a_mask_does_not_pin_it_forever(
 @pytest.mark.asyncio
 async def test_a_separate_field_array_is_protected_from_deletion(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The fence: PROTECT still does its job for an array that is NOT its edge's input.
 
     Deleting a warp field would leave a registration claiming a map it cannot produce --
@@ -677,7 +682,7 @@ mutation Create($input: CreateLensInput!) {
 @pytest.mark.asyncio
 async def test_the_documented_sequence_runs_end_to_end(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The exact call sequence in docs/field-transforms-api.md, through the real mutations.
 
     A doc that names a field the schema does not have is worse than no doc: it reads as

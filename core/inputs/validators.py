@@ -96,7 +96,7 @@ def assert_white_balance(gains: list[float] | None) -> None:
         raise ValueError(
             f"`whiteBalance` is one gain per component -- [red, green, blue] -- so it needs exactly 3 values, got {len(gains)}."
         )
-    for component, gain in zip(("red", "green", "blue"), gains):
+    for component, gain in zip(("red", "green", "blue"), gains, strict=True):
         if not math.isfinite(gain) or gain <= 0:
             raise ValueError(
                 f"`whiteBalance` gains must be positive and finite, but the {component} gain is {gain}. Use 1 to leave a component unchanged."

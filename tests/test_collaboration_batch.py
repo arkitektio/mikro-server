@@ -7,7 +7,9 @@ by hand (not brought), each with what it needs to be seen.
 import pytest
 from arkitekt_service.collaborations.models import Collaboration, CollaborationItem
 from asgiref.sync import sync_to_async
+from django.db.models import Model
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from mikro_server.schema import schema
 from tests import seed
@@ -19,7 +21,7 @@ mutation ($input: AddManyToCollaborationInput!) {
 """
 
 
-async def _run(ctx: HttpContext, query: str, **variables):
+async def _run(ctx: HttpContext, query: str, **variables: object) -> ExecutionResult:
     return await schema.execute(
         query, context_value=ctx, variable_values=variables or None
     )
@@ -31,13 +33,15 @@ async def _empty(ctx: HttpContext) -> Collaboration:
     )
 
 
-def _ref(identifier: str, obj) -> dict:
+def _ref(identifier: str, obj: Model) -> dict:
     return {"identifier": identifier, "object": str(obj.pk)}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_every_object_named_goes_in_once_and_by_hand(authenticated_context):
+async def test_every_object_named_goes_in_once_and_by_hand(
+    authenticated_context: HttpContext,
+) -> None:
     raw = await seed.create_array_dataset(authenticated_context, "raw")
     mask = await seed.create_array_dataset(authenticated_context, "mask")
     collaboration = await _empty(authenticated_context)
@@ -67,8 +71,8 @@ async def test_every_object_named_goes_in_once_and_by_hand(authenticated_context
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_one_object_that_cannot_go_in_keeps_the_whole_batch_out(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     raw = await seed.create_array_dataset(authenticated_context, "raw")
     collaboration = await _empty(authenticated_context)
 
@@ -92,7 +96,9 @@ async def test_one_object_that_cannot_go_in_keeps_the_whole_batch_out(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_part_goes_in_after_its_whole(authenticated_context):
+async def test_a_part_goes_in_after_its_whole(
+    authenticated_context: HttpContext,
+) -> None:
     dataset = await seed.create_array_dataset(authenticated_context, "raw")
     lens = await seed.create_lens(authenticated_context, dataset)
     collaboration = await _empty(authenticated_context)

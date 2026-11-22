@@ -14,6 +14,9 @@ it -- the tests here pin both, so removing either gate makes something fail. The
 inputs published under ``@unionElementOf`` are codegen's copy of the same truth.
 """
 
+from collections.abc import Callable
+from typing import TypeVar
+
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
@@ -23,12 +26,15 @@ from core import enums, models
 from core.input_unions import parse_union_member
 from core.inputs.coords import (
     TRANSFORM_MEMBERS,
+    AxisInputModel,
     ByDimensionTransformInputModel,
     MapAxisTransformInputModel,
 )
 from core.logic import graph as graph_logic
 from mikro_server.schema import schema
 from tests import seed
+
+R = TypeVar("R")
 
 CREATE_TRANSFORM = """
 mutation Create($input: CreateTransformationInput!) {
@@ -69,7 +75,7 @@ async def _dataset_and_world(ctx: HttpContext) -> tuple[str, str]:
     return str(intrinsic), str(result.data["createCoordinateSystem"]["id"])
 
 
-async def build_sync(builder):
+async def build_sync(builder: Callable[[], R]) -> R:
     """Run a synchronous fixture builder from an async test."""
     return await sync_to_async(builder)()
 
@@ -692,7 +698,9 @@ async def test_a_singular_map_is_refused_though_no_row_of_it_is_zero(
     )
 
 
-async def _volume_world(ctx: HttpContext, name: str, axes=("z", "y", "x")) -> str:
+async def _volume_world(
+    ctx: HttpContext, name: str, axes: tuple[str, ...] = ("z", "y", "x")
+) -> str:
     """A world of the named axes, with nothing registered into it."""
     result = await schema.execute(
         CREATE_CS,
@@ -1489,7 +1497,7 @@ def test_the_deleted_kind_is_gone_from_both_enums() -> None:
 @pytest.mark.asyncio
 async def test_a_number_free_edge_may_not_relate_two_different_units(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An IDENTITY between a micrometre space and a nanometre one is a claim that they are equal.
 
     It used to be accepted, because the IDENTITY branch compared axis *names* and nothing on the
@@ -1544,7 +1552,7 @@ async def test_a_number_free_edge_may_not_relate_two_different_units(
 @pytest.mark.asyncio
 async def test_a_correspondence_may_not_cross_axis_kinds(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`inputAxes: ["c"] -> outputAxes: ["z"]` maps a channel index onto a position. It is refused.
 
     The named-subset rules establish that the axes exist and pair one for one; none of them looked
@@ -1556,7 +1564,7 @@ async def test_a_correspondence_may_not_cross_axis_kinds(
     """
     ctx = seed._creation(authenticated_context)
 
-    def space(name: str, axes) -> models.CoordinateSystem:
+    def space(name: str, axes: list[AxisInputModel]) -> models.CoordinateSystem:
         made = models.CoordinateSystem.objects.create(
             name=name, creator=ctx.user, organization=ctx.organization
         )
@@ -1610,7 +1618,7 @@ async def test_a_correspondence_may_not_cross_axis_kinds(
 @pytest.mark.asyncio
 async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`epoch` says `wall_clock = epoch + t * unit`, and nothing ever read it.
 
     So a path across two spaces with different epochs treated their `t = 0` as the same instant:
@@ -1623,7 +1631,7 @@ async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offs
 
     ctx = seed._creation(authenticated_context)
 
-    def clock(name: str, epoch) -> models.CoordinateSystem:
+    def clock(name: str, epoch: datetime.datetime | None) -> models.CoordinateSystem:
         made = models.CoordinateSystem.objects.create(
             name=name, epoch=epoch, creator=ctx.user, organization=ctx.organization
         )
@@ -1698,7 +1706,7 @@ async def test_two_clocks_anchored_differently_are_related_only_by_a_stated_offs
         )
 
     # An offset on another axis is not an offset on the clock: the part producing `t` decides.
-    def track(name: str, epoch) -> models.CoordinateSystem:
+    def track(name: str, epoch: datetime.datetime | None) -> models.CoordinateSystem:
         made = models.CoordinateSystem.objects.create(
             name=name, epoch=epoch, creator=ctx.user, organization=ctx.organization
         )

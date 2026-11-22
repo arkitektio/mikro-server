@@ -14,7 +14,7 @@ QUERY = """
 """
 
 
-async def names(ctx, filters):
+async def names(ctx: HttpContext, filters: dict) -> set[str]:
     result = await schema.execute(
         QUERY, context_value=ctx, variable_values={"filters": filters}
     )
@@ -24,7 +24,9 @@ async def names(ctx, filters):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_parentless(db, authenticated_context: HttpContext):
+async def test_filter_by_parentless(
+    db: None, authenticated_context: HttpContext
+) -> None:
     root = await create_folder(authenticated_context, "Root")
     await create_folder(authenticated_context, "Child", parent=root)
 
@@ -34,7 +36,9 @@ async def test_filter_by_parentless(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_is_default(db, authenticated_context: HttpContext):
+async def test_filter_by_is_default(
+    db: None, authenticated_context: HttpContext
+) -> None:
     await create_folder(authenticated_context, "Default", is_default=True)
     await create_folder(authenticated_context, "Regular")
 
@@ -44,7 +48,9 @@ async def test_filter_by_is_default(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_tags_and_pinned(db, authenticated_context: HttpContext):
+async def test_filter_by_tags_and_pinned(
+    db: None, authenticated_context: HttpContext
+) -> None:
     tagged = await create_folder(authenticated_context, "Tagged")
     await create_folder(authenticated_context, "Plain")
     await sync_to_async(tagged.tags.add)("screening")
@@ -57,7 +63,7 @@ async def test_filter_by_tags_and_pinned(db, authenticated_context: HttpContext)
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_owner(db, authenticated_context: HttpContext):
+async def test_filter_by_owner(db: None, authenticated_context: HttpContext) -> None:
     other = await create_other_user(authenticated_context)
     from authentikate.models import Membership
 
@@ -74,7 +80,9 @@ async def test_filter_by_owner(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_search_and_description(db, authenticated_context: HttpContext):
+async def test_filter_by_search_and_description(
+    db: None, authenticated_context: HttpContext
+) -> None:
     await create_folder(
         authenticated_context, "Experiment", description="control wells"
     )
@@ -90,7 +98,7 @@ async def test_filter_by_search_and_description(db, authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_filter_by_parent(db, authenticated_context: HttpContext):
+async def test_filter_by_parent(db: None, authenticated_context: HttpContext) -> None:
     """The parent filter lists the direct children of a folder."""
     root = await create_folder(authenticated_context, "Root")
     await create_folder(authenticated_context, "Child A", parent=root)

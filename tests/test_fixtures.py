@@ -10,6 +10,7 @@ layer does.
 import pytest
 from arkitekt_datalayer.models import KulisseStore
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import models
 from mikro_server.schema import schema
@@ -100,7 +101,9 @@ async def _register(ctx: HttpContext, system_id: str, scene: models.Scene) -> No
     assert not result.errors, result.errors
 
 
-async def _create_model(ctx: HttpContext, populated: bool = True, **extra: object):
+async def _create_model(
+    ctx: HttpContext, populated: bool = True, **extra: object
+) -> ExecutionResult:
     store = await _kulisse_store(ctx, populated=populated)
     return await schema.execute(
         CREATE_MODEL,
@@ -113,7 +116,7 @@ async def _create_model(ctx: HttpContext, populated: bool = True, **extra: objec
 @pytest.mark.asyncio
 async def test_a_model_lives_in_a_space_carrying_its_units(
     authenticated_context: HttpContext,
-):
+) -> None:
     result = await _create_model(authenticated_context, name="Coverslip")
     assert not result.errors, result.errors
 
@@ -130,7 +133,7 @@ async def test_a_model_lives_in_a_space_carrying_its_units(
 @pytest.mark.asyncio
 async def test_a_store_whose_upload_was_not_finished_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A kulisse store is read and checked when its upload is finished; one that was not may hold anything."""
     result = await _create_model(authenticated_context, populated=False)
     assert result.errors and "has not been finished" in result.errors[0].message
@@ -141,7 +144,7 @@ async def test_a_store_whose_upload_was_not_finished_is_refused(
 @pytest.mark.asyncio
 async def test_only_three_spatial_axes_are_a_model_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     result = await _create_model(
         authenticated_context,
         axes=[*MM_AXES[:2], {"name": "t", "type": "TIME", "unit": "second"}],
@@ -153,7 +156,7 @@ async def test_only_three_spatial_axes_are_a_model_space(
 @pytest.mark.asyncio
 async def test_an_identity_registration_converts_by_the_units(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Millimetres into a micrometre world: a factor of 1000 nobody stated."""
     created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Stage")
@@ -183,7 +186,9 @@ async def test_an_identity_registration_converts_by_the_units(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpContext):
+async def test_a_layer_needs_a_path_into_the_world(
+    authenticated_context: HttpContext,
+) -> None:
     created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Unregistered")
     result = await schema.execute(
@@ -200,7 +205,7 @@ async def test_a_layer_needs_a_path_into_the_world(authenticated_context: HttpCo
 @pytest.mark.asyncio
 async def test_clearing_the_colour_returns_to_the_models_materials(
     authenticated_context: HttpContext,
-):
+) -> None:
     created = (await _create_model(authenticated_context)).data["createFixture"]
     scene = await seed.create_scene(authenticated_context, "Stage")
     await _register(authenticated_context, created["coordinateSystem"]["id"], scene)
@@ -240,7 +245,7 @@ async def test_clearing_the_colour_returns_to_the_models_materials(
 @pytest.mark.asyncio
 async def test_a_clip_box_is_a_lens_in_the_models_own_units(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A window over a fixture is stated in its axes and unit, and asked again finds the same lens."""
     created = (await _create_model(authenticated_context)).data["createFixture"]
     mutation = "mutation Cut($input: CreateFixtureLensInput!) { createFixtureLens(input: $input) { id windows { axis min max } fixture { id } } }"
@@ -268,7 +273,9 @@ async def test_a_clip_box_is_a_lens_in_the_models_own_units(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_model_is_a_resident_of_its_space(authenticated_context: HttpContext):
+async def test_a_model_is_a_resident_of_its_space(
+    authenticated_context: HttpContext,
+) -> None:
     """Its space answers `residents` with the model, and not with its whole lens beside it."""
     created = (await _create_model(authenticated_context, name="Coverslip")).data[
         "createFixture"
@@ -288,7 +295,7 @@ async def test_a_model_is_a_resident_of_its_space(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_model_is_filed_and_listed_by_its_files_name(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Unnamed, a model sorts and searches by the name of the file it was uploaded as."""
     folder = await seed.create_folder(authenticated_context, "Hardware")
     created = (await _create_model(authenticated_context, folder=str(folder.pk))).data[

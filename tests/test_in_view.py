@@ -19,6 +19,8 @@ Nothing here is stored. Refining a registration moves every extent that looks th
 which is the property `test_refining_a_registration_moves_the_extent` exists to hold.
 """
 
+from collections.abc import Callable
+
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
@@ -83,7 +85,7 @@ def _extent(hit: dict) -> dict[str, list[float]]:
 @pytest.mark.asyncio
 async def test_a_rank_changing_registration_constrains_only_the_axes_it_names(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A (c,y,x) dataset in a (z,y,x) world is a slab: bounded in y and x, free in z.
 
     The headline, and the case that fails without axis-aware composition -- `to_matrix` has
@@ -121,7 +123,7 @@ async def test_a_rank_changing_registration_constrains_only_the_axes_it_names(
 @pytest.mark.asyncio
 async def test_the_extent_is_the_half_voxel_box_of_the_level_zero_array(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Voxel n covers [n-0.5, n+0.5), so a shape of S spans [-0.5, S-0.5] -- not [0, S]."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Boxed", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -140,7 +142,7 @@ async def test_the_extent_is_the_half_voxel_box_of_the_level_zero_array(
 @pytest.mark.asyncio
 async def test_refining_a_registration_moves_the_extent(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The extent is derived, so one edge write moves it -- with no write to any source.
 
     The twin of `test_placement_validity`'s "fixing one edge fixes every layer". A stored
@@ -180,7 +182,7 @@ async def test_refining_a_registration_moves_the_extent(
 @pytest.mark.asyncio
 async def test_the_queried_system_is_in_view_of_itself(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A source whose own system IS the queried one: empty path, exact by construction."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Rooted", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -203,7 +205,7 @@ async def test_the_queried_system_is_in_view_of_itself(
 @pytest.mark.asyncio
 async def test_a_mesh_collection_is_returned_unbounded(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Its vertices are in Parquet the server never opens, so it is unbounded -- never culled."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Meshed", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -230,7 +232,7 @@ async def test_a_mesh_collection_is_returned_unbounded(
 @pytest.mark.asyncio
 async def test_an_unmappable_registration_is_not_in_view(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The one genuine exclusion: a declared non-correspondence is not a placement at all."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Unmapped", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -259,7 +261,7 @@ async def test_an_unmappable_registration_is_not_in_view(
 @pytest.mark.asyncio
 async def test_a_backwards_registration_keeps_its_path_and_states_why_it_has_no_extent(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Composed forward only -- so an inverted step is reported, not silently culled.
 
     The step IS invertible (the search offers a backwards step only when it is), so the
@@ -305,7 +307,7 @@ async def test_a_backwards_registration_keeps_its_path_and_states_why_it_has_no_
 @pytest.mark.asyncio
 async def test_a_region_that_misses_the_source_returns_nothing(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The cull actually culls, on an axis the registration does constrain."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Elsewhere", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -327,7 +329,9 @@ async def test_a_region_that_misses_the_source_returns_nothing(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_degenerate_region_probes_a_plane(authenticated_context: HttpContext):
+async def test_a_degenerate_region_probes_a_plane(
+    authenticated_context: HttpContext,
+) -> None:
     """min == max is the probe a client sends to ask what is under this slice; bounds are closed."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Sliced", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -350,7 +354,7 @@ async def test_a_degenerate_region_probes_a_plane(authenticated_context: HttpCon
 @pytest.mark.asyncio
 async def test_a_shorter_region_constrains_only_its_leading_axes(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A 2D box asked of a 3D space says nothing about the third axis, rather than pinning it to zero."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Prefix", axes=SPATIAL_AXES, shapes=[[8, 64, 64]]
@@ -369,7 +373,7 @@ async def test_a_shorter_region_constrains_only_its_leading_axes(
 @pytest.mark.asyncio
 async def test_a_region_longer_than_the_system_is_refused(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Naming more axes than the system has is a client error, not an empty result."""
     scene = await seed.create_scene(authenticated_context, "Narrow")
     world_id = await sync_to_async(lambda: scene.world.pk)()
@@ -394,7 +398,7 @@ async def test_a_region_longer_than_the_system_is_refused(
 @pytest.mark.asyncio
 async def test_an_anchor_pinned_outside_the_region_is_culled(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The one that exercises the cull: a pinned axis the region *does* constrain.
 
     The dataset's z is registered onto the world's z, so each anchor's slab is one voxel wide
@@ -435,7 +439,7 @@ async def test_an_anchor_pinned_outside_the_region_is_culled(
 @pytest.mark.asyncio
 async def test_an_anchor_on_an_axis_the_space_does_not_have_is_never_culled(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A (t,y,x) dataset in a (z,y,x) world: nothing constrains t, so no region can reject its anchors."""
     axes = [
         seed.axis("t", enums.AxisType.TIME),
@@ -464,7 +468,12 @@ async def test_an_anchor_on_an_axis_the_space_does_not_have_is_never_culled(
     )
 
 
-async def anchors_and_register(ctx, scene, dataset, make_anchors) -> None:
+async def anchors_and_register(
+    ctx: HttpContext,
+    scene: models.Scene,
+    dataset: models.ArrayDataset,
+    make_anchors: Callable[[], None],
+) -> None:
     """Create the anchors and register the dataset, both off the event loop."""
     await sync_to_async(make_anchors)()
     await seed.register_into_scene(ctx, scene, dataset)
@@ -474,7 +483,7 @@ async def anchors_and_register(ctx, scene, dataset, make_anchors) -> None:
 @pytest.mark.asyncio
 async def test_an_anchor_that_pins_no_registered_axis_is_in_view_whenever_its_container_is(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A channel label is everywhere: it pins c, and the region says nothing about c."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Channelled", shapes=[[3, 64, 64]]
@@ -500,7 +509,7 @@ async def test_an_anchor_that_pins_no_registered_axis_is_in_view_whenever_its_co
 @pytest.mark.asyncio
 async def test_the_query_count_does_not_grow_with_the_sources(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A flat cost in the number of registered sources -- the property the whole module exists for.
 
     Flat in the source *count*, on flat lineages: the derivation and lineage closures cost one
@@ -549,7 +558,7 @@ async def test_the_query_count_does_not_grow_with_the_sources(
 # --- the closed form --------------------------------------------------------------
 
 
-def test_the_closed_form_interval_agrees_with_the_corner_enumeration():
+def test_the_closed_form_interval_agrees_with_the_corner_enumeration() -> None:
     """`form_interval` is the O(n) shortcut for what `transformed_bbox` does with 2**n corners.
 
     Pinned rather than argued: "obviously equivalent" is how a sign error survives. A shear
@@ -580,7 +589,7 @@ def test_the_closed_form_interval_agrees_with_the_corner_enumeration():
         assert closed[name][1] == pytest.approx(reference["max"][index])
 
 
-def test_boxes_overlap_ignores_the_axes_only_one_side_names():
+def test_boxes_overlap_ignores_the_axes_only_one_side_names() -> None:
     """Silence is not a zero: an axis one side does not constrain cannot exclude anything."""
     slab = {"y": [0.0, 10.0], "x": [0.0, 10.0]}
     assert coords_logic.boxes_overlap(
@@ -596,7 +605,7 @@ def test_boxes_overlap_ignores_the_axes_only_one_side_names():
 @pytest.mark.asyncio
 async def test_a_tables_anchors_are_placed_by_the_values_they_pin(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table anchor pins a coordinate column's value: pushed into the world, it is in view where that value is, and nowhere else."""
     ctx = authenticated_context
     table, system = await _seed_table_dataset(ctx, "spots")

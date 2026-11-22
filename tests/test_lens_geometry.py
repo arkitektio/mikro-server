@@ -271,7 +271,7 @@ async def _overlapping(ctx: HttpContext, annotation_id: str) -> set[str]:
 )
 async def test_the_stored_edge_maps_every_lens_voxel_onto_its_dataset_voxel(
     authenticated_context: HttpContext, slices: list[dict]
-):
+) -> None:
     """`toParent`, composed, is numpy's own slicing: every lens voxel lands on the dataset voxel with its value, and the shape is the view's."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Small", shapes=[SHAPE])
@@ -306,7 +306,7 @@ async def test_the_stored_edge_maps_every_lens_voxel_onto_its_dataset_voxel(
 )
 async def test_a_cropped_layer_in_the_datasets_own_grid_composes_the_crop_forward(
     authenticated_context: HttpContext, slices: list[dict]
-):
+) -> None:
     """A scene rooted at intrinsic: the layer's one hop is the lens edge, forward, and `asAffine` is the oracle's map."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Small", shapes=[SHAPE])
@@ -338,7 +338,7 @@ async def test_a_cropped_layer_in_the_datasets_own_grid_composes_the_crop_forwar
 @pytest.mark.asyncio
 async def test_a_scene_rooted_at_the_crop_inverts_the_edge_for_the_whole_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The lens system as world, the whole dataset as a layer: the lens edge is walked backwards, and dataset voxel q lands on lens voxel q - start."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Small", shapes=[SHAPE])
@@ -377,7 +377,7 @@ async def test_a_scene_rooted_at_the_crop_inverts_the_edge_for_the_whole_dataset
 @pytest.mark.asyncio
 async def test_a_crop_under_a_calibration_is_the_calibration_of_the_shifted_voxel(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Intrinsic calibrated into micrometres by an affine: the cropped layer's map is `calibration ∘ (p + start)`, to the last digit."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Small", shapes=[SHAPE])
@@ -467,7 +467,7 @@ async def test_a_point_drawn_on_a_crop_is_stored_at_the_dataset_voxel(
     point: list[float],
     parent: tuple[int, int],
     box: tuple[list[float], list[float]],
-):
+) -> None:
     """A collection derived IDENTITY from the crop keeps its boxes in the dataset's grid, through the lens edge: the point's box is `start + step * (v ± 0.5)`."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -500,7 +500,7 @@ async def test_a_point_drawn_on_a_crop_is_stored_at_the_dataset_voxel(
 @pytest.mark.asyncio
 async def test_a_rectangle_drawn_on_a_crop_spans_the_dataset_voxels_it_covers(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Its box is the crop's corners shifted by the start, ± 0.5 -- the whole crop, drawn edge to edge, is the crop's own extent in the grid."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -538,7 +538,7 @@ async def test_a_rectangle_drawn_on_a_crop_spans_the_dataset_voxels_it_covers(
 @pytest.mark.asyncio
 async def test_a_crop_overlaps_exactly_the_annotations_on_the_rows_it_selects(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Points on the rows just outside a crop do not overlap it; the first and last rows inside do. Touching at a voxel face is not overlapping."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -576,7 +576,7 @@ async def test_a_crop_overlaps_exactly_the_annotations_on_the_rows_it_selects(
 @pytest.mark.asyncio
 async def test_a_stepped_crop_overlaps_exactly_the_rows_it_keeps_at_its_ends(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`y 1:6:2` keeps rows 1, 3 and 5: a point on row 0 is outside it and one on row 5 inside.
 
     The lens' box is the footprint of the voxels it keeps, not `n·step` voxels from its start:
@@ -618,7 +618,7 @@ async def test_a_stepped_crop_overlaps_exactly_the_rows_it_keeps_at_its_ends(
 @pytest.mark.asyncio
 async def test_a_stepped_lens_extent_is_the_footprint_of_the_voxels_it_keeps(
     authenticated_context: HttpContext,
-):
+) -> None:
     """In the dataset's own grid, a stepped lens' extent is half a voxel around the first and the last voxel it keeps."""
     ctx = authenticated_context
     slices = [
@@ -653,7 +653,7 @@ async def test_a_stepped_lens_extent_is_the_footprint_of_the_voxels_it_keeps(
 @pytest.mark.asyncio
 async def test_a_stepped_lens_keeps_only_the_anchors_on_the_indices_it_selects(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`y 0:6:2` keeps rows 0, 2 and 4: an anchor pinned to row 1 is inside the range and outside the lens."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -692,7 +692,7 @@ async def test_a_stepped_lens_keeps_only_the_anchors_on_the_indices_it_selects(
 @pytest.mark.asyncio
 async def test_a_windowed_table_lens_overlaps_the_shapes_in_its_window(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table the server cannot bound still has an extent where a window bounds it: x 10..20 meets a shape at x 10..20 and not one at 30..40. The whole lens, bounded nowhere, has not been shown to overlap either."""
     ctx = authenticated_context
     table, table_system = await _seed_table_dataset(ctx, "spots")
@@ -737,7 +737,7 @@ async def test_a_windowed_table_lens_overlaps_the_shapes_in_its_window(
 @pytest.mark.asyncio
 async def test_an_annotation_lens_overlaps_the_shapes_in_its_window_on_its_own_collection(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A window over a collection lives in the collection's own drawing space, which nothing is registered into; it is still found there."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -798,7 +798,7 @@ async def test_an_annotation_lens_overlaps_the_shapes_in_its_window_on_its_own_c
 )
 async def test_a_crop_of_a_crop_is_the_datasets_lens_for_those_voxels(
     authenticated_context: HttpContext, parent: list[dict], child: list[dict]
-):
+) -> None:
     """Slices stated over a lens compose through it: the result is the row the same voxels asked of the dataset give, and its edge maps every voxel."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -840,7 +840,7 @@ async def test_a_crop_of_a_crop_is_the_datasets_lens_for_those_voxels(
     )
     composed = [
         {"axis": a, "start": s.start, "stop": s.stop, "step": s.step}
-        for a, s in zip(["c", "y", "x"], index(parent))
+        for a, s in zip(["c", "y", "x"], index(parent), strict=True)
         if s != slice(None)
     ]
     direct = await _lens(
@@ -857,7 +857,7 @@ def _compose_by_numpy(parent: list[dict], child: list[dict]) -> list[dict]:
     out = []
     parent_by = {entry["axis"]: entry for entry in parent}
     child_by = {entry["axis"]: entry for entry in child}
-    for axis, size in zip(["c", "y", "x"], SHAPE):
+    for axis, size in zip(["c", "y", "x"], SHAPE, strict=True):
         p, c = parent_by.get(axis), child_by.get(axis)
         if p is None and c is None:
             continue
@@ -889,7 +889,7 @@ async def _lens_from(
 @pytest.mark.asyncio
 async def test_a_box_in_micrometres_cuts_exactly_the_voxels_whose_cells_it_meets(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Voxel j of a 0.5 um grid at offset 100 covers [100 + 0.5 j - 0.25, 100 + 0.5 j + 0.25): the oracle is that cell test, voxel by voxel, and the lens is the dataset's row for it."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Calibrated", shapes=[SHAPE])
@@ -947,7 +947,7 @@ async def test_a_box_in_micrometres_cuts_exactly_the_voxels_whose_cells_it_meets
 @pytest.mark.asyncio
 async def test_a_box_in_a_siblings_grid_is_reached_through_the_world_they_share(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Composition")
     drawn_on = await seed.create_array_dataset(
@@ -1009,7 +1009,7 @@ async def test_a_box_in_a_siblings_grid_is_reached_through_the_world_they_share(
 @pytest.mark.asyncio
 async def test_a_lens_cut_to_an_annotation_bounds_exactly_the_shape(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Crop to the ROI: a rectangle on rows 1..4 and columns 2..6 is the lens y[1:5], x[2:7], which overlaps that shape and not one outside it."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -1059,7 +1059,7 @@ async def test_a_lens_cut_to_an_annotation_bounds_exactly_the_shape(
 @pytest.mark.asyncio
 async def test_a_shape_with_fewer_components_than_its_space_is_cut_over_the_axes_it_spans(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A rectangle on a (c, y, x) image has two components: they are y and x, never c and y. Unpinned it keeps every channel; pinned to one, that plane."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[SHAPE])
@@ -1116,7 +1116,7 @@ DRAW_ON_SCENE = "mutation Create($input: CreateAnnotationInput!) { createAnnotat
 @pytest.mark.asyncio
 async def test_a_shape_drawn_on_a_scene_whose_world_has_channels_is_drawn_in_space(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A scene over a (c, y, x) space mints a (y, x) drawing space: a vertex is a place, so a rectangle's first component is y and never a channel, and the lens cut to it keeps every channel."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Slide", shapes=[SHAPE])
@@ -1166,7 +1166,7 @@ async def test_a_shape_drawn_on_a_scene_whose_world_has_channels_is_drawn_in_spa
 @pytest.mark.asyncio
 async def test_a_cropped_layer_walks_its_pyramid_from_the_whole_array(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Pinned, not endorsed: `pathToWorld` starts at the crop, `levelPaths` start at each level's own grid and never cross the lens edge.
 
     A renderer reading level L of a cropped layer therefore applies the crop itself, where the
@@ -1211,7 +1211,7 @@ async def test_a_cropped_layer_walks_its_pyramid_from_the_whole_array(
 @pytest.mark.asyncio
 async def test_a_legacy_negative_start_edge_is_true_once_repaired(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A lens written with `start: -5` recorded a translation of -5. After `merge_duplicate_lenses` it maps like the crop it always meant."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Small", shapes=[SHAPE])

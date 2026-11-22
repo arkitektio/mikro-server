@@ -160,8 +160,8 @@ async def _chromatic_scene(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_one_layer_resolves_differently_per_channel(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The whole point: two channels, one layer, two placements.
 
     Each channel's correction is its own edge into the same world -- the shape that used to
@@ -212,8 +212,8 @@ async def test_one_layer_resolves_differently_per_channel(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_without_a_fixed_coordinate_a_scoped_edge_is_not_crossed(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """No `at`, no answer -- rather than an arbitrary one.
 
     Where the data sits depends on the channel. A query that has not said which channel has no
@@ -257,8 +257,8 @@ async def test_without_a_fixed_coordinate_a_scoped_edge_is_not_crossed(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_unscoped_edge_still_answers_without_at(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Every edge written before selectors existed is unscoped, and none of them changed.
 
     This is the compatibility claim the whole design rests on: `selector_admits` returns True for
@@ -301,8 +301,8 @@ async def test_an_unscoped_edge_still_answers_without_at(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_selector_must_name_an_axis_that_can_be_indexed(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Three rejections, all at write time where the author is still in the room."""
     ctx = authenticated_context
     scene, dataset = await _chromatic_scene(ctx)
@@ -343,8 +343,8 @@ async def test_a_selector_must_name_an_axis_that_can_be_indexed(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_refining_one_channel_moves_only_that_channel(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Piecewise as several facts, not one row with a list in it.
 
     Each index is its own edge, so it carries its own `version` and its own provenance, and a
@@ -406,8 +406,8 @@ async def test_refining_one_channel_moves_only_that_channel(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_selector_predicate_is_the_only_reader_of_the_convention(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A unit-level pin on `selector_admits`, so the three cases stay stated in one place."""
     unscoped = models.Transformation(selector=None)
     scoped = models.Transformation(selector={"axis": "c", "index": 2})
@@ -425,8 +425,8 @@ async def test_the_selector_predicate_is_the_only_reader_of_the_convention(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_per_index_registration_is_a_registration_everywhere_it_is_asked(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The plumbing around the selector, which the walk had and nothing else did.
 
     `adjacency_of` was the only reader of `selector_admits`, and every other consumer walked
@@ -506,8 +506,8 @@ async def test_a_per_index_registration_is_a_registration_everywhere_it_is_asked
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_layer_can_be_created_over_a_scoped_only_registration(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`createLayer` refused the layer the feature exists to allow.
 
     Its gate asks `is_placeable_in`, whose walk could not see a scoped edge at all. The shape
@@ -616,8 +616,8 @@ async def test_a_layer_can_be_created_over_a_scoped_only_registration(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_scoped_source_is_in_view_of_the_space_it_is_registered_into(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`inView` never passed `at`, so a per-channel registration was invisible to it.
 
     The source is in the space -- returning nothing for it was the graph withholding what it

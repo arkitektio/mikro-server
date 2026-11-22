@@ -8,13 +8,20 @@ index. Everything is exchanged as cube *text literals* with an explicit
 untyped text parameter implicitly.
 """
 
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, cast
+
 from django.db import models
 
+if TYPE_CHECKING:
+    from django.db.backends.base.base import BaseDatabaseWrapper
+    from django.db.models.sql.compiler import SQLCompiler
 
-def cube_literal(low, high=None) -> str:
+
+def cube_literal(low: Iterable[float], high: Iterable[float] | None = None) -> str:
     """The cube text literal for a point or a (low, high) box, e.g. ``(0.0, 1.0),(2.0, 3.0)``."""
 
-    def corner(values) -> str:
+    def corner(values: Iterable[float]) -> str:
         return "(" + ", ".join(repr(float(value)) for value in values) + ")"
 
     return corner(low) if high is None else f"{corner(low)},{corner(high)}"
@@ -30,11 +37,13 @@ class CubeField(models.Field):
 
     description = "An axis-aligned N-dimensional box (PostgreSQL cube)"
 
-    def db_type(self, connection) -> str:
+    def db_type(self, connection: "BaseDatabaseWrapper") -> str:
         """The column type: the extension's ``cube``."""
         return "cube"
 
-    def get_placeholder(self, value, compiler, connection) -> str:
+    def get_placeholder(
+        self, value: object, compiler: "SQLCompiler", connection: "BaseDatabaseWrapper"
+    ) -> str:
         """The write placeholder, with an explicit cast.
 
         A bare text parameter is `text`, not `unknown`, under client- and
@@ -42,7 +51,7 @@ class CubeField(models.Field):
         """
         return "%s::cube"
 
-    def get_prep_value(self, value) -> str | None:
+    def get_prep_value(self, value: object) -> str | None:
         """Serialize a bbox dict, (low, high) pair, or bare point to a cube text literal."""
         if value is None or isinstance(value, str):
             return value
@@ -55,9 +64,12 @@ class CubeField(models.Field):
             and isinstance(value[0], (list, tuple))
         ):
             return cube_literal(value[0], value[1])
-        return cube_literal(value)
+        # Anything else is a bare point.
+        return cube_literal(cast("Iterable[float]", value))
 
-    def from_db_value(self, value, expression, connection) -> str | None:
+    def from_db_value(
+        self, value: str | None, expression: object, connection: "BaseDatabaseWrapper"
+    ) -> str | None:
         """The raw cube text representation -- never parsed, the column is query-only."""
         return value
 
@@ -67,7 +79,9 @@ class CubeOverlaps(models.Lookup):
 
     lookup_name = "overlaps"
 
-    def as_sql(self, compiler, connection) -> tuple[str, list]:
+    def as_sql(
+        self, compiler: "SQLCompiler", connection: "BaseDatabaseWrapper"
+    ) -> tuple[str, list]:
         """``lhs && rhs::cube``."""
         lhs, lhs_params = self.process_lhs(compiler, connection)
         rhs, rhs_params = self.process_rhs(compiler, connection)
@@ -79,7 +93,9 @@ class CubeContainsPoint(models.Lookup):
 
     lookup_name = "contains_point"
 
-    def as_sql(self, compiler, connection) -> tuple[str, list]:
+    def as_sql(
+        self, compiler: "SQLCompiler", connection: "BaseDatabaseWrapper"
+    ) -> tuple[str, list]:
         """``lhs @> rhs::cube``."""
         lhs, lhs_params = self.process_lhs(compiler, connection)
         rhs, rhs_params = self.process_rhs(compiler, connection)

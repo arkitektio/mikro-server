@@ -14,14 +14,17 @@ the auto-registration must not paper over it with an assumed identity placement 
 one hop from world against the lineage's several, would outrank the truth forever.
 """
 
+from collections.abc import Sequence
 from unittest.mock import patch
 
 import pytest
 from arkitekt_datalayer.models import ZarrStore
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
+from core.inputs.coords import AxisInputModel
 from mikro_server.schema import schema
 from tests import seed
 
@@ -101,13 +104,13 @@ async def _derive(
     ctx: HttpContext,
     name: str,
     *,
-    axes,
-    shape,
-    lens=None,
-    entries=None,
-    transform=None,
-    valueRelation=None,
-):
+    axes: Sequence[AxisInputModel],
+    shape: list[int],
+    lens: models.Lens | None = None,
+    entries: list[dict] | None = None,
+    transform: dict | None = None,
+    valueRelation: str | None = None,
+) -> ExecutionResult:
     """Create a dataset through the real mutation, stating the lens(es) it was computed from.
 
     Either one `lens` plus its nested `transform` dict (and optional `valueRelation`),
@@ -165,7 +168,7 @@ async def _derive(
 @pytest.mark.asyncio
 async def test_a_derived_dataset_walks_to_world_through_its_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The path runs through the source's systems, not around them.
 
     This is the assertion the whole change exists for. The placement search partitions its
@@ -283,7 +286,7 @@ async def test_a_derived_dataset_walks_to_world_through_its_source(
 @pytest.mark.asyncio
 async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_its_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """When nothing is registered yet, the layer is refused -- and registering the SOURCE fixes it.
 
     Nothing fabricates a placement any more. The honest fix is the one a client authors
@@ -384,7 +387,7 @@ async def test_an_unregistered_derived_dataset_is_rejected_and_placed_through_it
 @pytest.mark.asyncio
 async def test_the_derivation_edge_is_readable_on_the_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`derivedFrom` is the edge itself, so a client can compose it -- not a label about it."""
     source = await seed.create_array_dataset(authenticated_context, "Source")
     source_lens = await seed.create_lens(authenticated_context, source, slices=[])
@@ -426,7 +429,7 @@ async def test_the_derivation_edge_is_readable_on_the_dataset(
 @pytest.mark.asyncio
 async def test_the_derivation_is_readable_from_the_source_as_well(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`derivedDatasets` answers "what came out of this" -- the same edges, read backwards.
 
     A source cannot otherwise be asked what was made from it: `derivedFrom` only points
@@ -487,7 +490,7 @@ async def test_the_derivation_is_readable_from_the_source_as_well(
 @pytest.mark.asyncio
 async def test_a_fusion_is_a_child_of_every_source_it_named_exactly_once(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Report every child, not just the ones this source places -- and each child once.
 
     Two traps the naive query falls into. A fusion has several parents but only the first
@@ -574,7 +577,9 @@ async def test_a_fusion_is_a_child_of_every_source_it_named_exactly_once(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unmappable_child_is_still_a_child(authenticated_context: HttpContext):
+async def test_an_unmappable_child_is_still_a_child(
+    authenticated_context: HttpContext,
+) -> None:
     """The inverse is kind-blind, exactly as `derivedFrom` is.
 
     "This came from that, and the geometry did not survive" is a derivation -- the one the
@@ -610,7 +615,7 @@ async def test_an_unmappable_child_is_still_a_child(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_a_calibrated_dataset_is_not_its_own_child(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A calibration runs intrinsic -> PHYSICAL, and both ends belong to one dataset.
 
     Which means it looks exactly like a derivation landing in this dataset's space, from
@@ -645,7 +650,7 @@ async def test_a_calibrated_dataset_is_not_its_own_child(
 @pytest.mark.asyncio
 async def test_a_projection_drops_an_axis_as_by_dimension(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A max-z projection is a rank change, and BY_DIMENSION is how a rank change is stated."""
     axes = [
         seed.axis("c", enums.AxisType.CHANNEL),
@@ -694,7 +699,7 @@ async def test_a_projection_drops_an_axis_as_by_dimension(
 @pytest.mark.asyncio
 async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registration(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One mask for a whole movie needs no registration of its own: it sits where the movie sits.
 
     The mask is `(y, x)`, the movie `(t, y, x)`, and the derivation keeps `y` and `x` and says
@@ -799,7 +804,7 @@ async def test_a_mask_projected_from_a_movie_is_placed_by_the_movies_registratio
 @pytest.mark.asyncio
 async def test_identity_is_not_a_rank_claim_in_disguise(
     authenticated_context: HttpContext,
-):
+) -> None:
     """IDENTITY says the two grids ARE the same. Between different axes that is a lie.
 
     IDENTITY carries no parameters, so no rank check would otherwise look at it -- and it
@@ -842,7 +847,7 @@ async def test_identity_is_not_a_rank_claim_in_disguise(
 @pytest.mark.asyncio
 async def test_a_categorized_derivation_bootstraps_a_label_layer(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`valueRelation` is the structural signal LABEL inference was missing.
 
     The spatial kind says where a threshold's pixels sit (IDENTITY); CATEGORIZED says
@@ -970,7 +975,9 @@ async def _names(ctx: HttpContext, filters: dict) -> set[str]:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_derived_from_and_not_derived_filters(authenticated_context: HttpContext):
+async def test_derived_from_and_not_derived_filters(
+    authenticated_context: HttpContext,
+) -> None:
     """`derivedFrom` lists a source's children; `notDerived` lists the roots.
 
     Both are `graph_logic.derivation_edges` as a query, so both inherit its two rules:
@@ -1026,7 +1033,9 @@ async def test_derived_from_and_not_derived_filters(authenticated_context: HttpC
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_derivation_filters_are_kind_blind(authenticated_context: HttpContext):
+async def test_derivation_filters_are_kind_blind(
+    authenticated_context: HttpContext,
+) -> None:
     """An UNMAPPABLE child still came from here: reporting it is the whole point of the kind."""
     ctx = authenticated_context
     source = await seed.create_array_dataset(ctx, "Acquired")
@@ -1051,7 +1060,7 @@ async def test_derivation_filters_are_kind_blind(authenticated_context: HttpCont
 @pytest.mark.asyncio
 async def test_derived_from_reports_every_parent_of_a_fusion(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A fusion has two real parents, and is a child of both -- not only the one that places it."""
     ctx = authenticated_context
     first = await seed.create_array_dataset(ctx, "ChannelA")
@@ -1078,7 +1087,9 @@ async def test_derived_from_reports_every_parent_of_a_fusion(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_derivation_may_be_a_map_axis(authenticated_context: HttpContext):
+async def test_a_derivation_may_be_a_map_axis(
+    authenticated_context: HttpContext,
+) -> None:
     """A transposed dataset states its derivation as the pure permutation it is.
 
     The derivation subset is gone: `derivedFrom` carries the same union every authored
@@ -1125,7 +1136,7 @@ async def test_a_derivation_may_be_a_map_axis(authenticated_context: HttpContext
 
 
 @pytest.mark.django_db(transaction=True)
-def test_a_derivation_may_have_a_field_part(authenticated_context: HttpContext):
+def test_a_derivation_may_have_a_field_part(authenticated_context: HttpContext) -> None:
     """A derivation with a FIELD part writes through the same guards a registration does.
 
     Written through the writer directly: at ingest a self-field is unrepresentable (the
@@ -1210,7 +1221,7 @@ async def _create_with_pyramid(
     shapes: list[list[int]],
     scale_method: str | None,
     derived_from: list | None = None,
-):
+) -> ExecutionResult:
     """Run `createArrayDataset` over a pyramid of `shapes`, stating how each level above 0 was built (or not).
 
     Every level but the first becomes a `scales` entry, so a single-entry `shapes` is an
@@ -1259,12 +1270,12 @@ async def _derive_with_pyramid(
     ctx: HttpContext,
     name: str,
     *,
-    lens,
+    lens: models.Lens,
     value_relation: str,
     scale_method: str | None,
     axes: list | None = None,
     shapes: list[list[int]] | None = None,
-):
+) -> ExecutionResult:
     """A two-level derived dataset, stating how level 1 was downsampled (or not)."""
     return await _create_with_pyramid(
         ctx,
@@ -1287,7 +1298,7 @@ async def _derive_with_pyramid(
 @pytest.mark.asyncio
 async def test_a_categorized_pyramid_refuses_an_averaged_level(
     authenticated_context: HttpContext,
-):
+) -> None:
     """AREA over ids returns a number that was in neither source voxel."""
     source = await seed.create_array_dataset(
         authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -1314,7 +1325,7 @@ async def test_a_categorized_pyramid_refuses_an_averaged_level(
 @pytest.mark.asyncio
 async def test_a_categorized_pyramid_must_say_how_it_was_built(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Silence is not compliance: nothing about two arrays says whether one was averaged.
 
     The value could not be derived even in principle, so an unstated method over data
@@ -1342,7 +1353,7 @@ async def test_a_categorized_pyramid_must_say_how_it_was_built(
 @pytest.mark.asyncio
 async def test_a_label_compliant_pyramid_is_stored_and_reported(
     authenticated_context: HttpContext,
-):
+) -> None:
     """MODE is accepted, stored on the level, and read back through the dataset.
 
     The stored value is the point: `scaleMethod` has been on `ScaleInput` since the initial
@@ -1378,7 +1389,9 @@ async def test_a_label_compliant_pyramid_is_stored_and_reported(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_intensity_pyramid_may_be_averaged(authenticated_context: HttpContext):
+async def test_an_intensity_pyramid_may_be_averaged(
+    authenticated_context: HttpContext,
+) -> None:
     """The guard is about the values, not about pyramids: averaging an intensity is correct.
 
     And the reported compliance is False rather than an error -- the same dataset could
@@ -1414,7 +1427,7 @@ async def test_an_intensity_pyramid_may_be_averaged(authenticated_context: HttpC
 @pytest.mark.asyncio
 async def test_an_unstated_pyramid_reports_null_not_compliant(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Null is its own answer: nobody said, which is not the same as nobody averaged.
 
     Every level written before `scaleMethod` was stored reads this way, and collapsing it
@@ -1447,7 +1460,7 @@ async def test_an_unstated_pyramid_reports_null_not_compliant(
 @pytest.mark.asyncio
 async def test_an_unpyramided_dataset_is_trivially_compliant(
     authenticated_context: HttpContext,
-):
+) -> None:
     """One level, nothing downsampled, nothing that could be wrong."""
     dataset = await seed.create_array_dataset(
         authenticated_context, "Flat", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -1483,7 +1496,7 @@ _OBJECT_YX_AXES = [
 @pytest.mark.asyncio
 async def test_an_index_axis_refuses_an_averaged_pyramid_with_no_derivation(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The case the CATEGORIZED signal cannot reach: an ingest that declares no derivation.
 
     Nothing about this dataset says what its values are except its axes, and one of them
@@ -1511,7 +1524,7 @@ async def test_an_index_axis_refuses_an_averaged_pyramid_with_no_derivation(
 @pytest.mark.asyncio
 async def test_an_index_axis_refuses_an_averaged_pyramid_whatever_the_derivation_says(
     authenticated_context: HttpContext,
-):
+) -> None:
     """TRANSFORMED does not buy an INDEX-axis dataset an average: the two signals are independent."""
     source = await seed.create_array_dataset(
         authenticated_context, "Raw", axes=seed.YX_AXES, shapes=[[64, 64]]
@@ -1537,7 +1550,7 @@ async def test_an_index_axis_refuses_an_averaged_pyramid_whatever_the_derivation
 @pytest.mark.asyncio
 async def test_an_index_axis_pyramid_must_say_how_it_was_built(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Silence is not compliance here either -- the same strictness the CATEGORIZED case gets."""
     result = await _create_with_pyramid(
         authenticated_context,
@@ -1556,7 +1569,7 @@ async def test_an_index_axis_pyramid_must_say_how_it_was_built(
 @pytest.mark.asyncio
 async def test_an_index_axis_pyramid_built_by_picking_is_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """MODE is what the guard is asking for, and the level reads back saying so."""
     result = await _create_with_pyramid(
         authenticated_context,
@@ -1584,7 +1597,7 @@ async def test_an_index_axis_pyramid_built_by_picking_is_accepted(
 @pytest.mark.asyncio
 async def test_an_unpyramided_index_axis_dataset_is_accepted(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The guard is about levels, not about axes: with nothing downsampled there is nothing to state.
 
     The negative that keeps it honest -- an INDEX axis must not become a reason to refuse an
@@ -1604,7 +1617,7 @@ async def test_an_unpyramided_index_axis_dataset_is_accepted(
 @pytest.mark.asyncio
 async def test_a_container_and_its_whole_lens_are_one_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`{DATASET: d}` and `{LENS: d's whole lens}` resolve to one space; named together they are a duplicate, not two edges into one system."""
     ctx = authenticated_context
     source = await seed.create_array_dataset(
@@ -1632,7 +1645,7 @@ async def test_a_container_and_its_whole_lens_are_one_source(
 @pytest.mark.asyncio
 async def test_a_network_lens_is_never_a_named_derivation_source(
     authenticated_context: HttpContext,
-):
+) -> None:
     from tests.test_network_layers import _collection as _network_collection
 
     ctx = authenticated_context
@@ -1651,7 +1664,7 @@ async def test_a_network_lens_is_never_a_named_derivation_source(
 @pytest.mark.asyncio
 async def test_a_dataset_derived_from_a_table_is_derived_to_the_filter_too(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`derivedFrom` on the type and `notDerived` on the filter read the same edges: a reconstruction from a table is derived, whatever its parent's kind."""
     from tests.test_layer_kinds import _seed_table_dataset
 
@@ -1697,7 +1710,7 @@ async def test_a_dataset_derived_from_a_table_is_derived_to_the_filter_too(
 @pytest.mark.asyncio
 async def test_a_long_dataset_name_does_not_refuse_the_dataset(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Every name `createArrayDataset` derives from the dataset's is longer than the dataset's.
 
     The intrinsic space is `<name>/intrinsic`, each level's `<name>/<level>`, and a derivation
@@ -1765,7 +1778,7 @@ async def _lens_ids(ctx: HttpContext, filters: dict) -> set[str]:
 @pytest.mark.asyncio
 async def test_lens_not_derived_judges_array_lenses_only(
     authenticated_context: HttpContext,
-):
+) -> None:
     """`LensFilter.notDerived` drops the lenses over a derived dataset and keeps every other kind.
 
     The annotation collection is the trap: it carries a derivation edge into the dataset it was

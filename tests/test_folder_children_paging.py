@@ -59,7 +59,7 @@ def _name(child: dict[str, Any]) -> str:
 @pytest.mark.asyncio
 async def test_an_order_by_name_interleaves_the_kinds(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Mixed")
     await seed.create_folder(ctx, "charlie", parent=folder)
@@ -92,7 +92,7 @@ async def test_an_order_by_name_interleaves_the_kinds(
 @pytest.mark.asyncio
 async def test_size_orders_files_and_datasets_together_with_the_unsized_last(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Sized")
     await seed.create_file(ctx, "big.bin", folder, size=5000)
@@ -114,7 +114,7 @@ async def test_size_orders_files_and_datasets_together_with_the_unsized_last(
 @pytest.mark.asyncio
 async def test_a_kind_filter_pages_through_that_kind_only(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Tables among folders")
     for index in range(3):
@@ -154,7 +154,7 @@ async def test_a_kind_filter_pages_through_that_kind_only(
 @pytest.mark.asyncio
 async def test_counts_cover_every_kind_and_follow_the_search(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Counted")
     await seed.create_file(ctx, "notes.txt", folder)
@@ -192,7 +192,7 @@ async def test_counts_cover_every_kind_and_follow_the_search(
 @pytest.mark.asyncio
 async def test_sparse_datasets_and_network_collections_are_listed(
     authenticated_context: HttpContext,
-):
+) -> None:
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Newer containers")
     store = await seed.create_konnektion_store(ctx, axes=["x", "y", "z"])

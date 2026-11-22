@@ -27,7 +27,7 @@ from tests import seed
 @pytest.mark.asyncio
 async def test_an_roi_behind_a_map_axis_edge_is_permuted_not_mislabelled(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The box is pushed through the permutation, rather than handed back untouched."""
     dataset = await seed.create_array_dataset(authenticated_context, "Volume")
 

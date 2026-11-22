@@ -4,14 +4,19 @@ All helpers create objects in the organization/user of the supplied context
 (the identity the static "test" token resolves to, see conftest.py).
 """
 
-from arkitekt_datalayer.models import sparse_layout_path
+from arkitekt_datalayer.models import (
+    FabriksStore,
+    KonnektionStore,
+    ParquetStore,
+    sparse_layout_path,
+)
 from authentikate.models import Membership, User
 from kante.context import HttpContext
 
 from core.models import File, Folder, SparseStore
 
 
-async def create_folder(ctx: HttpContext, name: str, **kwargs) -> Folder:
+async def create_folder(ctx: HttpContext, name: str, **kwargs: object) -> Folder:
     return await Folder.objects.acreate(
         name=name,
         creator=kwargs.pop("creator", ctx.request.user),
@@ -21,7 +26,9 @@ async def create_folder(ctx: HttpContext, name: str, **kwargs) -> Folder:
     )
 
 
-async def create_file(ctx: HttpContext, name: str, folder: Folder, **kwargs) -> File:
+async def create_file(
+    ctx: HttpContext, name: str, folder: Folder, **kwargs: object
+) -> File:
     return await File.objects.acreate(
         name=name,
         folder=folder,
@@ -298,7 +305,7 @@ def _register_into_scene_sync(
     scene: Scene,
     dataset: ArrayDataset | None,
     system: CoordinateSystem | None,
-):
+) -> Transformation:
     """One explicit MANUAL registration: the identity on the axis names shared with the world.
 
     Layer mutations no longer fabricate placements, so a test that wants a placed layer
@@ -381,7 +388,7 @@ async def register_into_scene(
     dataset: ArrayDataset | None = None,
     *,
     system: CoordinateSystem | None = None,
-):
+) -> Transformation:
     """Register a dataset's intrinsic system (or an explicit system) into a scene's world."""
     return await sync_to_async(_register_into_scene_sync)(ctx, scene, dataset, system)
 
@@ -433,15 +440,13 @@ FABRIKS_ENCODING = {
 
 def _seed_fabriks_store_sync(
     ctx: HttpContext, *, axes: list[str] | None, populated: bool
-):
+) -> FabriksStore:
     """A fabriks store carrying what `fill_info` would have read off its manifest.
 
     Created directly rather than through the upload path, because no test here has an S3 to
     write a tree to -- and what the tests are about is what the server does with a *finished*
     store, not how the bytes got there.
     """
-    from arkitekt_datalayer.models import FabriksStore
-
     key = f"fabriks-{FabriksStore.objects.count()}"
     return FabriksStore.objects.create(
         path=f"s3://fabriks/{key}",
@@ -458,7 +463,7 @@ def _seed_fabriks_store_sync(
 
 async def create_fabriks_store(
     ctx: HttpContext, *, axes: list[str] | None, populated: bool = True
-):
+) -> FabriksStore:
     """A finished fabriks store, ready to be registered as a collection.
 
     ``axes`` is what its manifest says the vertex slots are, and has no default: a collection
@@ -499,15 +504,13 @@ def _seed_konnektion_store_sync(
     attributes: list[dict] | None,
     encoding: dict | None,
     populated: bool,
-):
+) -> KonnektionStore:
     """A konnektion store carrying what `fill_info` would have read off its manifest.
 
     The graph twin of `_seed_fabriks_store_sync`, created directly for the same no-S3 reason.
     ``attributes=None`` is a store filled before attributes existed (or a collection built
     without them), which the picker paths must treat exactly as declaring none.
     """
-    from arkitekt_datalayer.models import KonnektionStore
-
     key = f"konnektion-{KonnektionStore.objects.count()}"
     return KonnektionStore.objects.create(
         path=f"s3://konnektion/{key}",
@@ -532,7 +535,7 @@ async def create_konnektion_store(
     attributes: "list[dict] | None" = KONNEKTION_ATTRIBUTES,
     encoding: dict | None = None,
     populated: bool = True,
-):
+) -> KonnektionStore:
     """A finished konnektion store, ready to be registered as a network collection."""
     return await sync_to_async(_seed_konnektion_store_sync)(
         ctx, axes=axes, attributes=attributes, encoding=encoding, populated=populated
@@ -545,7 +548,7 @@ def _seed_parquet_store_sync(
     key: str,
     columns: list[tuple[str, str]] | None = None,
     populated: bool = True,
-):
+) -> ParquetStore:
     """A parquet store carrying what `fill_info` would have read off the file.
 
     The same move `_seed_fabriks_store_sync` makes, and now necessary for the same reason: since
@@ -557,8 +560,6 @@ def _seed_parquet_store_sync(
     tests, because they are about placement and edges rather than about the file. Pass the pairs
     when the test is about the schema itself.
     """
-    from arkitekt_datalayer.models import ParquetStore
-
     return ParquetStore.objects.create(
         path=f"s3://parquet/{key}",
         bucket="parquet",
@@ -579,7 +580,7 @@ async def create_parquet_store(
     key: str,
     columns: list[tuple[str, str]] | None = None,
     populated: bool = True,
-):
+) -> ParquetStore:
     """A finished parquet store, ready to be registered as a table dataset."""
     return await sync_to_async(_seed_parquet_store_sync)(
         ctx, key=key, columns=columns, populated=populated

@@ -15,6 +15,7 @@ from core.models import (
     Annotation,
     AnnotationCollection,
     ArrayDataset,
+    ArrayLens,
     CoordinateSystem,
     Layer,
     Scene,
@@ -49,15 +50,18 @@ _X = [seed.axis("x", enums.AxisType.SPACE)]
 _INDEX = [seed.axis("i", enums.AxisType.INDEX)]
 
 
-async def execute(ctx, query, filters):
+async def execute(ctx: HttpContext, query: str, filters: dict) -> dict:
     result = await schema.execute(
         query, context_value=ctx, variable_values={"filters": filters}
     )
     assert not result.errors, result.errors
+    assert result.data is not None
     return result.data
 
 
-async def create_array_dataset(ctx, name, **kwargs):
+async def create_array_dataset(
+    ctx: HttpContext, name: str, **kwargs: object
+) -> ArrayDataset:
     creator = kwargs.pop("creator", None)
     dataset = await seed.create_array_dataset(
         ctx, name, shapes=[[1, 1, 1, 100, 100]], axes=_TCZYX
@@ -72,7 +76,7 @@ async def create_array_dataset(ctx, name, **kwargs):
     return dataset
 
 
-async def create_lens(dataset, slices: list | None = None):
+async def create_lens(dataset: ArrayDataset, slices: list | None = None) -> ArrayLens:
     """The whole lens the dataset has from creation, or the lens making `slices`."""
     from core.base_models import SliceInputModel
     from core.logic import coordinate_system as coordinate_system_logic
@@ -88,7 +92,7 @@ async def create_lens(dataset, slices: list | None = None):
     )
 
 
-async def create_scene(ctx, name, **kwargs):
+async def create_scene(ctx: HttpContext, name: str, **kwargs: object) -> Scene:
     # Scene.world is non-null: create a bare shared world the same way the seed helper does.
     from core.models import CoordinateSystem
 
@@ -102,7 +106,9 @@ async def create_scene(ctx, name, **kwargs):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_array_dataset_filters(db, authenticated_context: HttpContext):
+async def test_array_dataset_filters(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     other = await create_other_user(ctx)
     await create_array_dataset(ctx, "Acquisition", description="raw stack")
@@ -124,7 +130,7 @@ async def test_array_dataset_filters(db, authenticated_context: HttpContext):
     assert {d["name"] for d in data["arrayDatasets"]} == {"Acquisition"}
 
 
-async def _seed_spec_datasets(ctx):
+async def _seed_spec_datasets(ctx: HttpContext) -> None:
     """One dataset per shape of interest, named for what it is."""
     await seed.create_array_dataset(
         ctx, "Stack", shapes=[[5, 3, 4, 100, 100]], axes=_TCZYX
@@ -147,7 +153,9 @@ _SPEC_QUERY = """
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_array_dataset_spec_field(db, authenticated_context: HttpContext):
+async def test_array_dataset_spec_field(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The field reports every spec that holds, spatial member first."""
     ctx = authenticated_context
     await _seed_spec_datasets(ctx)
@@ -165,11 +173,13 @@ async def test_array_dataset_spec_field(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_array_dataset_spec_filter(db, authenticated_context: HttpContext):
+async def test_array_dataset_spec_filter(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     await _seed_spec_datasets(ctx)
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         data = await execute(ctx, _SPEC_QUERY, filters)
         return {d["name"] for d in data["arrayDatasets"]}
 
@@ -208,8 +218,8 @@ async def test_array_dataset_spec_filter(db, authenticated_context: HttpContext)
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_spec_filter_ignores_datasets_without_an_intrinsic_system(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A dataset whose axes are unknown answers to no spatial spec -- least of all SCALAR.
 
     Its `stored_spec` is the empty list (nothing materialized it), so the `spec` field
@@ -240,8 +250,8 @@ async def test_array_dataset_spec_filter_ignores_datasets_without_an_intrinsic_s
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_spec_is_materialized_at_creation(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The spec is written onto the column when the axes are, not derived on read.
 
     Asserts both faces of the contract: the raw `stored_spec` strings on the row, and the
@@ -291,8 +301,8 @@ _CROPS = [
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_an_axis_of_one_position_does_not_count_towards_the_spec(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A spec says what the data is: a stack of one plane is an image, and one frame is no timelapse.
 
     Each dataset below declares an axis its shape gives a single position along. The axis
@@ -330,7 +340,7 @@ async def test_an_axis_of_one_position_does_not_count_towards_the_spec(
         "Timelapse": ["VOLUME", "TIMESERIES", "MULTICHANNEL"],
     }
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         return {
             d["name"]
             for d in (await execute(ctx, _SPEC_QUERY, filters))["arrayDatasets"]
@@ -357,8 +367,8 @@ async def test_an_axis_of_one_position_does_not_count_towards_the_spec(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_axes_that_are_not_acquired_denote_a_spec_too(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A field and a per-object stack are found by what they are, under the same extent rule."""
     ctx = authenticated_context
     await seed.create_array_dataset(ctx, "Flow", shapes=[[64, 64, 2]], axes=_FLOW)
@@ -380,7 +390,7 @@ async def test_the_axes_that_are_not_acquired_denote_a_spec_too(
         "Plain": ["IMAGE"],
     }
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         return {
             d["name"]
             for d in (await execute(ctx, _SPEC_QUERY, filters))["arrayDatasets"]
@@ -400,8 +410,8 @@ async def test_the_axes_that_are_not_acquired_denote_a_spec_too(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_dataset_that_is_a_curve_along_one_measured_axis_is_a_trace(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """One measured axis with extent, at most one enumerating axis beside it: whatever is measured."""
     ctx = authenticated_context
     space, time, channel, index = (
@@ -411,7 +421,9 @@ async def test_a_dataset_that_is_a_curve_along_one_measured_axis_is_a_trace(
         enums.AxisType.INDEX,
     )
 
-    async def make(name, axes, shape):
+    async def make(
+        name: str, axes: list[tuple[str, enums.AxisType]], shape: list[int]
+    ) -> None:
         await seed.create_array_dataset(
             ctx,
             name,
@@ -448,7 +460,7 @@ async def test_a_dataset_that_is_a_curve_along_one_measured_axis_is_a_trace(
         "PerObject": ["SCALAR", "INDEXED"],
     }
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         return {
             d["name"]
             for d in (await execute(ctx, _SPEC_QUERY, filters))["arrayDatasets"]
@@ -474,8 +486,8 @@ async def test_a_dataset_that_is_a_curve_along_one_measured_axis_is_a_trace(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_stored_spec_this_build_does_not_know_is_left_out(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A rolled-back release reads rows a newer one wrote: an unknown member is not an error."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -492,8 +504,8 @@ async def test_a_stored_spec_this_build_does_not_know_is_left_out(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_spec_of_a_created_dataset_is_read_off_its_stores_shape(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Through the real mutation: the extents come from the store, not from anything the caller says."""
     ctx = authenticated_context
     store = await ZarrStore.objects.acreate(
@@ -532,8 +544,8 @@ async def test_the_spec_of_a_created_dataset_is_read_off_its_stores_shape(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_datasets_stored_under_the_old_rule_are_corrected_by_the_job(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A row that says VOLUME for a single plane is rewritten; one with nothing to read extents from is left."""
     ctx = authenticated_context
     zyx = [
@@ -575,8 +587,8 @@ async def test_datasets_stored_under_the_old_rule_are_corrected_by_the_job(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_spec_filter_composes_under_and_or(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`AND`/`OR` recurse with the same prefix onto one queryset, and the two filters must
     still compose correctly there.
 
@@ -590,7 +602,7 @@ async def test_array_dataset_spec_filter_composes_under_and_or(
     ctx = authenticated_context
     await _seed_spec_datasets(ctx)
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         data = await execute(ctx, _SPEC_QUERY, filters)
         return {d["name"] for d in data["arrayDatasets"]}
 
@@ -621,12 +633,12 @@ async def test_array_dataset_spec_filter_composes_under_and_or(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_has_axis_types_filter(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     await _seed_spec_datasets(ctx)
 
-    async def names(filters):
+    async def names(filters: dict) -> set[str]:
         data = await execute(ctx, _SPEC_QUERY, filters)
         return {d["name"] for d in data["arrayDatasets"]}
 
@@ -654,7 +666,9 @@ async def test_array_dataset_has_axis_types_filter(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_array_dataset_multiscale_filter(db, authenticated_context: HttpContext):
+async def test_array_dataset_multiscale_filter(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     await seed.create_array_dataset(
         ctx,
@@ -688,8 +702,8 @@ async def test_array_dataset_multiscale_filter(db, authenticated_context: HttpCo
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_has_physical_space_filter(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     calibrated = await seed.create_array_dataset(
         ctx, "Calibrated", shapes=[[3, 64, 64]], axes=seed.SIMPLE_AXES
@@ -723,8 +737,8 @@ async def test_array_dataset_has_physical_space_filter(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_has_physical_space_filter_does_not_duplicate_on_several_spaces(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A dataset carries stage space, specimen space, a refined edge -- and is still one row."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -753,7 +767,9 @@ async def test_array_dataset_has_physical_space_filter_does_not_duplicate_on_sev
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_array_dataset_scene_filter(db, authenticated_context: HttpContext):
+async def test_array_dataset_scene_filter(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`scene` is what is staged, and it reaches the dataset through its lenses' layers."""
     ctx = authenticated_context
     staged = await create_array_dataset(ctx, "Staged")
@@ -779,8 +795,8 @@ async def test_array_dataset_scene_filter(db, authenticated_context: HttpContext
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_scene_filter_does_not_duplicate_on_several_layers(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Two lenses of one dataset staged in one scene: two layers, still one dataset."""
     ctx = authenticated_context
     staged = await create_array_dataset(ctx, "Staged")
@@ -806,8 +822,8 @@ async def test_array_dataset_scene_filter_does_not_duplicate_on_several_layers(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_dataset_filters_combine_over_multiplying_joins(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The counting filters must survive the joins the others add.
 
     `hasPhysicalSpace` and `scene` each join a to-many relation and call `.distinct()`, while
@@ -850,7 +866,7 @@ async def test_array_dataset_filters_combine_over_multiplying_joins(
         }
     """
 
-    async def names(filters):
+    async def names(filters: dict) -> list[str]:
         data = await execute(ctx, query, filters)
         return [d["name"] for d in data["arrayDatasets"]]
 
@@ -875,7 +891,7 @@ async def test_array_dataset_filters_combine_over_multiplying_joins(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_scene_filters(db, authenticated_context: HttpContext):
+async def test_scene_filters(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     await create_scene(ctx, "RootScene")
     await create_scene(ctx, "SubScene")
@@ -892,7 +908,7 @@ async def test_scene_filters(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_layer_filters(db, authenticated_context: HttpContext):
+async def test_layer_filters(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     array_dataset = await create_array_dataset(ctx, "ADS")
     lens_a = await create_lens(array_dataset)
@@ -933,7 +949,9 @@ async def test_layer_filters(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_lens_filter_by_dataset(db, authenticated_context: HttpContext):
+async def test_lens_filter_by_dataset(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
     ds_a = await create_array_dataset(ctx, "A")
     ds_b = await create_array_dataset(ctx, "B")
@@ -951,7 +969,7 @@ async def test_lens_filter_by_dataset(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_annotation_filters(db, authenticated_context: HttpContext):
+async def test_annotation_filters(db: None, authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     ds_a = await create_array_dataset(ctx, "A")
     ds_b = await create_array_dataset(ctx, "B")

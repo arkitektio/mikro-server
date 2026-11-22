@@ -159,7 +159,7 @@ _CONTAINERS = {
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_every_container_has_its_whole_lens_from_creation_and_it_is_the_one_asked_for(
     authenticated_context: HttpContext, kind: str
-):
+) -> None:
     """Creating the container made its whole lens, in its own space; asking for no windows, or windows that keep everything, is that lens."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]
@@ -202,7 +202,7 @@ async def test_every_container_has_its_whole_lens_from_creation_and_it_is_the_on
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_the_same_windows_are_the_same_lens_however_spelled(
     authenticated_context: HttpContext, kind: str
-):
+) -> None:
     """Two calls for one window are one id, stored as floats in the container's axis order, and no system is minted."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]
@@ -238,7 +238,7 @@ async def test_the_same_windows_are_the_same_lens_however_spelled(
 @pytest.mark.asyncio
 async def test_a_window_that_cannot_be_made_is_refused_in_prose(
     authenticated_context: HttpContext,
-):
+) -> None:
     """An axis the container lacks, an axis windowed twice and an empty window are refused, and nothing is written."""
     ctx = authenticated_context
     table_id, mutation, field = await _a_table(ctx)
@@ -265,7 +265,7 @@ async def test_a_window_that_cannot_be_made_is_refused_in_prose(
 @pytest.mark.asyncio
 async def test_windows_are_stored_in_the_containers_axis_order(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The order a caller lists windows in is not part of the selection."""
     ctx = authenticated_context
     table_id, mutation, field = await _a_table(ctx)
@@ -296,7 +296,7 @@ async def test_windows_are_stored_in_the_containers_axis_order(
 @pytest.mark.asyncio
 async def test_a_windowed_lens_is_a_resident_of_its_containers_space_that_the_container_speaks_for(
     authenticated_context: HttpContext,
-):
+) -> None:
     """It shows among the space's residents as its kind, and `deleteLens` refuses the whole lens and allows a window nothing draws through."""
     ctx = authenticated_context
     table_id, mutation, field = await _a_table(ctx)
@@ -333,7 +333,7 @@ async def test_a_windowed_lens_is_a_resident_of_its_containers_space_that_the_co
 @pytest.mark.asyncio
 async def test_a_lens_is_found_by_its_containers_label_whatever_the_container(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A sparse dataset by its name; a mesh and a network collection by their name, or by their store's key when they have none."""
     ctx = authenticated_context
     sparse_id, _, _ = await _a_sparse(ctx)
@@ -365,7 +365,7 @@ async def test_a_lens_is_found_by_its_containers_label_whatever_the_container(
 @pytest.mark.asyncio
 async def test_a_window_of_a_window_is_the_tables_lens_for_the_tighter_bounds(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Windows stated over a lens intersect with its own; an empty intersection is refused."""
     ctx = authenticated_context
     table_id, mutation, field = await _a_table(ctx)
@@ -409,7 +409,7 @@ _CONTAINER_FIELD = {
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_a_container_of_any_kind_lists_its_lenses_and_names_its_whole_one(
     authenticated_context: HttpContext, kind: str
-):
+) -> None:
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]
     container_id, mutation, field = await make(ctx)
@@ -438,7 +438,7 @@ async def test_a_container_of_any_kind_lists_its_lenses_and_names_its_whole_one(
 @pytest.mark.asyncio
 async def test_a_whole_lens_over_a_table_nominates_a_scene_of_its_own_and_lists_the_scenes_that_show_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """A table nominates no scene, so its whole lens holds the nomination itself; `scenes` and `scenes(filters: {lens})` answer alike for any kind."""
     ctx = authenticated_context
     table, _ = await _seed_table_dataset(ctx, "spots")
@@ -475,7 +475,9 @@ async def test_a_whole_lens_over_a_table_nominates_a_scene_of_its_own_and_lists_
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_window_may_be_a_single_position(authenticated_context: HttpContext):
+async def test_a_window_may_be_a_single_position(
+    authenticated_context: HttpContext,
+) -> None:
     """Inclusive on both sides, `[5, 5]` keeps the positions at 5 -- one timepoint, one feature, one channel -- and is a lens like any other."""
     ctx = authenticated_context
     table_id, mutation, field = await _a_table(ctx)

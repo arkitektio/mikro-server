@@ -15,7 +15,7 @@ from core import enums, models
 from mikro_server.schema import schema
 from mikro_server.service import service
 from tests import seed
-from tests.test_rekuest_signals import intake  # noqa: F401  the fixture
+from tests.test_rekuest_signals import _Intake
 from tests.test_scene_snapshot import _snapshot
 from tests.test_task_provenance import (
     attach_provenance,
@@ -64,7 +64,7 @@ EXPECTED = {
 }
 
 
-def _of(intake, identifier: str, count: int = 1) -> list[dict]:  # noqa: F811
+def _of(intake: _Intake, identifier: str, count: int = 1) -> list[dict]:
     import time
 
     def matching() -> list[dict]:
@@ -79,12 +79,12 @@ def _of(intake, identifier: str, count: int = 1) -> list[dict]:  # noqa: F811
     return matching()
 
 
-def test_the_manifest_declares_every_model_signal():
+def test_the_manifest_declares_every_model_signal() -> None:
     declared = {s["identifier"]: s["kinds"] for s in service.manifest()["signals"]}
     assert declared == EXPECTED
 
 
-def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
+def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors() -> None:
     hosted = {s["identifier"]: s for s in service.manifest()["structures"]}
     # Everything hosted is signalled, lenses included: nothing lives here silently.
     assert set(hosted) == set(EXPECTED)
@@ -108,8 +108,8 @@ def test_the_manifest_lists_what_mikro_hosts_with_its_descriptors():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_new_scene_is_signalled_with_its_descriptors(
-    intake, authenticated_context: HttpContext
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Signalled scene")
 
     (received,) = _of(intake, "@mikro/scene")
@@ -136,8 +136,8 @@ async def test_a_new_scene_is_signalled_with_its_descriptors(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_the_coordinate_graph_and_the_stores_under_the_data_are_announced(
-    intake, authenticated_context: HttpContext
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     dataset = await seed.create_array_dataset(authenticated_context, "Announced")
 
     systems = {
@@ -176,8 +176,8 @@ async def test_the_coordinate_graph_and_the_stores_under_the_data_are_announced(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_snapshot_made_in_a_task_carries_that_tasks_token(
-    intake, authenticated_context: HttpContext
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     scene = await seed.create_scene(authenticated_context, "Rendered")
     attach_provenance(authenticated_context, make_provenance(task_id="88"))
     snapshot = await _snapshot(authenticated_context, scene, "render.png")
@@ -195,8 +195,8 @@ async def test_a_snapshot_made_in_a_task_carries_that_tasks_token(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_crop_is_signalled_with_its_descriptors(
-    intake, authenticated_context: HttpContext
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext
+) -> None:
     """The whole lens arrives with its dataset; a crop on its own, saying it is not whole; naming the channel it pins renames it, and a delete follows it."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -250,8 +250,8 @@ async def test_a_crop_is_signalled_with_its_descriptors(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_a_windowed_lens_is_signalled_and_goes_with_its_container(
-    intake, authenticated_context: HttpContext, kind: str
-):  # noqa: F811
+    intake: _Intake, authenticated_context: HttpContext, kind: str
+) -> None:
     """A window is announced in its kind's vocabulary; deleting the container announces the lens gone, described while its container still stands."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]

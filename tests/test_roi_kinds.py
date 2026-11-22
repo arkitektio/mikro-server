@@ -33,7 +33,7 @@ mutation Create($input: CreateAnnotationInput!) {
 """
 
 
-def test_the_new_kinds_reach_the_graphql_enum():
+def test_the_new_kinds_reach_the_graphql_enum() -> None:
     """Both enums carry them: the Django one is what is stored, the strawberry one what is asked for.
 
     Named against ``AnnotationKind``, which is what backs ``Annotation.kind``. It used to assert
@@ -56,8 +56,8 @@ def test_the_new_kinds_reach_the_graphql_enum():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_drawn_sphere_gets_its_box_for_free(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The kind-blind annotation write path already boxes a corner-encoded shape correctly.
 
     No branch in ``compute_intrinsic_bbox`` knows what a sphere is, and none needs
@@ -106,8 +106,8 @@ async def test_a_drawn_sphere_gets_its_box_for_free(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_drawn_point_set_is_hulled_not_connected(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """MULTI_POINT stores every click; the box spans them all."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Counts")
@@ -133,7 +133,9 @@ async def test_a_drawn_point_set_is_hulled_not_connected(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_new_kinds_are_filterable(db, authenticated_context: HttpContext):
+async def test_the_new_kinds_are_filterable(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`AnnotationFilter.kind` derives its enum from `AnnotationKindChoices`, so it picks the kinds up for free."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Filterable")

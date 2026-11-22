@@ -22,7 +22,7 @@ mutation C($input: CreateChartInput!) { createChart(input: $input) { id layout }
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_chart_remembers_its_layout(authenticated_context: HttpContext):
+async def test_a_chart_remembers_its_layout(authenticated_context: HttpContext) -> None:
     ctx = authenticated_context
     _, _, space = await _nuclei(ctx)
     chart = await _values_chart(ctx, space)
@@ -49,7 +49,7 @@ async def test_a_chart_remembers_its_layout(authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_any_chart_takes_any_layout(authenticated_context: HttpContext):
+async def test_any_chart_takes_any_layout(authenticated_context: HttpContext) -> None:
     """OVERLAY over a table's rows is accepted: it only ever puts along-axis layers in one plot."""
     ctx = authenticated_context
     _, _, space = await _nuclei(ctx)

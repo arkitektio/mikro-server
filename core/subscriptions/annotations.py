@@ -25,7 +25,7 @@ class AnnotationEvent:
 
 
 async def annotations(
-    self,
+    self: object,
     info: Info,
     collection: strawberry.ID,
 ) -> AsyncGenerator[AnnotationEvent, None]:

@@ -143,7 +143,7 @@ async def following(
             {"type": "websocket.receive", "text": json.dumps(start)}
         )
         async with asyncio.timeout(5):
-            while not get_channel_layer().groups.get(room):
+            while not get_channel_layer().groups.get(room):  # noqa: ASYNC110 -- polls the channel layer, which has no event to await
                 await asyncio.sleep(0.01)
         try:
             yield Follower(client, field)
@@ -185,7 +185,9 @@ async def _run(ctx: HttpContext, query: str, input: dict) -> dict:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_scenes_layers_are_followed(db, authenticated_context: HttpContext):
+async def test_a_scenes_layers_are_followed(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A layer added to the scene, edited and removed each arrive; another scene's do not."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
@@ -246,8 +248,8 @@ async def test_a_scenes_layers_are_followed(db, authenticated_context: HttpConte
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_clearing_a_scene_tells_its_followers_about_every_layer(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`clearScene` deletes through the queryset: still one delete event per layer."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
@@ -273,8 +275,8 @@ async def test_clearing_a_scene_tells_its_followers_about_every_layer(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_array_datasets_are_followed_by_folder_and_by_organization(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A folder's followers hear that folder only; the organization's hear every folder."""
     ctx = authenticated_context
     folder = await seed.create_folder(ctx, "Experiment")
@@ -363,7 +365,9 @@ async def test_array_datasets_are_followed_by_folder_and_by_organization(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_table_datasets_are_followed(db, authenticated_context: HttpContext):
+async def test_table_datasets_are_followed(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A created table arrives whole -- its columns are written in the same transaction, and the event waits for it."""
     ctx = authenticated_context
     columns = [
@@ -430,7 +434,9 @@ async def test_table_datasets_are_followed(db, authenticated_context: HttpContex
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_scenes_are_followed(db, authenticated_context: HttpContext):
+async def test_scenes_are_followed(
+    db: None, authenticated_context: HttpContext
+) -> None:
     ctx = authenticated_context
 
     async with following(
@@ -474,7 +480,9 @@ async def test_scenes_are_followed(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_datasets_lenses_are_followed(db, authenticated_context: HttpContext):
+async def test_a_datasets_lenses_are_followed(
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A dataset's followers hear its crops only; the organization's hear every container's."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -550,8 +558,8 @@ async def test_a_datasets_lenses_are_followed(db, authenticated_context: HttpCon
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", list(_CONTAINERS))
 async def test_a_windowed_lens_is_followed(
-    db, authenticated_context: HttpContext, kind: str
-):
+    db: None, authenticated_context: HttpContext, kind: str
+) -> None:
     """A container of any kind can be followed; a window over it arrives as its kind."""
     ctx = authenticated_context
     make, model, axis = _CONTAINERS[kind]
@@ -578,8 +586,8 @@ async def test_a_windowed_lens_is_followed(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_a_container_tells_its_lens_followers(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The cascade announces every lens the container took with it: the whole lens and the crop."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
@@ -609,8 +617,8 @@ async def test_deleting_a_container_tells_its_lens_followers(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_another_organization_hears_nothing(
-    db, authenticated_context: HttpContext, other_org_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, other_org_context: HttpContext
+) -> None:
     """Org-wide followers of another organization are in another room; a foreign scene or folder cannot be followed at all."""
     ctx = authenticated_context
     scene = await seed.create_scene(ctx, "Canvas")
@@ -645,8 +653,8 @@ async def test_another_organization_hears_nothing(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_rolled_back_change_is_never_announced(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Events wait for the commit: a write that rolls back tells nobody."""
     from asgiref.sync import sync_to_async
     from django.db import transaction

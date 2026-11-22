@@ -10,6 +10,7 @@ which passes the write gate but is not mikro's admin, so the guard applies to it
 """
 
 import pytest
+from authentikate.models import User
 from kante.context import HttpContext
 
 from core import models
@@ -22,7 +23,9 @@ from tests.seed import create_folder, create_other_user
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_creator_can_delete_own_folder(db, authenticated_context: HttpContext):
+async def test_creator_can_delete_own_folder(
+    db: None, authenticated_context: HttpContext
+) -> None:
     folder = await create_folder(authenticated_context, "Mine")
 
     mutation = "mutation($id: ID!) { deleteFolder(input: {id: $id}) }"
@@ -39,8 +42,8 @@ async def test_creator_can_delete_own_folder(db, authenticated_context: HttpCont
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_non_owner_non_admin_cannot_delete_folder(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     # Owned by the admin user (sub 1); the bot user (sub 2, same org) is neither
     # creator nor assignee nor admin.
     folder = await create_folder(authenticated_context, "NotYours")
@@ -66,8 +69,8 @@ async def test_non_owner_non_admin_cannot_delete_folder(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_org_admin_can_delete_other_users_folder(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     # Created by a second user (sub 2); deleted by the admin user (sub 1).
     bot_user = await create_other_user(authenticated_context)
     folder = await create_folder(authenticated_context, "BotsFolder", creator=bot_user)
@@ -86,8 +89,8 @@ async def test_org_admin_can_delete_other_users_folder(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_assignee_can_delete_folder(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     # Creator is the admin user, but the bot user is the assigner
     # (created_through_by): the assignee path lets the bot delete it.
     bot_user = await create_other_user(authenticated_context)
@@ -107,7 +110,9 @@ async def test_assignee_can_delete_folder(
 # --- newly added delete mutations (wired + delete) ---------------------------
 
 
-async def _seed_array_dataset(ctx: HttpContext, *, creator=None) -> models.ArrayDataset:
+async def _seed_array_dataset(
+    ctx: HttpContext, *, creator: User | None = None
+) -> models.ArrayDataset:
     dataset = await seed.create_array_dataset(ctx, "ADS", shapes=[[1, 32, 32]])
     if creator is None:
         dataset.creator = None
@@ -117,7 +122,9 @@ async def _seed_array_dataset(ctx: HttpContext, *, creator=None) -> models.Array
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_array_dataset(db, authenticated_context: HttpContext):
+async def test_delete_array_dataset(
+    db: None, authenticated_context: HttpContext
+) -> None:
     array_dataset = await _seed_array_dataset(
         authenticated_context, creator=authenticated_context.request.user
     )
@@ -136,8 +143,8 @@ async def test_delete_array_dataset(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_delete_array_dataset_denied_for_non_owner(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     array_dataset = await _seed_array_dataset(
         authenticated_context, creator=authenticated_context.request.user
     )
@@ -155,7 +162,7 @@ async def test_delete_array_dataset_denied_for_non_owner(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_lens(db, authenticated_context: HttpContext):
+async def test_delete_lens(db: None, authenticated_context: HttpContext) -> None:
     """A sliced lens nothing draws through can go."""
     array_dataset = await _seed_array_dataset(
         authenticated_context, creator=authenticated_context.request.user
@@ -180,8 +187,8 @@ async def test_delete_lens(db, authenticated_context: HttpContext):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_a_crop_takes_its_own_space_and_edge(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """A crop owns the space it re-indexes into and the edge back to the grid; nothing else is attached, so both go with it."""
     ctx = authenticated_context
     array_dataset = await _seed_array_dataset(ctx, creator=ctx.request.user)
@@ -217,8 +224,8 @@ async def test_deleting_a_crop_takes_its_own_space_and_edge(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_crop_whose_space_is_registered_elsewhere_leaves_the_space_behind(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """Someone built on the crop's space -- registered it into another -- so the space outlives the crop, with the edges it had."""
     ctx = authenticated_context
     array_dataset = await _seed_array_dataset(ctx, creator=ctx.request.user)
@@ -262,8 +269,8 @@ async def test_a_crop_whose_space_is_registered_elsewhere_leaves_the_space_behin
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_deleting_a_container_takes_the_layers_drawn_through_its_lenses_in_every_scene(
-    db, authenticated_context: HttpContext, bot_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext, bot_context: HttpContext
+) -> None:
     """A lens is refused while layers draw through it; its container is not. Deleting what a layer drew takes the layer, whoever's scene it is in, and the scene stays.
 
     Said rather than guarded: a scene has no owner to decide "someone else's" by, and the
@@ -305,8 +312,8 @@ async def test_deleting_a_container_takes_the_layers_drawn_through_its_lenses_in
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_datasets_whole_lens_cannot_be_deleted(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The whole lens is the dataset's handle: it goes with the dataset, never on its own."""
     array_dataset = await _seed_array_dataset(
         authenticated_context, creator=authenticated_context.request.user
@@ -336,8 +343,8 @@ async def test_a_datasets_whole_lens_cannot_be_deleted(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_lens_a_layer_draws_through_cannot_be_deleted(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """`Layer.lens` cascades and the lens is shared, so deleting it would empty scenes the caller never named."""
     array_dataset = await _seed_array_dataset(
         authenticated_context, creator=authenticated_context.request.user
@@ -372,8 +379,8 @@ async def test_a_lens_a_layer_draws_through_cannot_be_deleted(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_a_lens_a_chart_draws_through_cannot_be_deleted(
-    db, authenticated_context: HttpContext
-):
+    db: None, authenticated_context: HttpContext
+) -> None:
     """The same guard, for the other composition that reads a lens."""
     from chart import models as chart_models
 
@@ -410,7 +417,7 @@ async def test_a_lens_a_chart_draws_through_cannot_be_deleted(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_scene(db, authenticated_context: HttpContext):
+async def test_delete_scene(db: None, authenticated_context: HttpContext) -> None:
     scene = await seed.create_scene(authenticated_context)
 
     mutation = "mutation($id: ID!) { deleteScene(input: {id: $id}) }"
@@ -426,7 +433,7 @@ async def test_delete_scene(db, authenticated_context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_delete_layer(db, authenticated_context: HttpContext):
+async def test_delete_layer(db: None, authenticated_context: HttpContext) -> None:
     scene = await seed.create_scene(authenticated_context)
     image = await seed.create_array_dataset(authenticated_context, "Drawn")
     layer = await models.Layer.objects.acreate(

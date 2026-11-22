@@ -18,15 +18,20 @@ store-to-SQL wiring is stubbed, because DuckDB reads S3 over its own HTTP client
 -- a botocore patch -- does not intercept.
 """
 
+from collections.abc import Sequence
+from typing import Never, TypeAlias
+
 import pytest
 from arkitekt_datalayer import base_models
 from arkitekt_datalayer.datalayer import Datalayer
 from arkitekt_datalayer.duck import DuckLayer
+from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
 
 from core.logic import tables as tables_logic
 
 
-def test_the_duck_layer_offers_the_query_method_its_callers_use():
+def test_the_duck_layer_offers_the_query_method_its_callers_use() -> None:
     """A real query through the facade, not an assertion that a mock was called.
 
     `get_parquet_schema` calls `duck.sql(...)`. That the class *has* `connection` is not the
@@ -38,7 +43,7 @@ def test_the_duck_layer_offers_the_query_method_its_callers_use():
     assert layer.sql("SELECT 42 AS answer;").fetchall() == [(42,)]
 
 
-def test_the_facade_runs_on_the_s3_configured_connection():
+def test_the_facade_runs_on_the_s3_configured_connection() -> None:
     """The point of the facade: the secret setup stays an implementation detail.
 
     A caller reaching through `.connection` itself would work too, but then every call site
@@ -52,25 +57,31 @@ def test_the_facade_runs_on_the_s3_configured_connection():
     )
 
 
+#: What DuckDB's DESCRIBE answers: one tuple per column.
+DescribeRows: TypeAlias = Sequence[tuple[object, ...]]
+
+
 class _FakeRelation:
-    def __init__(self, rows):
+    def __init__(self, rows: DescribeRows) -> None:
         self._rows = rows
 
-    def fetchall(self):
+    def fetchall(self) -> DescribeRows:
         return self._rows
 
 
 class _FakeDuck:
-    def __init__(self, rows, captured):
+    def __init__(self, rows: DescribeRows, captured: list[str]) -> None:
         self._rows = rows
         self._captured = captured
 
-    def sql(self, query: str, params=None):
+    def sql(self, query: str, params: object = None) -> _FakeRelation:
         self._captured.append(query)
         return _FakeRelation(self._rows)
 
 
-def _stub_duck(monkeypatch, rows, captured):
+def _stub_duck(
+    monkeypatch: pytest.MonkeyPatch, rows: DescribeRows, captured: list[str]
+) -> None:
     """Point `Datalayer.get_parquet_schema` at a fake DuckDB, wherever it imports it from."""
     import arkitekt_datalayer.duck as duck_module
 
@@ -79,7 +90,7 @@ def _stub_duck(monkeypatch, rows, captured):
     )
 
 
-def test_a_store_is_described_rather_than_read(monkeypatch):
+def test_a_store_is_described_rather_than_read(monkeypatch: pytest.MonkeyPatch) -> None:
     """The schema is a DESCRIBE over the parquet, never a scan of its values.
 
     A table dataset can be very large and only its column names and types are wanted, so
@@ -111,7 +122,9 @@ def test_a_store_is_described_rather_than_read(monkeypatch):
     )
 
 
-def test_the_nullable_flag_is_read_off_the_describe(monkeypatch):
+def test_the_nullable_flag_is_read_off_the_describe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """DESCRIBE reports nullability as the strings YES/NO, not as a boolean."""
     _stub_duck(
         monkeypatch,
@@ -130,7 +143,7 @@ def test_the_nullable_flag_is_read_off_the_describe(monkeypatch):
     assert [column.nullable for column in columns] == [True, False]
 
 
-def test_the_file_order_of_the_columns_is_kept(monkeypatch):
+def test_the_file_order_of_the_columns_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
     """File order is the order a `Column` row's `order` will be written in, so it must survive."""
     rows = [(name, "BIGINT", "YES", None, None, None) for name in ("z", "a", "m")]
     _stub_duck(monkeypatch, rows, [])
@@ -146,7 +159,9 @@ def test_the_file_order_of_the_columns_is_kept(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_context):
+def test_fill_info_records_what_the_file_declared(
+    monkeypatch: pytest.MonkeyPatch, authenticated_context: HttpContext
+) -> None:
     """The whole point of the move: after a finish, the schema is on the row.
 
     Nothing on the create path goes back to S3 for it -- which is why `create_table_dataset`
@@ -181,12 +196,12 @@ def test_fill_info_records_what_the_file_declared(monkeypatch, authenticated_con
 
 @pytest.mark.django_db
 def test_columns_for_store_reads_the_row_rather_than_the_file(
-    monkeypatch, authenticated_context
-):
+    monkeypatch: pytest.MonkeyPatch, authenticated_context: HttpContext
+) -> None:
     """A described store is never re-described; the answer is already on it."""
     from arkitekt_datalayer import models
 
-    def _refuse(self, store):
+    def _refuse(self: Datalayer, store: object) -> Never:
         raise AssertionError(
             "a store that recorded its schema must not be described again"
         )
@@ -208,8 +223,8 @@ def test_columns_for_store_reads_the_row_rather_than_the_file(
 
 @pytest.mark.django_db
 def test_a_store_written_before_the_field_existed_falls_back_to_describing(
-    monkeypatch, authenticated_context
-):
+    monkeypatch: pytest.MonkeyPatch, authenticated_context: HttpContext
+) -> None:
     """`columns` is null on every store finished before this field, and those still work."""
     from arkitekt_datalayer import models
 
@@ -234,7 +249,9 @@ def test_a_store_written_before_the_field_existed_falls_back_to_describing(
 
 
 @pytest.mark.django_db
-def test_the_parquet_source_names_the_configured_bucket(settings):
+def test_the_parquet_source_names_the_configured_bucket(
+    settings: SettingsWrapper,
+) -> None:
     """The URL DuckDB is handed is built from the datalayer's own bucket configuration."""
 
     class FakeStore:
@@ -244,7 +261,9 @@ def test_the_parquet_source_names_the_configured_bucket(settings):
     assert tables_logic.parquet_source_for_store(FakeStore()).endswith("/abc123")
 
 
-def test_the_connection_outlives_the_relation_it_returns(monkeypatch):
+def test_the_connection_outlives_the_relation_it_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """`sql()` returns a lazy relation, so the layer that owns the connection must stay alive.
 
     Written after the real failure: `get_current_duck().sql(...).fetchall()` on one line left
@@ -258,23 +277,23 @@ def test_the_connection_outlives_the_relation_it_returns(monkeypatch):
     """
 
     class ClosingRelation:
-        def __init__(self, owner, rows):
+        def __init__(self, owner: dict[str, bool], rows: DescribeRows) -> None:
             self._owner = owner
             self._rows = rows
 
-        def fetchall(self):
+        def fetchall(self) -> DescribeRows:
             if self._owner["closed"]:
                 raise RuntimeError("Connection has already been closed")
             return self._rows
 
     class ClosingDuck:
-        def __init__(self, state):
+        def __init__(self, state: dict[str, bool]) -> None:
             self._state = state
 
-        def __del__(self):
+        def __del__(self) -> None:
             self._state["closed"] = True
 
-        def sql(self, query: str, params=None):
+        def sql(self, query: str, params: object = None) -> ClosingRelation:
             # The relation deliberately does NOT reference the layer, exactly as duckdb's does
             # not keep its connection alive from Python's side.
             return ClosingRelation(

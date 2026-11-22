@@ -2,6 +2,9 @@
 
 import os
 import re
+from collections.abc import Iterator
+
+from django.db.models import Model
 
 
 def test_minimum_vertex_table_is_keyed_on_the_live_annotation_kinds() -> None:
@@ -235,7 +238,7 @@ def test_every_layer_kind_has_exactly_one_registered_concrete_type() -> None:
     )
 
 
-def _query_fields_reading_rows():
+def _query_fields_reading_rows() -> Iterator[tuple[str, type, type[Model]]]:
     """Every Query field strawberry_django resolves itself, as (name, django type, model).
 
     Fields with their own resolver are excluded: they scope explicitly, through

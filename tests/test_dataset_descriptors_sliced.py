@@ -26,7 +26,7 @@ mutation Cut($input: CreateLensInput!) {
 """
 
 
-async def _sliced(ctx: HttpContext, dataset_id: str, slices: list[dict]):
+async def _sliced(ctx: HttpContext, dataset_id: str, slices: list[dict]) -> dict:
     result = await schema.execute(
         SLICED,
         context_value=_fresh_request(ctx),
@@ -50,7 +50,7 @@ async def _cut(ctx: HttpContext, dataset_id: str, slices: list[dict]) -> dict:
 @pytest.mark.asyncio
 async def test_a_dataset_says_what_a_selection_provides_without_making_it(
     authenticated_context: HttpContext,
-):
+) -> None:
     """The answer is the lens' own descriptors, and asking writes no lens."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(ctx, "Channels", shapes=[[3, 6, 8]])
@@ -81,7 +81,7 @@ async def test_a_dataset_says_what_a_selection_provides_without_making_it(
 @pytest.mark.asyncio
 async def test_a_selection_the_cut_would_refuse_has_no_descriptors(
     authenticated_context: HttpContext,
-):
+) -> None:
     """Where `createLens` would refuse, the answer is null rather than an error."""
     ctx = authenticated_context
     dataset = await seed.create_array_dataset(
