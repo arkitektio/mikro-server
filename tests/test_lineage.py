@@ -7,6 +7,8 @@ here are the guard against the two drifting. The rest pins what the walk adds ov
 lineage rather than the organization.
 """
 
+import uuid
+
 import pytest
 from asgiref.sync import sync_to_async
 from authentikate.models import Organization
@@ -884,7 +886,7 @@ async def test_roots_narrow_by_creator_collaboration_and_time(
 
     day = lambda hour: datetime.datetime(2026, 10, 22, hour, tzinfo=datetime.UTC)  # noqa: E731
 
-    def stage() -> int:
+    def stage() -> str:
         # The series converted out of raw.czi was acquired 10:00-11:00; "Written" at 14:00.
         models.ArrayDataset.objects.filter(pk=ids["acquired"]).update(
             acquisition_start=day(10), acquisition_end=day(11)
@@ -897,7 +899,9 @@ async def test_roots_narrow_by_creator_collaboration_and_time(
         )
         models.ArrayDataset.objects.filter(pk=written.pk).update(stored_spec=["IMAGE"])
         org = Organization.objects.get(identifier="static_issuer#static_org")
-        collaboration = Collaboration.objects.create(organization=org, name="Shared")
+        collaboration = Collaboration.objects.create(
+            organization=org, key=uuid.uuid4(), name="Shared"
+        )
         # Only the converted series is put in; its file counts as in through it.
         CollaborationItem.objects.create(
             collaboration=collaboration,
@@ -909,7 +913,7 @@ async def test_roots_narrow_by_creator_collaboration_and_time(
             content_type=ContentType.objects.get_for_model(models.TableDataset),
             object_id=str(uploaded["id"]),
         )
-        return collaboration.pk
+        return str(collaboration.key)
 
     collaboration = await sync_to_async(stage)()
 
@@ -930,7 +934,20 @@ async def test_roots_narrow_by_creator_collaboration_and_time(
         {"owner": authenticated_context.request.user.sub}
     )
 
-    assert await keys({"collaboration": str(collaboration)}) == {raw, table}
+    assert await keys({"collaboration": collaboration}) == {raw, table}
+    # The same rows a list's `inCollaboration` gives; a key that names nothing here, none.
+    listed = await schema.execute(
+        "query ($key: ID!) { tableDatasets(filters: {inCollaboration: $key}) { id } }",
+        context_value=authenticated_context,
+        variable_values={"key": collaboration},
+    )
+    assert not listed.errors, listed.errors
+    assert listed.data is not None
+    assert {f"tabledataset:{row['id']}" for row in listed.data["tableDatasets"]} == {
+        table
+    }
+    assert await keys({"collaboration": str(uuid.uuid4())}) == set()
+    assert await keys({"collaboration": "not-a-key"}) == set()
 
     assert await keys(
         {"acquiredAfter": day(9).isoformat(), "acquiredBefore": day(12).isoformat()}

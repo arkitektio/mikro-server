@@ -1117,15 +1117,17 @@ class RootFilter:
     acquisition window, so a file is judged by the series converted out of it, and every other
     kind drops out while either is set. ``spec`` works the same way, on
     ``ArrayDatasetFilter.spec``'s line (every one of them); a file's acquisition window and spec
-    are read off one series, so a file matches only when one of its series meets both. A file
-    is in a collaboration when it, or a series converted out of it, was put there.
+    are read off one series, so a file matches only when one of its series meets both.
+    ``collaboration`` is a collaboration's key: what is in it here, put in or part of what was
+    -- the very rows ``inCollaboration`` lists -- and a file when it, or a series converted out
+    of it, is.
     ``search`` matches a name, ignoring case, anywhere in it; a file also matches by the name
     of a series converted out of it. A kind that carries an embedding also matches by meaning,
     and the result is ranked as ``embeddings.search.hybrid_search`` ranks, then newest first.
     """
 
     owner: str | None = None
-    collaboration: int | None = None
+    collaboration: str | None = None
     created_after: object = None
     created_before: object = None
     acquired_after: object = None
@@ -1197,21 +1199,43 @@ def _spec_sql(alias: str) -> str:
     )
 
 
-def _in_collaboration_sql(model: type, pk_sql: str) -> str:
-    """Whether the row whose key ``pk_sql`` reads is an item of the asked collaboration (of this organization)."""
-    from arkitekt_service.collaborations.models import Collaboration, CollaborationItem
-    from django.contrib.contenttypes.models import ContentType
+def _held_param(key: str) -> str:
+    """The parameter carrying the ids of the ``key`` kind's rows in the asked collaboration."""
+    return f"held_{key}"
 
-    item, collab, ct = CollaborationItem._meta, Collaboration._meta, ContentType._meta
-    return (
-        f"EXISTS (SELECT 1 FROM {_q(item.db_table)} ci"
-        f" JOIN {_q(collab.db_table)} c ON c.{_q(collab.pk.column)} = ci.{_q(_column(CollaborationItem, 'collaboration'))}"
-        f" JOIN {_q(ct.db_table)} ct ON ct.{_q(ct.pk.column)} = ci.{_q(_column(CollaborationItem, 'content_type'))}"
-        f" WHERE ci.{_q(_column(CollaborationItem, 'collaboration'))} = %(collaboration)s"
-        f" AND c.{_q(_column(Collaboration, 'organization'))} = %(org)s"
-        f" AND ct.app_label = '{model._meta.app_label}' AND ct.model = '{model._meta.model_name}'"
-        f" AND ci.{_q(_column(CollaborationItem, 'object_id'))} = ({pk_sql})::text)"
-    )
+
+def _in_collaboration_sql(key: str, pk_sql: str) -> str:
+    """Whether the ``key`` kind's row whose id ``pk_sql`` reads is in the asked collaboration.
+
+    The ids ride as a parameter, read by :func:`_held_ids` through the very condition
+    ``inCollaboration`` filters by: what was put in, or is part of what was.
+    """
+    return f"{pk_sql} = ANY(%({_held_param(key)})s::bigint[])"
+
+
+def _held_ids(
+    kinds: tuple[str, ...], collaboration: str, organization: Organization
+) -> dict[str, list[int]]:
+    """For each kind, the ids of its rows in the collaboration ``collaboration`` (its key) here.
+
+    What ``inCollaboration`` reads (``arkitekt_service.collaborations.filters``): one query per
+    kind, so the roots' SQL keeps its shape whatever is in the collaboration. A file is judged by
+    its converted series too, so asking for files reads the datasets as well.
+    """
+    from arkitekt_service.collaborations.filters import in_collaboration_q
+
+    wanted = {*kinds, "dataset"} if FILE in kinds else set(kinds)
+    held: dict[str, list[int]] = {}
+    for key in wanted:
+        model = models.File if key == FILE else MODEL_BY_KEY[key]
+        held[_held_param(key)] = [
+            int(pk)
+            for pk in model._base_manager.filter(
+                in_collaboration_q(model, collaboration, organization),
+                organization=organization,
+            ).values_list("pk", flat=True)
+        ]
+    return held
 
 
 def _series_sql(x_pk: str, condition: str) -> str:
@@ -1240,9 +1264,9 @@ def _root_arm_filters(
             f"x.{_q(_column(model, 'creator'))} IN (SELECT u.{_q(user.pk.column)} FROM {_q(user.db_table)} u WHERE u.sub = %(owner)s)"
         )
     if "collaboration" in shape:
-        held = _in_collaboration_sql(model, pk)
+        held = _in_collaboration_sql(key, pk)
         if key == FILE:
-            held = f"({held} OR {_series_sql(pk, _in_collaboration_sql(models.ArrayDataset, f'd.{_q(models.ArrayDataset._meta.pk.column)}'))})"
+            held = f"({held} OR {_series_sql(pk, _in_collaboration_sql('dataset', f'd.{_q(models.ArrayDataset._meta.pk.column)}'))})"
         clauses.append(held)
     if "search" in shape:
         clauses.append(_search_sql(key, model, semantic)[0])
@@ -1344,7 +1368,8 @@ def roots(
 
     With ``filters.search`` the best match comes first instead (see :class:`RootFilter`).
 
-    Two round trips: the walk-backed root test for every kind at once, then the names. A
+    Two round trips (and, with ``collaboration``, one per kind for what is in it): the
+    walk-backed root test for every kind at once, then the names. A
     file's converted series and a dataset's mask are not roots -- they are reached from
     their parent -- and neither is a file exported from a dataset. ``filters`` narrows it by
     creator, collaboration, creation time and acquisition time; see :class:`RootFilter`.
@@ -1377,6 +1402,8 @@ def roots(
         return []
     if "spec" in params:
         params["spec"] = json.dumps(list(params["spec"]))
+    if "collaboration" in params:
+        params.update(_held_ids(wanted, params.pop("collaboration"), organization))
     with connection.cursor() as cursor:
         cursor.execute(
             sql,

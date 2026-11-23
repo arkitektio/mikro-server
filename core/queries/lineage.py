@@ -180,7 +180,7 @@ def roots(
         limit=limit,
         filters=lineage_logic.RootFilter(
             owner=filters.owner,
-            collaboration=int(filters.collaboration)
+            collaboration=str(filters.collaboration)
             if filters.collaboration is not None
             else None,
             created_after=filters.created_after,

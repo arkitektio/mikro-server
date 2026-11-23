@@ -18,7 +18,6 @@ from .array_dataset import (
     set_default_scene,
     update_array_dataset,
 )
-from .collaboration import add_many_to_collaboration
 from .coordinate_anchor import create_coordinate_anchor
 from .coordinate_system import (
     clear_coordinate_system,

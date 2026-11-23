@@ -19,6 +19,7 @@ from collections.abc import Callable, Sequence
 from enum import Enum
 
 import kante
+from arkitekt_service.collaborations.filters import SharingFilterMixin
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import (
     BooleanField,
@@ -427,6 +428,7 @@ class FolderFilter(
     PinnedFilterMixin,
     TagsFilterMixin,
     CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     id: auto
     name: FilterLookup[str] | None
@@ -451,7 +453,11 @@ class FolderFilter(
 
 @kante.filter_type(models.File)
 class FileFilter(
-    IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin
+    IdsFilterMixin,
+    NameSearchFilterMixin,
+    OwnedFilterMixin,
+    CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
@@ -611,7 +617,9 @@ FILE_LINK_CONTAINER_COLUMNS: dict[enums.FileLinkContainerKind, str] = {
 
 
 @kante.filter_type(models.FileLink)
-class FileLinkFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+class FileLinkFilter(
+    IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin, SharingFilterMixin
+):
     """Filters for the links between a file and the data it encodes."""
 
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
@@ -653,6 +661,7 @@ class ArrayDatasetFilter(
     SemanticNameSearchFilterMixin,
     OwnedFilterMixin,
     CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     id: auto
     name: FilterLookup[str] | None
@@ -883,7 +892,11 @@ class ArrayDatasetFilter(
 
 @kante.filter_type(models.Animation)
 class AnimationFilter(
-    IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin
+    IdsFilterMixin,
+    NameSearchFilterMixin,
+    OwnedFilterMixin,
+    CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     id: auto
     name: FilterLookup[str] | None
@@ -900,6 +913,7 @@ class SceneSnapshotFilter(
     OwnedFilterMixin,
     PinnedFilterMixin,
     CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     id: auto
     name: FilterLookup[str] | None
@@ -933,7 +947,7 @@ class DataArrayFilter(IdsFilterMixin):
 
 
 @kante.filter_type(models.AnnotationCollection)
-class AnnotationCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
+class AnnotationCollectionFilter(IdsFilterMixin, OwnedFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -987,7 +1001,7 @@ class AnnotationCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
 
 
 @kante.filter_type(models.Annotation)
-class AnnotationFilter(IdsFilterMixin, CreatedAtFilterMixin):
+class AnnotationFilter(IdsFilterMixin, CreatedAtFilterMixin, SharingFilterMixin):
     id: auto
     name: FilterLookup[str] | None
     description: FilterLookup[str] | None
@@ -1114,7 +1128,9 @@ def _lens_spec_q(kind: "type[models.Lens]", value: "Sequence[Enum]", prefix: str
 
 
 @kante.filter_type(models.Lens)
-class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
+class LensFilter(
+    IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin, SharingFilterMixin
+):
     id: auto
 
     @kante.filter_field(
@@ -1390,7 +1406,7 @@ class LensFilter(IdsFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin):
 
 
 @kante.filter_type(models.Scene)
-class SceneFilter(IdsFilterMixin, CreatedAtFilterMixin):
+class SceneFilter(IdsFilterMixin, CreatedAtFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1440,7 +1456,7 @@ class SceneFilter(IdsFilterMixin, CreatedAtFilterMixin):
 
 
 @kante.filter_type(models.Layer)
-class LayerFilter(IdsFilterMixin):
+class LayerFilter(IdsFilterMixin, SharingFilterMixin):
     id: auto
     kind: auto
     blending: auto
@@ -1455,7 +1471,7 @@ class LayerFilter(IdsFilterMixin):
 
 
 @kante.filter_type(models.CoordinateAnchor)
-class CoordinateAnchorFilter(IdsFilterMixin):
+class CoordinateAnchorFilter(IdsFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1505,7 +1521,9 @@ class TaskFilter(IdsFilterMixin, CreatedAtFilterMixin):
 
 
 @kante.filter_type(models.CoordinateSystem)
-class CoordinateSystemFilter(IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin):
+class CoordinateSystemFilter(
+    IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, SharingFilterMixin
+):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1603,7 +1621,7 @@ class AxisFilter(IdsFilterMixin):
 
 
 @kante.filter_type(models.Transformation)
-class TransformationFilter(IdsFilterMixin, OwnedFilterMixin):
+class TransformationFilter(IdsFilterMixin, OwnedFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1648,7 +1666,7 @@ class TransformationFilter(IdsFilterMixin, OwnedFilterMixin):
 
 
 @kante.filter_type(models.MeshCollection)
-class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
+class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1701,7 +1719,7 @@ class MeshCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
 
 
 @kante.filter_type(models.Fixture)
-class FixtureFilter(IdsFilterMixin, OwnedFilterMixin):
+class FixtureFilter(IdsFilterMixin, OwnedFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1737,7 +1755,7 @@ class FixtureFilter(IdsFilterMixin, OwnedFilterMixin):
 
 
 @kante.filter_type(models.NetworkCollection)
-class NetworkCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
+class NetworkCollectionFilter(IdsFilterMixin, OwnedFilterMixin, SharingFilterMixin):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
         self,
@@ -1791,7 +1809,11 @@ class NetworkCollectionFilter(IdsFilterMixin, OwnedFilterMixin):
 
 @kante.filter_type(models.SparseDataset)
 class SparseDatasetFilter(
-    IdsFilterMixin, NameSearchFilterMixin, OwnedFilterMixin, CreatedThroughFilterMixin
+    IdsFilterMixin,
+    NameSearchFilterMixin,
+    OwnedFilterMixin,
+    CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(
@@ -1828,6 +1850,7 @@ class TableDatasetFilter(
     SemanticNameSearchFilterMixin,
     OwnedFilterMixin,
     CreatedThroughFilterMixin,
+    SharingFilterMixin,
 ):
     @kante.filter_field(description=REQUIRES_DESCRIPTION)
     def requires(

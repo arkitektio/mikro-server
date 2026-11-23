@@ -316,6 +316,13 @@ service.not_part_of(models.Layer, "lens")
 service.not_part_of(chart_models.ChartLayer, "lens")
 service.not_part_of(grid_models.GridLayer, "lens")
 service.not_part_of(models.Transformation, "output")
+# A container is not part of the store that holds its bytes: the store is what the container needs
+# to be seen (`_stored_needs`), and the container is what is shared. Taken for a part, a table could
+# not be put in a collaboration by itself, and a workflow's tables would be left out of its share.
+service.not_part_of(models.TableDataset, "store")
+service.not_part_of(models.MeshCollection, "store")
+service.not_part_of(models.NetworkCollection, "store")
+service.not_part_of(models.Fixture, "store")
 
 
 def _layer_saved(

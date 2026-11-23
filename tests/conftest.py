@@ -15,6 +15,7 @@ from strawberry.http.temporal_response import TemporalResponse
 
 # Fixtures several modules share, defined beside the tests they were written for.
 from tests.test_rekuest_signals import intake  # noqa: F401 -- a shared fixture
+from tests.test_sharing import guest  # noqa: F401 -- a shared fixture
 from tests.test_store_purging import buckets  # noqa: F401 -- a shared fixture
 
 

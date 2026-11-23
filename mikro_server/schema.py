@@ -201,7 +201,7 @@ class Query:
     )
     collaboration: collaboration_types.Collaboration = field(
         resolver=collaboration_api.collaboration,
-        description="Get a single collaboration by ID",
+        description="Get what mikro holds in a collaboration, by its key (lok's)",
     )
     collaborations_stats: collaboration_types.CollaborationStats = field(
         resolver=collaboration_api.collaborations_stats,
@@ -591,20 +591,23 @@ class Query:
 
 @strawberry.type
 class Mutation:
-    create_collaboration = mutation(
-        scope="mikro_share",
-        resolver=collaboration_api.create_collaboration,
-        description="Create an empty collaboration, to put objects in and grant a guest",
-    )
     add_to_collaboration = mutation(
         scope="mikro_share",
         resolver=collaboration_api.add_to_collaboration,
-        description="Put an object in a collaboration, with what it needs to be seen: a scene brings the data its layers draw",
+        description="Put an object in a collaboration (lok's, by its key), with what it needs to be seen: a scene brings the data its layers draw. The first thing put in makes mikro's row of the collaboration",
     )
     add_many_to_collaboration = mutation(
         scope="mikro_share",
-        resolver=mutations.add_many_to_collaboration,
+        resolver=collaboration_api.add_many_to_collaboration,
         description="Put several objects in a collaboration at once, each with what it needs to be seen; all or none. How a dataset goes in with what was derived from it",
+    )
+    share_workflow = mutation(
+        scope="mikro_share",
+        resolver=collaboration_api.share_workflow,
+        description=(
+            "Put what a workflow (its root task) created in mikro in a collaboration, as it is now: a whole goes in, its parts come along, and a part of something "
+            "made before the workflow and not shared is left out and reported. `dryRun` only says what would be. What the workflow makes later is not in it: share it again"
+        ),
     )
     remove_from_collaboration = mutation(
         scope="mikro_share",
@@ -614,7 +617,7 @@ class Mutation:
     delete_collaboration = mutation(
         scope="mikro_share",
         resolver=collaboration_api.delete_collaboration,
-        description="Delete a collaboration: whoever was granted it sees nothing of it any more",
+        description="Take everything mikro holds in a collaboration (by its key) out of it: whoever was granted it sees nothing of it here any more. lok's collaboration and its grants stay",
     )
 
     request_media_upload = upload_mutation(

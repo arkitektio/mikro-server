@@ -1,6 +1,7 @@
 import kante
 import strawberry
 import strawberry_django
+from arkitekt_service.collaborations.filters import SharingFilterMixin
 from django.db.models import Q, QuerySet
 from kante.types import Info
 from strawberry import auto
@@ -25,7 +26,7 @@ class MetricTargetFilter:
 
 
 @kante.filter_type(models.Metric)
-class MetricFilter(IdsFilterMixin):
+class MetricFilter(IdsFilterMixin, SharingFilterMixin):
     id: auto
     key: FilterLookup[str] | None
 

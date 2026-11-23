@@ -52,7 +52,7 @@ class RootFilter:
     )
     collaboration: strawberry.ID | None = strawberry.field(
         default=None,
-        description="Only what was put in this collaboration. A file counts when it, or a series converted out of it, was put there",
+        description="Only what is in this collaboration, by its key: put in, or part of what was -- what `inCollaboration` lists. A file counts when it, or a series converted out of it, is in it",
     )
     created_after: datetime.datetime | None = strawberry.field(
         default=None, description="Only what was created at or after this moment"

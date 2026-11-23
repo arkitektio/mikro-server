@@ -33,6 +33,8 @@ from collections.abc import Sequence
 from typing import TypeVar
 
 import numpy
+from arkitekt_service.service.described import Described
+from django.db.models import QuerySet
 
 from core import enums, models
 from core.logic import coords as coords_logic
@@ -437,6 +439,9 @@ def restore(target: object, *, emit: bool = True) -> None:
         service,  # it binds the models this module describes
     )
 
+    assert isinstance(target, Described | QuerySet), (
+        f"{type(target).__name__} is neither a described row nor a queryset of them"
+    )
     service.restore(target, emit=emit)
 
 

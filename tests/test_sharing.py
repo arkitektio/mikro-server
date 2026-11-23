@@ -1,15 +1,17 @@
 """A guest of the organization, granted a collaboration and nothing else: what they read, and what they may draw.
 
-Their token lists their collaborations by service instance (`collaborations`, instance "1" in the test settings),
-with the roles they hold in each; the guest token is minted per test. A full member ("test")
-puts objects in a collaboration; what each needs to be seen comes along, and what is part of it is in it.
+Their token lists their collaborations by key (`collabs`: lok's key, one across the hub), with the roles
+they hold in each; the guest token is minted per test. A full member ("test") puts objects in a
+collaboration (`addToCollaboration`, which makes mikro's row of the key on first use); what each needs to
+be seen comes along, and what is part of it is in it.
 """
 
+import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 
 import pytest
-from arkitekt_service.collaborations import items as collaboration_items
 from arkitekt_service.collaborations.models import Collaboration
+from arkitekt_service.service import Service
 from asgiref.sync import sync_to_async
 from authentikate import settings as authentikate_settings
 from django.db.backends.utils import CursorWrapper
@@ -22,6 +24,7 @@ from strawberry.types import ExecutionResult
 from core import models
 from mikro_server.schema import schema
 from tests import seed
+from tests.test_cross_container_derivation import _MEASUREMENT_COLUMNS, _table
 
 SCENE = "query ($id: ID!) { scene(id: $id) { id name } }"
 SCENES = "query { scenes { id } }"
@@ -62,12 +65,12 @@ def _context(token: str) -> HttpContext:
 def guest(
     db: None, authenticated_context: HttpContext, settings: SettingsWrapper
 ) -> Iterator[Callable[[dict], HttpContext]]:
-    """``guest({collaboration: roles})``: a context presenting a guest's token granted those collaborations on instance "1"."""
+    """``guest({collaboration: roles})``: a context presenting a guest's token granted those collaborations, by key."""
 
     def mint(collaborations: dict) -> HttpContext:
         granted = {
             str(
-                collaboration.pk
+                collaboration.key
                 if isinstance(collaboration, Collaboration)
                 else collaboration
             ): roles
@@ -80,7 +83,7 @@ def guest(
                 "guest": {
                     "sub": "20",
                     "roles": [],
-                    "collabs": {"1": granted},
+                    "collabs": granted,
                     "scope": "openid mikro_all",
                 },
             },
@@ -102,18 +105,34 @@ def _point(**target: object) -> dict:
     return {"input": {**target, "kind": "POINT", "vectors": [[1.0, 2.0, 3.0]]}}
 
 
+ADD = """
+mutation ($input: CollaborationObjectInput!) {
+  addToCollaboration(input: $input) { key name }
+}
+"""
+
+
 async def _collaboration(ctx: HttpContext, *objects: Model) -> Collaboration:
-    """A collaboration of the organization holding ``objects``, as a full member puts them in."""
-
-    def make() -> Collaboration:
-        collaboration = Collaboration.objects.create(
-            organization=ctx.request.organization, name="Shared"
+    """A collaboration of the organization holding ``objects``, as a full member puts them in: a
+    fresh key (lok's), and mikro's row of it made by the first thing put in."""
+    key = str(uuid.uuid4())
+    for obj in objects:
+        structure = Service.hosting(obj)
+        assert structure is not None, f"{type(obj).__name__} is not hosted"
+        added = await _run(
+            ctx,
+            ADD,
+            input={
+                "collaboration": key,
+                "identifier": structure.identifier,
+                "object": str(obj.pk),
+                "name": "Shared",
+            },
         )
-        for obj in objects:
-            collaboration_items.add(collaboration, obj)
-        return collaboration
-
-    return await sync_to_async(make)()
+        assert not added.errors, added.errors
+        assert added.data is not None
+        assert added.data["addToCollaboration"] == {"key": key, "name": "Shared"}
+    return await sync_to_async(Collaboration.objects.get)(key=key)
 
 
 async def _layer(
@@ -182,6 +201,43 @@ async def test_a_guest_reads_the_scene_in_their_collaboration_and_nothing_else(
     assert [s["id"] for s in listed.data["scenes"]] == [str(shared.id)]
     assert (await _run(ctx, SCENE, id=str(shared.id))).data["scene"]["name"] == "Shared"
     assert (await _run(ctx, SCENE, id=str(other.id))).errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_key_nothing_was_put_in_here_shows_nothing(
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
+    shared, _ = await _rendered_scene(authenticated_context, "Shared")
+    await _collaboration(authenticated_context, shared)
+
+    for granted in ({str(uuid.uuid4()): []}, {"not-a-key": []}, {}):
+        listed = await _run(guest(granted), SCENES)
+        assert not listed.errors, listed.errors
+        assert listed.data == {"scenes": []}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_table_goes_in_by_itself_with_its_store_and_space(
+    authenticated_context: HttpContext, guest: Callable[[dict], HttpContext]
+) -> None:
+    """A container is not part of its store: it is put in by hand, and brings the store and its space."""
+    made = await _table(authenticated_context, "Measured", columns=_MEASUREMENT_COLUMNS)
+    table = await sync_to_async(models.TableDataset.objects.get)(pk=made["id"])
+    ctx = guest({await _collaboration(authenticated_context, table): []})
+
+    seen = await _run(
+        ctx,
+        "query ($id: ID!) { tableDataset(id: $id) { id coordinateSystem { id } } }",
+        id=str(table.pk),
+    )
+    assert not seen.errors, seen.errors
+    assert seen.data is not None
+    assert (
+        seen.data["tableDataset"]["coordinateSystem"]["id"]
+        == made["coordinateSystem"]["id"]
+    )
 
 
 @pytest.mark.django_db(transaction=True)

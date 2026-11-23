@@ -1,6 +1,7 @@
 import kante
 import strawberry
 import strawberry_django
+from arkitekt_service.collaborations.filters import SharingFilterMixin
 from django.db.models import Q, QuerySet
 from kante.types import Info
 from strawberry import auto
@@ -13,7 +14,7 @@ from grid import models
 
 
 @kante.filter_type(models.Grid)
-class GridFilter(IdsFilterMixin, CreatedAtFilterMixin):
+class GridFilter(IdsFilterMixin, CreatedAtFilterMixin, SharingFilterMixin):
     id: auto
     name: FilterLookup[str] | None
 

@@ -13,8 +13,12 @@ def make_provenance(
     args_hash: str = "sha256-args",
     sub: str = "1",
     cid: str = "oinsoins",
+    root: str | None = None,
 ) -> ProvenanceToken:
     """Build a verified provenance token, as AuthentikateExtension would attach one.
+
+    ``root`` is the workflow the task runs in (the root task's id); a task is its own root
+    unless it says otherwise.
 
     koherent>=4 resolves the task from a signature-verified provenance token
     (set by AuthentikateExtension), not from a cleartext Rekuest-Task header, so
@@ -30,7 +34,7 @@ def make_provenance(
         jti=f"jti-{task_id}",
         tsk=task_id,
         ptk=parent,
-        rtk=task_id,
+        rtk=root or task_id,
         rcb=sub,
         ahs=args_hash,
         aha="v1",

@@ -33,8 +33,8 @@ ADMIN_WITH_EVERY_SCOPE = {"roles": ["mikro_admin"], "scope": "openid mikro_all"}
 AUTHENTIKATE = {
     **AUTHENTIKATE,
     "allow_static_tokens_in_production": True,
-    # This service instance, as konstruktor renders it: what a guest's collaborations are
-    # listed under (tests/test_sharing.py).
+    # This service instance, as konstruktor renders it. A guest's collaborations are listed by
+    # key, one across the hub, and no longer under it (tests/test_sharing.py).
     "audience": "1",
     "static_tokens": {
         name: {**ADMIN_WITH_EVERY_SCOPE, **token}

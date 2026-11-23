@@ -1,6 +1,7 @@
 import kante
 import strawberry
 import strawberry_django
+from arkitekt_service.collaborations.filters import SharingFilterMixin
 from django.db.models import Q, QuerySet
 from kante.types import Info
 from strawberry import auto
@@ -13,7 +14,7 @@ from core.logic.descriptor_filter import DescriptorConstraintInput
 
 
 @kante.filter_type(models.Chart)
-class ChartFilter(IdsFilterMixin, CreatedAtFilterMixin):
+class ChartFilter(IdsFilterMixin, CreatedAtFilterMixin, SharingFilterMixin):
     id: auto
     name: FilterLookup[str] | None
 

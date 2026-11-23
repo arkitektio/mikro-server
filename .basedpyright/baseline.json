@@ -12992,16 +12992,6 @@
                 }
             }
         ],
-        "./tests/test_collaboration_batch.py": [
-            {
-                "code": "reportOptionalSubscript",
-                "range": {
-                    "startColumn": 20,
-                    "endColumn": 31,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./tests/test_column_options.py": [
             {
                 "code": "reportOptionalSubscript",
