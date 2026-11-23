@@ -14,12 +14,12 @@ dependencies = [
     "daphne>=4.0.0,<5",
     "channels-redis>=4.1.0,<5",
     "django-choices-field>=2.2.2,<3",
-    "authentikate>=6.1",
+    "authentikate>=7.0",
     "ujson>=5.8.0,<6",
     "jsonpatch~=1.33",
     "django-probes>=1.7.0,<2",
     "rich>=14.0.0",
-    "koherent>=4.2.0",
+    "koherent>=4.3",
     "django-redis>=5.4.0",
     "boto3>=1.38.9",
     "aiohttp>=3.11.18",
@@ -36,7 +36,7 @@ dependencies = [
     "pint>=0.25.3",
     "pgvector>=0.5",
     "model2vec>=0.9",
-    "arkitekt-service[telemetry]>=9.7.0",
+    "arkitekt-service[telemetry]>=10.0",
     "arkitekt-datalayer>=3.0.0",
 ]
 
