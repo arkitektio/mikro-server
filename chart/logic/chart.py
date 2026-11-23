@@ -118,6 +118,7 @@ def create_chart(
             world=world,
             creator=ctx.user,
             organization=ctx.organization,
+            **ctx.provenance_kwargs(),
         )
 
 

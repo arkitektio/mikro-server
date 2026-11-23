@@ -69,6 +69,7 @@ def create_grid(
         world=world,
         creator=ctx.user,
         organization=ctx.organization,
+        **ctx.provenance_kwargs(),
     )
 
 

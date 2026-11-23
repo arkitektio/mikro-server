@@ -57,6 +57,22 @@ class Chart(Described):
         related_name="created_charts",
     )
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    created_through = models.ForeignKey(
+        "koherent.Task",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_%(class)ss",
+        help_text="The task this object was created through, if any: what finds a workflow's charts",
+    )
+    created_through_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_%(class)ss",
+        help_text="The assigner of the creating task, denormalized for fast filtering",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
