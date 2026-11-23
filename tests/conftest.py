@@ -2,17 +2,14 @@ import os
 import time
 from collections.abc import Iterator
 
-import boto3
 import psycopg
 import pytest
 from authentikate.models import Client, Membership, Organization, User
-from botocore.client import BaseClient
 from django.apps import AppConfig
 from django.contrib.contenttypes.management import create_contenttypes
 from django.db.models.signals import post_migrate
 from dokker import PortNotFoundError, testing
 from kante.context import HttpContext, UniversalRequest
-from moto import mock_aws
 from pytest_django import DjangoDbBlocker
 from strawberry.http.temporal_response import TemporalResponse
 
@@ -33,12 +30,6 @@ def embedding_model_warm() -> Iterator[None]:
 
     engine.warm_up()
     yield
-
-
-@pytest.fixture(scope="function")
-def s3(aws_credentials: None) -> Iterator[BaseClient]:
-    with mock_aws():
-        yield boto3.client("s3", region_name="us-east-1")
 
 
 @pytest.fixture(scope="session")

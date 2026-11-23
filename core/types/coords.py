@@ -1569,31 +1569,27 @@ class NetworkCollection(OrgScoped):
             "it**: `derivedFrom` says which *data* this was computed from and relates two coordinate systems, while this says which *bytes* it was read out of and relates to no "
             "space at all, because a file has none. Both can be non-empty and complete"
         ),
-        prefetch_related=["file_links__file"],
     )
     def source_files(
         self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
     ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
-        """The links naming a file this network collection was produced from."""
-        return apply_link_filters(
-            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
-            filters,
-            info,
-        )
+        """None: ``FileLink`` has no network collection column.
+
+        ``createNetworkCollection`` refuses ``sourceFiles`` (``file_link.container_field``)
+        and no export kind names a network collection, so there is never a link to answer.
+        """
+        del info, filters
+        return []
 
     @kante.django_field(
         description="The files written out of this network collection: an OME-TIFF export, a rendered snapshot registered as a file. The mirror of `sourceFiles`",
-        prefetch_related=["file_links__file"],
     )
     def exports(
         self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
     ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
-        """The links naming a file written out of this network collection."""
-        return apply_link_filters(
-            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.RENDITION),
-            filters,
-            info,
-        )
+        """None, as for ``sourceFiles``: no link names a network collection."""
+        del info, filters
+        return []
 
     id: auto
     name: str | None

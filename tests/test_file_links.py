@@ -16,12 +16,21 @@ from unittest.mock import patch
 
 import pytest
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from core import enums, models
 from core.inputs.file_link import EXPORT_OF_MEMBERS, file_link_union_types
 from core.logic.file_link import _CONTAINER_FIELDS, _CONTAINER_MODELS
 from mikro_server.schema import schema
 from tests.seed import create_array_dataset, create_file, create_folder
+from tests.test_network_layers import _collection
+from tests.test_sparse_datasets import (
+    _axes,
+    _create,
+    _features_table,
+    _mask,
+    _store,
+)
 
 
 async def _zarr(ctx: HttpContext) -> "models.ZarrStore":
@@ -946,3 +955,86 @@ async def test_has_source_file_splits_converted_from_written_in(
         names[value] = {row["name"] for row in result.data["arrayDatasets"]}
     assert "Converted" in names[True] and not names[True] & {"Written", "Exported"}
     assert {"Written", "Exported"} <= names[False] and "Converted" not in names[False]
+
+
+# --------------------------------------------------------------------------------------
+# Containers no file is linked to. A sparse dataset and a network collection have no
+# ``FileLink`` column, so their ``sourceFiles`` (and the network's ``exports``) answer empty,
+# and a create naming source files is refused whole.
+# --------------------------------------------------------------------------------------
+
+
+async def _sparse_dataset(ctx: HttpContext, **extra: object) -> ExecutionResult:
+    mask = await _mask(ctx)
+    features = await _features_table(ctx)
+    store = await _store(ctx, "matrix", axes=(0, 1))
+    result = await _create(
+        ctx, "expression", store=str(store.pk), axes=_axes(mask, features), **extra
+    )
+    assert isinstance(result, ExecutionResult)
+    return result
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_sparse_dataset_answers_no_source_files(
+    authenticated_context: HttpContext,
+) -> None:
+    created = await _sparse_dataset(authenticated_context)
+    assert created.data is not None, created.errors
+
+    result = await schema.execute(
+        """
+        query S($id: ID!) {
+          sparseDataset(id: $id) { sourceFiles { id } }
+          sparseDatasets { sourceFiles { id } }
+        }
+        """,
+        context_value=authenticated_context,
+        variable_values={"id": created.data["createSparseDataset"]["id"]},
+    )
+
+    assert not result.errors, result.errors
+    assert result.data == {
+        "sparseDataset": {"sourceFiles": []},
+        "sparseDatasets": [{"sourceFiles": []}],
+    }
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_sparse_dataset_naming_source_files_is_refused_whole(
+    authenticated_context: HttpContext,
+) -> None:
+    ctx = authenticated_context
+    file = await create_file(ctx, "matrix.mtx", await create_folder(ctx, "Raw"))
+
+    result = await _sparse_dataset(ctx, sourceFiles=[{"file": str(file.pk)}])
+
+    assert result.errors and "cannot be linked to a file" in result.errors[0].message
+    assert not await models.SparseDataset.objects.aexists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_network_collection_answers_no_source_files_and_no_exports(
+    authenticated_context: HttpContext,
+) -> None:
+    collection = await _collection(authenticated_context)
+
+    result = await schema.execute(
+        """
+        query N($id: ID!) {
+          networkCollection(id: $id) { sourceFiles { id } exports { id } }
+          networkCollections { sourceFiles { id } exports { id } }
+        }
+        """,
+        context_value=authenticated_context,
+        variable_values={"id": str(collection.pk)},
+    )
+
+    assert not result.errors, result.errors
+    assert result.data == {
+        "networkCollection": {"sourceFiles": [], "exports": []},
+        "networkCollections": [{"sourceFiles": [], "exports": []}],
+    }

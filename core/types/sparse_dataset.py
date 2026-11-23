@@ -11,12 +11,10 @@ from strawberry import auto
 from strawberry.scalars import JSON
 
 from core import enums, filters, models, order, scalars
-from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
 from core.types._shared import (
     DESCRIPTORS_DESCRIPTION,
     OrgScoped,
-    apply_link_filters,
     resolve_descriptors,
 )
 from core.types.auth import ProvenanceEntry, Task, User
@@ -211,21 +209,17 @@ class SparseDataset(OrgScoped):
         system = getattr(self, "coordinate_system", None)
         return graph_logic.collection_derivation_edges(system) if system else []
 
-    @kante.django_field(
-        description="The files this dataset was converted from",
-        prefetch_related=["file_links__file"],
-    )
+    @kante.django_field(description="The files this dataset was converted from")
     def source_files(
         self, info: Info, filters: filters.FileLinkFilter | None = strawberry.UNSET
     ) -> list[Annotated["FileLink", strawberry.lazy("core.types.file_link")]]:
-        """The links naming a file this dataset was produced from."""
-        import core.enums as enums
+        """None: a file link names an array or table dataset, a mesh or an annotation collection.
 
-        return apply_link_filters(
-            file_link_logic.links_for(self, enums.FileLinkDirectionChoices.SOURCE),
-            filters,
-            info,
-        )
+        ``FileLink`` has no sparse dataset column, and ``createSparseDataset`` refuses
+        ``sourceFiles`` (``file_link.container_field``), so there is never one to answer.
+        """
+        del info, filters
+        return []
 
     @kante.django_field(
         description="How this matrix was produced: the run, its parameters and its inputs"
