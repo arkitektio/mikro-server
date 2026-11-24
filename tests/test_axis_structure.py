@@ -84,6 +84,25 @@ MIXED = [_spectrum("w1"), _spectrum("w2")]
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_a_spectrum_is_wavelength_wavenumber_or_energy(
+    authenticated_context: HttpContext,
+) -> None:
+    """A Raman shift (1/cm) and a photon energy (eV) are spectra too; seconds are not."""
+    for unit in ("nanometer", "1/cm", "eV"):
+        ok = await _space(
+            authenticated_context, f"spectrum {unit}", [_spectrum("s", unit=unit)]
+        )
+        assert not ok.errors, (unit, ok.errors)
+
+    refused = await _space(
+        authenticated_context, "bad", [_spectrum("s", unit="second")]
+    )
+    assert refused.errors
+    assert "[length] or 1/[length] or energy" in str(refused.errors[0])
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_a_unitless_measured_axis_is_refused(
     authenticated_context: HttpContext,
 ) -> None:

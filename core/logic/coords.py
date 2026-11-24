@@ -82,12 +82,17 @@ _PHASOR_TYPES: frozenset[str] = frozenset(
 # micrometres is not a slightly-off calibration, it is a lie the arithmetic will
 # happily propagate: seconds and metres compose into the same matrix. Types absent
 # from this map (CHANNEL, COORDINATE, DISPLACEMENT) index into something with no
-# agreed dimension, so any parseable unit is allowed.
-_UNIT_DIMENSION_BY_TYPE: dict[str, str] = {
-    enums.AxisTypeChoices.TIME.value: "[time]",
-    enums.AxisTypeChoices.MICROTIME.value: "[time]",
-    enums.AxisTypeChoices.SPECTRUM.value: "[length]",
-    enums.AxisTypeChoices.SPACE.value: "[length]",
+# agreed dimension, so any parseable unit is allowed. A spectrum is read as wavelength,
+# wavenumber (Raman shift) or photon energy.
+_LENGTH = {"[length]": 1}
+_TIME = {"[time]": 1}
+_WAVENUMBER = {"[length]": -1}
+_ENERGY = {"[length]": 2, "[mass]": 1, "[time]": -2}
+_UNIT_DIMENSIONS_BY_TYPE: dict[str, tuple[dict[str, int], ...]] = {
+    enums.AxisTypeChoices.TIME.value: (_TIME,),
+    enums.AxisTypeChoices.MICROTIME.value: (_TIME,),
+    enums.AxisTypeChoices.SPECTRUM.value: (_LENGTH, _WAVENUMBER, _ENERGY),
+    enums.AxisTypeChoices.SPACE.value: (_LENGTH,),
 }
 
 
@@ -266,8 +271,8 @@ def assert_unit_matches_type(axis_name: str, axis_type: str, unit: str) -> None:
 
     ``a.u.`` stays the escape hatch, for an axis whose unit genuinely is arbitrary.
     """
-    required = _UNIT_DIMENSION_BY_TYPE.get(axis_type)
-    if required is None or kanne_scalars.is_arbitrary_unit(unit):
+    allowed = _UNIT_DIMENSIONS_BY_TYPE.get(axis_type)
+    if allowed is None or kanne_scalars.is_arbitrary_unit(unit):
         return
 
     dimensionality = (
@@ -275,10 +280,19 @@ def assert_unit_matches_type(axis_name: str, axis_type: str, unit: str) -> None:
         .Unit(kanne_scalars.normalize_compact_units(unit))
         .dimensionality
     )
-    if dict(dimensionality) != {required: 1}:
+    if dict(dimensionality) not in allowed:
+        measures = " or ".join(_dimension_label(d) for d in allowed)
         raise AxisUnitError(
-            f"Axis '{axis_name}' is a {axis_type} axis, so its unit must measure {required}, but '{unit}' does not. Use 'a.u.' for a genuinely arbitrary unit."
+            f"Axis '{axis_name}' is a {axis_type} axis, so its unit must measure {measures}, but '{unit}' does not. Use 'a.u.' for a genuinely arbitrary unit."
         )
+
+
+def _dimension_label(dimension: dict[str, int]) -> str:
+    """``{"[length]": 1}`` as ``[length]``, ``{"[length]": -1}`` as ``1/[length]``."""
+    if dimension == _ENERGY:
+        return "energy"
+    ((name, power),) = dimension.items()
+    return name if power == 1 else f"1/{name}"
 
 
 def units_are_interchangeable(source: str | None, target: str | None) -> bool:
