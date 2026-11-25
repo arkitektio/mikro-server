@@ -705,8 +705,9 @@ def create_annotations(
         created = bulk_create_with_history(
             descriptors_logic.stamp(rows), models.Annotation
         )
-        # After the shapes exist: a link needs its child's row. The ids are client-side
-        # UUIDs, so `created` carries them and lines up with `sources` by position.
+        # After the shapes exist: a link needs its child's row. `bulk_create` hands back the
+        # database's ids (Postgres returns them), so `created` carries them and lines up with
+        # `sources` by position.
         annotation_lineage.write_links(
             [
                 link

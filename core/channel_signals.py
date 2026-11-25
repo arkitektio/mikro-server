@@ -16,7 +16,7 @@ class AnnotationSignal(BaseModel):
     ``bulk_create``, which fires no ``post_save``, and one message per row would cost each
     subscriber one query per shape.
 
-    The ids are strings: an annotation's primary key is a UUID, not the integer a file's is.
+    The ids are strings, as every signal's are on the wire.
     """
 
     create: str | None = None

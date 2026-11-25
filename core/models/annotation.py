@@ -198,9 +198,15 @@ class Annotation(Described):
     stored world box would be wrong in one of them.
     """
 
-    # lets make this a normal ID (not a natural key) because the UUID is not a good primary key for the database, and we want to be able to use the ID in the API as well
-    # we could still add a "global_id" field that is a UUID, but we want to be able to use the ID in the API as well (make the global_id a unique field, but not the primary key)
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # The pk is the ordinary integer id (DEFAULT_AUTO_FIELD), like every other model's. The
+    # shape's pk was a UUID until migration 0017; that UUID is kept here, unique, so an id
+    # minted before the switch (a task's args, a copied link) still finds its shape.
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        help_text="The shape's global id. Its pk until migration 0017, so an id handed out before then still resolves to it",
+    )
     collection = models.ForeignKey(
         AnnotationCollection,
         related_name="annotations",

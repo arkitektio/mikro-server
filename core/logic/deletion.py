@@ -58,7 +58,7 @@ CASCADE_DESCRIPTION = (
     "series converted out of a file, files exported from a dataset. Without it, a delete of something anything was made from is refused, naming what"
 )
 
-NodeKey = tuple[str, int | str]
+NodeKey = tuple[str, int]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -66,7 +66,7 @@ class Casualty:
     """One row a delete would take along."""
 
     kind: str
-    pk: int | str
+    pk: int
     name: str
     #: Hops from the nearest target.
     depth: int
@@ -101,7 +101,7 @@ def _shapes_with_children_elsewhere(collection_pks: Iterable[int]) -> list[NodeK
         .values_list("source_id", flat=True)
         .distinct()
     )
-    return [(lineage_logic.ANNOTATION, str(pk)) for pk in sources]
+    return [(lineage_logic.ANNOTATION, pk) for pk in sources]
 
 
 def plan(targets: list[NodeKey], *, organization: Organization) -> Plan:
@@ -170,12 +170,11 @@ def plan(targets: list[NodeKey], *, organization: Organization) -> Plan:
     # of its own. What was made from it elsewhere stays listed.
     shapes = [pk for kind, pk in found if kind == lineage_logic.ANNOTATION]
     if shapes and collections_seen:
-        inside = {
-            str(pk)
-            for pk in models.Annotation.objects.filter(
+        inside = set(
+            models.Annotation.objects.filter(
                 pk__in=shapes, collection_id__in=collections_seen
             ).values_list("pk", flat=True)
-        }
+        )
         found = {
             key: casualty
             for key, casualty in found.items()
@@ -196,7 +195,7 @@ def instances(
     keys: Iterable[NodeKey], organization: Organization
 ) -> dict[NodeKey, Model]:
     """The rows behind node keys, scoped to the organization: one query per kind."""
-    by_kind: dict[str, list[int | str]] = {}
+    by_kind: dict[str, list[int]] = {}
     for kind, pk in keys:
         by_kind.setdefault(kind, []).append(pk)
     found: dict[NodeKey, Model] = {}
@@ -217,7 +216,7 @@ class Blocker:
     """Why one row of a delete cannot go."""
 
     kind: str
-    pk: int | str
+    pk: int
     reason: str
 
 

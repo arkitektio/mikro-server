@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, Any
 
 import arkitekt_datalayer.mutations as datalayer_mutations
@@ -80,6 +81,29 @@ class CreatedByCallerField(StrawberryDjangoField):
         return super().get_queryset(
             queryset.filter(creator=info.context.request.user), info, **kwargs
         )
+
+
+class AnnotationByIdField(StrawberryDjangoField):
+    """``annotation(id:)``, which also finds a shape by the UUID that was its id before 0017.
+
+    A shape's pk was a UUID until migration 0017, and ids handed out then live on outside
+    mikro (a task's args, a copied link, rekuest's records). A UUID is never an integer pk,
+    so an id that parses as one is looked up as the shape's ``uuid`` instead.
+    """
+
+    def get_queryset(
+        self, queryset: QuerySet[Model], info: Info, **kwargs: Any
+    ) -> QuerySet[Model]:
+        raw = kwargs.get("id")
+        if raw not in (None, strawberry.UNSET) and not str(raw).isdigit():
+            try:
+                legacy = uuid.UUID(str(raw))
+            except ValueError:
+                pass  # neither: the pk filter below finds nothing
+            else:
+                queryset = queryset.filter(uuid=legacy)
+                kwargs = {**kwargs, "id": strawberry.UNSET}
+        return super().get_queryset(queryset, info, **kwargs)
 
 
 def mutation(
@@ -274,7 +298,10 @@ class Query:
     annotations: list[types.Annotation] = field(
         description="List annotations (human-drawn shapes, each in its collection's coordinate system)"
     )
-    annotation: types.Annotation = field(description="Get a single annotation by ID")
+    annotation: types.Annotation = field(
+        description="Get a single annotation by ID (or by the UUID that was its ID before shapes got integer ids)",
+        field_cls=AnnotationByIdField,
+    )
 
     annotation_collections: list[types.AnnotationCollection] = field(
         description="List annotation collections (named sets of human-drawn shapes, each owning the coordinate system they are drawn in)"

@@ -457,6 +457,32 @@ async def test_an_annotation_names_who_drew_it(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_an_annotation_has_an_integer_id_and_its_old_uuid_still_finds_it(
+    db: None, authenticated_context: HttpContext
+) -> None:
+    """The id is an integer pk; the UUID ids handed out before 0017 still resolve."""
+    ctx = authenticated_context
+    scene = await seed.create_scene(ctx)
+    made = await _draw(ctx, {"scene": str(scene.id)}, vectors=[[0.0, 0.0, 0.0]])
+    assert made["id"].isdigit(), made["id"]
+
+    shape = await models.Annotation.objects.aget(pk=int(made["id"]))
+    query = "query ($id: ID!) { annotation(id: $id) { id } }"
+    by_uuid = await schema.execute(
+        query, context_value=ctx, variable_values={"id": str(shape.uuid)}
+    )
+    assert not by_uuid.errors, by_uuid.errors
+    assert by_uuid.data["annotation"]["id"] == made["id"]
+
+    # Neither an integer nor a UUID: no shape, and an error rather than a crash.
+    garbage = await schema.execute(
+        query, context_value=ctx, variable_values={"id": "not-an-id"}
+    )
+    assert garbage.errors
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_drawing_into_a_collection_appends_only(
     db: None, authenticated_context: HttpContext
 ) -> None:
@@ -1172,7 +1198,7 @@ async def test_a_collections_subscription_relays_its_changes_and_is_org_scoped(
     drawn = result.data["createAnnotation"]
     collection_id = drawn["collection"]["id"]
 
-    gone = "00000000-0000-0000-0000-000000000000"
+    gone = "999999999"  # an id no shape has
     relayed = [
         channels.AnnotationSignal(create=drawn["id"]),
         channels.AnnotationSignal(

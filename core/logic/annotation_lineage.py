@@ -71,8 +71,8 @@ def resolve_sources(
     for entry in entries:
         try:
             source = get_for_org(models.Annotation, info, id=entry.annotation)
-        except (models.Annotation.DoesNotExist, ValidationError) as error:
-            # A malformed UUID is as absent as an unknown one: either way there is no such shape here.
+        except (models.Annotation.DoesNotExist, ValidationError, ValueError) as error:
+            # A malformed id is as absent as an unknown one: either way there is no such shape here.
             raise ValueError(
                 f"`{position}` names annotation {entry.annotation}, which does not exist or is not visible to you"
             ) from error

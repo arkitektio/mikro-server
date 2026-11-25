@@ -116,7 +116,7 @@ def _targets(
         except (
             ValueError,
             ValidationError,
-        ) as error:  # a malformed id (an annotation's is a uuid)
+        ) as error:  # a malformed id, e.g. not an integer
             raise ValueError(
                 f"Not ids of a {identifier}: {sorted(objects)[:5]}"
             ) from error

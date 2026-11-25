@@ -6,7 +6,6 @@ paths are never stored. So it is a walk, and the second half of this module is w
 price down: one graph per space the annotation reaches, flat in everything else.
 """
 
-import uuid
 
 import pytest
 from asgiref.sync import sync_to_async
@@ -514,7 +513,7 @@ async def test_a_shape_in_a_space_with_no_edge_out_reaches_only_its_own_collecti
     assert await _reachable(ctx, loose, kind="ARRAY") == set()
     assert await _reachable(ctx, drawn, kind="ARRAY") != set()
     assert await _reachable(other_org_context, drawn) == set()
-    assert await _reachable(ctx, str(uuid.uuid4())) == set()
+    assert await _reachable(ctx, "999999999") == set()
 
 
 @pytest.mark.django_db(transaction=True)

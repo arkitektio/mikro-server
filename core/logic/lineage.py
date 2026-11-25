@@ -80,20 +80,19 @@ def model_of(kind: str) -> type:
     return NON_CONTAINER_MODELS.get(kind) or MODEL_BY_KEY[kind]
 
 
-def node_pk(kind: str, raw: object) -> int | str | None:
-    """A node's pk as Python keys it: the walk carries every pk as text, because a shape's is a UUID."""
+def node_pk(kind: str, raw: object) -> int | None:  # noqa: ARG001 -- every kind's pk is an integer
+    """A node's pk as Python keys it: the walk carries every pk as text, and every kind's is an integer."""
     if raw is None:
         return None
-    return str(raw) if kind == ANNOTATION else int(raw)
+    return int(raw)
 
 
 def _as(kind: str, key: str, pk: str, cast: str = "bigint") -> str:
     """``pk`` as the type ``key``'s rows have, and NULL for every other kind.
 
-    The walk carries pks as text, and a text that is a UUID must never reach a bigint cast:
-    CASE is the one construct Postgres evaluates in order, so the cast runs only for the
-    kind it belongs to, and the result is still a per-row value an FK index can be probed
-    with.
+    The walk carries pks as text: CASE is the one construct Postgres evaluates in order, so
+    the cast runs only for the kind it belongs to, and the result is still a per-row value an
+    FK index can be probed with.
     """
     return f"CASE WHEN {kind} = '{key}' THEN ({pk})::{cast} END"
 
@@ -267,7 +266,7 @@ def _shape_arms(n: str, *, down: bool) -> list[str]:
     ``annotation_derived_containers`` reads). Up: the shapes it was made from. A source
     deleted since leaves its link with no source, and no hop.
     """
-    shape = _as(f"{n}.kind", ANNOTATION, f"{n}.pk", cast="uuid")
+    shape = _as(f"{n}.kind", ANNOTATION, f"{n}.pk")
     child, source, org = (
         _q(_column(models.AnnotationDerivation, name))
         for name in ("child", "source", "organization")
@@ -419,8 +418,7 @@ class LineageAxis:
 @dataclasses.dataclass
 class LineageNode:
     kind: str
-    #: An int for every kind but a shape, whose pk is a UUID string.
-    pk: int | str
+    pk: int
     depth: int
     name: str = ""
     created_at: object = None
@@ -444,8 +442,8 @@ class LineageNode:
 class LineageEdge:
     via: str
     via_id: int
-    parent: tuple[str, int | str]
-    child: tuple[str, int | str]
+    parent: tuple[str, int]
+    child: tuple[str, int]
     kind: str = "DERIVATION"
     task_id: str | None = None
     transformation_kind: str | None = None
@@ -488,7 +486,7 @@ def _assert_direct_scoping() -> None:
 
 def _walk(
     cursor: CursorWrapper,
-    root: tuple[str, int | str],
+    root: tuple[str, int],
     *,
     down: bool,
     depth: int,
@@ -514,10 +512,10 @@ def _walk(
 
 
 def _hydrate_nodes(
-    nodes: dict[tuple[str, int | str], LineageNode], organization: Organization
+    nodes: dict[tuple[str, int], LineageNode], organization: Organization
 ) -> None:
     """One query per node kind present. A node another organization owns is dropped, never named."""
-    by_kind: dict[str, list[int | str]] = {}
+    by_kind: dict[str, list[int]] = {}
     for kind, pk in nodes:
         by_kind.setdefault(kind, []).append(pk)
 
@@ -557,8 +555,8 @@ def _hydrate_nodes(
 
 
 def _hydrate_shapes(
-    nodes: dict[tuple[str, int | str], LineageNode],
-    pks: list[int | str],
+    nodes: dict[tuple[str, int], LineageNode],
+    pks: list[int],
     organization: Organization,
 ) -> None:
     """The shape nodes: named, and scoped through their collection, which is where a shape's organization is.
@@ -566,13 +564,13 @@ def _hydrate_shapes(
     A shape records no creation time of its own, so ``created_at`` stays unset.
     """
     rows = {
-        str(row["id"]): row
+        row["id"]: row
         for row in models.Annotation.objects.filter(
             pk__in=pks, collection__organization=organization
         ).values("id", "name", "created_through__task_id")
     }
     for pk in pks:
-        row = rows.get(str(pk))
+        row = rows.get(pk)
         if row is None:
             del nodes[(ANNOTATION, pk)]
             continue
@@ -764,7 +762,7 @@ def lineage(
     org = organization.pk
     root = (root[0], node_pk(root[0], root[1]))
 
-    nodes: dict[tuple[str, int | str], LineageNode] = {
+    nodes: dict[tuple[str, int], LineageNode] = {
         root: LineageNode(kind=root[0], pk=root[1], depth=0)
     }
     with connection.cursor() as cursor:
