@@ -32,3 +32,9 @@ def test_every_job_is_a_command_of_this_service() -> None:
 def test_the_setup_is_safe_to_run_again() -> None:
     """``migrate`` runs it for every build."""
     prepared.setup_runs_again(contract)
+
+
+@pytest.mark.django_db
+def test_every_backlog_says_what_is_owed() -> None:
+    """A scheduled run that owes nothing is skipped: its backlog has to answer."""
+    prepared.backlogs_answer(contract)

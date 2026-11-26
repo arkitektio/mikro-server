@@ -105,7 +105,7 @@ wheels = [
 
 [[package]]
 name = "arkitekt-datalayer"
-version = "3.0.0"
+version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authentikate" },
@@ -117,14 +117,14 @@ dependencies = [
     { name = "pydantic" },
     { name = "strawberry-graphql" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a0/f1/dd6786a4047e3ea8b3ef59c711b9813114340bef30b8ca8b6929715ce362/arkitekt_datalayer-3.0.0.tar.gz", hash = "sha256:00efdafe5ec0e69253320038a5231e96b584b86494f648887e98b3d74f8805f6", size = 84578, upload-time = "2026-10-28T13:42:41.827Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/8d/d8ff140f8e660510ea0cf38bace2ea7dd60807d3a274c6c4bc66e39cf881/arkitekt_datalayer-3.1.0.tar.gz", hash = "sha256:67533c2450bf8d444b0c94a90911b31fc6a7fa9654b244cbdb3c03a7e44d7326", size = 91897, upload-time = "2026-11-26T12:29:33.675Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/ae/7c0af05c0f4bd5ef259264eb463f02f0056e5ece0d4c9a12b7ddf51229cc/arkitekt_datalayer-3.0.0-py3-none-any.whl", hash = "sha256:1ad453de22088f20c7eef66438ec54b1ff0c33485901b8083b4bbc22c3389a86", size = 105613, upload-time = "2026-10-28T13:42:40.517Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/67/8ab69cbe9ba6b0cd11e28b6aa5070d8f63f1f0530f9c7ee440f3b25477ac/arkitekt_datalayer-3.1.0-py3-none-any.whl", hash = "sha256:d24b04fc1ea6ce3d4f0ed339a1ea84a0971b7edf4f57984a9bbce6a7fbd5e1f4", size = 115123, upload-time = "2026-11-26T12:29:32.736Z" },
 ]
 
 [[package]]
 name = "arkitekt-service"
-version = "10.0.0"
+version = "10.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
@@ -135,9 +135,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/71/b9/4ed10af0fe896778b4ca1fac5de3aade49d65554a2aead9083207e114cf3/arkitekt_service-10.0.0.tar.gz", hash = "sha256:190c026e017f44a4c61734588d16c6d7c6daad6ac5fe830fa2839eacd9a8623e", size = 104556, upload-time = "2026-11-23T19:44:27.693Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/12/ae2eefd6a0690761afc1997df253b4c3e0cfb680e0b431b6c92d2e8c08f1/arkitekt_service-10.1.0.tar.gz", hash = "sha256:a8658a56399e320b01c4bd0826ac234ae1cf45b432212b5585b5379a3214f54b", size = 106368, upload-time = "2026-11-26T12:31:43.383Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/9d/d822db7d44e04275354b6f6b12bb16a7e5d7e7a7211831d27d588f1c93e4/arkitekt_service-10.0.0-py3-none-any.whl", hash = "sha256:18ef1242df7ed01a91af50c2114e72c4b68c5796e95d1e37d6ed93c6ef27c5b9", size = 132135, upload-time = "2026-11-23T19:44:26.497Z" },
+    { url = "https://files.pythonhosted.org/packages/59/65/e60e0018b506dbe3a837d2e2d86decdc48ef995ec57c404c3e74261f24a8/arkitekt_service-10.1.0-py3-none-any.whl", hash = "sha256:9aefde6d8c4c159f7629067d2889275e97844d71a0b168d67b68a66d1b812683", size = 134571, upload-time = "2026-11-26T12:31:42.073Z" },
 ]
 
 [package.optional-dependencies]
@@ -1282,8 +1282,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
-    { name = "arkitekt-datalayer", specifier = ">=3.0.0" },
-    { name = "arkitekt-service", extras = ["telemetry"], specifier = ">=10.0" },
+    { name = "arkitekt-datalayer", specifier = ">=3.1.0" },
+    { name = "arkitekt-service", extras = ["telemetry"], specifier = ">=10.1" },
     { name = "authentikate", specifier = ">=7.0" },
     { name = "boto3", specifier = ">=1.38.9" },
     { name = "channels-redis", specifier = ">=4.1.0,<5" },
