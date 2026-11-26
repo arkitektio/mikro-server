@@ -487,7 +487,13 @@ class FileFilter(
     )
     def duplicated(self, info: Info, value: bool, prefix: str) -> Q:
         """Match files whose digest and size another file of the organization has too."""
-        q = Q(**{f"{prefix}pk__in": file_duplicates.duplicated(for_org(models.File, info)).values("pk")})
+        q = Q(
+            **{
+                f"{prefix}pk__in": file_duplicates.duplicated(
+                    for_org(models.File, info)
+                ).values("pk")
+            }
+        )
         return q if value else ~q
 
     @kante.filter_field(

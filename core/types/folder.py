@@ -234,9 +234,13 @@ class File:
     description="Files holding one set of bytes: the same digest and size. What keeping one of them would free is `redundantBytes`"
 )
 class DuplicateFileGroup:
-    digest: str = strawberry.field(description="The bytes' digest (`BigFileStore.digest`)")
+    digest: str = strawberry.field(
+        description="The bytes' digest (`BigFileStore.digest`)"
+    )
     size: ByteCount = strawberry.field(description="The size of each copy, in bytes")
-    files: list[File] = strawberry.field(description="The files holding these bytes, oldest first")
+    files: list[File] = strawberry.field(
+        description="The files holding these bytes, oldest first"
+    )
     redundant_bytes: ByteCount = strawberry.field(
         description="The bytes stored more than once: the size times the copies past the first"
     )
