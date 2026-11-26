@@ -590,6 +590,12 @@ contract = Contract(
             ("purge_orphaned_stores",),
             "Delete the stored objects of data that was deleted, after the grace period",
         ),
+        # Not in `setup=`: it reads every byte it owes, which on a hub with much data takes
+        # hours. The service serves meanwhile; a file without a digest is simply not known yet.
+        "digest_bigfiles": Job(
+            ("digest_bigfiles",),
+            "Hash the stored files whose digest is still owed, for duplicate detection (long-running: reads each file once; safe to interrupt and run again; --backlog says what is owed)",
+        ),
         "respec_datasets": Job(
             ("respec_datasets",),
             "Recompute the spec of datasets created before an axis of one position stopped counting",

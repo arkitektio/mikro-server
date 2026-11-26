@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Annotated, Optional, cast
 
 import kante
 import strawberry
+from arkitekt_datalayer.scalars import ByteCount
 from arkitekt_datalayer.types import BigFileStore
 from django.db.models import Prefetch, QuerySet
 from kante.types import Info
@@ -20,6 +21,8 @@ from strawberry.scalars import JSON
 from strawberry_django.pagination import OffsetPaginationInput
 
 from core import enums, filters, models, order
+from core.logic import file_duplicates
+from core.scoping import for_org
 from core.types._shared import (
     DESCRIPTORS_DESCRIPTION,
     OrgScoped,
@@ -202,11 +205,41 @@ class File:
         description="The content type of the file"
     )
 
+    @kante.django_field(
+        description=(
+            "The other files of this organization holding the same bytes: the same store, or one whose `digest` and size are this file's. Empty while this file's "
+            "digest is owed (`store.digest` is null), and read only -- nothing is merged; both files stand until someone deletes one"
+        ),
+        select_related=["store"],
+    )
+    def duplicates(self, info: Info) -> list["File"]:
+        """The files sharing this one's bytes, oldest first."""
+        return cast(
+            list[File],
+            list(
+                file_duplicates.duplicates_of(
+                    cast(models.File, self), for_org(models.File, info)
+                )
+            ),
+        )
+
     @classmethod
     def get_queryset(
         cls, queryset: QuerySet[models.File], info: Info, **kwargs: object
     ) -> QuerySet[models.File]:
         return build_prescoped_queryset(info, queryset)
+
+
+@strawberry.type(
+    description="Files holding one set of bytes: the same digest and size. What keeping one of them would free is `redundantBytes`"
+)
+class DuplicateFileGroup:
+    digest: str = strawberry.field(description="The bytes' digest (`BigFileStore.digest`)")
+    size: ByteCount = strawberry.field(description="The size of each copy, in bytes")
+    files: list[File] = strawberry.field(description="The files holding these bytes, oldest first")
+    redundant_bytes: ByteCount = strawberry.field(
+        description="The bytes stored more than once: the size times the copies past the first"
+    )
 
 
 @kante.django_type(

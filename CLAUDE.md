@@ -232,7 +232,8 @@ What this service declares:
   positions and its cut give it (`Lens.name`, announcing nothing); the
   database refuses duplicates since the lens tables were split, so it is a guard for rows
   written by hand. It changes nothing the second time and reports what it leaves in place.
-- Other jobs: `purge_orphaned_stores` (from `arkitekt_datalayer`), `respec_datasets`, `backfill_parquet_schemas`,
+- Other jobs: `purge_orphaned_stores` and `digest_bigfiles` (both from `arkitekt_datalayer`; the second hashes the
+  files whose digest is owed, reads every byte it owes and is therefore never a setup job), `respec_datasets`, `backfill_parquet_schemas`,
   `record_table_stats`. The two backfills are safe beside a serving release and report what is
   still owed; they read S3, so they are not in the setup and an operator runs them. `prune_organizations` (from arkitekt-service, `-- --only <org> --yes` or
   `--keep`) deletes everything organizations own -- datasets, lenses, shapes, metrics, stores

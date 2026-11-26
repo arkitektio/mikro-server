@@ -9,6 +9,7 @@ from core.logic import coordinate_system as coordinate_system_logic
 from core.logic import coords as coords_logic
 from core.logic import descriptor_filter
 from core.logic.descriptor_filter import DescriptorConstraintInput, FitsConstraintInput
+from core.scoping import for_org
 
 #: What a `requires` filter says of itself, on every structure that has one.
 REQUIRES_DESCRIPTION = (
@@ -38,10 +39,9 @@ from koherent.models import Task as KoherentTask
 from strawberry import auto
 from strawberry_django.filters import FilterLookup
 
+from core.logic import file_duplicates, space_graph
 from core.logic import file_link as file_link_logic
 from core.logic import graph as graph_logic
-from core.logic import space_graph
-from core.scoping import for_org
 from embeddings.search import hybrid_search
 
 
@@ -481,6 +481,14 @@ class FileFilter(
     @kante.filter_field(description="Filter by a list of folder IDs")
     def folders(self, info: Info, value: list[strawberry.ID], prefix: str) -> Q:
         return Q(**{f"{prefix}folder_id__in": value})
+
+    @kante.filter_field(
+        description="Filter for files that share their bytes (`store.digest` and size) with another file of the organization (`true`), or with none (`false`). A file whose digest is still owed shares with none"
+    )
+    def duplicated(self, info: Info, value: bool, prefix: str) -> Q:
+        """Match files whose digest and size another file of the organization has too."""
+        q = Q(**{f"{prefix}pk__in": file_duplicates.duplicated(for_org(models.File, info)).values("pk")})
+        return q if value else ~q
 
     @kante.filter_field(
         description=(

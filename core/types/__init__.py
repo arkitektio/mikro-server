@@ -112,6 +112,7 @@ from core.types.file_link import (
     FileLinkContainer,
 )
 from core.types.folder import (
+    DuplicateFileGroup,
     File,
     Folder,
 )
@@ -149,6 +150,7 @@ from core.types.table_dataset import (
 from core.types.visualization import Visualization
 
 __all__ = [
+    "DuplicateFileGroup",
     "File",
     "Folder",
     "build_prescoped_queryset",
